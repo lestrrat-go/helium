@@ -1,0 +1,542 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="param">
+   <description>Tests the xsl:param element</description>
+   <environment name="param-01">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="param-04">
+      <source role=".">
+         <content><![CDATA[<doc><data><inner><in><last>abc</last></in></inner></data></doc>]]></content>
+      </source>
+      <source file="import2.xsl" uri="import2.xsl"/>
+   </environment>
+   
+   <environment name="param-06">
+      <source role=".">
+         <content><![CDATA[<doc><data/></doc>]]></content>
+      </source>
+      <source file="var_import.xsl" uri="var_import.xsl"/>
+   </environment>
+
+   <test-case name="param-0101">
+      <description>test 3 global variables and 1 stylesheet function that reference each other</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>foo</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0102">
+      <description>Test case that uses xsl:call-template instruction to set a parameter value to a boolean, and uses it in an xsl:if instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Success</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0103">
+      <description>Test the "required" attribute using xsl:call-template instruction to set the parameter.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Required parameter;Not required parameter</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0104">
+      <description>Test case that uses xsl:sequence instruction to set the value of a variable.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>25</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0105">
+      <description>Test case to verify that range variables used in 'for' expressions can shadow global and template variables declared with the same name.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><in>3 4 3 4 3 4</in><in>6 6 6</in></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0106">
+      <description>Test case to verify that range variables used in 'for' expressions can shadow global and template parameters declared with the same name.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><in>3 4 3 4 3 4</in><in>6 6 6</in></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0107">
+      <description>Tests the shalowing of local variables.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><p1><a1>a</a1><b1>b</b1><c1>bc</c1><d1>bc,x,y,z</d1></p1
+            ><e1>a</e1><p2><a2>g</a2><b2>b</b2><c2>bc</c2><d2>bc,x,y,z</d2></p2><e2>g</e2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0108">
+      <description>Tests function parameters.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>xyz</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0109">
+      <description>Test the xsl:variable element with missing 'required" name attribute.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0109.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="param-0110">
+      <description>Test the "required" attribute for xsl:with-param.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0110.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+
+   <test-case name="param-0111">
+      <description>Test the "required" attribute on a template parameter where the "select" attribute is not empty.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0111.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="param-0112">
+      <description>
+         Test to verify that a dynamic-error is raised if a stylesheet parameter has a required attribute with no supplied value.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0112.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0050"/>
+      </result>
+   </test-case>
+
+   <test-case name="param-0113">
+      <description>
+         Test case that uses xsl:param instruction with a required="yes" attribute, 
+         while the instruction has a non-empty sequence constructor.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0113.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="param-0114">
+      <description>
+         Test case to verify that an static error is raised if an element from the XSLT namespace 
+         have an attribute whose namespace is null.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0114.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+
+   <test-case name="param-0115">
+      <description>
+         Test case to verify that an static error is raised if an element from the XSLT namespace 
+         have an attribute whose namespace is the XSLT namespace.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0115.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+
+   <test-case name="param-0116">
+      <description>
+         Test case to verify that a dynamic error is raised if the initial template defines a 
+         template parameter that specifies required="yes".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2014-08-06" change="additional error code, see bug 24864"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0116.xsl"/>
+         <initial-template name="temp"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE0060"/>
+            <error code="XTDE0700"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="param-0117">
+      <description>Test the "required" attribute with values "true" and "false", using xsl:call-template instruction to set the parameter.</description>
+      <created by="Debbie Lockett" on="2014-08-06"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0117.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Required parameter;Not required parameter</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="param-0118">
+      <description>Test the "required" attribute with values "1" and "0", using xsl:call-template instruction to set the parameter.</description>
+      <created by="Debbie Lockett" on="2014-08-06"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0118.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Required parameter;Not required parameter</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="param-0119">
+      <description>Test the "required" attribute with values "TRUE" (not allowed) and "0", using xsl:call-template instruction to set the parameter.</description>
+      <created by="Debbie Lockett" on="2014-08-06"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0119.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="param-0120">
+      <description> Test 3 global variables and 1 stylesheet function that reference each other, testing use of static="no", "false" and "0".</description>
+      <created by="Debbie Lockett" on="2014-08-06"/>
+      <environment ref="param-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0120.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>foo</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0201">
+      <description>Test case using a parameter to select nodes by position to test the pitfalls with numeric predicates.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><item>1</item><item>2</item><item>3</item></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1 2 3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0301">
+      <description>
+         Test case to show that circularity causes errors only if the parameter invloved in circularity 
+         is actually evaluated at some point in the transformation process.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><data><a>10</a><b>100</b><c>1000</c></data></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>value of $x= 3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0401">
+      <description>Test to set the value of a variable using xsl:next-match.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>defaultValue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0402">
+      <description>Test to set the value of a variable and a parameter inside xsl:apply-imports instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><var>Variable Value: Poor default</var><par>Parameter Value: Assigned Value</par></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0403">
+      <description>
+         Tests parameter specified within xsl:apply-imports and a global parameter with an 
+         identical name as the template parameter, which should be ignored.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0403.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><var>Variable Value: Poor default</var><par>Parameter Value: Assigned Value</par></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0501">
+      <description>
+         Test case to verify that variables used in Quantified Expressions can shadow global variables 
+         and parameters declared with the same name.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><prices><price>55</price><price>43</price><price>12</price><price>34.50</price></prices></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0101</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0601">
+      <description>
+         Test parameter specified within xsl:next-match instruction and a global parameter with an 
+         identical name as the template parameter, which should be ignored.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>abc</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="param-0602">
+      <description>
+         Tests parameter specified within xsl:apply-import instruction and a global parameter with 
+         an identical name as the template parameter, which should be ignored.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="param-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0602.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>abc</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="param-0701">
+      <description>
+         The visibility attribute is not allowed on xsl:param
+      </description>
+      <created by="Michael Kay" on="2014-09-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0701.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+   
+   <test-case name="param-0702">
+      <description>
+         xsl:param with forwards anad backwards references to global variable
+      </description>
+      <created by="Michael Kay" on="2018-03-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0702.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><in value="42"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="param-0703">
+      <description>
+         The visibility attribute is not allowed on xsl:param[@static='yes'], despite the note in section 9.6
+         which appears to suggest that visibility="provate" is OK. -->
+      </description>
+      <created by="Michael Kay" on="2019-05-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="param-0703.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+</test-set>

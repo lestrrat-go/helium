@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="sf-copy-of">
+   <description>fn:copy-of() with streaming</description>
+   
+   <environment name="sf-copy-of-A">
+     <stylesheet file="sf-copy-of-A.xsl"/>
+   </environment>
+
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-copy-of-003">
+      <description>Use fn:copy-of: climbing posture</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-copy-of-A"/>
+      <test>
+         <initial-template name="cy-003"/>
+      </test>
+      <result>
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-copy-of-004">
+      <description>Use fn:copy-of: climbing posture</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-copy-of-A"/>
+      <test>
+         <initial-template name="cy-004"/>
+      </test>
+      <result>
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05 101 102"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-copy-of-005">
+      <description>Use fn:copy-of: striding posture, element nodes</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-copy-of-A"/>
+      <test>
+         <initial-template name="cy-005"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-copy-of-006">
+      <description>Use fn:copy-of: striding posture, text nodes</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-copy-of-A"/>
+      <test>
+         <initial-template name="cy-006"/>
+      </test>
+      <result>
+         <assert>/out = "4.956.584.954.9516.4716.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-copy-of-008">
+      <description>Use fn:copy-of: striding posture, element nodes plus grounded elements</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-copy-of-A"/>
+      <test>
+         <initial-template name="cy-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>100.00</PRICE><PRICE>101.00</PRICE><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-copy-of-009">
+      <description>Use fn:copy-of: descendant text nodes</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-copy-of-A"/>
+      <test>
+         <initial-template name="cy-009"/>
+      </test>
+      <result>
+         <assert>/out = "4.956.584.954.9516.4716.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-copy-of-011">
+      <description>Use fn:copy-of: whole document unchanged</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-copy-of-A"/>
+      <test>
+         <initial-template name="cy-011"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/head</assert>
+           <assert>/out/BOOKLIST/BOOKS</assert>
+           <assert>/out/BOOKLIST/CATEGORIES</assert>
+           <assert>/out/tail</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="sf-copy-of-021">
+      <description>Use fn:copy-of: test that namespaces are copied</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-copy-of-A"/>
+      <test>
+         <initial-template name="cy-021"/>
+      </test>
+      <result>
+         <assert>count(in-scope-prefixes(/out/*)) = 8</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-copy-of-025">
+      <description>Use fn:copy-of: test that namespaces are copied, argument grounded and consuming</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-copy-of-A"/>
+      <test>
+         <initial-template name="cy-025"/>
+      </test>
+      <result>
+         <assert>count(in-scope-prefixes(/out/*)) = 8</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-copy-of-027">
+      <description>Use fn:copy-of: argument crawling and consuming, nested nodes</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-copy-of-A"/>
+      <test>
+         <initial-template name="cy-027"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><n><n>1</n><n>2</n><n>3</n><n>4</n><n>5</n></n><n>1</n><n>2</n><n>3</n><n>4</n><n>5</n></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   
+  
+   
+</test-set>

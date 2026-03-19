@@ -1,0 +1,2041 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="boolean">
+   <description>Tests boolean</description>
+   <environment name="bool001">
+      <source role=".">
+         <content><![CDATA[ 
+<doc></doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="bool002">
+      <source role=".">
+         <content><![CDATA[ 
+
+<doc>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="bool003">
+      <source role=".">
+         <content><![CDATA[<doc></doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="bool005">
+      <source role=".">
+         <content><![CDATA[ 
+
+<doc>
+  test
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="bool008">
+      <source role=".">
+         <content><![CDATA[<doc>
+<p xml:lang="en"/>
+<p xml:lang="EN"/>
+<p xml:lang="en-gb"/>
+<p xml:lang="EN-GB"/>
+<p xml:lang="TH"/>
+<p/>
+<span xml:lang="en">
+<p/>
+</span>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="bool009">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="bool024">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="bool028">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="bool033">
+      <source role=".">
+         <content><![CDATA[<doc>
+  test
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="bool056">
+      <source role=".">
+         <content><![CDATA[<dummy>
+ <set1>
+  <value>2</value><value>3</value>
+ </set1>
+ <set2>
+  <value>3</value><value>22</value>
+ </set2>
+</dummy>
+]]></content>
+      </source>
+   </environment>
+   <environment name="bool057">
+      <source role=".">
+         <content><![CDATA[<dummy>
+ <set1>
+  <value>2</value><value>3</value>
+ </set1>
+ <set2>
+  <value>3</value><value>22</value><value>abc</value>
+ </set2>
+</dummy>
+]]></content>
+      </source>
+   </environment>
+   <environment name="bool070">
+      <source role=".">
+         <content><![CDATA[<dummy>
+ <set1>
+  <value>0</value><value>1</value>
+ </set1>
+ <set2>
+  <value>false</value><value>false</value>
+ </set2>
+</dummy>
+]]></content>
+      </source>
+   </environment>
+   <environment name="bool077">
+      <source role=".">
+         <content><![CDATA[	<dd:hcfa-jcodes xmlns:dd="http://dd.com/">
+	   <dd:hcfa-jcode>J1820</dd:hcfa-jcode>
+	   <dd:hcfa-jcode>J1820  </dd:hcfa-jcode>
+	</dd:hcfa-jcodes>]]></content>
+      </source>
+   </environment>
+   <environment name="bool078">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="bool079">
+      <source role=".">
+         <content><![CDATA[<doc>
+<p xml:lang="en"/>
+<p xml:lang="EN"/>
+<p xml:lang="en-gb"/>
+<p xml:lang="EN-GB"/>
+<p xml:lang="TH"/>
+<p/>
+<span xml:lang="en">
+<p/>
+</span>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="bool158">
+      <source role="." file="bool158.xml"/>
+   </environment>
+   <environment name="bool159">
+      <source role="." file="bool159.xml"/>
+   </environment>
+   <environment name="bool170">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <j l='12' w='33'>first</j>
+  <j l='17' w='45'>second</j>
+  <j l='16' w='78'>third</j>
+  <j l='12' w='33'>fourth</j>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="bool172">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <j l='12' w='45'>first</j>
+  <j l='17' w='45'>second</j>
+  <j l='16' w='78'>third</j>
+  <j l='12' w='33'>fourth</j>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="bool184">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <avj>
+    <good>
+      <b>12</b>
+      <c>34</c>
+      <d>56</d>
+      <e>78</e>
+    </good>
+  </avj>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="bool188">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <str>found</str>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="bool189">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <num>17</num>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="bool190">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="boolean-001">
+      <description>Test of true()</description>
+      <keywords>fn:true xsl:value-of</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-002">
+      <description>Test of codepoint-equal() function</description>
+      <keywords>fn:codepoint-equal xsl:value-of string-literal</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t>true</t><f>false</f><f>false</f><t>true</t><t>true</t></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-003">
+      <description>Test of boolean "and" operator with both values true</description>
+      <keywords>fn:true AndExpr xsl:value-of</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true,</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-004">
+      <description>Test of boolean "not" operator with true value.</description>
+      <keywords>xsl:value-of fn:true fn:not</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-005">
+      <description>Test of boolean "or" operator with two true values</description>
+      <keywords>OrExpr xsl:value-of fn:true</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool003"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-006">
+      <description>Test of boolean() function - conversion of empty string.</description>
+      <keywords>xsl:value-of fn:boolean string-literal empty-string</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool005"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-007">
+      <description>Test of "&gt;" operator with false expected value.</description>
+      <keywords>GeneralComp xsl:value-of</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool005"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-008">
+      <description>Test of "&gt;=" operators with expected false result.</description>
+      <keywords>GeneralComp xsl:value-of</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool005"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-009">
+      <description>Test of lang() function</description>
+      <keywords>xsl:value-of fn:lang</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool008"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true, true, true, true, false, false, </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-010">
+      <description>Test of false() function</description>
+      <keywords>xsl:value-of fn:false</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-011">
+      <description>Test of the '=' operator for true.</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-012">
+      <description>Test of '=' operator for false.</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-013">
+      <description>Test of '=' operator with fractional number one with leading zero one without.</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-014">
+      <description>Test of '=' operator with positive and negative zero.</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-015">
+      <description>Test of '=' operator with one number with leading zero, one not. originally written as &lt;xsl:value-of select="1 = '001'"/&gt;. At 2.0, you have to be explicit whether you want a string or a numeric comparison</description>
+      <keywords>GeneralComp xsl:value-of fn:number numeric-literals string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-016">
+      <description>Test of '=' operator one true value compared against a non-empty string. original test was &lt;xsl:value-of select="true()='xxx'"/&gt;. This isn't allowed in XPath 2.0</description>
+      <keywords>GeneralComp xsl:value-of fn:true fn:boolean string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-017">
+      <description>Test of '=' operator one false value compared against an empty string. original test was &lt;xsl:value-of select="false()=''"/&gt;. This isn't allowed in 2.0</description>
+      <keywords>GeneralComp xsl:value-of fn:false fn:boolean empty-string string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-018">
+      <description>Test of '=' operator one true value compared against a non-zero number.</description>
+      <keywords>GeneralComp xsl:value-of fn:true fn:boolean numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-019">
+      <description>Test of '=' operator one true value compared against zero.</description>
+      <keywords>GeneralComp xsl:value-of fn:false fn:boolean numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-020">
+      <description>Test of boolean "and" operator with both values false</description>
+      <keywords>AndExpr xsl:value-of fn:false</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false,</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-021">
+      <description>Test of boolean "and" operator with one value true and one value false</description>
+      <keywords>AndExpr xsl:value-of fn:true fn:false</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false,</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-022">
+      <description>Test of boolean "and" operator with one value false and one value true</description>
+      <keywords>xsl:value-of fn:true fn:false</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false,</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-023">
+      <description>Test of boolean "and" operator with two strings</description>
+      <keywords>AndExpr xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-024">
+      <description>Test that '0' converts to boolean "false" at XPath 2.0 (at XPath 1.0, it converts to true) Test changed Jan 2003, comparison of boolean to string no longer allowed</description>
+      <keywords>GeneralComp xs:boolean xsl:value-of fn:false string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out result="true">true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-025">
+      <description>Test that 'false' converts to boolean "false" at XPath 2.0 (at XPath 1.0, it converts to true) Test changed Jan 2003, comparison of boolean to string no longer allowed</description>
+      <keywords>GeneralComp xsl:value-of fn:false xs:boolean string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out result="true">true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-026">
+      <description>Test "fortran" operators applied to numbers (XPath 2.0)</description>
+      <keywords>ValueComp lre avt numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="boolean-026.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-027">
+      <description>Test "fortran" operators applied to strings (XPath 2.0) actually this is false actually this is false</description>
+      <keywords>ValueComp lre avt string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="boolean-027.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-028">
+      <description>Test of boolean "or" operator</description>
+      <keywords>OrExpr xsl:value-of fn:true fn:false</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool024"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-029">
+      <description>Test of boolean "or" operator</description>
+      <keywords>xsl:value-of fn:true fn:false OrExpr</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool024"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-030">
+      <description>Test of boolean "or" operator</description>
+      <keywords>OrExpr xsl:value-of fn:false</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool024"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-031">
+      <description>Test of boolean "or" operator</description>
+      <keywords>OrExpr empty-string xsl:value-of numeric-literals string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool024"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-031.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-032">
+      <description>Test that "or" doesn't evaluate right operand if left is true, in backwards compatibility mode</description>
+      <keywords>OrExpr MultiplicativeExpr xsl:value-of fn:true numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool024"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-032.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-033">
+      <description>Test of boolean "not" operator</description>
+      <keywords>xsl:value-of fn:false fn:not</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool028"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-034">
+      <description>Test of boolean "not" operator</description>
+      <keywords>GeneralComp xsl:value-of fn:false fn:not</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool028"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-034.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-035">
+      <description>Test of boolean "not" operator</description>
+      <keywords>GeneralComp xsl:value-of fn:true fn:false fn:not</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool028"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-036">
+      <description>Test of boolean "not" operator</description>
+      <keywords>empty-string xsl:value-of fn:not string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool028"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-037">
+      <description>Test of boolean "not" operator</description>
+      <keywords>xsl:value-of fn:not string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool028"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-038">
+      <description>Test of boolean() function</description>
+      <keywords>xsl:value-of fn:boolean string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-039">
+      <description>Test of boolean() function</description>
+      <keywords>xsl:value-of fn:boolean numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-039.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-040">
+      <description>Test of boolean() function</description>
+      <keywords>xsl:value-of fn:boolean numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-040.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-041">
+      <description>Test of boolean() function</description>
+      <keywords>xsl:value-of fn:boolean numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-041.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-042">
+      <description>Test of boolean() function</description>
+      <keywords>MultiplicativeExpr xsl:value-of fn:boolean numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-042.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-043">
+      <description/>
+      <keywords>MultiplicativeExpr xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-043.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>NaN</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-044">
+      <description>Test of boolean() function</description>
+      <keywords>MultiplicativeExpr xsl:value-of fn:boolean numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-044.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-045">
+      <description>Test of boolean() function</description>
+      <keywords>AxisStep xsl:value-of fn:boolean</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-045.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-046">
+      <description>Test of boolean() function</description>
+      <keywords>AxisStep xsl:value-of fn:boolean</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-046.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-047">
+      <description>Test of boolean() function</description>
+      <keywords>variable-reference xsl:value-of fn:boolean</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-047.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-048">
+      <description>Test of boolean() function</description>
+      <keywords>variable-reference xsl:value-of fn:boolean</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-048.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-049">
+      <description>Test of "&gt;" and "&lt;" operators</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-049.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-050">
+      <description>Test of "&gt;" and "&lt;" operators</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-050.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-051">
+      <description>Test of "&gt;" and "&lt;" operators</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-051.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-052">
+      <description>Test of "&gt;" and "&lt;" operators</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-052.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-053">
+      <description>Test of "&gt;" and "&lt;" operators</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-053.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-054">
+      <description>Test of "&gt;" and "&lt;" operators</description>
+      <keywords>GeneralComp xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-054.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-055">
+      <description>Test of "&gt;" and "&lt;" operators</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-055.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-056">
+      <description>Test of "&lt;=" and "&gt;=" operators</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-056.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-057">
+      <description>Test of "&lt;=" and "&gt;=" operators</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-057.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-058">
+      <description>Test of "&lt;=" and "&gt;=" operators</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-058.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-059">
+      <description>Test of "&lt;=" and "&gt;=" operators</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-059.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-060">
+      <description>Test of "&lt;=" and "&gt;=" operators</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-060.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-061">
+      <description>Purpose: Test of "&lt;=" operator</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-061.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-062">
+      <description>Test of "&lt;" operator comparing two real numbers, true result</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-062.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-063">
+      <description>Test of "&lt;" operator comparing two real numbers, false result</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-063.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-064">
+      <description>Test of "&lt;" operator comparing real to integer, true result</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-064.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-065">
+      <description>Test of "&lt;" operator comparing real to integer, false result</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool033"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-065.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-066">
+      <description>Test of "&lt;=" and "&gt;=" operators</description>
+      <keywords>PathExpr variable-reference GeneralComp xsl:value-of</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-03-28" change="make expected results less confusing"/>
+      <environment ref="bool056"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-066.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a/@result='true'</assert> <!-- 3 gt 22 when compared as strings -->
+            <assert>/out/b/@result='true'</assert> <!-- 3 gt 2 when compared as strings -->
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-067">
+      <description>Test of "&lt;=" and "&gt;=" operators Modified from bool56 which does string comparisons at XPath 2.0</description>
+      <keywords>ForExpr GeneralComp xsl:value-of fn:number variable-reference sequence-comparison</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool056"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-067.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false should be false
+  true should be true
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-068">
+      <description>Test of "=" operator with mixed types Modified from bool56 which does string comparisons at XPath 2.0</description>
+      <keywords>variable-reference GeneralComp leading-double-slash xsl:value-of sequence-comparison numeric-literals string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool056"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-068.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true should be true
+  true should be true
+  false should be false  
+  true should be true    
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-069">
+      <description>Test of "=" operator with mixed types String to boolean comparison is allowed in backwards compatibility mode</description>
+      <keywords>variable-reference sequence-comparison GeneralComp xsl:value-of numeric-literals string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool056"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-069.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema">true should be true
+  true should be true
+  false should be false  
+  true should be true    
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-070">
+      <description>Test of "!=" operator with an unordered type (anyURI)</description>
+      <keywords>xs:anyURI GeneralComp sequence-comparison xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool056"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-070.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema">true should be true
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-071">
+      <description>Test of eq (etc) with an empty sequence as operand empty</description>
+      <keywords>ValueComp fn:count sequence-comparison xsl:value-of</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool056"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-071.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1 0 0 0</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-072">
+      <description>Test of eq (etc) with an emptiable types as operands</description>
+      <keywords>xs:integer empty-sequence sequence-comparison stylesheet-function xsl:function xsl:value-of ValueComp string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool056"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-072.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-073">
+      <description>Test of "&lt;=" and "&gt;=" operators</description>
+      <keywords>GeneralComp sequence-comparison variable-reference xsl:value-of</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool057"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-073.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true should be false
+  true should be true
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-074">
+      <description>Test of node identity comparison operators</description>
+      <keywords>NodeComp sequence-comparison variable-reference xsl:value-of fn:not</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool057"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-074.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false should be false
+  true should be true
+  true should be true
+  false should be false
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-075">
+      <description>Test of node identity comparison operators with empty sequences</description>
+      <keywords>sequence-comparison NodeComp variable-reference xsl:value-of fn:not</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool057"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-075.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  "" should be ""
+  "" should be ""
+  "true" should be ""
+  "true" should be ""
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-076">
+      <description>Test of node order operators</description>
+      <keywords>sequence-comparison NodeComp variable-reference xsl:value-of</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool057"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-076.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true should be true
+  false should be false
+  false should be false
+  false should be false
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-077">
+      <description>Test of node order operators with empty operands</description>
+      <keywords>sequence-comparison NodeComp variable-reference xsl:value-of</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool057"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-077.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  "" should be ""
+  "false" should be false
+  "" should be ""
+  "" should be ""
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-078">
+      <description>Test 3-valued truth table for AND</description>
+      <keywords>empty-sequence xsl:value-of fn:true fn:false AndExpr</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool057"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-078.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="boolean-078.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-079">
+      <description>Test 3-valued truth table for OR</description>
+      <keywords>empty-sequence OrExpr xsl:value-of fn:true fn:false</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool057"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-079.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="boolean-079.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-080">
+      <description>DOCUMENT: http://www.w3.org/TR/xpath SECTION: 3.4 Booleans Test 3-valued truth table for AND with computed booleans</description>
+      <keywords>fn:count GeneralComp AndExpr fn:exists PathExpr leading-double-slash xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool057"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-080.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="boolean-080.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-081">
+      <description>Test of comparison between boolean and node-set</description>
+      <keywords>sequence-comparison variable-reference GeneralComp xsl:value-of fn:true</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool070"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-081.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true should be true
+  true should be true
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-082">
+      <description>crashes with NPE in Saxon 7.9.1</description>
+      <keywords>GeneralComp fn:compare text-node xsl:if xsl:value-of</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool077"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-082.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz xmlns:dd="http://dd.com/"><tr valign="top"><td style="color: #336699; font-weight: bold">HCFA Jcodes:</td><td>J1820, J1820</td></tr></zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-083">
+      <description>Test of '=' operator, boolean to string. Reverse order of boolean15.</description>
+      <keywords>GeneralComp xsl:value-of fn:true string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-083.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-084">
+      <description>Test that "and" doesn't bother with right operand if left is false, in backwards compatibility mode</description>
+      <keywords>AndExpr MultiplicativeExpr xsl:value-of fn:false numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-084.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-085">
+      <description>Test of the '!=' operator returning false on two numbers.</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-085.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-086">
+      <description>Test of the '!=' operator returning true on two numbers.</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-086.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-087">
+      <description>Test of '!=' operator on two numbers, one having decimal point and zeroes after</description>
+      <keywords>GeneralComp xsl:value-of numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-087.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-088">
+      <description>Test of '!=' operator on two booleans, false first.</description>
+      <keywords>GeneralComp xsl:value-of fn:true fn:false</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-088.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-089">
+      <description>Test of '!=' operator on two booleans, true first.</description>
+      <keywords>GeneralComp xsl:value-of fn:true fn:false</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-089.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-090">
+      <description>Test of '!=' operator on two booleans that are equal, so false should result.</description>
+      <keywords>GeneralComp xsl:value-of fn:false</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-090.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-091">
+      <description>Test of '!=' operator on two strings that are equal, so false should result.</description>
+      <keywords>GeneralComp xs:string xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-091.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-092">
+      <description>Test of '!=' operator on two strings that are unequal, so true should result.</description>
+      <keywords>GeneralComp xs:string xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-092.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-093">
+      <description>Test of '!=' operator on two strings that are unequal, but only in leading spaces.</description>
+      <keywords>GeneralComp xs:string xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-093.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-094">
+      <description>Test of '!=' operator on two strings that are unequal, but only in trailing spaces.</description>
+      <keywords>GeneralComp xs:string xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-094.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-095">
+      <description>Test of '=' operator with one number with leading zero, one not. Reverse order of boolean14.</description>
+      <keywords>GeneralComp xs:string backwards-compatibility-mode xsl:value-of numeric-literals string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-095.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-096">
+      <description>Test of '=' operator, false value compared against zero. Reverse order of boolean18.</description>
+      <keywords>GeneralComp backwards-compatibility-mode xsl:value-of fn:false numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-096.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-097">
+      <description>Test of '=' operator with one number with leading zero, one not. Reverse order of boolean14. Error: cannot compare a number to a string</description>
+      <keywords>GeneralComp xs:string xsl:value-of string-literals numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-097.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-098">
+      <description>Test of '=' operator, false value compared against zero. Reverse order of boolean18. Error: cannot compare boolean to number</description>
+      <keywords>GeneralComp xsl:value-of fn:false numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool078"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-098.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-099">
+      <description>Test of lang() function with 2 arguments</description>
+      <keywords>ForExpr PathExpr xsl:value-of fn:lang</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool079"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-099.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true true true true false false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-100">
+      <description>If $x is bound to a node-set, then $x="foo" does not mean the same as not($x!="foo"): the former is true if and only if some node in $x has the string-value foo; the latter is true if and only if all nodes in $x have the string-value foo.</description>
+      <keywords>sequence-comparison GeneralComp xsl:value-of fn:not string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool158"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-100.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truefalse truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-101">
+      <description>Test =, !=, and not, comparing node-set to string, where node-set is empty. empty</description>
+      <keywords>empty-sequence GeneralComp sequence-comparison xsl:value-of fn:not string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool159"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>falsetrue falsetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-102">
+      <description>Test = on two node-sets, where both are the same.</description>
+      <keywords>sequence-comparison GeneralComp predicate xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool170"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-103">
+      <description>Test = on two disjoint node-sets.</description>
+      <keywords>sequence-comparison predicate GeneralComp xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool170"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-104">
+      <description>Test != on two node-sets, where both are the same.</description>
+      <keywords>GeneralComp sequence-comparison predicate xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool170"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-105">
+      <description>Test != on two disjoint node-sets.</description>
+      <keywords>predicate GeneralComp sequence-comparison xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool170"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-106">
+      <description>Test = on two node-sets that have one node in common.</description>
+      <keywords>GeneralComp sequence-comparison predicate xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool172"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-107">
+      <description>Test != on two node-sets that have one node in common.</description>
+      <keywords>GeneralComp sequence-comparison predicate xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool172"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-108">
+      <description>Test != on two node-sets that have their only node in common.</description>
+      <keywords>sequence-comparison GeneralComp predicate xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool172"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-109">
+      <description>Test =, !=, and not, comparing node-set to number. Now reverse the order of the comparands</description>
+      <keywords>GeneralComp sequence-comparison xsl:value-of fn:not numeric-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool184"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-109.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e>true</e><ne>false</ne><n>true</n><nn>false</nn>
+<e>true</e><ne>false</ne><n>true</n><nn>false</nn></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-110">
+      <description>Test = and !=, comparing RTF to string.</description>
+      <keywords>variable-reference GeneralComp xs:string xsl:value-of string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool188"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-110.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><es>true</es><ns>false</ns><se>true</se><sn>false</sn></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-111">
+      <description>Test = and !=, comparing RTF to string.</description>
+      <keywords>variable-reference GeneralComp numeric-literals xsl:value-of</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool189"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-111.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><en>true</en><nn>false</nn><ne>true</ne><nn>false</nn></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="boolean-112">
+      <description>Test of boolean() on string "1".</description>
+      <keywords>xsl:value-of fn:boolean string-literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bool190"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="boolean-112.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

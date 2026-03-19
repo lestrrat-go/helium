@@ -1,0 +1,113 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="su-inspection">
+   <description>Streamable stylesheet functions: category "inspection"</description>
+   
+   <environment name="su-inspection-A">
+      <stylesheet file="su-inspection-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="su-inspection-001">
+      <description>Call an arity-1 stylesheet function</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-inspection-A"/>
+      <test>
+         <initial-template name="t-001"/>
+      </test>
+      <result>
+         <assert>/out = "3 3 3 3 3 3"</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-inspection-002">
+      <description>Call an arity-1 stylesheet function with recursion</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-inspection-A"/>
+      <test>
+         <initial-template name="t-002"/>
+      </test>
+      <result>
+         <assert>/out = "3 3 3 3 3 3"</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-inspection-003">
+      <description>Call an arity-2 inspection stylesheet function</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-inspection-A"/>
+      <test>
+         <initial-template name="t-003"/>
+      </test>
+      <result>
+         <assert>/out = "oz oz oz oz g oz"</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-inspection-004">
+      <description>Call an arity-2 inspection stylesheet function with recursion</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-inspection-A"/>
+      <test>
+         <initial-template name="t-004"/>
+      </test>
+      <result>
+         <assert>/out = "MMP P P P H P"</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-inspection-901">
+      <description>Invalid inspection function - consumes the streamed input</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <test>
+         <stylesheet file="su-inspection-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-inspection-902">
+      <description>Invalid inspection function - first arg accepts a sequence</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <test>
+         <stylesheet file="su-inspection-902.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-inspection-903">
+      <description>Invalid inspection function - returns streamed nodes</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <test>
+         <stylesheet file="su-inspection-903.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-inspection-904">
+      <description>Invalid inspection function - accepts streamed node in second argument</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <test>
+         <stylesheet file="su-inspection-904.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+   
+ 
+
+
+</test-set>

@@ -1,0 +1,710 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-insert-before">
+   <description>insert-before() function with streaming</description>
+   
+   <environment name="sf-insert-before-A">
+     <stylesheet file="sf-insert-before-A.xsl"/>
+   </environment>
+   
+   <environment name="sf-insert-before-B">
+     <stylesheet file="sf-insert-before-B.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-insert-before-001">
+      <description>Streaming insert-before() - grounded operand</description>
+      <keywords>striding-then-grounded leading-lone-slash PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert>/out = "4.95 A B 6.58 4.95 4.95 16.47 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-002">
+      <description>Streaming insert-before() - grounded operand</description>
+      <keywords>leading-lone-slash striding-then-grounded fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><a>A</a><b>B</b><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-003">
+      <description>Streaming insert-before() - grounded atomic operand</description>
+      <keywords>striding-then-grounded leading-lone-slash fn:tokenize ContextItemExpr PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert>/out = "8.3 A B 5.7 1.1 1.0 A B 5.2 7.8 6.8 A B 4.2 0.8 7.8 A B 5.2 0.9 22.5 A B 18.0 3.5 7.8 A B 5.0 0.9"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-010">
+      <description>Streaming insert-before() - striding operand, inspection usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:count</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "8"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-011">
+      <description>Streaming insert-before() - striding operand, absorption usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:sum</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-012">
+      <description>Streaming insert-before() - striding operand, transmission usage</description>
+      <keywords>leading-lone-slash striding fn:position PathExpr motionless-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>/out = "A 6.58 4.95 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-013">
+      <description>Streaming insert-before() - striding operand, focus-setting usage</description>
+      <keywords>AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 100 99 7.58 5.95 5.95 17.47 17.47"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-insert-before-014">
+      <description>Streaming insert-before() - striding operand, focus-controlled usage</description>
+      <keywords>leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><a>A</a><b>B</b><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-insert-before-015">
+      <description>Streaming insert-before() - striding operand, focus-setting usage</description>
+      <keywords>leading-lone-slash striding PathExpr AdditiveExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 100 99 7.58 5.95 5.95 17.47 17.47 "</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-insert-before-016">
+      <description>Streaming insert-before() - striding operand, focus-controlled usage</description>
+      <keywords>xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><a>A</a><b>B</b><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-017">
+      <description>Streaming insert-before() - striding operand, focus-setting usage for inspection action</description>
+      <keywords>leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "true false false false true true true true false false true true true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-018">
+      <description>Streaming insert-before() - striding operand, apply-templates usage</description>
+      <keywords>leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and Prejudice(A)(B)Jane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-020">
+      <description>Streaming insert-before() - crawling operand, inspection usage</description>
+      <keywords>xsl:copy-of fn:count PathExpr leading-double-slash crawling</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "8"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-021">
+      <description>Streaming insert-before() - crawling operand, absorption usage</description>
+      <keywords>leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "13"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-022">
+      <description>Streaming insert-before() - crawling operand, transmission usage</description>
+      <keywords>striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Pride and Prejudice<a>A</a><b>B</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-023">
+      <description>Streaming insert-before() - crawling operand, focus-setting usage</description>
+      <keywords>leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 100 99 7.58 5.95 5.95 17.47 17.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-030">
+      <description>Streaming insert-before() - climbing operand, inspection usage</description>
+      <keywords>striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST a b BOOKS ITEM"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-031">
+      <description>Streaming insert-before() - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST a b BOOKS ITEM ITEM ITEM ITEM ITEM ITEM"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-insert-before-032">
+      <description>Streaming insert-before() - climbing operand, absorption usage</description>
+      <keywords>climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|A|B|MMP"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-033">
+      <description>Streaming insert-before() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|A|B|P|P|P|H|P"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-insert-before-034">
+      <description>Streaming insert-before() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|A|B|P|P|P|H|P"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-035">
+      <description>Streaming insert-before() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|A|B|MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>  
+
+   <test-case name="sf-insert-before-040">
+      <description>Streaming insert-before expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-040"/>
+      </test>
+      <result>
+         <assert>deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-041">
+      <description>Streaming insert-before expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-041"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))</assert>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (4.95, 6.58, 4.95, 4.95, 16.47, 16.47, 18.90))</assert>          
+         </any-of>        
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-042">
+      <description>Streaming insert-before expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-042"/>
+      </test>
+      <result>
+         <assert>/out = "18.90 4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-043">
+      <description>Streaming insert-before expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sf-insert-before-A"/>
+      <test>
+         <initial-template name="r-043"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "18.90 4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+            <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47 18.90"</assert>
+         </any-of>
+      </result>
+   </test-case>
+   
+
+   <test-case name="sf-insert-before-101">
+      <description>insert-before() (streaming arg 3) - grounded operand</description>
+      <keywords>striding-then-grounded leading-lone-slash PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert>/out = "A 4.95 6.58 4.95 4.95 16.47 16.47 B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-102">
+      <description>insert-before() (streaming arg 3) - grounded operand</description>
+      <keywords>leading-lone-slash striding-then-grounded fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>A</a><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE><b>B</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-103">
+      <description>insert-before() (streaming arg 3) - grounded atomic operand</description>
+      <keywords>striding-then-grounded leading-lone-slash fn:tokenize ContextItemExpr PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert>/out = "A 8.3 5.7 1.1 B A 1.0 5.2 7.8 B A 6.8 4.2 0.8 B A 7.8 5.2 0.9 B A 22.5 18.0 3.5 B A 7.8 5.0 0.9 B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-110">
+      <description>insert-before() (streaming arg 3) - striding operand, inspection usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:count</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "8"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-111">
+      <description>insert-before() (streaming arg 3) - striding operand, absorption usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:sum</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "251.37"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-112">
+      <description>insert-before() (streaming arg 3) - striding operand, transmission usage</description>
+      <keywords>leading-lone-slash striding motionless-predicate fn:position PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>/out = "4.95 4.95 16.47 B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-113">
+      <description>insert-before() (streaming arg 3) - striding operand, focus-setting usage</description>
+      <keywords>AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "99 5.95 7.58 5.95 5.95 17.47 17.47 100"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-insert-before-114">
+      <description>insert-before() (streaming arg 3) - striding operand, focus-controlled usage</description>
+      <keywords>leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>A</a><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT><b>B</b></out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-insert-before-115">
+      <description>insert-before() (streaming arg 3) - striding operand, focus-setting usage</description>
+      <keywords>leading-lone-slash striding PathExpr AdditiveExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "99 5.95 7.58 5.95 5.95 17.47 17.47 100 "</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-insert-before-116">
+      <description>insert-before() (streaming arg 3) - striding operand, focus-controlled usage</description>
+      <keywords>xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>A</a><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT><b>B</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-117">
+      <description>insert-before() (streaming arg 3) - striding operand, focus-setting usage for inspection action</description>
+      <keywords>leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "false true false true true true true false false true true true false"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-118">
+      <description>insert-before() (streaming arg 3) - striding operand, apply-templates usage</description>
+      <keywords>leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "(A)Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1(B)"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-120">
+      <description>insert-before() (streaming arg 3) - crawling operand, inspection usage</description>
+      <keywords>xsl:copy-of fn:count PathExpr leading-double-slash crawling</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "8"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-121">
+      <description>insert-before() (streaming arg 3) - crawling operand, absorption usage</description>
+      <keywords>leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "13"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-122">
+      <description>insert-before() (streaming arg 3) - crawling operand, transmission usage</description>
+      <keywords>striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>A</a>Pride and PrejudiceJane Austen</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-123">
+      <description>insert-before() (streaming arg 3) - crawling operand, focus-setting usage</description>
+      <keywords>leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert>/out = "99 5.95 7.58 5.95 5.95 17.47 17.47 100"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-130">
+      <description>insert-before() (streaming arg 3) - climbing operand, inspection usage</description>
+      <keywords>striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <assert>/out = "a BOOKLIST BOOKS ITEM b"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-131">
+      <description>insert-before() (streaming arg 3) - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "a BOOKLIST BOOKS ITEM ITEM ITEM ITEM ITEM ITEM b"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-insert-before-132">
+      <description>insert-before() (streaming arg 3) - climbing operand, absorption usage</description>
+      <keywords>climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = "A|MHK|MMP|B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-133">
+      <description>insert-before() (streaming arg 3) - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "A|MMP|P|P|P|H|P|B"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-insert-before-134">
+      <description>insert-before() (streaming arg 3) - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>/out = "A|MMP|P|P|P|H|P|B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-135">
+      <description>insert-before() (streaming arg 3) - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "A|MHK|MMP|P|P|P|H|P|B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-140">
+      <description>Streaming insert-before expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-040"/>
+      </test>
+      <result>
+         <assert>deep-equal(/out/PRICE/xs:decimal(.), (4.95, 18.90, 6.58, 4.95, 4.95, 16.47, 16.47))</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-141">
+      <description>Streaming insert-before expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-041"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))</assert>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (4.95, 6.58, 4.95, 4.95, 16.47, 16.47, 18.90))</assert>          
+         </any-of>        
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-142">
+      <description>Streaming insert-before expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-042"/>
+      </test>
+      <result>
+         <assert>/out = "4.95 18.90 6.58 4.95 4.95 16.47 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-insert-before-143">
+      <description>Streaming insert-before expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sf-insert-before-B"/>
+      <test>
+         <initial-template name="r-043"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "18.90 4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+            <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47 18.90"</assert>
+         </any-of>
+      </result>
+   </test-case>
+ 
+
+
+
+</test-set>

@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="sf-unparsed-entity-uri">
+   <description>Tests the unparsed-entity-uri and unparsed-entity-public-id functions under streaming</description>
+   
+   <environment name="unparsed-entity-A">
+      <source role="." file="unparsed-entity-A.xml" streaming="true"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   
+   <test-case name="sf-unparsed-entity-01">
+      <description>test unparsed-entity-public-id() Also tests nested comments</description>
+      <created by="Michael Kay" on="2016-12-20"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-01.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = 'true'</assert>
+            <assert>/out/b = ''</assert>
+            <assert>/out/c = 'false'</assert>
+            <assert>/out/d = '-//Textuality//TEXT standard boilerplate//EN'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-unparsed-entity-02">
+      <description>PURPOSE test unparsed-entity-uri() function</description>
+      <created by="Michael Kay" on="2016-12-20"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-02.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-unparsed-entity-03">
+      <description>test unparsed-entity-public-id#2 and copying of unparsed-entities by the snapshot function</description>
+      <created by="Michael Kay" on="2016-12-20"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-03.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = 'true'</assert>
+            <assert>/out/b = ''</assert>
+            <assert>/out/c = 'false'</assert>
+            <assert>/out/d = '-//Textuality//TEXT standard boilerplate//EN'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-unparsed-entity-04">
+      <description>PURPOSE test unparsed-entity-uri#2 function</description>
+      <created by="Michael Kay" on="2016-12-20"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-04.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-unparsed-entity-05">
+      <description>Unparsed entities available during document node processing</description>
+      <created by="Michael Kay" on="2016-12-20"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-05.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = 'true'</assert>
+            <assert>/out/b = ''</assert>
+            <assert>/out/c = 'false'</assert>
+            <assert>/out/d = '-//Textuality//TEXT standard boilerplate//EN'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-unparsed-entity-06">
+      <description>Unparsed entities preserved by xsl:copy</description>
+      <created by="Michael Kay" on="2016-12-20"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-06.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = 'true'</assert>
+            <assert>/out/b = ''</assert>
+            <assert>/out/c = 'false'</assert>
+            <assert>/out/d = '-//Textuality//TEXT standard boilerplate//EN'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-unparsed-entity-07">
+      <description>Unparsed entities preserved by fn:copy-of</description>
+      <created by="Michael Kay" on="2015-05-01"/>
+      <modified by="Michael Kay" on="2016-03-18" change="document DTD dependency"/>
+      <modified by="Michael Kay" on="2016-11-22" change="moved from expression-1907"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-07.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = 'true'</assert>
+            <assert>/out/b = ''</assert>
+            <assert>/out/c = 'false'</assert>
+            <assert>/out/d = '-//Textuality//TEXT standard boilerplate//EN'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-unparsed-entity-08">
+      <description>Unparsed entities preserved by fn:snapshot</description>
+      <created by="Michael Kay" on="2016-12-20"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-08.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = 'true'</assert>
+            <assert>/out/b = ''</assert>
+            <assert>/out/c = 'false'</assert>
+            <assert>/out/d = '-//Textuality//TEXT standard boilerplate//EN'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+ 
+
+</test-set>

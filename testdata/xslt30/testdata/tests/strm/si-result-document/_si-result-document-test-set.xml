@@ -1,0 +1,826 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-result-document">
+   <description>Tests xsl:stream instruction with xsl:result-document.</description>
+   
+   
+   <environment name="si-result-document-A">
+     <stylesheet file="si-result-document-A.xsl"/>
+   </environment>
+   
+   <environment name="si-result-document-B">
+     <schema file="../docs/loans.xsd"/>
+     <stylesheet file="si-result-document-B.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   
+   
+   <test-case name="si-result-document-001">
+      <description>Use xsl:result-document: atomic values, consuming</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-001"/>
+      </test>
+      <result><assert-result-document uri="d-001.xml">
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05"</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-002">
+      <description>Use xsl:result-document: atomic values, consuming and non-consuming</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-002"/>
+      </test>
+      <result><assert-result-document uri="d-002.xml">
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05 101 102"</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-003">
+      <description>Use xsl:result-document: climbing posture</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-003"/>
+      </test>
+      <result><assert-result-document uri="d-003.xml">
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05"</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-004">
+      <description>Use xsl:result-document: climbing posture</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-004"/>
+      </test>
+      <result><assert-result-document uri="d-004.xml">
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05 101 102"</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-005">
+      <description>Use xsl:result-document: striding posture, element nodes</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-005"/>
+      </test>
+      <result><assert-result-document uri="d-005.xml">
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-006">
+      <description>Use xsl:result-document: striding posture, text nodes</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-006"/>
+      </test>
+      <result><assert-result-document uri="d-006.xml">
+         <assert>/out = "4.95,6.58,4.95,4.95,16.47,16.47,"</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-007">
+      <description>Use xsl:result-document: striding posture, text nodes plus atomic values</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-007"/>
+      </test>
+      <result><assert-result-document uri="d-007.xml">
+         <assert>/out = "4.956.584.954.9516.4716.47101 102"</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-008">
+      <description>Use xsl:result-document: striding posture, element nodes plus grounded elements</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-008"/>
+      </test>
+      <result>
+        <all-of>
+      	  <assert-result-document uri="d-008-1.xml">
+      	  	<assert>/PRICE = "100.00"</assert>
+      	  </assert-result-document>
+      	  <assert-result-document uri="d-008-2.xml">
+      	  	<assert>/PRICE = "101.00"</assert>
+      	  </assert-result-document>
+      	  <assert-result-document uri="d-008-3.xml">
+      	  	<assert>/PRICE = "4.95"</assert>
+      	  </assert-result-document>
+      	  <assert-result-document uri="d-008-4.xml">
+      	  	<assert>/PRICE = "6.58"</assert>
+      	  </assert-result-document>
+      	  <assert-result-document uri="d-008-5.xml">
+      	  	<assert>/PRICE = "4.95"</assert>
+      	  </assert-result-document>
+      	  <assert-result-document uri="d-008-6.xml">
+      	  	<assert>/PRICE = "4.95"</assert>
+      	  </assert-result-document>
+      	  <assert-result-document uri="d-008-7.xml">
+      	  	<assert>/PRICE = "16.47"</assert>
+      	  </assert-result-document>
+      	  <assert-result-document uri="d-008-8.xml">
+      	  	<assert>/PRICE = "16.47"</assert>
+      	  </assert-result-document>
+      	</all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-result-document-009">
+      <description>Use xsl:result-document: descendant text nodes</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-009"/>
+      </test>
+      <result>
+        <all-of>
+      	  <assert-result-document uri="d-009-3.xml">
+      	  	<assert>/PRICE = "4.95"</assert>
+      	  </assert-result-document>
+      	  <assert-result-document uri="d-009-4.xml">
+      	  	<assert>/PRICE = "6.58"</assert>
+      	  </assert-result-document>
+      	  <assert-result-document uri="d-009-5.xml">
+      	  	<assert>/PRICE = "4.95"</assert>
+      	  </assert-result-document>
+      	  <assert-result-document uri="d-009-6.xml">
+      	  	<assert>/PRICE = "4.95"</assert>
+      	  </assert-result-document>
+      	  <assert-result-document uri="d-009-7.xml">
+      	  	<assert>/PRICE = "16.47"</assert>
+      	  </assert-result-document>
+      	  <assert-result-document uri="d-009-8.xml">
+      	  	<assert>/PRICE = "16.47"</assert>
+      	  </assert-result-document>
+      	</all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-result-document-010">
+      <description>Use xsl:result-document: descendant text nodes plus atomic values</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-010"/>
+      </test>
+      <result><assert-result-document uri="d-010.xml">
+         <assert>/out = "100 1014.956.584.954.9516.4716.47"</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-011">
+      <description>Use xsl:result-document: whole document unchanged</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-011"/>
+      </test>
+      <result><assert-result-document uri="d-011.xml">
+         <all-of>
+           <assert>/out/head</assert>
+           <assert>/out/BOOKLIST/BOOKS</assert>
+           <assert>/out/BOOKLIST/CATEGORIES</assert>
+           <assert>/out/tail</assert>
+         </all-of>  
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-022">
+      <description>Use xsl:result-document: validation="strip" (non-schema-aware)</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-022"/>
+      </test>
+      <result><assert-result-document uri="d-022.xml">
+         <assert>/out/* instance of element(*, xs:untyped)</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-023">
+      <description>Use xsl:result-document: validation="preserve" (non-schema-aware)</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-023"/>
+      </test>
+      <result><assert-result-document uri="d-023.xml">
+         <assert>/out/* instance of element(*, xs:untyped)</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-024">
+      <description>Use xsl:result-document: validation="lax" (non-schema-aware)</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-024"/>
+      </test>
+      <result><assert-result-document uri="d-024.xml">
+         <assert>/out/* instance of element(*, xs:untyped)</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+<!--
+   <test-case name="si-result-document-040">
+      <description>Use xsl:result-document: with on-empty (nothing selected)</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-040"/>
+      </test>
+      <result><assert-result-document uri="d-040.xml">
+         <assert>/out/a</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-041">
+      <description>Use xsl:result-document: with on-empty</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-041"/>
+      </test>
+      <result><assert-result-document uri="d-041.xml">
+         <assert>/out/a</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-042">
+      <description>Use xsl:result-document: with on-empty</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-042"/>
+      </test>
+      <result><assert-result-document uri="d-042.xml">
+         <assert>/out/a</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-043">
+      <description>Use xsl:result-document: with on-empty</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-043"/>
+      </test>
+      <result><assert-result-document uri="d-043.xml">
+         <assert>/out/a</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-044">
+      <description>Use xsl:result-document: with on-empty</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-044"/>
+      </test>
+      <result><assert-result-document uri="d-044.xml">
+         <assert>/out/a</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-045">
+      <description>Use xsl:result-document: with on-empty</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-045"/>
+      </test>
+      <result><assert-result-document uri="d-045.xml">
+         <assert>/out/a</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-046">
+      <description>Use xsl:result-document: with on-empty</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-046"/>
+      </test>
+      <result><assert-result-document uri="d-046.xml">
+         <assert>/out/a</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-047">
+      <description>Use xsl:result-document: with on-empty (empty element constructed)</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-047"/>
+      </test>
+      <result><assert-result-document uri="d-047.xml">
+         <assert>/out/a</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-048">
+      <description>Use xsl:result-document: with on-empty (empty document constructed)</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-A"/>
+      <test>
+         <initial-template name="d-048"/>
+      </test>
+      <result><assert-result-document uri="d-048.xml">
+         <assert>/out/a</assert>
+      </assert-result-document></result>
+   </test-case>
+-->   
+   <test-case name="si-result-document-101">
+      <description>Use xsl:result-document: schema-aware, validation=strict</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-101"/>
+      </test>
+      <result><assert-result-document uri="d-101.xml">
+         <assert>/myroot/ACERequest</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+  <test-case name="si-result-document-102">
+      <description>Use xsl:result-document: schema-aware, validation=lax</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-102"/>
+      </test>
+      <result><assert-result-document uri="d-102.xml">
+         <assert>/myroot/ACERequest</assert>
+      </assert-result-document></result>
+   </test-case>
+  
+  <test-case name="si-result-document-103">
+      <description>Use xsl:result-document: schema-aware, validation=strip</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-103"/>
+      </test>
+      <result><assert-result-document uri="d-103.xml">
+         <assert>/myroot/ACERequest</assert>
+      </assert-result-document></result>
+   </test-case>
+  
+  <test-case name="si-result-document-104">
+      <description>Use xsl:result-document: schema-aware, validation=preserve</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-104"/>
+      </test>
+      <result><assert-result-document uri="d-104.xml">
+         <assert>/myroot/ACERequest</assert>
+      </assert-result-document></result>
+   </test-case>
+  
+  <test-case name="si-result-document-105">
+      <description>Use xsl:result-document: schema-aware, validation by type</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-105"/>
+      </test>
+      <result><assert-result-document uri="d-105.xml">
+         <assert>/myroot/ACERequest</assert>
+      </assert-result-document></result>
+   </test-case>
+  
+  <test-case name="si-result-document-106">
+      <description>Use xsl:result-document: schema-aware, validation=strict, no element declaration available</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <modified by="Michael Kay" on="2018-09-24" change="Error code should be XTTE1512 not XTTE1510, but keep the old result as an alternative"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-106"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTTE1510"/>
+            <error code="XTTE1512"/>
+         </any-of>
+      </result>
+   </test-case>
+  
+  <test-case name="si-result-document-107">
+      <description>Use xsl:result-document: schema-aware, validation=lax, no element declaration available</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-107"/>
+      </test>
+      <result><assert-result-document uri="d-107.xml">
+         <assert xmlns:r="http://loan.shark.com/">/r:myroot/r:ACERequest</assert>
+      </assert-result-document></result>
+   </test-case>
+
+   <test-case name="si-result-document-108">
+      <description>Use xsl:result-document: schema-aware, validation by type, invalid (wrong namespace)</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <modified by="Michael Kay" on="2018-09-24" change="Error code should be XTTE1512 not XTTE1510, but keep the old result as an alternative"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-108"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTTE1510"/>
+            <error code="XTTE1512"/>
+         </any-of>
+      </result>
+   </test-case>
+  
+  <test-case name="si-result-document-109">
+      <description>Use xsl:result-document: schema-aware, validation=strict, no element declaration available, caught</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <modified by="Michael Kay" on="2018-09-24" change="Error code should be XTTE1512 not XTTE1510, but keep the old result as an alternative"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-109"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "XTTE1510"</assert>
+            <assert>/out = "XTTE1512"</assert>
+         </any-of>
+      </result>
+   </test-case>
+  
+  <test-case name="si-result-document-110">
+      <description>Use xsl:result-document: schema-aware, validation by type, invalid, caught</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-110"/>
+      </test>
+      <result>
+         <assert>/out = "XTTE1540"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-result-document-111">
+      <description>Use xsl:result-document: schema-aware, validation=strict, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-111"/>
+      </test>
+      <result><assert-result-document uri="d-111.xml">
+         <assert>/ACERequest/Deal/Pool</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+  <test-case name="si-result-document-112">
+      <description>Use xsl:result-document: schema-aware, validation=lax, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-112"/>
+      </test>
+      <result><assert-result-document uri="d-112.xml">
+         <assert>/ACERequest/Deal/Pool</assert>
+      </assert-result-document></result>
+   </test-case>
+  
+  <test-case name="si-result-document-113">
+      <description>Use xsl:result-document: schema-aware, validation=strip, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-113"/>
+      </test>
+      <result><assert-result-document uri="d-113.xml">
+         <assert>/Deal/Pool</assert>
+      </assert-result-document></result>
+   </test-case>
+  
+  <test-case name="si-result-document-114">
+      <description>Use xsl:result-document: schema-aware, validation=preserve, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-114"/>
+      </test>
+      <result><assert-result-document uri="d-114.xml">
+         <assert>/Deal/Pool</assert>
+      </assert-result-document></result>
+   </test-case>
+  
+  <test-case name="si-result-document-115">
+      <description>Use xsl:result-document: schema-aware, validation by type, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-115"/>
+      </test>
+      <result><assert-result-document uri="d-115.xml">
+         <assert>ACERequest/Deal/Pool</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+   <test-case name="si-result-document-116">
+      <description>Use xsl:result-document: schema-aware, validate attribute by type, success</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-116"/>
+      </test>
+      <result>
+      	<assert-result-document uri="d-116.xml">
+      	  <all-of>
+         	<assert>/in = 2.1</assert>
+         	<assert>/in instance of element(*, xs:decimal)</assert>
+          </all-of>	
+      	</assert-result-document>
+      </result>
+   </test-case>
+   
+   <test-case name="si-result-document-117">
+      <description>Use xsl:result-document: schema-aware, validate attribute by type, failure</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-117"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-result-document-121">
+      <description>Use xsl:result-document: schema-aware, validation=strict, element node</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-121"/>
+      </test>
+      <result><assert-result-document uri="d-121.xml">
+         <assert>/myroot/ACERequest</assert>
+      </assert-result-document></result>
+   </test-case>
+   
+  <test-case name="si-result-document-122">
+      <description>Use xsl:result-document: schema-aware, validation=lax, element node</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-122"/>
+      </test>
+      <result><assert-result-document uri="d-122.xml">
+         <assert>/myroot/ACERequest</assert>
+      </assert-result-document></result>
+   </test-case>
+  
+  <test-case name="si-result-document-123">
+      <description>Use xsl:result-document: schema-aware, validation=strip, element node</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-123"/>
+      </test>
+      <result><assert-result-document uri="d-123.xml">
+         <assert>/myroot/ACERequest</assert>
+      </assert-result-document></result>
+   </test-case>
+  
+  <test-case name="si-result-document-124">
+      <description>Use xsl:result-document: schema-aware, validation=preserve, element node</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-124"/>
+      </test>
+      <result><assert-result-document uri="d-124.xml">
+         <assert>/myroot/ACERequest</assert>
+      </assert-result-document></result>
+   </test-case>
+  
+  <test-case name="si-result-document-125">
+      <description>Use xsl:result-document: schema-aware, validation by type, element node</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-125"/>
+      </test>
+      <result><assert-result-document uri="d-125.xml">
+         <assert>/myroot/ACERequest</assert>
+      </assert-result-document></result>
+   </test-case>
+  
+  <test-case name="si-result-document-126">
+      <description>Use xsl:result-document: schema-aware, validation=strict, element node, no element declaration available</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <modified by="Michael Kay" on="2018-09-24" change="Error code should be XTTE1512 not XTTE1510, but keep the old result as an alternative"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-126"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTTE1510"/>
+            <error code="XTTE1512"/>
+         </any-of>
+      </result>
+   </test-case>
+  
+  <test-case name="si-result-document-127">
+      <description>Use xsl:result-document: schema-aware, validation=lax, element node, no element declaration available</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-127"/>
+      </test>
+      <result>
+      	<assert-result-document uri="d-127.xml">
+        	<assert xmlns:r="http://loan.shark.com/">/r:myroot/r:ACERequest</assert>
+      	</assert-result-document>
+      </result>
+   </test-case>
+
+   <test-case name="si-result-document-128">
+      <description>Use xsl:result-document: schema-aware, validation by type, element node, invalid (wrong namespace)</description>
+      <created by="Michael Kay" on="2014-01-10"/>
+      <environment ref="si-result-document-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="d-128"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="si-result-document-301">
+      <description>Streaming - calling xsl:result-document - motionless content</description>
+      <created by="Michael Kay" on="2013-06-15"/>
+      <test>
+         <stylesheet file="si-result-document-301.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-result-document uri="76543210.xml">
+               <assert-xml><![CDATA[<root>account</root>]]></assert-xml>
+         </assert-result-document>
+      </result>
+   </test-case>
+   
+   <test-case name="si-result-document-302">
+      <description>Streaming - calling xsl:result-document</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-08-16"/>
+      <environment>
+         <source role="." file="si-result-document-302.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-result-document-302.xsl"/>
+      </test>
+      <result>
+         <assert-result-document uri="test2016081202Result2.xml">
+            <assert-xml><![CDATA[<root>
+    <header>
+        <foo xmlns:x="http://bar.com/" id="x:bar">
+            <bar>baz</bar>
+        </foo>
+    </header>
+    <body>
+        <data>1</data>
+        <data>2</data>
+        <data>3</data>
+        <data>4</data>
+        <data>5</data>
+        <data>6</data>
+        <data>7</data>
+        <data>8</data>
+        <data>9</data>
+        <data>10</data>
+    </body>
+</root>]]></assert-xml>
+         </assert-result-document>
+      </result>
+   </test-case>
+   
+   <test-case name="si-result-document-303">
+      <description>Streaming - calling xsl:result-document - href attribute is consuming, content is motionless</description>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <test>
+         <stylesheet file="si-result-document-303.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-result-document uri="20.xml">
+            <assert-xml><![CDATA[<root>account</root>]]></assert-xml>
+         </assert-result-document>
+      </result>
+   </test-case>
+   
+   <test-case name="si-result-document-304">
+      <description>Streaming - calling xsl:result-document - method attribute is consuming, content is motionless</description>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <test>
+         <stylesheet file="si-result-document-304.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-result-document uri="304.xml">
+            <assert-xml><![CDATA[<root>account</root>]]></assert-xml>
+         </assert-result-document>
+      </result>
+   </test-case>
+
+
+</test-set>

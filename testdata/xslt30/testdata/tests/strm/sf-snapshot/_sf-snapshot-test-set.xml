@@ -1,0 +1,451 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="sf-snapshot">
+   <description>Tests the snapshot() function under streaming</description>
+
+   <environment name="snapshot-01">
+      <source role=".">
+         <content><![CDATA[ 
+<br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
+                  xmlns:br="http://www.bridge.org"
+                 gml:id="Iowa-IllinoisMemorialBridge">
+   <gml:description>
+       The Interstate 74 Bridge, originally known as the Iowa-Illinois Memorial Bridge,
+       and often called The Twin Bridges, or the I-74 Bridge, is a pair of suspension
+       bridges that cross the Mississippi River and connect Bettendorf, Iowa and Moline, Illinois.
+   </gml:description>
+   <gml:identifier codeSpace="http://iowadot.gov">#8205,OL074  8205,OR074</gml:identifier>    
+   <gml:name>I-74 Bridge</gml:name>    
+   <gml:name>Twin Bridge</gml:name>
+   <gml:boundedBy>   
+       <gml:Envelope srsName="http://earth-info.nga.mil/GandG/wgs84/index.html">
+           <gml:lowerCorner>41.512674 -90.513161</gml:lowerCorner>
+           <gml:upperCorner>41.524113 -90.51299</gml:upperCorner>
+       </gml:Envelope>
+   </gml:boundedBy>
+   <br:length>3,372 feet (1,028 m)</br:length>
+   <br:width>27 feet (8 m)</br:width>
+   <br:spans>Mississippi River</br:spans>
+</br:Bridge>
+]]></content>
+      </source>
+   </environment>
+   
+   <environment name="sf-snapshot-A">
+     <stylesheet file="sf-snapshot-A.xsl"/>
+   </environment>
+
+
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   
+
+   <test-case name="sf-snapshot-0101a">
+      <description>snapshot() applied to document node</description>
+      <created by="Michael Kay" on="2013-11-10"/>
+      <environment ref="snapshot-01"/>      
+      <test>
+         <stylesheet file="sf-snapshot-0101.xsl"/>
+         <initial-template name="a"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0101b">
+      <description>snapshot() applied to outermost element node</description>
+      <created by="Michael Kay" on="2012-12-10"/>
+      <environment ref="snapshot-01"/>      
+      <test>
+         <stylesheet file="sf-snapshot-0101.xsl"/>
+         <initial-template name="b"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/ok</assert>
+            <assert>/ok/@doc = 'true'</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0101c">
+      <description>snapshot() applied to a deeper element node</description>
+      <created by="Michael Kay" on="2012-12-10"/>
+      <environment ref="snapshot-01"/>      
+      <test>
+         <stylesheet file="sf-snapshot-0101.xsl"/>
+         <initial-template name="c"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[
+<br:Bridge xmlns:gml="http://www.opengis.net/gml/3.2"
+           xmlns:br="http://www.bridge.org"
+           gml:id="Iowa-IllinoisMemorialBridge"
+><gml:identifier codeSpace="http://iowadot.gov">#8205,OL074  8205,OR074</gml:identifier></br:Bridge>
+]]></assert-xml>           
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0102">
+      <description>Compare actual snapshot() results with the implementation in the spec</description>
+      <created by="Michael Kay" on="2014-08-11"/>
+      <environment ref="snapshot-01"/>   
+      <test>
+         <stylesheet file="sf-snapshot-0102.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out</assert>
+            <assert>not(/out/wrong)</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0105">
+      <description>snapshot() applied to an empty sequence
+      </description>
+      <created by="Michael Kay" on="2013-11-12"/>
+      <environment ref="snapshot-01"/>   
+      <test>
+         <stylesheet file="sf-snapshot-0105.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out</assert>
+            <assert>not(/out/node())</assert>
+         </all-of>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-snapshot-0201">
+      <description>Test snapshot() applied to individual node in streamed input</description>
+      <created by="Michael Kay" on="2013-11-12"/>
+      <test>
+         <stylesheet file="sf-snapshot-0201.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/emp) = 13</assert>
+            <assert-xml><![CDATA[<out>
+   <emp name="Jane Doe 1" dept="sales" nr="E101" hours="40"/>
+   <emp name="John Doe 2" dept="sales" nr="E102" hours="70 20"/>
+   <emp name="Jane Doe 3" dept="sales" nr="E103" hours="80"/>
+   <emp name="John Doe 4" dept="sales" nr="E104" hours="20 40"/>
+   <emp name="Jane Doe 5" dept="sales" nr="E105" hours="20 30"/>
+   <emp name="John Doe 6" dept="customer-support" nr="E106" hours="12"/>
+   <emp name="Jane Doe 7" dept="customer-support" nr="E201" hours="40"/>
+   <emp name="John Doe 8" dept="customer-support" nr="E202" hours="80"/>
+   <emp name="Jane Doe 9" dept="customer-support" nr="E301" hours="20"/>
+   <emp name="John Doe 10" dept="finance" nr="E302" hours="20"/>
+   <emp name="Jane Doe 11" dept="finance" nr="E401" hours="20"/>
+   <emp name="John Doe 12" dept="finance" nr="E402" hours="40"/>
+   <emp name="Jane Doe 13" dept="finance" nr="E403" hours="80"/>
+</out>
+]]></assert-xml>           
+         </all-of>
+      </result>
+   </test-case>  
+   
+   <test-case name="sf-snapshot-0202">
+      <description>Test snapshot() applied to sequence of nodes in streamed input</description>
+      <created by="Michael Kay" on="2013-11-12"/>
+      <test>
+         <stylesheet file="sf-snapshot-0202.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out</assert>
+            <assert-xml><![CDATA[<out>
+   <emp name="Jane Doe 1" dept="sales" nr="E101" hours="40"/>
+   <emp name="John Doe 2" dept="sales" nr="E102" hours="70 20"/>
+   <emp name="Jane Doe 3" dept="sales" nr="E103" hours="80"/>
+   <emp name="John Doe 4" dept="sales" nr="E104" hours="20 40"/>
+   <emp name="Jane Doe 5" dept="sales" nr="E105" hours="20 30"/>
+   <emp name="John Doe 6" dept="customer-support" nr="E106" hours="12"/>
+   <emp name="Jane Doe 7" dept="customer-support" nr="E201" hours="40"/>
+   <emp name="John Doe 8" dept="customer-support" nr="E202" hours="80"/>
+   <emp name="Jane Doe 9" dept="customer-support" nr="E301" hours="20"/>
+   <emp name="John Doe 10" dept="finance" nr="E302" hours="20"/>
+   <emp name="Jane Doe 11" dept="finance" nr="E401" hours="20"/>
+   <emp name="John Doe 12" dept="finance" nr="E402" hours="40"/>
+   <emp name="Jane Doe 13" dept="finance" nr="E403" hours="80"/>
+</out>
+]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>  
+   
+   <test-case name="sf-snapshot-0203">
+      <description>Test snapshot() applied to a sequence of attribute nodes</description>
+      <created by="Michael Kay" on="2013-11-17"/>
+      <test>
+         <stylesheet file="sf-snapshot-0203.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out</assert>
+            <assert-xml><![CDATA[<out>
+   <emp name="Jane Doe 1" gender="female" dept="sales"/>
+   <emp name="John Doe 2" gender="male" dept="sales"/>
+   <emp name="Jane Doe 3" gender="female" dept="sales"/>
+</out>
+]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>  
+
+   <test-case name="sf-snapshot-0204">
+      <description>Test snapshot() applied to a sequence of text nodes</description>
+      <created by="Michael Kay" on="2013-11-17"/>
+      <test>
+         <stylesheet file="sf-snapshot-0204.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out</assert>
+            <assert-xml><![CDATA[<out>
+   <emp name="Jane Doe 1" dept="sales" num="E101" gender="female"/>
+   <emp name="John Doe 6" dept="customer-support" num="E106" gender="male"/>
+   <emp name="John Doe 10" dept="finance" num="E302" gender="male"/>
+</out>
+]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-snapshot-0205">
+      <description>Test snapshot() applied to a sequence of attribute nodes: unstreamed</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <test>
+         <stylesheet file="sf-snapshot-0205.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out</assert>
+            <assert-xml><![CDATA[<out>
+   <emp name="Jane Doe 1" gender="female" dept="sales"/>
+   <emp name="John Doe 2" gender="male" dept="sales"/>
+   <emp name="Jane Doe 3" gender="female" dept="sales"/>
+</out>
+]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-snapshot-0206">
+      <description>Test snapshot() applied to a subsequence of a sequence of attribute nodes: streamed</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <test>
+         <stylesheet file="sf-snapshot-0206.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out</assert>
+            <assert-xml><![CDATA[<out>
+   <emp name="Jane Doe 1" gender="female" dept="sales"/>
+   <emp name="John Doe 2" gender="male" dept="sales"/>
+   <emp name="Jane Doe 3" gender="female" dept="sales"/>
+</out>
+]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0207">
+      <description>Test snapshot() applied to a sequence of text nodes with one removed</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <test>
+         <stylesheet file="sf-snapshot-0207.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out</assert>
+            <assert-xml><![CDATA[<out>
+   <emp name="Jane Doe 1" dept="sales" num="E101" gender="female"/>
+   <emp name="John Doe 10" dept="finance" num="E302" gender="male"/>
+</out>
+]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>    
+   
+   <test-case name="sf-snapshot-0208">
+      <description>Test snapshot() applied to a sequence of text nodes with one removed</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <test>
+         <stylesheet file="sf-snapshot-0208.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out</assert>
+            <assert-xml><![CDATA[<out>
+   <emp name="Jane Doe 1" dept="sales" num="E101" gender="female"/>
+   <emp name="John Doe 10" dept="finance" num="E302" gender="male"/>
+</out>
+]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>       
+   
+   <test-case name="sf-snapshot-0209">
+      <description>Test snapshot() applied to a sequence of element nodes with one removed</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <test>
+         <stylesheet file="sf-snapshot-0209.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out</assert>
+            <assert-xml><![CDATA[<out>
+   <emp name="Jane Doe 1" dept="sales" num="E101" gender="female"/>
+   <emp name="John Doe 10" dept="finance" num="E302" gender="male"/>
+</out>
+]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0303">
+      <description>Use fn:snapshot: climbing posture</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-snapshot-A"/>
+      <test>
+         <initial-template name="cy-003"/>
+      </test>
+      <result>
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0304">
+      <description>Use fn:snapshot: climbing posture</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-snapshot-A"/>
+      <test>
+         <initial-template name="cy-004"/>
+      </test>
+      <result>
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05 101 102"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0305">
+      <description>Use fn:snapshot: striding posture, element nodes</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-snapshot-A"/>
+      <test>
+         <initial-template name="cy-005"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0306">
+      <description>Use fn:snapshot: striding posture, text nodes</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-snapshot-A"/>
+      <test>
+         <initial-template name="cy-006"/>
+      </test>
+      <result>
+         <assert>/out = "4.956.584.954.9516.4716.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0308">
+      <description>Use fn:snapshot: striding posture, element nodes plus grounded elements</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-snapshot-A"/>
+      <test>
+         <initial-template name="cy-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>100.00</PRICE><PRICE>101.00</PRICE><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0309">
+      <description>Use fn:snapshot: descendant text nodes</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-snapshot-A"/>
+      <test>
+         <initial-template name="cy-009"/>
+      </test>
+      <result>
+         <assert>/out = "4.956.584.954.9516.4716.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0311">
+      <description>Use fn:snapshot: whole document unchanged</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-snapshot-A"/>
+      <test>
+         <initial-template name="cy-011"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/head</assert>
+           <assert>/out/BOOKLIST/BOOKS</assert>
+           <assert>/out/BOOKLIST/CATEGORIES</assert>
+           <assert>/out/tail</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0321">
+      <description>Use fn:snapshot: test that namespaces are copied</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-snapshot-A"/>
+      <test>
+         <initial-template name="cy-021"/>
+      </test>
+      <result>
+         <assert>count(in-scope-prefixes(/out/*)) = 8</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0325">
+      <description>Use fn:snapshot: test that namespaces are copied, argument grounded and consuming</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-snapshot-A"/>
+      <test>
+         <initial-template name="cy-025"/>
+      </test>
+      <result>
+         <assert>count(in-scope-prefixes(/out/*)) = 8</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-snapshot-0327">
+      <description>Use fn:snapshot: argument crawling and consuming, nested nodes</description>
+      <created by="Michael Kay" on="2014-08-30"/>
+      <environment ref="sf-snapshot-A"/>
+      <test>
+         <initial-template name="cy-027"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><n><n>1</n><n>2</n><n>3</n><n>4</n><n>5</n></n><n>1</n><n>2</n><n>3</n><n>4</n><n>5</n></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+          
+   
+</test-set>   

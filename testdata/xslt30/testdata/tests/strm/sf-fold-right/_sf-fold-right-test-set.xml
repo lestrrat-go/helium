@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-fold-right">
+   <description>
+   	fold-right() function with streaming: the function is streamable if the operand
+   	is grounded, despite being processed from right-to-left: see bug 24125.
+   </description>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+      <feature value="higher_order_functions"/>
+   </dependencies>
+   
+   <test-case name="sf-fold-right-003">
+      <description>Basic Test of xsl:stream instruction with fold-right()</description>
+      <keywords>striding-then-grounded PathExpr fn:data NamedFunctionRef</keywords>
+      <created by="Michael Kay" on="2013-12-10"/>
+      <test>
+         <stylesheet file="sf-fold-right-A.xsl"/>
+         <initial-template name="s-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>54.37</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+</test-set>

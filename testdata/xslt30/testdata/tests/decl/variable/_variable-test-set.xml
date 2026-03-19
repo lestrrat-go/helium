@@ -1,0 +1,1931 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="variable">
+   <description>Tests local and global variables</description>
+   
+   <environment name="variable-01">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-02">
+      <source role=".">
+         <content><![CDATA[<doc><a><b><c><d>test</d></c></b></a></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-03">
+      <source role=".">
+         <content><![CDATA[<go/>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-04">
+      <source role=".">
+         <content><![CDATA[<doc><chap><section><para/></section></chap></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-05">
+      <source role="." file="variable-05.xml"/>
+   </environment>
+   
+   <environment name="variable-06">
+      <source role=".">
+         <content><![CDATA[<!-- Test #1 for xsl:variable --><doc></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-07">
+      <source role=".">
+         <content><![CDATA[<!-- Test #2 for xsl:variable --><doc></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-08">
+      <source role=".">
+         <content><![CDATA[<doc><a>test</a></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-11">
+      <source role=".">
+         <content><![CDATA[<doc><item>1</item><item>2</item><item>3</item></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-14">
+      <source role=".">
+         <content><![CDATA[<docs><doc/><a>X</a><a>Y</a><a>Z</a></docs>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-17">
+      <source role=".">
+         <content><![CDATA[<doc><a pos="first"><b/></a><a pos="second"><b/></a></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-19">
+      <source role=".">
+         <content><![CDATA[<doc><a><b><c/></b></a></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-21">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <source file="variable-20.xml" uri="variable-20.xml"/>
+   </environment>
+   
+   <environment name="variable-22">
+      <source role=".">
+         <content><![CDATA[<dummy/>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-23">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-38">
+      <source role=".">
+         <content><![CDATA[<doc><a>test</a></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-44">
+      <source role=".">
+         <content><![CDATA[<doc><Test a="attrib-a" b="attrib-b"/></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-46">
+      <source role=".">
+         <content><![CDATA[<doc><a>value</a></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="variable-47">
+      <source role=".">
+         <content><![CDATA[<doc><foo>bar</foo></doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="variable-0101">
+      <description>test that "mod" can be used as a variable name See Saxon bug 6.3/008</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out changed="2004-03-05"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0102">
+      <description>XSLT 2.0 allows two local variables to have the same name</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out result="7"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0103">
+      <description>Test a global parameter with an "as" constraint. (This test needs to be called specially: it's designed for use from the command line)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" val="17" is-integer="true"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0104">
+      <description>Test use of range variables within the select expression of a global variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" x="55" z="22" is-integer="true"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0105">
+      <description>test type conversion of parameters in an xsl:apply-templates call</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out test="true"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0106">
+      <description>test as attribute on xsl:with-param</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out count="3"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0107">
+      <description>tests parameter with default value of () parameter p with not-supplied implicitly specified default value of () Result: true Result: 1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0107.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/result/a = "true"</assert>
+            <assert>/result/b = "0"</assert>
+            <assert>/result/c = "false"</assert>
+            <assert>/result/d = ""</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0108">
+      <description>Generated by NiceXSL 2.0.4 at Fri Apr 23 12:53:23 BST 2004 From Ed Willink: a stylesheet that shows problems in memory management. In 7.9.1, with looped=false, it gradually consumes memory, building a long list of Closure objects chained to other Closure objects a value of 200 or 1000 is more interesting from the point of view of memory management &lt;xsl:param name="these-spans"/&gt; &lt;xsl:param name="annotated-spans"/&gt;</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0108.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="variable-0108.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0109">
+      <description>Bug report from Evan Lenz against Saxon 9.0.0.6</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0109.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Three</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0110">
+      <description>Bug report from Vladimir Nestorovsky against Saxon 9.1.0.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0110.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<select><field alias="T"/><field alias="T"/></select>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0111">
+      <description>XSLT 2.0 doesn't allow two local parameters to have the same name</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0111.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0580"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0112">
+      <description>Test required="yes" on a global parameter</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0112.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0050"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0113">
+      <description>Variable whose value has the wrong item type. Error even in BC mode</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2019-12-03" change="Processor isn't obliged to report a type error in an unused variable"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0113.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0570"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0114">
+      <description>error - params to apply-templates have wrong type</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0114.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0590"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0115">
+      <description>Variable whose value has the wrong item type</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0115.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0570"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0116">
+      <description>Variable whose value has the wrong item type</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0116.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0570"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0117">
+      <description>Variable whose value has the wrong cardinality</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0117.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0570"/>
+      </result>
+   </test-case>
+   
+   <test-case name="variable-0118">
+      <description>Variable is out of scope within its own definition</description>
+      <created by="Michael Kay" on="2013-02-23"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0118.xsl"/>
+      </test>
+      <result>
+         <error code="XPST0008"/>
+      </result>
+   </test-case>
+   
+   <test-case name="variable-0119">
+      <description>test that EQNames can be used as a variable name</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0119.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out v="1"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="variable-0120">
+      <description>Within an overriding global variable, attempt to reference the overridden variable (spec bug 30171)</description>
+      <created by="Michael Kay" on="2017-08-26"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0120.xsl"/>
+         <stylesheet file="variable-0120a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <error code="XPST0008"/>
+      </result>
+   </test-case>
+   
+   <test-case name="variable-0121">
+      <description>Type promotion from xs:anyURI to xs:string</description>
+      <created by="Michael Kay" on="2018-12-21"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0121.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "http://p.com/ns"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="variable-0122">
+      <description>Variable with empty sequence content produces document node with no children</description>
+      <created by="Michael Kay" on="2019-07-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0122.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out/@ok = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="variable-0123">
+      <description>Variable with zero-length string content produces document node with no children</description>
+      <created by="Michael Kay" on="2019-07-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0123.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out/@ok = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0201">
+      <description>basic test of tunnel parameters</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[	<b><d>17</d></b>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0202">
+      <description>test of overriding a tunnel parameter</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><b><d t1="17" t2="28" t3="38"/></b><old>18</old></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0203">
+      <description>test of tunnel parameters on call-template</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><b><d t1="17" t2="28" t3="38"/></b><old>18</old></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0204">
+      <description>show that normal params don't clash with tunnel parameters</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0204.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><b t1="mushroom"><d t1="17" t2="28" t3="38"/></b><old>18</old></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0205">
+      <description>test error on tunnel parameter with required="yes"</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0205.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0700"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0206">
+      <description>test type error on tunnel parameter</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0206.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0590"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0301">
+      <description>test tunnel parameters</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>x = abc</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0302">
+      <description>test tunnel parameters</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>abc</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0303">
+      <description>test tunnel parameters</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0303.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>abc</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0401">
+      <description>show that appply-templates passes parameters through a built-in template in 2.0 mode, but not in 1.0 mode</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-06-07" change="depends on 1.0 compatibility mode"/>
+      <environment ref="variable-04"/>
+      <dependencies>
+         <feature value="backwards_compatibility"/>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><v2><x>42</x></v2><v1><x>42</x></v1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0501">
+      <description>Bug in Saxon 9.2: xsl:value-of generating multiple text nodes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><book><nodes>1</nodes><copy><t>1 4097 Chapter 1 2 3105 Chapter 2</t></copy></book></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0601">
+      <description>Purpose: Set top-level xsl:variable to a string </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ABC</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0701">
+      <description>Purpose: Test top-level xsl:variable set to be an RTF </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ABC,<B>ABC</B></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0801">
+      <description>Purpose: Test xsl:variable inside a template set to be an RTF </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-08"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>test</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0802">
+      <description>Purpose: Test for passing variable into other template via with-param. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-08"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0802.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>test, Default text in pvar2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-0901">
+      <description>Purpose: Verify top-level xsl:variable, HTML text RTF </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>value,<B>value</B></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1001">
+      <description>Purpose: Set variable by name but no value, should get null string  Note: "If the variable-binding element has empty content and does not have a select attribute, then the value of the variable is an empty string."</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1002">
+      <description>Section: 11.3 Using Variables and Parameters with xsl:copy-of Purpose: Test for using xsl:copy-of with empty (null string) variable. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1003">
+      <description>
+      	Section: 11.4 Top-level Variables and Parameters 
+      	Purpose: Import precedence applies to top-level params (even when template referencing it is in the imported file)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1003.xsl"/>
+         <stylesheet file="variable-1003a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>main stylesheet, should have highest precedence</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1004">
+      <description>Purpose: Set top-level xsl:param to a string </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ABC</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1005">
+      <description>Purpose: Variable name is a QName. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Tommy</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1006">
+      <description>Purpose: Set variable to null string explicitly and implicitly, compare. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1007">
+      <description>Section: 11.2 Values of Variables and Parameters Purpose: Set a variable to a boolean, and show it being used in xsl:if </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Success</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1008">
+      <description>Section: 11.3 Using Variables and Parameters with xsl:copy-of Purpose: Test for using xsl:copy-of with variable set to a number. This should have the same result as xsl:value-of, stringified number. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>17</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1009">
+      <description>Purpose: Set a variable inside a template based on variable defined earlier in that template.  Two sets of quotes make it a string</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>first</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1010">
+      <description>Purpose: Use param whose name is a QName in with-param passing. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>200, Default reptile</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1011">
+      <description>Set a variable within an if within a for-each.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Passed!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1012">
+      <description>Purpose: Show that name of variable acts like a real QName. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Wizard</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1101">
+      <description>Purpose: Test for handling of RTF used as positional index by setting variable as the content of the xsl:variable element. Reference as [$n]. This is the case that will NOT obtain what a naive person expects.  Note: When a variable is used to select nodes by position, be careful not to do: &lt;xsl:variable name="n"&gt;2&lt;/xsl:variable&gt; ... &lt;xsl:value-of select="item[$n]"/&gt; This will output the value of the first item element, because the variable n will be bound to a result tree fragment, not a number. Instead, do either &lt;xsl:variable name="n" select="2"/&gt; ... &lt;xsl:value-of select="item[$n]"/&gt; or &lt;xsl:variable name="n"&gt;2&lt;/xsl:variable&gt; ... &lt;xsl:value-of select="item[position()=$n]"/&gt;</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1102">
+      <description>Purpose: Test for handling of RTF used as positional index by setting variable as the content of the xsl:variable element. Reference as [position()=$n] This is the case that will NOT obtain what the naive person expects.  Note: When a variable is used to select nodes by position, be careful not to do: &lt;xsl:variable name="n"&gt;2&lt;/xsl:variable&gt; ... &lt;xsl:value-of select="item[$n]"/&gt; This will output the value of the first item element, because the variable n will be bound to a result tree fragment, not a number. Instead, do either &lt;xsl:variable name="n" select="2"/&gt; ... &lt;xsl:value-of select="item[$n]"/&gt; or &lt;xsl:variable name="n"&gt;2&lt;/xsl:variable&gt; ... &lt;xsl:value-of select="item[position()=$n]"/&gt;</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1103">
+      <description>Purpose: Test for handling of number used as positional index by setting variable using select attribute. Reference as [$n]  Note: When a variable is used to select nodes by position, be careful not to do: &lt;xsl:variable name="n"&gt;2&lt;/xsl:variable&gt; ... &lt;xsl:value-of select="item[$n]"/&gt; This will output the value of the first item element, because the variable n will be bound to a result tree fragment, not a number. Instead, do either &lt;xsl:variable name="n" select="2"/&gt; ... &lt;xsl:value-of select="item[$n]"/&gt; or &lt;xsl:variable name="n"&gt;2&lt;/xsl:variable&gt; ... &lt;xsl:value-of select="item[position()=$n]"/&gt;</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1201">
+      <description>Purpose: Test for setting a param using a choose </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><item>Y</item></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ABC_25</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1301">
+      <description>Purpose: Verify that a variable defined within a xsl:with-param content is scoped correctly. Idea sent in on xalan-dev list. We should recognize 'test' within the with-param statement. The named template 'foo' really plays no part here. , based on posting to xalan-dev list</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><Test>Hello</Test></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<foo>Test</foo>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1401">
+      <description>Purpose: Test for-each inside xsl:variable </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>$all contains XYZ</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1402">
+      <description>Purpose: Test for-each inside xsl:param </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>$all contains XYZ</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1501">
+      <description>Purpose: Show that there is always a current node </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<docs><doc>blah</doc><a>X</a></docs>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>$children contains 1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1601">
+      <description>Purpose: Test param being set to default in a named template.  If we had a with-param here, we could change the value of "bar".</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><defaultVal>Just checking</defaultVal></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><foo>defaultVal</foo></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1701">
+      <description>Purpose: Verify that a variable in an inner template can take on a new value  "Only the innermost binding of a variable is visible." suppress empty lines</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-17"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1701.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="variable-1701.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1702">
+      <description>Purpose: Verify that a variable in a for-each can take on a new value  MHK: this is legal in 2.0 but not in 1.0 suppress empty lines</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-17"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1702.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>begin doc template, $var=level1
+inside for-each, $var=first
+inside for-each, $var=second
+end doc template, $var=level1
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1801">
+      <description>Purpose: Test setting several parameters locally </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>
+  <item>a</item>
+  <item>e</item>
+  <item>e</item>
+  <item>i</item>
+  <item>i</item>
+  <item>l</item>
+  <item>r</item>
+  <item>s</item>
+  <item>z</item>
+</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>serialize</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1901">
+      <description>Purpose: Import precedence applies to top-level params (testing references from various import levels) </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1901.xsl"/>
+         <stylesheet file="variable-1901a.xsl" role="secondary"/>
+         <stylesheet file="variable-1901b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><final>main stylesheet, should have highest precedence</final
+            ><middle>main stylesheet, should have highest precedence</middle
+            ><main>main stylesheet, should have highest precedence</main></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1902">
+      <description>Purpose: Import precedence applies to top-level params (testing references from various import levels) </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1902.xsl"/>
+         <stylesheet file="variable-1901a.xsl" role="secondary"/>
+         <stylesheet file="variable-1901b.xsl" role="secondary"/>
+         <stylesheet file="variable-1902a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><final>main stylesheet, should have highest precedence</final
+            ><middle>main stylesheet, should have highest precedence</middle
+            ><side>main stylesheet, should have highest precedence</side
+            ><main>main stylesheet, should have highest precedence</main></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1903">
+      <description>Purpose: Import precedence applies to top-level params (first template from middle, then up/down/up) </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1903.xsl"/>
+         <stylesheet file="variable-1903a.xsl" role="secondary"/>
+         <stylesheet file="variable-1903b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><middle>main stylesheet, should have highest precedence</middle
+            ><main>main stylesheet, should have highest precedence</main
+            ><final>main stylesheet, should have highest precedence</final
+            ><main-again>main stylesheet, should have highest precedence</main-again></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1904">
+      <description>Purpose: Import precedence applies to top-level params (order of imports in this sheet matters) </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1904.xsl"/>
+         <stylesheet file="variable-1901b.xsl" role="secondary"/>
+         <stylesheet file="variable-1904a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><final>set in var29side, should have highest precedence</final
+            ><side>set in var29side, should have highest precedence</side
+            ><main>set in var29side, should have highest precedence</main
+            ><side-again>set in var29side, should have highest precedence</side-again></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-1905">
+      <description>Purpose: Import precedence applies to top-level params (start at bottom; all use variable set in middle) </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-1905.xsl"/>
+         <stylesheet file="variable-1905a.xsl" role="secondary"/>
+         <stylesheet file="variable-1901b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><final>value set in var30mid, should have highest precedence</final
+            ><main>value set in var30mid, should have highest precedence</main
+            ><middle>value set in var30mid, should have highest precedence</middle
+            ><main-again>value set in var30mid, should have highest precedence</main-again></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2001">
+      <description>
+      	Purpose: Test how big a string can be passed to a template.  
+      	Set upper limit here put out one iteration of the name and a trailing space
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>a</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2001.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="variable-2001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2101">
+      <description>Section: 11.2 Values of Variables and Parameters Purpose: Test the ability of variable to hold the result of document() </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-21"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><doc>
+  <a pos="first">
+    <b/>
+  </a>
+  <a pos="second">
+    <b/>
+  </a>
+</doc></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2201">
+      <description>
+      	It is not an error to pass a parameter to a template that does not have an element for it, the parameter is simpily ignored. 
+        This is an error in XSLT 2.0 if the stylesheet specifies version=2.0, but not with version="1.0"
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-22"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>It is global!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2202">
+      <description>Purpose: It is not an error to pass a parameter to a template that does not have an element for it, the parameter is simpily ignored.  This is an error in XSLT 2.0 if the stylesheet specifies version=2.0, but not with version="1.0"</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-22"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2202.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0680"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2301">
+      <description>Purpose: Test passing value from top-level param to top-level variable via value-of.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-23"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>titi</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2302">
+      <description>Purpose: Test passing value from top-level param to top-level variable via value-of. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-23"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>titi</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2303">
+      <description>Purpose: Set top-level variable with a forward reference to see what happens. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-23"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2303.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>titi</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2304">
+      <description>Purpose: Try to catch lazy-evaluation scheme picking up local instead of global. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-23"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2304.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>templ, titi</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2305">
+      <description>Use same-named variables in inner and outer scopes, where inner is a for-each loop. MHK: legal in 2.0, illegal in 1.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-23"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2305.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<outer bar="outer"><inner bar="inner"/></outer>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2401">
+      <description>Purpose: Set cascaded top-level variables in arbitrary order. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><mid><inner>GotIt</inner></mid></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+a= GotIt
+b= GotIt
+c= GotIt
+d= GotIt
+e= GotIt</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2501">
+      <description>Section: 11.3 Using Variables and Parameters with xsl:copy-of Purpose: Build an RTF from instructions, then use xsl:copy-of. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>content</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><main><first type="text">junk</first><second type="fetched">content</second><third type="comment"><!--remarks--></third></main></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2601">
+      <description>Purpose: Test top-level xsl:variable set using apply-templates  expect only text, not child elements</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><a><b>begin</b><c>junk</c></a><b>+more+</b><d>wrong<b>end</b>bad</d></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>begin+more+end,a,begin-junk;+more+d,wrongendbad</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2701">
+      <description>Purpose: Because root node is current when top-level param is set, can get top-level comment. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<!-- the comment --><doc>blah</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>$z contains the comment </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2801">
+      <description>Purpose: Use copy to set a variable to an RTF. REMINDER: we won't get the whole sub-tree, just the 'doc' element node. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc status="original"><t0>inner</t0></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>$z contains <doc status="replacement"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-2901">
+      <description>Purpose: Test xsl:variable inside xsl:copy </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><width>9</width><depth>22</depth></doc>]]></content>
+         </source>
+      </environment>   
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-2901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><doc><item>198</item></doc></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-3001">
+      <description>Section: 11.2 Values of Variables and Parameters Purpose: Test proper construction of an RTF containing multiple top level nodes. Creator: Felix Garcia Romero (felixgr@tdi.tudistrito.es)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<root/>]]></content>
+         </source>
+      </environment>
+      
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-3001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><b>First element</b>
+  Second element
+  <FORM METHOD="post"><input type="length" size="30"/></FORM></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-3101">
+      <description>Purpose: Evaluation of params with repeated use of imported stylesheet. Creator: Matthew Hanson (matthew.hanson@wcom.com Elaboration: One of the params passed in to baseTemplate is the result of a call to baseSubTemplate. Both are in the imported stylesheet, which could be considered a subroutine library. The ...Param0 params aren't actually used, but are there to potentially cause trouble. baseTemplate puts out two child elements, one from itself and one it got from baseSubTemplate.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<xmlDoc attr1="theAttr1" attr2="theAttr2"/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-3101.xsl"/>
+         <stylesheet file="variable-3101a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><OK-too/><OK/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-3201">
+      <description>Purpose: Check propagation of params down into templates</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="variable-32.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-3201.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="variable-3201.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-3301">
+      <description>
+         Purpose: Show that one param (p2) can be set to value of another (p1) equally well in apply and 
+         call template invocations. Recursively visit all children
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="variable-33.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-3301.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="variable-3301.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-3401">
+      <description>Ensure that we can find descendants of the nodes in a node-set stored in a variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><p>a<b>b</b>c</p></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-3401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a
+b
+c
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-3501">
+      <description>test parameters call by reference and by value</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<data><point>10</point><point>20</point><point>30</point></data>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-3501.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="variable-3501.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-3601">
+      <description>test using recursion to traverse a node-set in a variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="variable-36.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-3601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a b c d k l m n w x y z </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-3701">
+      <description>test using parameter names with '.' in them</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="variable-37.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-3701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(1)(2)(3)(4)(5)(6)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-3801">
+      <description>Test for passing param containing 1-element node-set via apply-templates</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-38"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-3801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><size>1</size><list>test,</list></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-3802">
+      <description>Test for passing param containing 0-element node-set via apply-templates</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-38"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-3802.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><size>0</size><list/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-3901">
+      <description>Test for passing param containing 4-element node-set via apply-templates</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><a-set><a>first</a><a>second</a><a>third</a><a>fourth</a></a-set></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-3901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><size>4</size><list>first,second,third,fourth,</list></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-4001">
+      <description>Test for passing param containing boolean via apply-templates</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><a>foo</a><b>foo</b></doc>]]></content>
+         </source>
+      </environment>
+      
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>foo</a><b content="the same">foo</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-4101">
+      <description>Test for passing param containing number via apply-templates</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><a>11</a></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><list>17,</list></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-4201">
+      <description>Test for passing numeric param via apply-templates, with sorting</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="variable-42.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4201.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="variable-4201.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="variable-4301">
+      <description>test using parameter names with leading underscore</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><datum value="5"/><datum value="3"/><datum value="4"/></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(1)(2)(3)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-4401">
+      <description>test with-param as RTF copied from global variable (also RTF)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-44"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><before>ax="attrib-ax"</before><after>ax="attrib-ax"</after></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-4402">
+      <description>test with-param as string copied from global variable (an RTF)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-44"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><before>ax="attrib-ax"</before>
+<after>ax="attrib-ax"</after></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-4403">
+      <description>test with-param as string copied from global variable (a locally-built RTF)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-44"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4403.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><before>ax="attrib-ax"</before>
+<after>ax="attrib-ax"</after></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-4501">
+      <description>Setting a variable in the midst of setting another should not alter any others Two global variables: index should be unaffected; source contains settings for others</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><Start>okay</Start>
+(Before) okay
+(Between) okay
+(After) okay
+<End>okay</End></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-4601">
+      <description>Demonstrate various tests of nullness on local variables No element of that name in source.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-46"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>NotSet: equals empty
+String: not empty
+nString: equals empty
+Node: not empty
+nNode: neither</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-4602">
+      <description>Demonstrate various tests of nullness on global variables No element of that name in source.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-46"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4602.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>NotSet: equals empty
+String: not empty
+nString: equals empty
+Node: not empty
+nNode: neither</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-4701">
+      <description>Values of Variables and Parameters</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-47"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4701.xsl"/>
+         <stylesheet file="variable-4701a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>the value of bar is bar</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="variable-4702">
+      <description>Use EQName for variable names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="variable-47"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4702.xsl"/>
+         <stylesheet file="variable-4701a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>the value of bar is bar</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="variable-4801">
+      <description>Tests xsl:variable with select comparing untyped id()</description>
+      <created by="Debbie Lockett" on="2017-09-06"/>
+      <environment>
+         <source role="." file="variable-32.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e>id3</e><e>id6</e><e>id7</e><e>id12</e><e>id15</e><e>id19</e></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="variable-4802">
+      <description>Saxon bug 5495 (Pattern using variables and position()=last()</description>
+      <created by="Michael Kay after Rohit Gaikwad" on="2022-05-18"/>
+      <environment>
+         <source role="." file="variable-4802.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="variable-4802.xsl"/>
+      </test>
+      <result>
+         <assert>out = "/servlet/MyServlet/*"</assert>
+      </result>
+   </test-case>
+</test-set>

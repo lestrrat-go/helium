@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-for-each">
+   <description>xsl:for-each with streaming</description>
+   
+   <environment name="si-for-each-A">
+     <stylesheet file="si-for-each-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   
+   
+   <test-case name="si-for-each-001">
+      <description>Use xsl:for-each within xsl:stream</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <environment ref="si-for-each-A"/>
+      <test>
+         <initial-template name="fe-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction value="-15.00" date="2006-02-15"
+            /><transaction value="-5.00" date="2006-02-20"
+            /><transaction value="-2.33" date="2006-02-23"
+            /><transaction value="-248.05" date="2006-02-24"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-002">
+      <description>Use xsl:for-each within xsl:stream, with position() numbering</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <environment ref="si-for-each-A"/>
+      <test>
+         <initial-template name="fe-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction nr="1" value="-15.00" date="2006-02-15"
+            /><transaction nr="2" value="-5.00" date="2006-02-20"
+            /><transaction nr="3" value="-2.33" date="2006-02-23"
+            /><transaction nr="4" value="-248.05" date="2006-02-24"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-003">
+      <description>Use xsl:for-each within xsl:stream, with positional selection</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <environment ref="si-for-each-A"/>
+      <test>
+         <initial-template name="fe-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction nr="1" value="13.24" date="2006-02-13"
+            /><transaction nr="2" value="8.12" date="2006-02-13"
+            /><transaction nr="3" value="-15.00" date="2006-02-15"
+            /><transaction nr="4" value="6.00" date="2006-02-16"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-004">
+      <description>Use xsl:for-each over atomized nodes</description>
+      <created by="Michael Kay" on="2013-12-04"/>
+      <environment ref="si-for-each-A"/>
+      <test>
+         <initial-template name="fe-004"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction nr="1">0.50</transaction><transaction nr="2">2.33</transaction><transaction nr="3">4.44</transaction></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-005">
+      <description>Crawling selection, inspection body</description>
+      <created by="Michael Kay" on="2013-12-04"/>
+      <modified by="Michael Kay" on="2015-07-08" change="Correct expected whitespace"/>
+      <environment ref="si-for-each-A"/>
+      <test>
+         <initial-template name="fe-005"/>
+      </test>
+      <result>
+         <assert>/out = "1:BOOKLIST 2:BOOKS 3:ITEM 4:TITLE 5:AUTHOR 6:PUBLISHER "</assert>
+      </result>   
+   </test-case>
+   
+   <test-case name="si-for-each-006">
+      <description>Crawling selection, inspection body</description>
+      <created by="Michael Kay" on="2013-12-04"/>
+      <environment ref="si-for-each-A"/>
+      <test>
+         <initial-template name="fe-006"/>
+      </test>
+      <result>
+         <assert>/out = "1 2 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 2 3 3 3"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-007">
+      <description>xsl:stream / xsl:for-each / xsl:copy-of with a predicate</description>
+      <created by="Michael Kay" on="2015-07-10"/>
+      <environment ref="si-for-each-A"/>
+      <test>
+         <initial-template name="fe-007"/>
+      </test>
+      <result>
+        <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR
+        ><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE
+        ><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES
+        ><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-008">
+      <description>Use parent axis within xsl:for-each</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-A"/>
+      <test>
+         <initial-template name="fe-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>account account account account</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-009">
+      <description>Use ancestor axis within xsl:for-each</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-A"/>
+      <test>
+         <initial-template name="fe-009"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>account account account account</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-010">
+      <description>Use subsequence() within xsl:for-each/@select</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-A"/>
+      <test>
+         <initial-template name="fe-010"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>count(/out/transaction) = 4</assert>
+           <assert>/out/transaction[1]/@value = "13.24"</assert>
+           <assert>/out/transaction[4]/@value = "6.00"</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-011">
+      <description>Select attribute nodes within xsl:for-each/@select.</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-A"/>
+      <test>
+         <initial-template name="fe-011"/>
+      </test>
+      <result>
+           <assert>/out = "13.24 8.12 6.00 0.50 2.33 4.44 8.99 16.00 5.60 4.32 6.78 12.20 12.00 13.99 14.20"</assert>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-012">
+      <description>Iterate over ancestors in xsl:for-each/@select; also tests outermost()</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-A"/>
+      <test>
+         <initial-template name="fe-012"/>
+      </test>
+      <result>
+           <assert-xml><![CDATA[<out xmlns="http://loan.shark.com/"><myroot/><ACERequest version="2.1"/><Deal/><Pool id="22"/><Loan/></out>]]></assert-xml>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-013">
+      <description>xsl:stream / xsl:for-each / xsl:copy-of with a predicate and some local variables</description>
+      <created by="Michael Kay" on="2015-07-10"/>
+      <environment ref="si-for-each-A"/>
+      <test>
+         <initial-template name="fe-013"/>
+      </test>
+      <result>
+        <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR
+        ><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE
+        ><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES
+        ><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-801">
+      <description>Use streaming xsl:for-each referring to a global variable (Saxon bug 2412)</description>
+      <created by="Michael Kay" on="2015-07-04"/>
+      <environment>
+         <source file="si-for-each-801.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-for-each-801.xsl"/>
+         <param name="node-name" select="'record'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><found/><found/></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-802">
+      <description>
+        Use streaming xsl:for-each referring to a global variable (Saxon bug 2412)
+        Same as -801 but using xsl:stream
+      </description>
+      <created by="Michael Kay" on="2015-07-04"/>
+      <test>
+         <stylesheet file="si-for-each-802.xsl"/>
+         <param name="node-name" select="'record'"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><found/><found/></root>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+   <test-case name="si-for-each-806">
+      <description>Use xsl:for-each within xsl:stream, not streamable (select expression is crawling)</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <modified by="Michael Kay" on="2014-08-13" change="change expected result to match the spec"/>
+      <test>
+         <stylesheet file="si-for-each-806.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-807">
+      <description>Use xsl:for-each within xsl:stream, streamable (select expression is grounded)</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-07-10"/>
+      <environment>
+         <source file="si-for-each-807.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-for-each-807.xsl"/>
+      </test>
+      <result>
+         <assert-result-document uri="student001.xml">
+            <assert-xml><![CDATA[<class xmlns:xfa="soommmeee-tteexxxxtttttt"><students><student><id>1</id><refObjectId>m9</refObjectId><subject><id>25</id><name>science</name><friend>popeye</friend><firstname><isDisplay>true</isDisplay></firstname><lastname><Detail><lastNameDetail><fragId>kullu</fragId><znjdvgsc>nSVCm</znjdvgsc><zmdcb>zmbvc</zmdcb></lastNameDetail></Detail></lastname></subject></student></students></class>]]></assert-xml>         
+         </assert-result-document>    
+      </result>
+   </test-case>
+   
+   
+   <test-case name="si-for-each-904">
+      <description>Use xsl:for-each within xsl:stream, attempt multiple downward selections in a loop</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <modified by="Michael Kay" on="2016-06-28" change="prevent the error being optimized away"/>
+      <test>
+         <stylesheet file="si-for-each-904.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-for-each-905">
+      <description>Use xsl:for-each within xsl:stream, attempt multiple downward selections in a loop</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <test>
+         <stylesheet file="si-for-each-905.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>   
+      
+   <test-case name="si-for-each-907">
+      <description>Use xsl:for-each within xsl:stream. Uses xsl:sequence rather than xsl:copy-of, causing error.</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <test>
+         <stylesheet file="si-for-each-907.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>   
+   
+   
+</test-set>

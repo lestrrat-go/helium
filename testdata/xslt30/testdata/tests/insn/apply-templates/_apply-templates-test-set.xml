@@ -1,0 +1,973 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="apply-templates">
+   <description>Tests the xsl:apply-templates instruction. In practice, as indicated by the test names,
+      most of the tests concern conflict resolution.</description>
+   <environment name="conflict-resolution-01">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <foo test="true"/>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   
+   <environment name="conflict-resolution-03">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <foo test="true"/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="conflict-resolution-04">
+      <source role=".">
+         <content><![CDATA[<bar:foo xmlns:bar="http://bar.com/"/>]]></content>
+      </source>
+   </environment>
+   <environment name="conflict-resolution-05">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <a>
+    <a/>
+  </a>
+  <a>
+    <b/>
+  </a>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="conflict-resolution-07">
+      <source role=".">
+         <content><![CDATA[<doc xmlns="http://some.uri/"><foo test="true"/></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="conflict-resolution-08">
+      <source role=".">
+         <content><![CDATA[<doc xmlns="http://some.uri/">
+<foo test="true"/>
+<bar test="true"/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="conflict-resolution-09">
+      <source role=".">
+         <content><![CDATA[<doc>
+<a>
+  <b/><b/><b/>
+</a>
+<z>
+  <b/><b/><b/>
+</z>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="conflict-resolution-11">
+      <source role=".">
+         <content><![CDATA[<top/>]]></content>
+      </source>
+   </environment>
+   <environment name="conflict-resolution-12">
+      <source role=".">
+         <content><![CDATA[<doc><foo test="true">magic</foo></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="conflict-resolution-14">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="conflict-resolution-16">
+      <source role=".">
+         <content><![CDATA[<doc><a x4="big" x5="medium" x6="small" /><b x4="red" x5="yellow" x6="blue" /></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="conflict-resolution-17">
+      <source role="." file="conflict-resolution-17.xml"/>
+   </environment>
+   <environment name="conflict-resolution-18">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <boo test="true"/>
+  <coo test="false"/>
+  <foo test="false"/>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+   <test-case name="apply-templates-001">
+      <description>Error condition: context item is not a node (detected statically)</description>
+      <created by="Michael Kay" on="2016-09-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="apply-templates-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTTE0510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="apply-templates-002">
+      <description>Error condition: context item is not a node (detected dynamically)</description>
+      <created by="Michael Kay" on="2016-09-03"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="apply-templates-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTTE0510"/>
+      </result>
+   </test-case>
+
+
+   <test-case name="conflict-resolution-0101">
+      <description>Testing Match of qualified name</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match-of-qualified-name</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0102a">
+      <description>Test for conflict Resolution - wildcard names. Should see 1 conflict warning</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="recover"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match-of-wildcard</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0102b">
+      <description>Test for conflict Resolution - wildcard names. Should see 1 conflict warning</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="error"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0102.xsl"/>
+      </test>
+      <result>
+         <error code="XTRE0540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="conflict-resolution-0102c">
+      <description>Test for conflict Resolution - wildcard names. Should see 1 conflict warning</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match-of-wildcard</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0104a">
+      <description>Test for conflict Resolution - nodetype. should see 1 conflict warning</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="recover"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match-of-node-type</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0104b">
+      <description>Test for conflict Resolution - nodetype. should see 1 conflict warning</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="error"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0104.xsl"/>
+      </test>
+      <result>
+         <error code="XTRE0540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="conflict-resolution-0104c">
+      <description>Test for conflict Resolution - nodetype. should see 1 conflict warning</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match-of-node-type</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0106">
+      <description>
+      	Test for conflict Resolution - nodetest override of default priority. Also, node selected is attribute 
+      	instead of element. No conflict warnings should be seen.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0107">
+      <description>
+      	Test for conflict Resolution non_simple ('/'). No conflict warnings should be seen. 
+      	The spec states: " The idea is that the most common kind of pattern (a pattern that justs 
+      	tests for an element with a specific name) has priority 0; a pattern more specific than 
+      	this has priority .5; a pattern less specific than this has priority minus .5"</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match of non-simple '/'</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0108a">
+      <description>
+      	Test for conflict Resolution - 2 non-simples (predicate and '/') 1 conflict warning should be seen.
+      	This version is for XSLT 2.0 with error recovery option. 
+      	Should say "Match of non-simple '/'"
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="recover"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match-of-non-simple '/'</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0108b">
+      <description>
+      	Test for conflict Resolution - 2 non-simples (predicate and '/') 1 conflict warning should be seen.
+      	This version is for XSLT 2.0 without error recovery option.  
+      	Should say "Match of non-simple '/'"
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="error"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0108.xsl"/>
+      </test>
+      <result>
+         <error code="XTRE0540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="conflict-resolution-0108c">
+      <description>
+      	Test for conflict Resolution - 2 non-simples (predicate and '/') 1 conflict warning should be seen.
+      	This version is for XSLT 3.0. 
+      	Should say "Match of non-simple '/'"
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match-of-non-simple '/'</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0110a">
+      <description>
+      	Test for conflict Resolution - 2 non-simples ('/' and predicate) 1 conflict warning should be seen.
+      	This version is for XSLT 2.0 with recovery option. 
+      	Should say "Match of non-simple '[...]'"
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="recover"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0110.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match-of-non-simple '[...]'</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0110b">
+      <description>
+      	Test for conflict Resolution - 2 non-simples ('/' and predicate) 1 conflict warning should be seen.
+      	This version is for XSLT 2.0 without recovery option. 
+      	Should say "Match of non-simple '[...]'"
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="error"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0110.xsl"/>
+      </test>
+      <result>
+         <error code="XTRE0540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="conflict-resolution-0110c">
+      <description>
+      	Test for conflict Resolution - 2 non-simples ('/' and predicate) 1 conflict warning should be seen.
+      	This version is for XSLT 3.0 
+      	Should say "Match of non-simple '[...]'"
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0110.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match-of-non-simple '[...]'</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   
+   <test-case name="conflict-resolution-0112">
+      <description>Testing Match of qualified name. Tests that "//*" has higher priority than "foo"</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0112.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<text>Match-of //* (correct)</text>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0201">
+      <description>Test for conflict Resolution: nonsimple (predicate) No conflict warnings should be seen.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><file test="true"/><file test="false"/></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match-on-node-name,Match-w/qualified-attribute-value</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0401a">
+      <description>
+      	Tests what happens when a "specific" rule and a "general" rule have the same priority. 
+      	Bug reported by Norman Walsh Jan 2002.
+      	This version is for XSLT 2.0 with error recovery.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-04"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+         <on-multiple-match value="recover"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<b>matched bar:*</b>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0401b">
+      <description>
+      	Tests what happens when a "specific" rule and a "general" rule have the same priority. 
+      	Bug reported by Norman Walsh Jan 2002.
+      	This version is for XSLT 2.0 without error recovery.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-04"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+         <on-multiple-match value="error"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0401.xsl"/>
+      </test>
+      <result>
+         <error code="XTRE0540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="conflict-resolution-0401c">
+      <description>
+      	Tests what happens when a "specific" rule and a "general" rule have the same priority. 
+      	Bug reported by Norman Walsh Jan 2002.
+      	This version is for XSLT 3.0.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-04"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<b>matched bar:*</b>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0501">
+      <description>Test use of current() in a pattern (XSLT 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc>
+  <a recursive="yes">
+    <a/>
+  </a>
+  <a>
+    <b/>
+  </a>
+</doc>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0502">
+      <description>Test use of a range variable in a pattern (XSLT 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0502.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc>
+  <a recursive="yes">
+    <a/>
+  </a>
+  <a>
+    <b/>
+  </a>
+</doc>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0503">
+      <description>Test use of current() in a pattern, in a step other than the last (XSLT 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0503.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc>
+  <a>
+    <a parent-recursive="yes"/>
+  </a>
+  <a>
+    <b/>
+  </a>
+</doc>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0601">
+      <description>Test use of a variable within a pattern (XSLT 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><a><a id="2"/></a><a><b id="3"/></a></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc><a><a special="yes"/></a><a><b/></a></doc>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0701">
+      <description>Testing xpath-default-namespace</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match-of-qualified-name</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0702">
+      <description>Testing xsl:xpath-default-namespace</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0702.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:u="http://some.uri/">Match-of-qualified-name</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0703">
+      <description>Testing xpath-default-namespace doesn't apply to attributes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0703.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>foo"true"</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0801">
+      <description>Test apply-templates mode="#current" (2.0 facility)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>[a][b]</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0802">
+      <description>Test xsl:templates mode="a b #default" (2.0 facility)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0802.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a/><b/><default/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-0901">
+      <description>Testing Match of parent/child pattern</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-09"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>111222</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1001">
+      <description>tests resolution of Saxon bug 576632 parametre externe "type" (tous, parent, enfant) regle-modele pour la racine regle-modele pour les noeuds fils de images fils de planche</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="conflict-resolution-10.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<planche><images/><dialogues/></planche>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1101">
+      <description>tests whether parameters to a built-in template are passed through in 1.0 mode (note this isn't a legal 1.0 stylesheet because it uses an RTF as a node-set) the spec has changed several times. Current state is that they ARE passed through - gives answer 42 ** changes in 8.2 - built-in templates don't pass parameters in 1.0 mode **</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z>42</z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1102">
+      <description>tests that parameters to a built-in template are passed through</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z>42</z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1201">
+      <description>Testing xsl:next-match using varying priorities</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(5)(4)(3)(2)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1202a">
+      <description>
+      	Testing xsl:next-match using two templates with equal priority.
+      	Also tests that xsl:next-match allows and ignores an xsl:fallback child
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-12"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="recover"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(5)(4)(3b)(3a)(2)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1202b">
+      <description>
+      	Testing xsl:next-match using two templates with equal priority. 
+      	Also tests that xsl:next-match allows and ignores an xsl:fallback child
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-12"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="error"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1202.xsl"/>
+      </test>
+      <result>
+         <error code="XTRE0540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="conflict-resolution-1202c">
+      <description>
+      	Testing xsl:next-match using two templates with equal priority.
+      	Also tests that xsl:next-match allows and ignores an xsl:fallback child.
+      	XSLT 3.0 always recovers unless the xsl:mode specifies otherwise.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(5)(4)(3b)(3a)(2)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1204">
+      <description>Testing xsl:next-match using two templates with different import precedence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1204.xsl"/>
+         <stylesheet file="conflict-resolution-1204a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(5)(4)(3)(2)(25)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1205">
+      <description>Testing xsl:next-match with parameters</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1205.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(5)(4)(3)(2)<e p="17"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1301">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>
+<simplelist>
+<member>11111111</member>
+<member>22222222</member>
+<member>33333333</member>
+<member>44444444</member>
+</simplelist>
+</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="conflict-resolution-1301.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1401">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="conflict-resolution-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<h2 xmlns="http://www.w3.org/1999/xhtml">ChapterTitle</h2>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="conflict-resolution-1402">
+      <description>Test that pattern "attribute(A,T)" gets a default priority of 0.25.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="conflict-resolution-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>!Match-of-attribute-x-integer:e1!Match-any-attribute:e2!Match-e4-x!Match-any-attribute:e5</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1501">
+      <description>Test use of current() in a positional pattern, in a step other than the last (XSLT 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><a><a/></a><a><a/></a><a><b/></a></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1501.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/doc/a[2]/a[1][@parent-recursive="yes"]</assert>
+            <assert>count(//@parent-recursive) = 1</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1601">
+      <description>Test that pattern "/" gets a default priority of -0.5.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="conflict-resolution-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>big</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1602">
+      <description>Test that pattern "document-node(element(E))" gets a default priority of 0.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="conflict-resolution-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1602.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>big</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1603">
+      <description>Test that pattern "document-node(element(*))" gets a default priority of -0.5.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="conflict-resolution-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1603.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>big</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1701">
+      <description>Test that pattern "*:NCName" gets a default priority of -0.25.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="conflict-resolution-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>,Fully-qualified-1:ed-b,Localnamed-b:co-b,Localnamed-b:bz-b</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="conflict-resolution-1801">
+      <description>Test that pattern "element()" gets a default priority of -0.5.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="conflict-resolution-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="conflict-resolution-1801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match-booMatch-of-element-no-name:cooMatch-of-element-no-name:foo</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   
+</test-set>

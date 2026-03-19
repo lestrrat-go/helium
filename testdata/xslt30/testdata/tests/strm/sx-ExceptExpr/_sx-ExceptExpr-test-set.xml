@@ -1,0 +1,992 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+   xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sx-ExceptExpr">
+   <description>except expression function with streaming</description>
+
+   <environment name="sx-except-A">
+      <stylesheet file="sx-except-A.xsl"/>
+   </environment>
+
+   <environment name="sx-except-B">
+      <stylesheet file="sx-except-B.xsl"/>
+   </environment>
+   
+   <environment name="sx-except-C">
+      <stylesheet file="sx-except-C.xsl"/>
+   </environment>
+
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+
+   <test-case name="sx-except-002">
+      <description>Streaming except expression - grounded operand</description>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert>count(//PRICE) = 6</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-010">
+      <description>Streaming except expression - striding operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding leading-lone-slash PathExpr
+         fn:count</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "6"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-011">
+      <description>Streaming except expression - striding operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding leading-lone-slash PathExpr
+         fn:sum</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "54.37"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-012">
+      <description>Streaming except expression - striding operand, transmission usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding motionless-predicate
+         fn:position PathExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>/out = "6.58 4.95 16.47"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-013">
+      <description>Streaming except expression - striding operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture AdditiveExpr ContextItemExpr striding
+         leading-lone-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-014">
+      <description>Streaming except expression - striding operand, focus-controlled
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash AxisStep striding PathExpr
+         positional-predicate SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER
+            ><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN
+            >0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-015">
+      <description>Streaming except expression - striding operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding PathExpr
+         AdditiveExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47 "</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-016">
+      <description>Streaming except expression - striding operand, focus-controlled
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture xsl:for-each striding AxisStep PathExpr
+         positional-predicate leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER
+            ><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN
+            >0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-017">
+      <description>Streaming except expression - striding operand, focus-setting usage for
+         inspection action</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding PathExpr
+         positional-predicate SimpleMapExpr fn:name</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "true false true true true true false false true true true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-018">
+      <description>Streaming except expression - striding operand, apply-templates
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding xsl:apply-templates
+         PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-020">
+      <description>Streaming except expression - crawling operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture xsl:copy-of fn:count crawling PathExpr
+         leading-double-slash</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "6"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-021">
+      <description>Streaming except expression - crawling operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash text-nodes childless-nodes
+         striding-then-crawling fn:count PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "11"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-022">
+      <description>Streaming except expression - crawling operand, transmission usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-crawling leading-lone-slash
+         fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-023">
+      <description>Streaming except expression - crawling operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-double-slash childless-nodes text-nodes
+         AdditiveExpr PathExpr crawling SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-030">
+      <description>Streaming except expression - climbing operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-climbing fn:name leading-lone-slash
+         PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST BOOKS ITEM"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-031">
+      <description>Streaming except expression - climbing operand, inspection usage, removal of
+         duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding-then-climbing fn:name
+         PathExpr SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST BOOKS ITEM ITEM ITEM ITEM ITEM ITEM"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-032">
+      <description>Streaming except expression - climbing operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing attribute-axis PathExpr
+         positional-predicate ancestor-axis leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-033">
+      <description>Streaming except expression - climbing operand, absorption usage, removal of
+         duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing leading-lone-slash PathExpr
+         ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-034">
+      <description>Streaming except expression - climbing operand, absorption usage, removal of
+         duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing leading-lone-slash PathExpr
+         ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-035">
+      <description>Streaming except expression - climbing operand, absorption usage, removal of
+         duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture crawling-then-climbing leading-double-slash
+         attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-036">
+      <description>Streaming except expression - two potentially consuming operands (bug
+         27668)</description>
+      <keywords>ParenthesizedExpr mixed-posture crawling-then-climbing leading-double-slash
+         attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-A"/>
+      <test>
+         <initial-template name="r-036"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/v[1] = 'P'</assert>
+            <assert>/out/v[2] = 'MMP'</assert>
+            <assert>/out/v[3] = 'H'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+
+
+   <test-case name="sx-except-102">
+      <description>except expression (streaming arg 2) - grounded operand</description>
+      <keywords>leading-lone-slash striding-then-grounded fn:copy-of PathExpr
+         ParenthesizedExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>A</a><b>B</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-110">
+      <description>except expression (streaming arg 2) - striding operand, inspection
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding leading-lone-slash PathExpr
+         fn:count</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "2"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-111">
+      <description>except expression (streaming arg 2) - striding operand, absorption
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding leading-lone-slash PathExpr
+         fn:sum</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "33"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-112">
+      <description>except expression (streaming arg 2) - striding operand, transmission
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding motionless-predicate
+         fn:position PathExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>/out = "B"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-113">
+      <description>except expression (streaming arg 2) - striding operand, focus-setting
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture AdditiveExpr ContextItemExpr striding
+         leading-lone-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "12 23"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-114">
+      <description>except expression (streaming arg 2) - striding operand, focus-controlled
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash AxisStep striding PathExpr
+         positional-predicate SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>A</a><b>B</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-115">
+      <description>except expression (streaming arg 2) - striding operand, focus-setting
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding PathExpr
+         AdditiveExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "12 23 "</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-116">
+      <description>except expression (streaming arg 2) - striding operand, focus-controlled
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture xsl:for-each striding AxisStep PathExpr
+         positional-predicate leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>A</a><b>B</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-117">
+      <description>except expression (streaming arg 2) - striding operand, focus-setting usage for
+         inspection action</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding PathExpr
+         positional-predicate SimpleMapExpr fn:name</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "false false"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-118">
+      <description>except expression (streaming arg 2) - striding operand, apply-templates
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding xsl:apply-templates
+         PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>empty(/out/node())</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-120">
+      <description>except expression (streaming arg 2) - crawling operand, inspection
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture xsl:copy-of fn:count crawling PathExpr
+         leading-double-slash</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "2"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-121">
+      <description>except expression (streaming arg 2) - crawling operand, absorption
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash text-nodes childless-nodes
+         striding-then-crawling fn:count PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "2"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-122">
+      <description>except expression (streaming arg 2) - crawling operand, transmission
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-crawling leading-lone-slash
+         fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert-xml><![CDATA[<out><a>A</a><b>B</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-123">
+      <description>except expression (streaming arg 2) - crawling operand, focus-setting
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-double-slash childless-nodes text-nodes
+         AdditiveExpr PathExpr crawling SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "12 23"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-130">
+      <description>except expression (streaming arg 2) - climbing operand, inspection
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-climbing fn:name leading-lone-slash
+         PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <assert>/out = "a b"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-131">
+      <description>except expression (streaming arg 2) - climbing operand, inspection usage, removal
+         of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding-then-climbing fn:name
+         PathExpr SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "a b"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-132">
+      <description>except expression (streaming arg 2) - climbing operand, absorption
+         usage</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing attribute-axis PathExpr
+         positional-predicate ancestor-axis leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "A|B"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-133">
+      <description>except expression (streaming arg 2) - climbing operand, absorption usage, removal
+         of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing leading-lone-slash PathExpr
+         ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "A|B"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-134">
+      <description>except expression (streaming arg 2) - climbing operand, absorption usage, removal
+         of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing leading-lone-slash PathExpr
+         ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "A|B"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-135">
+      <description>except expression (streaming arg 2) - climbing operand, absorption usage, removal
+         of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture crawling-then-climbing leading-double-slash
+         attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "A|B"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-136">
+      <description>Streaming except expression - two potentially consuming operands (bug
+         27668)</description>
+      <keywords>ParenthesizedExpr mixed-posture crawling-then-climbing leading-double-slash
+         attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-036"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/v[1] = ('Paperback')</assert>
+            <assert>/out/v[2] = ('Mass-market Paperback')</assert>
+            <assert>/out/v[3] = ('Hard Cover')</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-137">
+      <description>Streaming except expression - except of motionless/climbing references to
+         ancestor nodes</description>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-037"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><v/><v/><v/><v/><v/><v/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-138">
+      <description>Streaming except expression - except of motionless and consuming striding
+         nodes</description>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-038"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ITEM</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-139">
+      <description>Streaming except expression - except of motionless and consuming striding
+         nodes</description>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-039"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ITEM</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sx-except-140">
+      <description>Streaming except expression - except of motionless and consuming striding
+         nodes</description>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-040"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-141">
+      <description>Streaming except expression - except of motionless and consuming striding
+         nodes</description>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-except-B"/>
+      <test>
+         <initial-template name="r-041"/>
+      </test>
+      <result>
+         <assert>/out = "TITLE AUTHOR PUBLISHER PUB-DATE LANGUAGE PRICE QUANTITY ISBN PAGES DIMENSIONS WEIGHT"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-302">
+      <description>Streaming except expression - two consuming operands</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert>count(/out/PRICE) = 6</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-303">
+      <description>Streaming except expression - two consuming operands</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert>/out/PRICE = "4.95"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-310">
+      <description>Streaming except expression - striding operands, inspection usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "2"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-311">
+      <description>Streaming except expression - striding operand, absorption usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-312">
+      <description>Streaming except expression - striding operand, transmission usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>/out = "Charlotte Brontë Thomas Hardy Jasper Fforde"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-313">
+      <description>Streaming except expression - striding operand, focus-setting usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "7.1"</assert>        
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-except-314">
+      <description>Streaming except expression - striding operand, focus-controlled usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/*[1][self::WEIGHT][@UNIT='g'] = '390'</assert>
+            <assert>count(/out/*) = 1</assert>
+         </all-of>
+      </result>
+   </test-case> 
+   
+   <!--<test-case name="sx-except-315">
+      <description>Streaming except expression - striding operand, focus-setting usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 188 7.58 114 5.95 86 5.95 130 17.47 130 17.47 130 "</assert>
+      </result>
+   </test-case> -->
+   
+   <test-case name="sx-except-316">
+      <description>Streaming except expression - striding operand, focus-controlled usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/*[1][self::WEIGHT][@UNIT='g'] = '390'</assert>
+            <assert>count(/out/*) = 1</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-317">
+      <description>Streaming except expression - striding operand, focus-setting usage for inspection action</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "TITLE PUBLISHER PUB-DATE LANGUAGE PRICE PAGES DIMENSIONS WEIGHT TITLE PUBLISHER PUB-DATE LANGUAGE PRICE PAGES DIMENSIONS WEIGHT"</assert>
+      </result>
+   </test-case>
+   
+   <!--<test-case name="sx-except-318">
+      <description>Streaming except expression - striding operand, apply-templates usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>-->
+   
+   <test-case name="sx-except-320">
+      <description>Streaming except expression - crawling operand, inspection usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-320a">
+      <description>Streaming except expression - crawling operand, inspection usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-020a"/>
+      </test>
+      <result>
+         <assert>/out = "60"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-321">
+      <description>Streaming except expression - crawling operand, absorption usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "10"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-322">
+      <description>Streaming except expression - crawling operand, transmission usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceModern Library2002-12-31"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-323">
+      <description>Streaming except expression - crawling operand, focus-setting usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert>/out = "391"</assert>        
+      </result>
+   </test-case>
+   
+   <!--<test-case name="sx-except-330">
+      <description>Streaming except expression - climbing operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "BOOKLIST BOOKS ITEM a b"</assert>
+            <assert>/out = "a b BOOKLIST BOOKS ITEM"</assert>
+         </any-of>        
+      </result>
+   </test-case>-->
+   
+   <test-case name="sx-except-331">
+      <description>Streaming except expression - climbing operand, inspection usage, removal of duplicates</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "ITEM"</assert>
+      </result>   
+   </test-case> 
+   
+   <test-case name="sx-except-332">
+      <description>Streaming except expression - climbing operand, absorption usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = "MMP"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-333">
+      <description>Streaming except expression - climbing operand, absorption usage, removal of duplicates</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "MMP"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-except-334">
+      <description>Streaming except expression - climbing operand, absorption usage, removal of duplicates</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>empty(/out/node())</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-except-335">
+      <description>Streaming except expression - climbing operand, absorption usage, removal of duplicates</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-except-C"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>empty(/out/node())</assert>
+      </result>
+   </test-case>
+
+</test-set>

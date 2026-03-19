@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="collection">
+   <description>Tests collection</description>
+   <environment name="collection-e01">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <source file="catalog1.xml" uri="catalog1.xml"/>
+      <source file="a.xml" uri="a.xml"/>
+      <source file="b.xml" uri="b.xml"/>
+      <source file="collectinput/a.xml" uri="collectinput/a.xml"/>
+      <source file="collectinput/b.xml" uri="collectinput/b.xml"/>
+      <collection uri=""/>
+   </environment>
+   
+   <environment name="collection-e02">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <collection uri="catalog1.xml">
+         <source file="a.xml" uri="a.xml"/>
+         <source file="b.xml" uri="b.xml"/>
+      </collection>
+   </environment>
+   
+   <environment name="collection-e03">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <collection uri="">
+         <!-- empty collection -->
+      </collection>
+   </environment>
+   
+   <environment name="collection-e04">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <source file="doc14.xml" uri="doc14.xml"/>
+      <source file="doc15.xml" uri="doc15.xml"/>
+      <source file="dir08/xmdocs08a.xml" uri="dir08/xmdocs08a.xml"/>
+      <collection uri="collection-004.xml">
+         <source file="doc14.xml" uri="doc14.xml"/>
+         <source file="doc15.xml#frag2" uri="doc15.xml#frag2"/>
+         <source file="dir08/xmdocs08a.xml" uri="dir08/xmdocs08a.xml"/>
+      </collection>
+   </environment>
+
+   <test-case name="collection-001">
+      <description>Test that result of collection() is of type node()*.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="collection-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collection-001.xsl"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="collection-002">
+      <description>Test that result of collection($arg) is of type node()*.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2021-06-14" change="Use a collection URI that actually exists"/>
+      <environment ref="collection-e02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collection-002.xsl"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="collection-003">
+      <description>Get the default collection (by default this is an empty collection).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collection-e03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collection-003.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>exists(/result)</assert>
+            <assert>empty(/result/node())</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="collection-004">
+      <description>test collection() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-06-14" change="Use xml:id instead of DTD-based ID, to remove dependency"/>
+      <environment ref="collection-e04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collection-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><doc>
+<a> </a>
+<b> </b>
+<c> </c>
+</doc><a xml:id="frag2"/><out>Got it right!</out></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="collection-005">
+      <description>test collection() function with xsl:strip-space</description>
+      <created by="Michael Kay" on="2016-06-10"/>
+      <environment ref="collection-e04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collection-005.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = ""</assert>
+            <assert>/out/b = " "</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="collection-006">
+      <description>test collection() function with different xsl:strip-space declarations in different packages</description>
+      <created by="Michael Kay" on="2016-06-10"/>
+      <environment>
+         <collection uri="collection-006.cxn">
+            <source file="doc14.xml" uri="doc14.xml"/>
+         </collection>
+         <package uri="http://www.w3.org/xslts/collection-006" package-version="3.0" file="collection-006a.xsl" role="secondary"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collection-006b.xsl" role="principal"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/pack-a/doc/a = ""</assert>
+            <assert>/out/pack-b/doc/a = " "</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   
+   
+</test-set>

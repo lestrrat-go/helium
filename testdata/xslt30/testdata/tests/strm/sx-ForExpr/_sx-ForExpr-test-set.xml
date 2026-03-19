@@ -1,0 +1,77 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sx-ForExpr">
+   <description>for expressions  with streaming</description>
+   
+   <environment name="sx-for-A">
+     <stylesheet file="sx-for-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sx-for-001">
+      <description>Streaming for expression - "in" expression is grounded and consuming</description>
+      <created by="Michael Kay" on="2015-03-27"/>
+      <environment ref="sx-for-A"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+        <assert-xml><![CDATA[<out>26.1 25 22.8 24.9 57 24.7</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-for-002">
+      <description>Streaming for expression - "in" expression is grounded and consuming</description>
+      <created by="Michael Kay" on="2015-03-27"/>
+      <environment ref="sx-for-A"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+        <assert-xml><![CDATA[<out>26.1 25 22.8 24.9 57 24.7</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-for-003">
+      <description>Streaming for expression - "in" expression is grounded and consuming</description>
+      <created by="Michael Kay" on="2015-03-27"/>
+      <environment ref="sx-for-A"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+        <assert-xml><![CDATA[<out>26.1 25 22.8 24.9 57 24.7</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-for-004">
+      <description>Streaming for expression - "in" expression is grounded and consuming</description>
+      <created by="Michael Kay" on="2015-03-27"/>
+      <modified by="Michael Kay" on="2015-07-01" change="correct expected results"/>
+      <environment ref="sx-for-A"/>
+      <test>
+         <initial-template name="r-004"/>
+      </test>
+      <result>
+        <assert-xml><![CDATA[<out>19.1 18 15.8 17.9 48 17.7</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-for-005">
+      <description>Streaming for expression - "in" expression is grounded and consuming</description>
+      <created by="Michael Kay" on="2015-03-27"/>
+      <environment ref="sx-for-A"/>
+      <test>
+         <initial-template name="r-005"/>
+      </test>
+      <result>
+        <assert-xml><![CDATA[<out>Q{}OWNER Q{}CAT Q{}UNIT Q{}CAT Q{}UNIT Q{}CAT Q{}UNIT Q{}CAT Q{}UNIT Q{}CAT Q{}UNIT Q{}CAT Q{}UNIT</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   
+
+</test-set>

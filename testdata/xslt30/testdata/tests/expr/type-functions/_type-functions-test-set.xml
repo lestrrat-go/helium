@@ -1,0 +1,332 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="type-functions">
+   <description>Tests type-functions</description>
+   <environment name="type-functions-01">
+      <source role="." file="type-functions-01.xml"/>
+      <schema role="source-reference" file="variousTypesSchemaFunc.xsd" xsd-version="1.0"/>
+   </environment>
+   <environment name="type-functions-02">
+      <source role="." file="type-functions-02.xml" validation="strict"/>
+      <schema role="source-reference" file="variousTypesSchemaFunc.xsd" xsd-version="1.0"/>
+   </environment>
+   <environment name="type-functions-03">
+      <source role="." file="type-functions-03.xml" validation="strict"/>
+      <schema role="source-reference" file="variousTypesSchemaFunc.xsd" xsd-version="1.0"/>
+   </environment>
+   
+   <dependencies>
+      <feature value="schema_aware"/>
+   </dependencies>
+
+   <test-case name="type-functions-0101">
+      <description>Test fn:dateTime with arguments coming from typed nodes in input source. Types tested: - xs:date and xs:time; - user-defined types derived by restriction from xs:date and xs:time</description>
+      <keywords>xs:date xs:time derived-xs-time derived-xs-date fn:dateTime InstanceOfExpr xsl:import-schema fn:data</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="type-functions-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-functions-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>truetruetruetruetruetrue</e1><e2>-0012-12-03T13:20:00 , true</e2><e3>1960-11-08T19:27:00 , true</e3></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-functions-0201">
+      <description>Test fn:abs with typed numeric arguments coming from nodes in input source. Types tested: - xs:float, xs:double, xs:decimal, xs:integer, xs:nonPositiveInteger, xs:long, xs:negativeInteger xs:positiveInteger, xs:short, xs:int; xs:unsignedInt; - user-defined types derived by restriction from the types listed above</description>
+      <keywords>buildin-datatypes derived-builtin-types InstanceOfExpr fn:abs xsl:import-schema fn:data</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="type-functions-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-functions-0201.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/e1 = "true , 3.4201"</assert>
+            <assert>/out/e2 = "true , 0"</assert>
+            <assert>/out/e3 = "true , 1.1234E30"</assert>
+            <assert>/out/e4 = "true , 3345"</assert>
+            <assert>/out/e5 = "true , 131072"</assert>
+            <assert>/out/e6 = "true , 7632460"</assert>
+            <assert>/out/e7 = "true , 18446744"</assert>
+            <assert>/out/e8 = "true , 74146"</assert>
+            <assert>/out/e9 = "true , 9223372036854775807"</assert>
+            <assert>/out/e10 = "true , 573231403"</assert>
+            <assert>/out/e11 = "true , 32768"</assert>
+            <assert>/out/e12 = "true , true , 1.1"</assert>
+            <assert>/out/e13 = "true , true , 0.99"</assert>
+            <assert>/out/e14 = "true , true , 0"</assert>
+            <assert>/out/e15 = "true , true , 999"</assert>
+            <assert>/out/e16 = "true , true , 10484"</assert>
+            <assert>/out/e17 = "true , true , 100"</assert>
+            <assert>/out/e18 = "true , true , 1000"</assert>
+            <assert>/out/e19 = "true , true , 555"</assert>
+            <assert>/out/e20 = "true , true , 92233720368547758"</assert>
+            <assert>/out/e21 = "true , true , 1686"</assert>
+            <assert>/out/e22 = "true , true , 25000"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="type-functions-0202">
+      <description>Test fn:data with no arguments</description>
+      <keywords>buildin-types derived-builtin-types InstanceOfExpr fn:data xsl:if xsl:import-schema</keywords>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="type-functions-02"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-functions-0202.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-functions-0202.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-functions-0203">
+      <description>This stylesheet crashes out at run-time saying that System function data#0 is not available with this host language - XSLT2.0</description>
+      <keywords>xs:decimal fn:data InstanceOfExpr xsl:if xsl:import-schema XPST0017</keywords>
+      <created by="O'Neil Delpratt, Saxonica" on="2012-11-07"/>
+      <environment ref="type-functions-02"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-functions-0203.xsl"/>
+      </test>
+      <result>
+         <error code="XPST0017"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-functions-0301">
+      <description>Test fn:substring with arguments coming from typed nodes in input source. Types tested: - xs:string, xs:normalizedString, xs:token, xs:language, xs:Name, xs:NCName, xs:NMTOKEN xs:ID, xs:IDREF - user-defined types derived by restriction from xs:string and all builtin types derived from it</description>
+      <keywords>buildin-types fn:data derived-builtin-types fn:substring derived-xs-string xsl:import-schema</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="type-functions-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-functions-0301.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/e1 = "true , ello"</assert>
+            <assert>/out/e2 = "true , ike,"</assert>
+            <assert>/out/e3 = "true , wo organizations"</assert>
+            <assert>/out/e4 = "true , T"</assert>
+            <assert>/out/e5 = "true , :_underscore_"</assert>
+            <assert>/out/e6 = "true , wxyz12"</assert>
+            <assert>/out/e7 = "true , usiness-enforcement::link-chain.common"</assert>
+            <assert>/out/e8 = "true , ab"</assert>
+            <assert>/out/e9 = "true , ab"</assert>
+            <assert>/out/e10 = "true , true , ello There"</assert>
+            <assert>/out/e11 = "true , true , ar_"</assert>
+            <assert>/out/e12 = "true , true , z Az , AA 13121-1314"</assert>
+            <assert>/out/e13 = "true , true , N"</assert>
+            <assert>/out/e14 = "true , true , olon:name"</assert>
+            <assert>/out/e15 = "true , true , nternationalization"</assert>
+            <assert>/out/e16 = "true , true , OM:co"</assert>
+            <assert>/out/e17 = "true , true , a1234"</assert>
+            <assert>/out/e18 = "true , true , a1234"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="type-functions-0302">
+      <description>Test fn:upper-case with arguments coming from typed nodes in input source. Types tested: - xs:string, xs:normalizedString, xs:token, xs:language, xs:Name, xs:NCName, xs:NMTOKEN xs:ID, xs:IDREF - user-defined types derived by restriction from xs:string and all builtin types derived from it</description>
+      <keywords>buildin-types derived-builtin-types derived-xs-string xs:string InstanceOfExpr fn:data fn:upper-case xsl:import-schema</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="type-functions-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-functions-0302.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/e1 = "true , HELLO"</assert>
+            <assert>/out/e2 = "true , LIKE,"</assert>
+            <assert>/out/e3 = "true , TWO ORGANIZATIONS"</assert>
+            <assert>/out/e4 = "true , PT"</assert>
+            <assert>/out/e5 = "true , A:_UNDERSCORE_"</assert>
+            <assert>/out/e6 = "true , VWXYZ12"</assert>
+            <assert>/out/e7 = "true , BUSINESS-ENFORCEMENT::LINK-CHAIN.COMMON"</assert>
+            <assert>/out/e8 = "true , _AB"</assert>
+            <assert>/out/e9 = "true , _AB"</assert>
+            <assert>/out/e10 = "true , true , HELLO THERE"</assert>
+            <assert>/out/e11 = "true , true , CAR_"</assert>
+            <assert>/out/e12 = "true , true , AZ AZ , AA 13121-1314"</assert>
+            <assert>/out/e13 = "true , true , EN"</assert>
+            <assert>/out/e14 = "true , true , COLON:NAME"</assert>
+            <assert>/out/e15 = "true , true , INTERNATIONALIZATION"</assert>
+            <assert>/out/e16 = "true , true , DOM:CO"</assert>
+            <assert>/out/e17 = "true , true , _A1234"</assert>
+            <assert>/out/e18 = "true , true , _A1234"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="type-functions-0303">
+      <description>Test fn:matches with arguments coming from typed nodes in input source. Types tested: - xs:string, xs:normalizedString, xs:token, xs:language, xs:Name, xs:NCName, xs:NMTOKEN xs:ID, xs:IDREF - user-defined types derived by restriction from xs:string and all builtin types derived from it</description>
+      <keywords>buildin-types derived-builtin-types derived-xs-string xs:string InstanceOfExpr fn:data fn:matches xsl:import-schema</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="type-functions-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-functions-0303.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/e1 = "true , true"</assert>
+            <assert>/out/e2 = "true , true"</assert>
+            <assert>/out/e3 = "true , true"</assert>
+            <assert>/out/e4 = "true , true"</assert>
+            <assert>/out/e5 = "true , true"</assert>
+            <assert>/out/e6 = "true , true"</assert>
+            <assert>/out/e7 = "true , true"</assert>
+            <assert>/out/e8 = "true , true"</assert>
+            <assert>/out/e9 = "true , true"</assert>
+            <assert>/out/e10 = "true , true , true"</assert>
+            <assert>/out/e11 = "true , true , true"</assert>
+            <assert>/out/e12 = "true , true , true"</assert>
+            <assert>/out/e13 = "true , true , true"</assert>
+            <assert>/out/e14 = "true , true , true"</assert>
+            <assert>/out/e15 = "true , true , true"</assert>
+            <assert>/out/e16 = "true , true , true"</assert>
+            <assert>/out/e17 = "true , true , true"</assert>
+            <assert>/out/e18 = "true , true , true"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="type-functions-0304">
+      <description>
+        Test fn:resolve-uri with arguments coming from typed nodes in input source. Types tested: - 
+        xs:string, xs:normalizedString, xs:token, xs:language, xs:Name, xs:NCName, xs:NMTOKEN xs:ID, xs:IDREF - 
+        user-defined types derived by restriction from xs:string and all builtin types derived from it.
+        
+        Note the dependency on resolution of bugs 20672 and 20602.
+        </description>
+      <keywords>buildin-types derived-builtin-types derived-xs-string xs:string InstanceOfExpr fn:data fn:resolve-uri xsl:import-schema</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Abel Braaksma" on="2015-04-15" change="Bug 20672, no percent encoding takes place with fn:resolve-uri" />
+      <environment ref="type-functions-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-functions-0304.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/e1 = "true , http://base.example.org/ns/hello"</assert>
+            <assert>/out/e2 = "true , http://base.example.org/ns/like,"</assert>
+            <assert>/out/e3 = "true , http://base.example.org/ns/two organizations"</assert>
+            <assert>/out/e4 = "true , http://base.example.org/ns/PT"</assert>
+            <assert>/out/e5 = "true , a:_underscore_"</assert>
+            <assert>/out/e6 = "true , http://base.example.org/ns/vwxyz12"</assert>
+            <assert>/out/e7 = "true , business-enforcement::link-chain.common"</assert>
+            <assert>/out/e8 = "true , http://base.example.org/ns/_ab"</assert>
+            <assert>/out/e9 = "true , http://base.example.org/ns/_ab"</assert>
+            <assert>/out/e10 = "true , true , http://base.example.org/ns/Hello There"</assert>
+            <assert>/out/e11 = "true , true , http://base.example.org/ns/car_"</assert>
+            <assert>/out/e12 = "true , true , http://base.example.org/ns/Az Az , AA 13121-1314"</assert>
+            <assert>/out/e13 = "true , true , http://base.example.org/ns/EN"</assert>
+            <assert>/out/e14 = "true , true , colon:name"</assert>
+            <assert>/out/e15 = "true , true , http://base.example.org/ns/internationalization"</assert>
+            <assert>/out/e16 = "true , true , DOM:co"</assert>
+            <assert>/out/e17 = "true , true , http://base.example.org/ns/_a1234"</assert>
+            <assert>/out/e18 = "true , true , http://base.example.org/ns/_a1234"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="type-functions-0401">
+      <description>Test fn:year-from-date with arguments coming from typed nodes in input source. Types tested: - xs:date - user-defined types derived by restriction from xs:date</description>
+      <keywords>InstanceOfExpr xs:date fn:data fn:year-from-date derived-xs-date xsl:import-schema</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="type-functions-04.xml"/>
+         <schema role="source-reference" file="variousTypesSchemaFunc.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-functions-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>true , -12</e1><e2>true , true , 1992</e2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-functions-0501">
+      <description>Test fn:local-name-from-QName with arguments coming from typed nodes in input source. Types tested: - xs:QName - user-defined types derived by restriction from xs:QName</description>
+      <keywords>fn:data xs:QName fn:local-name-from-QName derived-xs-QName InstanceOfExpr xsl:import-schema</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-12-14" change="Added validation attribute, removed whitespace from stylesheet"/>
+      <environment>
+         <source role="." file="type-functions-05.xml" validation="strict"/>
+         <schema role="source-reference" file="variousTypesSchemaFunc.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-functions-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>true , hello</e1><e2>true , true , brown-bear</e2></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="type-functions-0502">
+      <description>Constructor function based on user-defined type</description>
+      <created by="Michael Kay" on="2023-03-14"/>
+      <environment>
+         <source role="." file="type-functions-05.xml" validation="strict"/>
+         <schema role="source-reference" file="variousTypesSchemaFunc.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-functions-0502.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out value="123-XY" ok="true"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="type-functions-0503">
+      <description>Constructor function based on user-defined type, clashing with user-defined function</description>
+      <created by="Michael Kay" on="2023-03-14"/>
+      <environment>
+         <source role="." file="type-functions-05.xml" validation="strict"/>
+         <schema role="source-reference" file="variousTypesSchemaFunc.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-functions-0503.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0770"/>
+         <!-- the error isn't explicit in the XSLT spec, but this is the closest it gets -->
+      </result>
+   </test-case>
+</test-set>

@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-choose">
+   <description>xsl:choose and other conditional expressions with streaming</description>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="si-choose-001">
+      <description>Use xsl:choose within xsl:stream, both branches do downward selection</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <test>
+         <stylesheet file="si-choose-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><chapter><head>Heading</head><p>One</p><p>Two</p><p>Three</p
+            ><bullet>point one</bullet><bullet>point two</bullet><bullet>point three</bullet
+            ><p>Four</p></chapter></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-choose-002">
+      <description>Use xsl:choose within an LRE within xsl:stream, both branches do downward selection</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <test>
+         <stylesheet file="si-choose-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><chapter><head>Heading</head><p>One</p><p>Two</p><p>Three</p
+            ><bullet>point one</bullet><bullet>point two</bullet><bullet>point three</bullet
+            ><p>Four</p></chapter></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-choose-003">
+      <description>Use xsl:choose and LREs within xsl:stream, both branches do downward selection</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <test>
+         <stylesheet file="si-choose-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><in/><chapter><head>Heading</head><p>One</p><p>Two</p><p>Three</p
+            ><bullet>point one</bullet><bullet>point two</bullet><bullet>point three</bullet
+            ><p>Four</p></chapter><in/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-choose-004">
+      <description>Use xsl:choose and LREs within xsl:stream, both branches do downward selection</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <test>
+         <stylesheet file="si-choose-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><in/><chapter><head>Heading</head><p>One</p><p>Two</p><p>Three</p
+            ><bullet>point one</bullet><bullet>point two</bullet><bullet>point three</bullet
+            ><p>Four</p></chapter><in/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-choose-005">
+      <description>Use xsl:if and LREs within xsl:stream, only one branch doing downward selection</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <test>
+         <stylesheet file="si-choose-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><in/><chapter><head>Heading</head><p>One</p><p>Two</p><p>Three</p
+            ><bullet>point one</bullet><bullet>point two</bullet><bullet>point three</bullet
+            ><p>Four</p></chapter><in/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-choose-006">
+      <description>Streaming, xsl:choose does downward selection within the first condition</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <test>
+         <stylesheet file="si-choose-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out/magic</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-choose-007">
+      <description>Streaming, xsl:choose does downward selection within the first condition, returns false</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <test>
+         <stylesheet file="si-choose-007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out/cool</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-choose-008">
+      <description>Streaming, xsl:choose using a variety of motionless test conditions</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <test>
+         <stylesheet file="si-choose-008.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><head>Heading</head><para/><para/><para/><bullet>point one</bullet
+            ><bullet>point two</bullet><bullet>point three</bullet><para/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-choose-009">
+      <description>Streaming, xsl:choose does downward selection within the second condition</description>
+      <created by="Michael Kay" on="2016-12-18"/>
+      <test>
+         <stylesheet file="si-choose-009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out/magic</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-choose-010">
+      <description>Use xsl:choose within xsl:stream, both branches are grounded and consuming</description>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <test>
+         <stylesheet file="si-choose-010.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '10'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-choose-011">
+      <description>Use xsl:choose within xsl:stream, both branches are grounded and consuming</description>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <test>
+         <stylesheet file="si-choose-011.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '[HeadingOneTwoThreepoint onepoint twopoint threeFourHeadingOneTwoThreepoint onepoint twopoint threeFour]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-choose-012">
+      <description>Use xsl:choose within xsl:stream, all branches do downward selection. Tests a Saxon optimization</description>
+      <created by="Michael Kay" on="2018-04-27"/>
+      <test>
+         <stylesheet file="si-choose-012.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><D1>0.01</D1><D1>3.06</D1><D2>15.11</D2><D2>4.61</D2><D3>3.81</D3><D3>6.40</D3><D4>10.52</D4
+            ><D4>-1.84</D4><D5>15.83</D5><D5>-6.68</D5><D5>1.28</D5><D5>3.29</D5><D6>-2.37</D6><D6>6.21</D6><D6>-3.64</D6><D7>22.39</D7></out>
+]]></assert-xml>
+      </result>
+   </test-case>
+
+</test-set>

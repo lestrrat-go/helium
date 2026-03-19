@@ -1,0 +1,510 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-min">
+   <description>min() function with streaming</description>
+   
+   <environment name="sf-min-A">
+     <stylesheet file="sf-min-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-min-003">
+      <description>Basic Test of xsl:stream instruction with min()</description>
+      <keywords>striding PathExpr</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4.95</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-min-004">
+      <description>Test of xsl:stream instruction with min(), filtered with a motionless predicate</description>
+      <keywords>striding PathExpr motionless-predicate</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-004"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4.95</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-min-005">
+      <description>Test of xsl:stream instruction with min(), filtered with a positional predicate</description>
+      <keywords>striding PathExpr positional-predicate fn:position</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-005"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4.95</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-min-006">
+      <description>Test of xsl:stream instruction with min(), filtered with a positional predicate</description>
+      <keywords>striding fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-006"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4.95</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-min-007">
+      <description>Test of xsl:stream instruction with min(), filtered with a positional predicate</description>
+      <keywords>striding fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-007"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4.95</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-008">
+      <description>Test of xsl:stream instruction with min(), filtered with data() to make the predicates motionless</description>
+      <keywords>striding-then-grounded predicate PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>346</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-009">
+      <description>Test of xsl:stream instruction with min(), filtered with text() to make the predicates motionless</description>
+      <keywords>striding childless-nodes text-nodes PathExpr predicate</keywords>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-009"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>346</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-010">
+      <description>Test of xsl:stream instruction with min(), filtered with number() to make the predicates motionless</description>
+      <keywords>striding-then-grounded fn:number PathExpr predicate</keywords>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-010"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>346</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-011">
+      <description>min() selecting nothing, returning the $zero case</description>
+      <keywords>striding empty-sequence PathExpr</keywords>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-011"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-012">
+      <description>min() selecting both streamed nodes and literals</description>
+      <keywords>ParenthesizedExpr striding-then-grounded mixed-posture fn:number PathExpr</keywords>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-012"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>31</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-013">
+      <description>min() selecting both streamed nodes and literals while also filtering</description>
+      <keywords>fn:tail striding-then-grounded fn:number PathExpr ParenthesizedExpr</keywords>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-013"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>31</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-015">
+      <description>Test of xsl:stream instruction with min() of a computed value</description>
+      <keywords>striding-then-grounded ForExpr LetExpr leading-double-slash fn:outermost crawling-then-striding PathExpr SimpleMapExpr fn:data</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-015"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>22.848</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-016">
+      <description>Test of xsl:stream instruction with min() of a computed value</description>
+      <keywords>MultiplicativeExpr attribute-axis striding-then-grounded PathExpr</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-15</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-017">
+      <description>Test of xsl:stream instruction with min() using copy-of to make it streamable</description>
+      <keywords>striding-then-grounded predicate fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-017"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>346</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-018">
+      <description>Test of xsl:stream instruction with min() over attribute values</description>
+      <keywords>striding-then-climbing attribute-axis PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-018"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-7</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-019">
+      <description>Test of xsl:stream instruction with min() over attribute values, filtered</description>
+      <keywords>striding-then-climbing attribute-axis motionless-predicate xs:decimal PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-019"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-020">
+      <description>min() over attribute values, computed</description>
+      <keywords>striding-then-grounded attribute-axis climbing PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-020"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-021">
+      <description>min() over values that depend on a condition</description>
+      <keywords>striding-then-grounded AdditiveExpr climbing attribute-axis UnaryExpr PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-021"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-7</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-022">
+      <description>min() with a loop used to compute each value</description>
+      <keywords>striding xs:NMTOKENS ContextItemExpr xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-022"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0.8</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-023">
+      <description>min() over a crawling expression</description>
+      <keywords>xs:NMTOKENS ContextItemExpr leading-double-slash xs:decimal PathExpr fn:outermost crawling-then-striding SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-023"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0.8</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-030">
+      <description>min() applied to dates</description>
+      <keywords>striding-then-grounded xs:date ContextItemExpr PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-030"/>
+      </test>
+      <result>
+         <assert>/out = '1984-05-01'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-031">
+      <description>min() applied to strings</description>
+      <keywords>striding-then-grounded fn:string PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-031"/>
+      </test>
+      <result>
+         <assert>/out = 'Charlotte Brontë'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-032">
+      <description>min() applied to durations</description>
+      <keywords>striding AxisStep xs:date PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-032"/>
+      </test>
+      <result>
+         <assert>/out = 'P5234D'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-033">
+      <description>min() - sequence contains NaN</description>
+      <keywords>striding-then-grounded fn:number PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-033"/>
+      </test>
+      <result>
+         <assert>/out = 'NaN'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sf-min-034">
+      <description>min() - incompatible data types</description>
+      <keywords>striding-then-grounded ParenthesizedExpr fn:number PathExpr FORG0006</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-034"/>
+      </test>
+      <result>
+         <error code="FORG0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-035">
+      <description>min() - incompatible data types - error is caught</description>
+      <keywords>ParenthesizedExpr striding-then-grounded fn:number xsl:try error-handling specific-catch-clause FORG0006 PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-035"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-040">
+      <description>min() over an empty grounded expression</description>
+      <keywords>empty-sequence leading-double-slash fn:outermost crawling-then-striding PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-040"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-041">
+      <description>min() over an empty striding expression</description>
+      <keywords>striding leading-lone-slash PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-041"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-042">
+      <description>min() over an empty crawling expression</description>
+      <keywords>leading-double-slash fn:outermost crawling-then-striding PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-042"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-043">
+      <description>min() over an empty grounded expression</description>
+      <keywords>crawling-then-climbing parent-axis attribute-axis leading-double-slash PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-043"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-050">
+      <description>min() - collation argument present</description>
+      <keywords>striding-then-grounded ContextItemExpr collation-argument leading-double-slash PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-050"/>
+      </test>
+      <result>
+         <assert>/out = 'Charlotte Brontë'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-051">
+      <description>min() - collation argument present - unknown collation</description>
+      <keywords>striding-then-grounded collation-argument ContextItemExpr FOCH0002 leading-double-slash PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-051"/>
+      </test>
+      <result>
+         <error code="FOCH0002"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-052">
+      <description>min() - collation argument present - unknown collation - error is caught</description>
+      <keywords>striding-then-grounded ContextItemExpr collation-argument leading-double-slash xsl:try error-handling specific-catch-clause FOCH0002 PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-052"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-053">
+      <description>min() - collation argument consumes streamed document</description>
+      <keywords>ParenthesizedExpr collation-argument striding PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-053"/>
+      </test>
+      <result>
+         <assert>/out = 'a'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-054">
+      <description>min() - collation argument consumes streamed document, unknown collation</description>
+      <keywords>ParenthesizedExpr striding collation-argument PathExpr FOCH0002</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-054"/>
+      </test>
+      <result>
+         <error code="FOCH0002"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-055">
+      <description>min() - collation argument consumes streamed document, unknown collation, error is caught</description>
+      <keywords>collation-argument ParenthesizedExpr striding xsl:try error-handling specific-catch-clause FOCH0002 PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-min-A"/>
+      <test>
+         <initial-template name="s-055"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+      
+
+   <test-case name="sf-min-901">
+      <description>Test of xsl:stream instruction with min(), filtered with predicate that atomizes.</description>
+      <keywords>consuming-predicate fn:last striding-then-roaming PathExpr positional-predicate XTSE3430 _IMPROVE:fix-description</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <test>
+         <stylesheet file="sf-min-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-min-902">
+      <description>Test of xsl:stream instruction with min(), filtered with predicate that uses last().</description>
+      <keywords>_IMPROVE:fix-description consuming-predicate GeneralComp striding-then-roaming XTSE3430 PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <test>
+         <stylesheet file="sf-min-902.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+
+</test-set>

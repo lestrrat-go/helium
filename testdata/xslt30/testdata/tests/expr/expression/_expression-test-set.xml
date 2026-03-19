@@ -1,0 +1,2099 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="expression">
+   <description>Tests expression</description>
+   
+   
+   <environment name="expression-03">
+      <source role="." file="expression-03.xml"/>
+   </environment>
+   
+   <environment name="expression-04">
+      <source role=".">
+         <content><![CDATA[<doc>
+    <para id="1" cat="a"/>
+    <para id="2" cat="a"/>
+    <para id="3" cat="b"/>
+    <para id="4" cat="b"/>
+    <para id="5" cat="b"/>    
+</doc>]]></content>
+      </source>
+   </environment>
+     
+   <environment name="expression-07">
+      <source role="." file="expression-07.xml"/>
+   </environment>
+   <environment name="expression-08">
+      <source role=".">
+         <content><![CDATA[
+<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="expression-09">
+      <source role=".">
+         <content><![CDATA[ 
+
+<doc>
+    <item val="1"/>
+    <item val="2"/>
+    <item val="3"/>
+    <item val="4"/>
+    <item val="5"/>                
+</doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="expression-11">
+      <source role=".">
+         <content><![CDATA[ 
+
+<doc>
+
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="expression-12">
+      <source role=".">
+         <content><![CDATA[<doc>
+    <item val="1"/>
+    <item val="2"/>
+    <item val="3"/>
+    <item val="4"/>
+    <item val="5"/>    
+    <item val="06"/>               
+</doc>]]></content>
+      </source>
+   </environment>
+ 
+   <environment name="expression-17">
+      <source role="." file="expression-17.xml"/>
+   </environment>
+   
+
+   <environment name="expression-20">
+      <source role=".">
+         <content><![CDATA[<doc>
+   <a/><a/><a att="3"/><a/>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   
+   <environment name="expression-22">
+      <source role=".">
+         <content><![CDATA[ <doc>
+   <sub1>
+     <child1>child1</child1>
+   </sub1>
+   <sub2>
+     <child2>child2</child2>
+   </sub2>
+ </doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="expression-23">
+      <source role=".">
+         <content><![CDATA[ <doc>
+   <sub1>
+     <child1>descendant number 1</child1>
+   </sub1>
+   <sub2>
+     <child2>descendant number 2</child2>
+   </sub2>
+ </doc>
+]]></content>
+      </source>
+   </environment>
+   
+   <environment name="expression-24">
+      <source role="." file="expression-24.xml"/>
+   </environment>
+   
+   <environment name="expression-27">
+      <source role="." file="expression-27.xml"/>
+   </environment>
+   
+   <environment name="expression-33">
+      <source role="." file="expression-33.xml"/>
+   </environment>
+   
+   <environment name="expression-42">
+      <source role=".">
+         <content><![CDATA[<doc></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="expression-44">
+      <source role="." file="expression-44.xml"/>
+   </environment>
+
+   <test-case name="expression-0101">
+      <description>Test of lang() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="expression-01.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>en</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0301">
+      <description>Test of lang() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>en-us</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0302">
+      <description>Test of lang() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>en</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0303">
+      <description>Test of lang() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0303.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>EN</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0401">
+      <description>Test optimisation of true() in a filter expression</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><para id="1" cat="a"/><para id="2" cat="a"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0402">
+      <description>Test optimisation of false() in a filter expression</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0403">
+      <description>Test optimisation of true() in a path expression</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0403.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><para id="1" cat="a"/><para id="2" cat="a"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0404">
+      <description>Test optimisation of false() in a path expression</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0404.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0501">
+      <description>Test passing a context-dependent node-set expression as a parameter</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc cat="b"><para id="1" cat="a"/><para id="2" cat="a"/><para id="3" cat="b"/><para id="4" cat="b"/><para id="5" cat="b"/></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><temp>3</temp>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0601">
+      <description>Test optimisation of recursive scan of a node-set</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="expression-06.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4400</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0701">
+      <description>Test optimisation of count()=0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>false should be false</a><a>true should be true</a><a>true should be true</a><a>false should be false</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0702">
+      <description>Test optimisation of string-length()=0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0702.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>true should be true</a><a>false should be false</a><a>true should be true</a><a>false should be false</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0801">
+      <description>test identity of nodes in a result tree fragment</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-03-17" change="order of nodes in different trees is impl-dependent"/>
+      <environment ref="expression-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0801.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml><![CDATA[<Result><Fred/><Bill/></Result>]]></assert-xml>
+            <assert-xml><![CDATA[<Result><Bill/><Fred/></Result>]]></assert-xml>
+         </any-of>        
+      </result>
+   </test-case>
+
+   <test-case name="expression-0802">
+      <description>test identity of nodes in a single-node result tree fragment &lt;xsl:message&gt;Should have Fred and Bill in Result&lt;/xsl:message&gt;</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-01-14" change="remove dependency on document order across different trees"/>
+      <environment ref="expression-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0802.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml><![CDATA[<Result>fredbill</Result>]]></assert-xml>
+            <assert-xml><![CDATA[<Result>billfred</Result>]]></assert-xml>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0803">
+      <description>test identity of nodes in a result tree fragment &lt;xsl:message&gt;Modified 2002-08-08 to remove dependency on document number: expect "false"&lt;/xsl:message&gt;</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0803.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result comparison="false"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0804">
+      <description>test identity of nodes in a single-node result tree fragment</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0804.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result comparison="false"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0901">
+      <description>Test sum() inside a predicate (bug in expression reduction in 6.4.4)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="expression-0901.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0902">
+      <description>Test simple mapping operator: rhs delivers atomic values</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0902.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>25</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0903">
+      <description>Test simple mapping operator: rhs delivers atomic values</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0903.xsl"/>
+      </test>
+      <result>
+         <assert>/out="val=1 val=2 val=3 val=4 val=5"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0904">
+      <description>Test simple mapping operator: type of rhs not known statically, delivers nodes at run-time</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0904.xsl"/>
+      </test>
+      <result>
+         <assert>/out="1 2 3 4 5"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0905">
+      <description>Test simple mapping operator: type of rhs not known statically, delivers atoms at run-time</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0905.xsl"/>
+      </test>
+      <result>
+         <assert>/out="1 2 3 4 5"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0906">
+      <description>Test simple mapping operator: type of rhs not known statically, delivers nodes at run-time, requires de-duplicating</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0906.xsl"/>
+      </test>
+      <result>
+         <assert>every $i in (1 to 5) satisfies /out/doc/item[$i]/@val = string($i)</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0907">
+      <description>Test simple mapping operator: type of rhs not known statically, delivers nodes at run-time, requires sorting into doc order</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0907.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><item val="2"/><item val="3"/><item val="5"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0908">
+      <description>Test simple mapping operator: type of rhs not known statically, delivers nodes at run-time, requires sorting into doc order, further steps follow</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0908.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "2 3 5"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0909">
+      <description>Test avg() over sequences</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0909.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = ""</assert>
+            <assert>/out/b = "1"</assert>
+            <assert>abs(number(/out/c) - 2.333333333333333333) lt 1e-10</assert>
+            <assert>/out/d = "3"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0910">
+      <description>Test "for" over a node-set</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0910.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "(1, 2, 3, 4, 5)"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0911">
+      <description>Test "xsl:for-each" over a sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0911.xsl"/>
+      </test>
+      <result>
+         <assert>every $i in 1 to 10 satisfies /out/a[$i] = ($i + 1)</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0912">
+      <description>Test sorted "xsl:for-each" over a sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0912.xsl"/>
+      </test>
+      <result>
+         <assert>/out="-100;-2;0;5;12;14;14;19;"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0913">
+      <description>Test predicate applied to a sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0913.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "5;12;14;14;19;"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0914">
+      <description>Test numeric predicate applied to a sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0914.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>14</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0915">
+      <description>Test positional predicate applied to a sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0915.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "12;5;14;-2;19;-100;0;"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0916">
+      <description>Test "for" with two range variables</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0916.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "(2, 3, 4, 6, 6, 9, 8, 12, 10, 15)"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0917">
+      <description>First range variable used in declaration of second range variable</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0917.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "(2, 3, 4, 5, 6)"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0918">
+      <description>Test for expresssion within first operand of a for expression</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0918.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "(2, 3, 4, 5, 6)"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0919">
+      <description>Test range variable used within a predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0919.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "(2, 3, 4)"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0920">
+      <description>Test some $x in X satisfies C</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0920.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><true>true</true><false>false</false></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0921">
+      <description>Test every $x in X satisfies C</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0921.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><true>true</true><false>false</false></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0922">
+      <description>Test remove() (XPath 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0922.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/r4 = "1, 2, 3, 5"</assert>
+            <assert>/out/r1 = "2, 3, 4, 5"</assert>
+            <assert>/out/r0 = "1, 2, 3, 4, 5"</assert>
+            <assert>/out/r9 = "1, 2, 3, 4, 5"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0923">
+      <description>Test insert-before() (XPath 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0923.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/r1 = "1, 2, 3, 4, 4.5, 5"</assert>
+            <assert>/out/r2 = "1, 1.5, 2, 3, 4, 5"</assert>
+            <assert>/out/r3 = "0.5, 1, 2, 3, 4, 5"</assert>
+            <assert>/out/r4 = "1, 2, 3, 4, 5, 9.5, 10.5, 11.5"</assert>
+            <assert>/out/r5 = "9.5, 10.5, 11.5, 1, 2, 3, 4, 5"</assert>
+            <assert>/out/r6 = "1, 2, 3, 4, 5"</assert>
+            <assert>/out/r7 = "1, 2, 3, 4, 5"</assert>
+            <assert>/out/r8 = "1, 2, 3, 4, 5"</assert>
+            <assert>/out/r9 = "1, 2, 3, 4, 5"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0924">
+      <description>Test subsequence() (XPath 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0924.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/r1 = "2, 3"</assert>
+            <assert>/out/r2 = "1, 2"</assert>
+            <assert>/out/r3 = "1"</assert>
+            <assert>/out/r4 = "2, 3, 4, 5"</assert>
+            <assert>/out/r5 = "5"</assert>
+            <assert>/out/r6 = "1, 2, 3, 4, 5"</assert>
+            <assert>/out/r7 = ""</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0925">
+      <description>Test index-of() (XPath 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0925.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/r1 = "5, 6"</assert>
+            <assert>/out/r2 = "4, 7"</assert>
+            <assert>/out/r3 = ""</assert>
+            <assert>/out/r4 = "2"</assert>
+            <assert>/out/r5 = "5"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0926">
+      <description>Test non-integer predicates (bug 499030)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0926.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0927">
+      <description>Test some $x in X, $y in Y satisfies C</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0927.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><true>true</true><false>false</false></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0928">
+      <description>Test some $x in X, $y in Y satisfies C</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0928.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><true>true</true><false>false</false></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0929">
+      <description>Test reverse() (XPath 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0929.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/r1 = "5 4 3 2 1"</assert>
+            <assert>/out/r2 = "10 9 8 7 6"</assert>
+            <assert>/out/r3 = "c b a"</assert>
+            <assert>/out/r4 = "1"</assert>
+            <assert>/out/r5 = ""</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0930">
+      <description>Test use of remove($seq, 1) as a tail expression</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0930.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>150</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0931">
+      <description>Test nilled() function in an untyped environment (always false) comment</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0931.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z><d/><e>false</e><a/><p/><c/><t/><n/><s/><x>false</x></z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0932">
+      <description>Test simple mapping operator: type of rhs not known statically, delivers atoms then nodes at run-time</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0932.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0018"/>
+      </result>
+   </test-case>
+
+   <test-case name="expression-0933">
+      <description>Test simple mapping operator: type of rhs not known statically, delivers nodes then atoms at run-time</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-0933.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0018"/>
+      </result>
+   </test-case>
+
+   <test-case name="expression-1001">
+      <description>Test intersection and difference</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="expression-10.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="expression-1001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="expression-1101">
+      <description>Test document()/key()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-1101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Paris;
+    Lyon;
+    Calais;
+    </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-1102">
+      <description>Test sequence expressions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-1102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>;
+    0;
+    1;
+    2;
+    3;
+    6;
+    10;
+    10;                     
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-1103">
+      <description>Test xsl:value-of with sequence expressions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-1103.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="expression-1103.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="expression-1104">
+      <description>Test position() and last() with sequence expressions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-1104.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="expression-1104.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="expression-1201">
+      <description>Test min() over sequences</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-1201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>;
+    ;
+    1;    
+    -1;
+    06; 
+    1;     
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-1301">
+      <description>Test max() over sequences</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>;
+    ;
+    1;    
+    4;
+    5;   
+    6;    
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-1401">
+      <description>test deep-equal() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="expression-14.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>;
+    <true>true</true><false>false</false><false>false</false></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-1501">
+      <description>test optimization of a[ppp and xxx] as a[ppp][xxx]</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>
+<z>
+    <a x="1" y="2" z="3">[1]</a>
+    <a x="1" z="3" y="2">[2]</a>
+</z>
+<z>
+    <a x="1" z="3" y="4">[3]</a>
+    <a x="1" y="2" z="3">[4]</a>    
+</z>
+</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-1501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>[1]</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-1601">
+      <description>test escape-html-uri()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-1601.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/escape/e1 = "simple.url"</assert>
+            <assert>/escape/e2 = "uri with spaces.uri"</assert>
+            <assert>/escape/e3 = "pre-escaped%20uri.uri"</assert>
+            <assert>/escape/e4 = "%C3%86lfred.uri"</assert>
+            <assert>/escape/e5 = "Euro%E2%82%AC.uri"</assert>
+            <assert>/escape/e6 = "Surrogate Pair %F0%98%A2%94.uri"</assert>
+            <assert>/escape/e7 = "http://example.com/query.uri?x=y#fragment"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="expression-1701">
+      <description>test sequence-deep-equal() between nodes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-1701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><true>true</true><true>true</true><true>true</true><true>true</true><true>true</true><false>false</false><false>false</false><false>false</false></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-1702">
+      <description>test deep-equal() between simple values</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-1702.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="expression-1702.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="expression-1801">
+      <description>test optimization of a filter expression whose predicate doesn't depend on the node</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>
+  <a/><a/><a/>
+  <b/><b/><b/>
+</doc>
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-1801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><b/><b/><b/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   
+
+   <test-case name="expression-2001">
+      <description>test optimisation of a filter expression containing a sequence-valued non-dependent subexpression</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>
+   <a/><a/><a att="3"/><a/>
+</doc>
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>;
+        </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2101">
+      <description>BUG in 7.6.5 and earlier - wrong optimization causes different results being output BUG 2 - colon (':') is not an alphanumeric character</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc xmlns:ns="http://some_ns/" ns:att="att value"/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2101.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <assert-serialization method="text" file="expression-2101.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2201">
+      <description>Purpose: NodeSet union using two absolute location paths </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-22"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>child1
+    child2
+    </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2202">
+      <description>Purpose: NodeSet union using absolute and relative location paths </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-22"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   child1
+   child2
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2203">
+      <description>Purpose: NodeSet union using two relatives location paths </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-22"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   child1
+   child2
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2301">
+      <description>Purpose: NodeSet union using the ancestor location path </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-23"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+     descendant number 1
+   
+     descendant number 2
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2302">
+      <description>Purpose: NodeSet union using the ancestor-or-self location path </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-23"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+     descendant number 1
+   
+     descendant number 2
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2401">
+      <description>Purpose: test union operator using two attribute nodes. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-24"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   Carmelo Montanez
+   Mary Brady
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2402">
+      <description>Purpose: test union operator using a complex XPath expression. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-24"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   Carmelo Montanez
+   Mary Brady
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2501">
+      <description>Purpose: NodeSet union using the attribute location path </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-23" change="make expected results independent of attribute order"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc attr1="attribute 1" attr2="attribute 2">
+   <sub1>
+     <child1>child number 1</child1>
+   </sub1>
+   <sub2>
+     <child2>child number 2</child2>
+   </sub2>
+ </doc>
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2501.xsl"/>
+      </test>
+      <result>
+        <any-of>
+          <assert>/out = "attribute 1attribute 2"</assert>
+          <assert>/out = "attribute 2attribute 1"</assert>
+        </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2601">
+      <description>Purpose: NodeSet union using the child location path </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[ <doc>
+   <sub1>
+     <child1>child number 1</child1>
+   </sub1>
+   <sub2>
+     <child2>child2 number 2</child2>
+   </sub2>
+ </doc>
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+     child number 1
+   
+     child2 number 2
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2701">
+      <description>Purpose: NodeSet union using the descendant location path </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-27"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   descendant number 1
+   descendant number 2
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2702">
+      <description>Purpose: NodeSet union using the descendant-or-self location path </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-27"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2702.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   
+     descendant number 1
+   
+   
+     descendant number 2
+   
+ </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2801">
+      <description>Purpose: test union operator using element and attribute nodes. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="expression-28.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   Carmelo Montanez
+   Mary Brady
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-2901">
+      <description>Purpose: test union operator where union yields empty set. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><child2>child number 2</child2></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-2901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-3001">
+      <description>Purpose: NodeSet union using the following-sibling and preceding-sibling location paths. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[ <doc>
+   <sub1>
+     <child1>preceding sibling number 1</child1>
+     <child2>current node</child2>
+     <child3>following sibling number 3</child3>
+   </sub1>
+ </doc>
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-3001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+    preceding sibling number 1
+    following sibling number 3
+    </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-3101">
+      <description>Purpose: NodeSet union using a function that return a node set (id). and a location path axes. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="expression-31.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-3101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   book1
+   book3
+   book5
+   book9
+   book11
+   book13
+   book15
+   article 1
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-3201">
+      <description>Purpose: NodeSet union using a function that return a node set (id). </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="expression-32.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-3201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   book2
+   book4
+   book6
+   book8
+   book10
+   book12
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-3301">
+      <description>Purpose: test union operator at different nesting levels (same element) </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-3301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   Carmelo Montanez
+   David Marston
+   Mary Brady
+   Lynne Rosenthal
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-3302">
+      <description>Purpose: test union operator at different nesting levels (different elements) </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-3302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   Carmelo Montanez
+   David Marston
+   Mary Brady
+   Five
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-3401">
+      <description>Purpose: test union operator where one of the members is empty. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="expression-34.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-3401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   David Marston
+   Mary Brady
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-3501">
+      <description>Purpose: test union operator using overlaping node-sets. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[ <doc>
+    <child1>Text for variable 1.</child1>
+    <child2>Selection of this child is an error.</child2>
+    <child3>Selection of this child is an error.</child3>
+ </doc>
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-3501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   Text for variable 1.
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-3601">
+      <description>Purpose: NodeSet union using the self location path. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[ <doc>
+   <sub1>
+     <child1>self content number 1</child1>
+   </sub1>
+   <sub2>
+     <child2>self content number 2</child2>
+   </sub2>
+ </doc>
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-3601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   self content number 1
+   self content number 2
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-3701">
+      <description>Purpose: Test Simple nodeset union. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[ <doc>
+    <child1>1</child1>
+    <child2>2</child2>
+ </doc>
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-3701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-3801">
+      <description>Purpose: test union operator used three times in a statement. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[ <doc>
+    <child1>1</child1>
+    <child2>2</child2>
+    <child3>3</child3>
+ </doc>
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-3801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>123</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-3901">
+      <description>Purpose: test union operator using a variable and a function. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="expression-39.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-3901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   article 1
+   book14
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-4001">
+      <description>Purpose: test union operator using a variable and a location path. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[ <doc>
+    <child1>Text for variable</child1>
+    <child2>Text for location Path</child2>
+    <child3>Selection of this child is an error.</child3>
+ </doc>
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   Text for variable
+   Text for location Path
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-4101">
+      <description>Purpose: test union operator using variables. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[ <doc>
+    <child1>child number 1</child1>
+    <child2>child number 2</child2>
+    <child3>Selection of this child is an error.</child3>
+ </doc>
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   child number 1
+   child number 2
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-4201">
+      <description>
+      	Test IEEE 754 comparisons involving sign of zero. (test of equality +0 and -0) 
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-42"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-4202">
+      <description>
+      	Test IEEE 754 comparisons involving sign of zero. (test of "less than" +0 and -0) 
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-42"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-4203">
+      <description>
+      	Test IEEE 754 comparisons involving sign of zero. (test of "greater than" +0 and -0) 
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-42"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-4204">
+      <description>
+      	Test IEEE 754 comparisons involving sign of zero. (test of "greater than or equal" of +0 and -0) 
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-42"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4204.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-4205">
+      <description>
+      	Test IEEE 754 comparisons involving sign of zero. (test of "less than or equal" of +0 and -0) 
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-42"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4205.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-4206">
+      <description>
+      	Test IEEE 754 comparisons involving sign of zero. (test of "not equal to" of +0 and -0) 
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-42"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4206.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-4207">
+      <description>
+      	Test IEEE 754 comparisons involving floating point numbers. 
+      	Test of a predicate the "Greater Than" predicate that holds true for the named comparison. 
+      	A "Greater Than" relation yields a true value, a "Less than" relation yields a false value, 
+      	an "equal" relation yields a false value and if one of the operands is of the type "unordered", 
+      	the relation yields a false value (IEEE 754 table 4). 
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-42"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4207.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   true
+   false
+   false
+   false
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-4208">
+      <description>
+      	Test IEEE 754 comparisons involving floating point numbers. 
+      	Test of a predicate the "Less Than" predicate that holds true for the named comparison. 
+      	A "Less Than" relation yields a true value, a "Greater than" relation yields a false value, 
+      	an "equal" relation yields a false value and if one of the operands is of the type "unordered", 
+      	the relation yields a false value (IEEE 754 table 4). 
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-42"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4208.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   true
+   false
+   false
+   false
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-4209">
+      <description>Test IEEE 754 comparisons involving floating point numbers. 
+      Test of a predicate the "Less Than or equal to" predicate that holds true for the named comparison. 
+      A "Less Than" relation yields a true value, a "Greater than" relation yields a false value, 
+      an "equal" relation yields a true value and if one of the operands is of the type "unordered", 
+      the relation yields a false value (IEEE 754 table 4). 
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-42"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4209.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   true
+   false
+   true
+   false
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="expression-4210">
+      <description>
+      	Test IEEE 754 comparisons involving floating point numbers. 
+      	Test of a predicate the "Greater Than or equal to" predicate that holds true for the named comparison. 
+      	A "Less Than" relation yields a false value, a "Greater than" relation yields a true value, 
+      	an "equal" relation yields a true value and if one of the operands is of the type "unordered", 
+      	the relation yields a false value (IEEE 754 table 4). 
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="expression-42"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4210.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+   true
+   false
+   true
+   false
+   </out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="expression-4301">
+      <description>Test for QName general comparisons</description>
+      <created by="Debbie Lockett" on="2017-05-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4301.xsl"/>
+         <param name="blahParam" select="'blah'"/>
+         <initial-template name="main"/>        
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>false</one><two>true</two><three>true</three></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="expression-4302">
+      <description>Test for general comparison of node with number, 1.0 compatibility mode (SaxonJS bug 6393)</description>
+      <created by="Debbie Lockett" on="2024-04-19"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<a>A</a>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<span>false</span>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="expression-4303">
+      <description>Test for general comparison of node with number, XPath 2.0 rules (SaxonJS bug 6393)</description>
+      <created by="Debbie Lockett" on="2024-04-19"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<a>A</a>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4303.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expression-4401">
+      <description>test promotion of independent subexpressions within a filter expression 
+         (was opt-001 in xslt3extra: Saxon bug 5091)</description>
+      <created by="Michael Kay" on="2021-09-14"/>
+      <environment ref="expression-44"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><section nr="2"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="expression-4402">
+      <description>test promotion of independent subexpressions within a filter expression 
+         (was opt-002 in xslt3extra: Saxon bug 5091)</description>
+      <created by="Michael Kay" on="2021-09-14"/>
+      <environment ref="expression-44"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="expression-4402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><section nr="1"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

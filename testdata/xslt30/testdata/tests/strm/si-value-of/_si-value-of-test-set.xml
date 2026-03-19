@@ -1,0 +1,498 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-value-of">
+   <description>xsl:value-of instruction with streaming</description>
+   
+   <environment name="si-value-of-A">
+     <stylesheet file="si-value-of-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="si-value-of-003">
+      <description>Basic Test of xsl:stream instruction with xsl:value-of</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-003"/>
+      </test>
+      <result>
+         <assert>/out = '4.95 6.58 4.95 4.95 16.47 16.47'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-value-of-004">
+      <description>Test of xsl:stream instruction with xsl:value-of, filtered with a motionless predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-004"/>
+      </test>
+      <result>
+         <assert>/out = '6.58 4.95 4.95 16.47'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-value-of-005">
+      <description>Test of xsl:stream instruction with xsl:value-of, filtered with a positional predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-005"/>
+      </test>
+      <result>
+         <assert>/out = '4.95 6.58 4.95'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-value-of-006">
+      <description>Test of xsl:stream instruction with xsl:value-of, filtered with a positional predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-006"/>
+      </test>
+      <result>
+         <assert>/out = '4.95 6.58 4.95'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-value-of-007">
+      <description>Test of xsl:stream instruction with xsl:value-of, filtered with a positional predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-007"/>
+      </test>
+      <result>
+         <assert>/out = '4.95 6.58 4.95'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-008">
+      <description>Test of xsl:stream instruction with xsl:value-of, filtered with data() to make the predicates motionless</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-008"/>
+      </test>
+      <result>
+         <assert>/out = '352 430 480 528 346 384'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-009">
+      <description>Test of xsl:stream instruction with xsl:value-of, filtered with text() to make the predicates motionless</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-009"/>
+      </test>
+      <result>
+         <assert>/out = '352430480528346384'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-010">
+      <description>Test of xsl:stream instruction with xsl:value-of, filtered with number() to make the predicates motionless</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-010"/>
+      </test>
+      <result>
+         <assert>/out = '352 430 480 528 346 384'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-011">
+      <description>xsl:value-of selecting nothing, returning the $zero case</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-011"/>
+      </test>
+      <result>
+         <assert>/out = ''</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-012">
+      <description>xsl:value-of selecting both streamed nodes and literals</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-012"/>
+      </test>
+      <result>
+         <assert>/out = '352 430 480 528 346 384 31 32'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-013">
+      <description>xsl:value-of selecting both streamed nodes and literals while also filtering</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-013"/>
+      </test>
+      <result>
+         <assert>/out = '430 480 528 346 384 31 32'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-015">
+      <description>Test of xsl:stream instruction with xsl:value-of of a computed value</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-015"/>
+      </test>
+      <result>
+         <assert>/out = '52.041 40.56 22.848 36.504 1417.5 35.1'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-016">
+      <description>Test of xsl:stream instruction with xsl:value-of of a computed value</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-016"/>
+      </test>
+      <result>
+         <assert>/out = '0.02 6.12 30.22 9.22'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-017">
+      <description>Test of xsl:stream instruction with xsl:value-of using copy-of to make it streamable</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-017"/>
+      </test>
+      <result>
+         <assert>/out = '352 430 480 528 346 384'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-018">
+      <description>Test of xsl:stream instruction with xsl:value-of over attribute values</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-018"/>
+      </test>
+      <result>
+         <assert>/out = '0.01 3.06 15.11 4.61'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-019">
+      <description>Test of xsl:stream instruction with xsl:value-of over attribute values, filtered</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-019"/>
+      </test>
+      <result>
+         <assert>/out = ''</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-020">
+      <description>xsl:value-of over attribute values, computed</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-020"/>
+      </test>
+      <result>
+         <assert>starts-with(/out, '0.01 1.28 20.46 2.78 4.21 9.85 4.74 1.46 5.62 17.42 6.35 13.29 16.6 1.33 3.81 0.46 13.71 3.76 2.42 2.52 0.07 15.64')</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-021">
+      <description>xsl:value-of over values that depend on a condition</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-021"/>
+      </test>
+      <result>
+         <assert>starts-with(/out, '0.01 3.06 15.11 4.61 3.81 6.4 10.52 -1.84 15.83 -6.68 1.28 3.29 -2.37 6.21 -3.64 22.39 11.51 4.86 13.44 20.81 20.46 8.45 16.55 18.56 19.42 12.89')</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-022">
+      <description>xsl:value-of with a loop used to compute each value</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-022"/>
+      </test>
+      <result>
+         <assert>/out = '8.3 5.7 1.1 1 5.2 7.8 6.8 4.2 0.8 7.8 5.2 0.9 22.5 18 3.5 7.8 5 0.9'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-023">
+      <description>xsl:value-of over a crawling expression</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-023"/>
+      </test>
+      <result>
+         <assert>/out = '8.3 5.7 1.1 1 5.2 7.8 6.8 4.2 0.8 7.8 5.2 0.9 22.5 18 3.5 7.8 5 0.9'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-027">
+      <description>Use xsl:value-of: argument crawling and consuming, nested nodes</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-027"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12345 1 2 3 4 5</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-040">
+      <description>xsl:value-of over an empty grounded expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-040"/>
+      </test>
+      <result>
+         <assert>/out = ''</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-041">
+      <description>xsl:value-of over an empty striding expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-041"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-042">
+      <description>xsl:value-of over an empty crawling expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-042"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-043">
+      <description>xsl:value-of over an empty grounded expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-043"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-044">
+      <description>xsl:value-of; second operand is consuming</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-044"/>
+      </test>
+      <result>
+         <assert>/out = "1J2J3J4J5J6J7J8J9J10"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-045">
+      <description>xsl:value-of; second operand is consuming, but unused</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-045"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-046">
+      <description>xsl:value-of; complex content</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-046"/>
+      </test>
+      <result>
+         <assert>/out = "[4.95][6.58][4.95][4.95][16.47][16.47]"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-047">
+      <description>xsl:value-of; descendant text nodes</description>
+      <created by="Michael Kay" on="2014-01-11"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-047"/>
+      </test>
+      <result>
+         <assert>/out = "4.956.584.954.9516.4716.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-070">
+      <description>xsl:value-of; striding element nodes</description>
+      <created by="Michael Kay" on="2014-08-11"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-070"/>
+      </test>
+      <result>
+         <assert>/out = "4.95|6.58|4.95|4.95|16.47|16.47"</assert>
+      </result>
+   </test-case>   
+   
+   <test-case name="si-value-of-071">
+      <description>xsl:value-of; crawling element nodes</description>
+      <created by="Michael Kay" on="2014-08-11"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-071"/>
+      </test>
+      <result>
+         <assert>/out = "4.95|6.58|4.95|4.95|16.47|16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-072">
+      <description>xsl:value-of; crawling nested element nodes</description>
+      <created by="Michael Kay" on="2014-08-11"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-072"/>
+      </test>
+      <result>
+         <assert>/out = "12345|1|2|3|4|5"</assert>
+      </result>
+   </test-case>  
+   
+   <test-case name="si-value-of-073">
+      <description>xsl:value-of; zero-length text nodes</description>
+      <created by="Michael Kay" on="2014-08-11"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-073"/>
+      </test>
+      <result>
+         <assert>/out = "12345|1|2|3|4|5"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-074">
+      <description>xsl:value-of; adjacent text nodes</description>
+      <created by="Michael Kay" on="2014-08-11"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-074"/>
+      </test>
+      <result>
+         <assert>/out = "~12345~"</assert>
+      </result>
+   </test-case>  
+   
+   <test-case name="si-value-of-075">
+      <description>xsl:value-of; mix in atomic values</description>
+      <created by="Michael Kay" on="2014-08-11"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-075"/>
+      </test>
+      <result>
+         <assert>/out = "1|2|3|12345|1|2|3"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="si-value-of-076">
+      <description>xsl:value-of; value of document node</description>
+      <created by="Michael Kay" on="2014-09-15"/>
+      <environment ref="si-value-of-A"/>
+      <test>
+         <initial-template name="s-076"/>
+      </test>
+      <result>
+         <assert>/out = "12345"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-value-of-100">
+      <description>xsl:value-of; effect of separator attribute</description>
+      <created by="Michael Kay" on="2017-12-29"/>
+      <environment>
+         <source role="." file="si-value-of-100.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-value-of-100.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(tokenize(out, '\n')) = 3</assert>
+            <assert>tokenize(out, '\n')[1] = '1,"foo 1, ""quoted 1"", bar 1",a'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-101">
+      <description>xsl:value-of; non streamable template rule</description>
+      <created by="Michael Kay" on="2017-12-29"/>
+      <environment>
+         <source role="." file="si-value-of-100.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-value-of-101.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-value-of-102">
+      <description>xsl:value-of; test case involving attributes only (Saxon bug 5754)</description>
+      <created by="Michael Kay" on="2022-12-04"/>
+      <environment>
+         <source role="." file="si-value-of-102.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-value-of-102.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/row[1] = "a1,b1,default"</assert>
+            <assert>/out/row[2] = "a2,b2,c2"</assert>
+            <assert>/out/row[3] = "a3,b3,c3"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+
+</test-set>

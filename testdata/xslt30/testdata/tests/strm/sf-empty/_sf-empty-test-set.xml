@@ -1,0 +1,394 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-empty">
+  <description>empty() function with streaming</description>
+
+  <environment name="sf-empty-A">
+    <stylesheet file="sf-empty-001.xsl"/>
+  </environment>
+
+  <dependencies>
+    <spec value="XSLT30+"/>
+    <feature value="streaming"/>
+  </dependencies>
+
+  <test-case name="sf-empty-001">
+    <description>Test of xsl:stream instruction with empty(): count descendant nodes</description>
+    <keywords>PathExpr crawling</keywords>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <stylesheet file="sf-empty-001.xsl"/>
+      <initial-template name="c-001"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-002">
+    <description>Test of xsl:stream instruction with empty(), filtered with motionless predicate</description>
+    <keywords>PathExpr motionless-predicate striding</keywords>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-002"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-003">
+    <description>Test of xsl:stream instruction with empty(), applied to ancestor nodes</description>
+    <keywords>ancestor-axis climbing PathExpr motionless-predicate SimpleMapExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-003"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-004">
+    <description>Test of xsl:stream instruction with empty(), applied to grounded consuming items</description>
+    <keywords>striding-then-grounded PathExpr SimpleMapExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-004"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-005">
+    <description>Test of xsl:stream instruction with empty(), applied to attributes of ancestor nodes</description>
+    <keywords>ancestor-axis attribute-axis striding-then-climbing PathExpr motionless-predicate SimpleMapExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-005"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-006">
+    <description>Test of xsl:stream instruction with empty(), applied to namespaces of ancestor nodes</description>
+    <keywords>striding-then-climbing namespace-axis PathExpr motionless-predicate SimpleMapExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-006"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-007">
+    <description>empty() with empty downwards selection</description>
+    <keywords>AxisStep striding PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-007"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-008">
+    <description>empty() with empty downwards selection</description>
+    <keywords>striding PathExpr positional-predicate</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-008"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-009">
+    <description>empty() with a striding(?) union</description>
+    <keywords>striding-then-crawling UnionExpr PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-009"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-010">
+    <description>empty() with a crawling union</description>
+    <keywords>crawling-then-crawling UnionExpr childless-nodes PathExpr crawling</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-010"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-011">
+    <description>simple motionless empty()</description>
+    <keywords>RangeExpr grounded</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-011"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-012">
+    <description>empty() filtered grounded sequence</description>
+    <keywords>leading-double-slash text-nodes PathExpr crawling fn:remove fn:data</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-012"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-013">
+    <description>empty() filtered crawling sequence</description>
+    <keywords>leading-lone-slash striding PathExpr fn:remove</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-013"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-014">
+    <description>empty() with twice-filtered crawling sequence</description>
+    <keywords>leading-lone-slash striding motionless-predicate PathExpr fn:remove</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-014"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-015">
+    <description>empty() applied to a non-existent element</description>
+    <keywords>striding PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-015"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-016">
+    <description>empty() applied to an existent attribute (can exit early)</description>
+    <keywords>striding-then-climbing attribute-axis PathExpr childless-nodes</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-016"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-017">
+    <description>empty() and a boolean filter</description>
+    <keywords>striding PathExpr motionless-predicate</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-017"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-018">
+    <description>empty() and both a positional and a boolean filter</description>
+    <keywords>motionless-predicate striding PathExpr positional-predicate</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-018"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-100">
+    <description>empty() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>striding empty-sequence PathExpr ParenthesizedExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-100"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-101">
+    <description>empty() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>striding empty-sequence _IMPROVE:fix-description PathExpr mixed-posture ParenthesizedExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <modified by="Michael Kay" on="2020-03-23" change="drop early-exit-possible; the streamed document must be read to completion"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-101"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-102">
+    <description>empty() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>striding mixed-posture PathExpr ParenthesizedExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-102"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-103">
+    <description>empty() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>striding mixed-posture ParenthesizedExpr PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-103"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-104">
+    <description>empty() applied to grounded element nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-104"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-105">
+    <description>empty() applied to grounded text nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-105"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-106">
+    <description>empty() applied to grounded attribute nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-106"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-107">
+    <description>empty() applied to constructed attribute nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-107"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-108">
+    <description>empty() applied to constructed element nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-108"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-empty-109">
+    <description>empty() applied to constructed text nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-empty-A"/>
+    <test>
+      <initial-template name="c-109"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+
+  <test-case name="sf-empty-901">
+    <description>Test of xsl:stream instruction with empty(), filtered with non-motionless predicate.</description>
+    <keywords>striding consuming-predicate XTSE3430 PathExpr</keywords>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <test>
+      <stylesheet file="sf-empty-901.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XTSE3430"/>
+    </result>
+  </test-case>
+</test-set>

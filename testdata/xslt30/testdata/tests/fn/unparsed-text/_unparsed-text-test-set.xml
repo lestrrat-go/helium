@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="unparsed-text">
+   
+   <description>Tests the fn:unparsed-text() function</description>
+   
+ 
+   
+   
+   <environment name="unparsed-text-18">
+      <source role=".">
+         <content><![CDATA[<doc xmlns:xi="http://www.w3.org/2001/XInclude">
+  <row>abc</row>
+  <row><xi:include parse="text" href="xmdocs07.txt"/></row>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="unparsed-text-19">
+      <source role=".">
+         <content><![CDATA[<out>Got it wrong!</out>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="unparsed-text-20">
+      <source role=".">
+         <content><![CDATA[<doc>42</doc>]]></content>
+      </source>
+      <resource file="xutf-8.txt" uri="xutf-8.txt" media-type="text/plain" encoding="utf-8"/>
+      <resource file="xutf-16.txt" uri="xutf-16.txt" media-type="text/plain" encoding="utf-16"/>
+      <resource file="xutf-8.xml" uri="xutf-8.xml" media-type="application/xml" encoding="utf-8"/>
+      <resource file="xutf-16.xml" uri="xutf-16.xml" media-type="application/xml" encoding="utf-16"/>
+      <resource file="xiso-8859-1.xml" uri="xiso-8859-1.xml" media-type="application/xml" encoding="iso-8859-1"/>
+      <resource file="http://www.w3.org/Consortium/mission.html"
+         uri="http://www.w3.org/Consortium/mission.html" media-type="text/html"/>
+      <resource file="http://www.w3.org/TR/1999/WD-font-19990902"
+         uri="http://www.w3.org/TR/1999/WD-font-19990902" media-type="text/html" encoding="iso-8859-1"/>
+   </environment>
+   
+ 
+   <test-case name="unparsed-text-17">
+      <description>Test unparsed-text() function (XSLT 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="unparsed-text-17.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <unparsed_text_encoding value="iso-8859-1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-text-17.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Adduce the equine quadruped
+to element aquatic:
+ingurgitation, it is said,
+must still be automatic.</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="unparsed-text-18">
+      <description>Trivial XInclude implementation handling both parsed and unparsed documents</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc xmlns:xi="http://www.w3.org/2001/XInclude"><row>abc</row><row><xi:include parse="text" href="xmdocs07.txt"/></row></doc>]]></content>
+         </source>
+         <resource file="xmdocs07.txt" uri="xmdocs07.txt" media-type="text/plain"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-text-18.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc xmlns:xi="http://www.w3.org/2001/XInclude"><row>abc</row><row>def</row></doc>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="unparsed-text-19">
+      <description>Test unparsed-text() function in a situation where direct copy to the serializer is possible</description>
+      <created by="Michael Kay" on="2019-05-24"/>
+      <environment>
+         <source role="." file="unparsed-text-17.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <unparsed_text_encoding value="iso-8859-1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-text-19.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Adduce the equine quadruped
+to element aquatic:
+ingurgitation, it is said,
+must still be automatic.</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+
+
+   <test-case name="unparsed-text-2001">
+      <description>test unparsed-text() with one argument; make some sample files in different encodings</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="unparsed-text-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <unparsed_text_encoding value="iso-8859-1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-text-2001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><file name="xutf-16.txt">Kirche, Kinder, Küche</file
+            ><file name="xutf-8.txt">Kirche, Kinder, Küche</file
+            ><file name="xutf-16.xml">&lt;?xml version="1.0" encoding="utf-16"?&gt;Kirche, Kinder, Küche</file
+            ><file name="xutf-8.xml">&lt;?xml version="1.0" encoding="utf-8"?&gt;Kirche, Kinder, Küche</file
+            ><file name="xiso-8859-1.xml">&lt;?xml version="1.0" encoding="iso-8859-1"?&gt;Kirche, Kinder, Küche</file></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+   <test-case name="unparsed-text-2002">
+      <description>test unparsed-text() with one argument using HTTP headers to discover encoding</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2025-03-15" change="content of W3C mission statement has changed"/>
+      <environment ref="unparsed-text-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <unparsed_text_encoding value="iso-8859-1"/>
+         <available_documents value="https://www.w3.org/Consortium/mission.html"/>
+         <available_documents value="https://www.w3.org/TR/1999/WD-font-19990902"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-text-2002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><utf-8>false</utf-8><iso-8859-1>true</iso-8859-1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="unparsed-text-2003">
+      <description>test unparsed-text-available()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="unparsed-text-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-text-2003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>true</a><a>true</a><a>false</a><a>false</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+ 
+</test-set>

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-call-template">
+   <description>xsl:call-template instruction with streaming</description>
+   
+   <environment name="si-call-template-A">
+     <stylesheet file="si-call-template-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="si-call-template-001">
+      <description>xsl:stream instruction with xsl:call-template with grounded context item</description>
+      <created by="Michael Kay" on="2014-10-10"/>
+      <environment ref="si-call-template-A"/>
+      <test>
+         <initial-template name="c-001"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/PRICE[1] = '4.95'</assert>
+           <assert>/out/PRICE[2] = '6.58'</assert>
+           <assert>/out/PRICE[3] = '4.95'</assert>
+           <assert>/out/PRICE[4] = '4.95'</assert>
+           <assert>/out/PRICE[5] = '16.47'</assert>
+           <assert>/out/PRICE[6] = '16.47'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-call-template-002">
+      <description>
+        xsl:stream instruction with xsl:call-template with prohibited context item
+        and atomized parameter
+      </description>
+      <created by="Michael Kay" on="2014-10-10"/>
+      <environment ref="si-call-template-A"/>
+      <test>
+         <initial-template name="c-002"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/PRICE[1] = '4.95'</assert>
+           <assert>/out/PRICE[2] = '6.58'</assert>
+           <assert>/out/PRICE[3] = '4.95'</assert>
+           <assert>/out/PRICE[4] = '4.95'</assert>
+           <assert>/out/PRICE[5] = '16.47'</assert>
+           <assert>/out/PRICE[6] = '16.47'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+
+   
+   
+
+
+
+</test-set>

@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-assert">
+   <description>xsl:assert with streaming</description>
+   
+   
+   <environment name="si-assert-A">
+     <stylesheet file="si-assert-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+      <enable_assertions/>
+   </dependencies>
+   
+   
+   
+   
+   <test-case name="si-assert-001">
+      <description>Use xsl:assert: atomic values, consuming</description>
+      <created by="Michael Kay" on="2019-08-13"/>
+      <environment ref="si-assert-A"/>
+      <test>
+         <initial-template name="d-001"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-assert-002">
+      <description>Use xsl:assert: atomic values, consuming and non-consuming</description>
+      <created by="Michael Kay" on="2019-08-13"/>
+      <environment ref="si-assert-A"/>
+      <test>
+         <initial-template name="d-002"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-assert-003">
+      <description>Use xsl:assert: climbing posture</description>
+      <created by="Michael Kay" on="2019-08-13"/>
+      <environment ref="si-assert-A"/>
+      <test>
+         <initial-template name="d-003"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-assert-004">
+      <description>Use xsl:assert: climbing posture</description>
+      <created by="Michael Kay" on="2019-08-13"/>
+      <environment ref="si-assert-A"/>
+      <test>
+         <initial-template name="d-004"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-assert-005">
+      <description>Use xsl:assert: striding posture, element nodes</description>
+      <created by="Michael Kay" on="2019-08-13"/>
+      <environment ref="si-assert-A"/>
+      <test>
+         <initial-template name="d-005"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-assert-006">
+      <description>Use xsl:assert: striding posture, text nodes</description>
+      <created by="Michael Kay" on="2019-08-13"/>
+      <environment ref="si-assert-A"/>
+      <test>
+         <initial-template name="d-006"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-assert-007">
+      <description>Use xsl:assert: striding posture, text nodes plus atomic values</description>
+      <created by="Michael Kay" on="2019-08-13"/>
+      <environment ref="si-assert-A"/>
+      <test>
+         <initial-template name="d-007"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-assert-008">
+      <description>Use xsl:assert: striding posture, element nodes plus grounded elements</description>
+      <created by="Michael Kay" on="2019-08-13"/>
+      <environment ref="si-assert-A"/>
+      <test>
+         <initial-template name="d-008"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-assert-009">
+      <description>Use xsl:assert: descendant text nodes</description>
+      <created by="Michael Kay" on="2019-08-13"/>
+      <environment ref="si-assert-A"/>
+      <test>
+         <initial-template name="d-009"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-assert-010">
+      <description>Use xsl:assert: descendant text nodes plus atomic values</description>
+      <created by="Michael Kay" on="2019-08-13"/>
+      <environment ref="si-assert-A"/>
+      <test>
+         <initial-template name="d-010"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-assert-011">
+      <description>Use xsl:assert: whole assert unchanged</description>
+      <created by="Michael Kay" on="2019-08-13"/>
+      <environment ref="si-assert-A"/>
+      <test>
+         <initial-template name="d-011"/>
+      </test>
+      <result>
+         <assert>true()</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-assert-901">
+      <description>Use xsl:assert: test evaluates to false</description>
+      <created by="Michael Kay" on="2019-08-13"/>
+      <test>
+         <stylesheet file="si-assert-901.xsl"/>
+      </test>
+      <result>
+         <error code="Q{}XX99"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-assert-902">
+      <description>Use xsl:assert: test not streamable</description>
+      <created by="Michael Kay" on="2019-08-13"/>
+      <test>
+         <stylesheet file="si-assert-902.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   
+   
+</test-set>

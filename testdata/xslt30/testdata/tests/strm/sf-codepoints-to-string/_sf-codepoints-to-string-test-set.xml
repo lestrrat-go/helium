@@ -1,0 +1,71 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-codepoints-to-string">
+   <description>Tests the xsl:stream instruction introduced in XSLT 3.0 with fn:codepoints-to-string().</description>
+   <keywords>streaming streamability-analysis codepoints-to-string</keywords>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+
+
+   <test-case name="sf-codepoints-to-string-001">
+      <description>Test of xsl:stream instruction using codepoints-to-string</description>
+      <keywords>crawling fn:outermost crawling-then-striding fn:string-length leading-double-slash</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="sf-codepoints-to-string-001.xsl"/>
+         <initial-template name="c-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1/7./-</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-codepoints-to-string-002">
+      <description>Test of xsl:stream instruction using codepoints-to-string, error case</description>
+      <keywords>fn:outermost crawling crawling-then-striding fn:string-length leading-double-slash</keywords>
+      <created by="Michael Kay" on="2013-01-06"/>
+      <test>
+         <stylesheet file="sf-codepoints-to-string-001.xsl"/>
+         <initial-template name="c-002"/>
+      </test>
+      <result>
+         <error code="FOCH0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-codepoints-to-string-003">
+      <description>Test of xsl:stream instruction using codepoints-to-string, error case, caught</description>
+      <keywords>xsl:catch fn:outermost leading-double-slash crawling-then-striding xsl:try error-handling specific-catch-clause FOCH0001</keywords>
+      <created by="Michael Kay" on="2013-01-06"/>
+      <test>
+         <stylesheet file="sf-codepoints-to-string-001.xsl"/>
+         <initial-template name="c-003"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-codepoints-to-string-004">
+      <description>Test of xsl:stream instruction using codepoints-to-string, empty case</description>
+      <keywords>empty-sequence crawling-then-striding fn:outermost leading-double-slash fn:string-length</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="sf-codepoints-to-string-001.xsl"/>
+         <initial-template name="c-004"/>
+      </test>
+      <result>
+         <assert>/out = ''</assert>
+      </result>
+   </test-case>
+
+
+
+
+
+
+</test-set>

@@ -1,0 +1,356 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="where-populated">
+   <description>Tests xsl:where-populated instruction introduced in XSLT 3.0 (unstreamed).</description>
+   
+   <environment name="coco-A">
+     <source role="." file="books.xml"/>
+     <stylesheet file="where-populated-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+   </dependencies>
+   
+   <test-case name="coco-001">
+      <description>xsl:element; value is consuming; xsl:where-populated</description>
+      <created by="Michael Kay" on="2015-08-13"/>
+      <environment ref="coco-A"/>
+      <test>
+         <initial-template name="s-001"/>
+      </test>
+      <result>
+         <assert>empty(/out/a)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-002">
+      <description>Test of xsl:stream instruction with xsl:where-populated</description>
+      <created by="Michael Kay" on="2015-08-13"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Results><first>one</first><last>last</last></Results>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-003">
+      <description>Test of xsl:where-populated with atomic values, some 'empty'</description>
+      <created by="Michael Kay" on="2015-08-13"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-003"/>
+      </test>
+      <result>
+         <assert>/out = "23 2011-01-01 0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-004">
+      <description>Test of xsl:where-populated with xsl:if</description>
+      <created by="Michael Kay" on="2015-08-13"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-004"/>
+      </test>
+      <result>
+         <assert>empty(/out/*)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-005">
+      <description>Test of xsl:where-populated with xsl:if</description>
+      <created by="Michael Kay" on="2015-08-13"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-005"/>
+      </test>
+      <result>
+         <assert>exists(/out/a/banana)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-006">
+      <description>Test of xsl:where-populated with xsl:for-each</description>
+      <created by="Michael Kay" on="2015-08-13"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-006"/>
+      </test>
+      <result>
+         <assert>exists(/out/ul/li)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-007">
+      <description>Test of xsl:where-populated with xsl:for-each</description>
+      <created by="Michael Kay" on="2015-08-13"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-007"/>
+      </test>
+      <result>
+         <assert>empty(/out/node())</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-008">
+      <description>Test of xsl:where-populated with comment nodes</description>
+      <created by="Michael Kay" on="2015-08-13"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-008"/>
+      </test>
+      <result>
+         <assert>count(/out/in/comment()[.='3']) = 6</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-009">
+      <description>Test of xsl:where-populated with text nodes</description>
+      <created by="Michael Kay" on="2015-08-13"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-009"/>
+      </test>
+      <result>
+         <assert>count(/out/in[.='3']) = 6</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-010">
+      <description>Test of xsl:where-populated with xsl:fork</description>
+      <created by="Michael Kay" on="2015-08-13"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-010"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a><TITLE>Pride and Prejudice</TITLE><TITLE>Wuthering Heights</TITLE
+         ><TITLE>Tess of the d'Urbervilles</TITLE><TITLE>Jude the Obscure</TITLE><TITLE>The Big Over Easy</TITLE
+         ><TITLE>The Eyre Affair</TITLE><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE
+         ><PRICE>16.47</PRICE><PRICE>16.47</PRICE></a></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-011">
+      <description>Test of xsl:where-populated with xsl:fork</description>
+      <created by="Michael Kay" on="2015-08-13"/>
+      <environment ref="coco-A"/> 
+      <test>
+         <initial-template name="s-011"/>
+      </test>
+      <result>
+         <assert>empty(/out/node())</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-012">
+      <description>Test of xsl:where-populated with document nodes</description>
+      <created by="Michael Kay" on="2015-08-13"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-012"/>
+      </test>
+      <result>
+         <assert>/out/in/@value = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="coco-013">
+      <description> Test of xsl:where-populated with maps (bug 28989) </description>
+      <created by="Michael Kay" on="2015-08-14"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-013"/>
+      </test>
+      <result>
+         <assert>/out/in/@count = '0'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-014">
+      <description> Test of xsl:where-populated with maps (bug 28989) </description>
+      <created by="Michael Kay" on="2015-08-14"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-014"/>
+      </test>
+      <result>
+         <assert>/out/in/@count = '1'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-015">
+      <description> Test of xsl:where-populated with elements having attributes </description>
+      <created by="Michael Kay" on="2015-08-14"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-015"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Results><first one="non-empty">one</first><third xmlns:x="http://abc.com/">three</third></Results>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-016">
+      <description> Test of xsl:where-populated with free-standing attributes </description>
+      <created by="Michael Kay" on="2015-08-14"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Results x="17"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-017">
+      <description> Test of xsl:where-populated with namespace with empty name: error </description>
+      <created by="Michael Kay" on="2015-08-14"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-017"/>
+      </test>
+      <result>
+         <error code="XTDE0930"/>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-018">
+      <description> Test of xsl:where-populated with empty text nodes </description>
+      <created by="Michael Kay" on="2015-08-14"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-018"/>
+      </test>
+      <result>
+         <assert>/Results = '17 92 55=17 92 55'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-019">
+      <description> Test of xsl:where-populated with empty comments </description>
+      <created by="Michael Kay" on="2015-08-14"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-019"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Results>1:<!--Pride and Prejudice-->2:</Results>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-020">
+      <description> Test of xsl:where-populated with empty processing instructions </description>
+      <created by="Michael Kay" on="2015-08-14"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-020"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Results>1:<?mu Pride and Prejudice?>2:</Results>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-021">
+      <description> Test of xsl:where-populated including local variables </description>
+      <created by="Michael Kay" on="2015-08-14"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-021"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Results><b>2222</b><b>2222</b></Results>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-022">
+      <description> Test of xsl:where-populated with an empty map </description>
+      <created by="Michael Kay" on="2015-08-21"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-022"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Results>2</Results>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-023">
+      <description> Test of xsl:where-populated with an empty attribute within an element </description>
+      <created by="Michael Kay" on="2020-08-31"/>
+      <environment ref="coco-A"/>  
+      <test>
+         <initial-template name="s-023"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Results><a><b x='' y='yyy'/></a></Results>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-100">
+      <description> Recursive use of xsl:where-populated to remove empty elements at every level</description>
+      <created by="Michael Kay" on="2015-08-21"/>  
+      <test>
+         <stylesheet file="where-populated-100.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><xsl:stylesheet 
+                   xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                   xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                   version="3.0"
+                   exclude-result-prefixes="xs"
+       ><xsl:template name="extra">Hello world!</xsl:template></xsl:stylesheet></out>]]></assert-xml>
+      </result>
+   </test-case>
+  
+  <test-case name="coco-101">
+    <description>Copying an attribute node (Saxon bug 4504)</description>
+    <created by="Michael Kay after Vladimir Nestorovsky" on="2020-03-29"/>  
+    <test>
+      <stylesheet file="where-populated-101.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<html><body/></html>]]></assert-xml>
+    </result>
+  </test-case>
+   
+   <test-case name="coco-102">
+      <description>Function result violates type check (SaxonJS bug 5042)</description>
+      <created by="Michael Kay after Martin Honnen" on="2022-03-02"/>
+      <environment>
+         <source file="where-populated-102.xml" role="."/>
+      </environment>
+      <test>
+         <stylesheet file="where-populated-102.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0780"/>
+      </result>
+   </test-case>
+   
+   <test-case name="coco-103">
+      <description>Emptyness of arrays</description>
+      <created by="Michael Kay" on="2022-07-17"/>  
+      <test>
+         <stylesheet file="where-populated-103.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a/@count='0'</assert>
+            <assert>/out/b/@count='0'</assert>
+            <assert>/out/c/@count='0'</assert>
+            <assert>/out/d/@count='0'</assert>
+            <assert>/out/e/@count='0'</assert>
+            <assert>/out/f/@count='0'</assert>
+            <assert>/out/z/@count='1'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+
+</test-set>

@@ -1,0 +1,409 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="normalize-unicode">
+
+   <description> Test the fn:normalize-unicode() function introduced in XPath 2.0, together with the
+      normalization-form option on serialization. </description>
+
+   <environment name="unicode001">
+      <source role="." file="unicode001.xml"/>
+   </environment>
+
+   <test-case name="normalize-unicode-001">
+      <description>test normalize-unicode() default normalization form, trivial
+         examples</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-001.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1] = "The quick brown fox jumped over the lazy dog"</assert>
+            <assert>/out/a[2] = "84 104 101 32 113 117 105 99 107 32 98 114 111 119 110 32 102 111 120 32 106 117 109 112 101 100 32 111 118 101 114 32 116 104 101 32 108 97 122 121 32 100 111 103"</assert>
+            <assert>/out/a[3]/@att = "&#x9;&#xA;&#xD;"</assert>
+            <assert>/out/a[4] = "9 10 13"</assert>
+            <assert>/out/a[5] = "Straßenüberführung"</assert>
+            <assert>/out/a[6] = "83 116 114 97 223 101 110 252 98 101 114 102 252 104 114 117 110 103"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-002">
+      <description>test normalize-unicode() explicit NFC normalization form, trivial
+         examples</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-002.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1] = "The quick brown fox jumped over the lazy dog"</assert>
+            <assert>/out/a[2] = "84 104 101 32 113 117 105 99 107 32 98 114 111 119 110 32 102 111 120 32 106 117 109 112 101 100 32 111 118 101 114 32 116 104 101 32 108 97 122 121 32 100 111 103"</assert>
+            <assert>/out/a[3]/@att = "&#x9;&#xA;&#xD;"</assert>
+            <assert>/out/a[4] = "9 10 13"</assert>
+            <assert>/out/a[5] = "Straßenüberführung"</assert>
+            <assert>/out/a[6] = "83 116 114 97 223 101 110 252 98 101 114 102 252 104 114 117 110 103"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-003">
+      <description>test normalize-unicode() explicit NFD normalization form, trivial
+         examples</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <additional_normalization_form value="support NFD"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-003.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1] = "The quick brown fox jumped over the lazy dog"</assert>
+            <assert>/out/a[2] = "84 104 101 32 113 117 105 99 107 32 98 114 111 119 110 32 102 111 120 32 106 117 109 112 101 100 32 111 118 101 114 32 116 104 101 32 108 97 122 121 32 100 111 103"</assert>
+            <assert>/out/a[3]/@att = "&#x9;&#xA;&#xD;"</assert>
+            <assert>/out/a[4] = "9 10 13"</assert>
+            <assert>/out/a[5] = "Straßenu&#776;berfu&#776;hrung"</assert>
+            <assert>/out/a[6] = "83 116 114 97 223 101 110 117 776 98 101 114 102 117 776 104 114 117 110 103"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-004">
+      <description>test normalize-unicode() explicit NFKC normalization form, trivial
+         examples</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <additional_normalization_form value="support NFKC"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-004.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1] = "The quick brown fox jumped over the lazy dog"</assert>
+            <assert>/out/a[2] = "84 104 101 32 113 117 105 99 107 32 98 114 111 119 110 32 102 111 120 32 106 117 109 112 101 100 32 111 118 101 114 32 116 104 101 32 108 97 122 121 32 100 111 103"</assert>
+            <assert>/out/a[3]/@att = "&#x9;&#xA;&#xD;"</assert>
+            <assert>/out/a[4] = "9 10 13"</assert>
+            <assert>/out/a[5] = "Straßenüberführung"</assert>
+            <assert>/out/a[6] = "83 116 114 97 223 101 110 252 98 101 114 102 252 104 114 117 110 103"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-005">
+      <description>test normalize-unicode() explicit NFKD normalization form, trivial
+         examples</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <additional_normalization_form value="support NFKD"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-005.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1] = "The quick brown fox jumped over the lazy dog"</assert>
+            <assert>/out/a[2] = "84 104 101 32 113 117 105 99 107 32 98 114 111 119 110 32 102 111 120 32 106 117 109 112 101 100 32 111 118 101 114 32 116 104 101 32 108 97 122 121 32 100 111 103"</assert>
+            <assert>/out/a[3]/@att = "&#x9;&#xA;&#xD;"</assert>
+            <assert>/out/a[4] = "9 10 13"</assert>
+            <assert>/out/a[5] = "Straßenu&#776;berfu&#776;hrung"</assert>
+            <assert>/out/a[6] = "83 116 114 97 223 101 110 117 776 98 101 114 102 117 776 104 114 117 110 103"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-006">
+      <description>test normalize-unicode() test all normalization forms on a string containing a
+         mixture of different forms</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <additional_normalization_form value="support NFD NFKC NFKD"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><nfc>197 197 197</nfc><nfd>65 778 65 778 65 778</nfd><nfkc>197 197 197</nfkc><nfkd>65 778 65 778 65 778</nfkd></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-007">
+      <description>test normalize-unicode() test all normalization forms on a string containing a
+         mixture of different forms</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <additional_normalization_form value="support NFD NFKC NFKD"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><nfc>65 102 102 105 110 105 116 121 32 65 64259 110 105 116 121</nfc
+            ><nfd>65 102 102 105 110 105 116 121 32 65 64259 110 105 116 121</nfd
+            ><nfkc>65 102 102 105 110 105 116 121 32 65 102 102 105 110 105 116 121</nfkc
+            ><nfkd>65 102 102 105 110 105 116 121 32 65 102 102 105 110 105 116 121</nfkd></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-008">
+      <description>This test applies the normalize-unicode() function to the normalization
+         conformance test published by the Unicode Consortium. If successful, no &lt;failure&gt;
+         elements are output. For details of the test, see NormalizationTest.txt. The test has been
+         modified to avoid using characters that are illegal in XML. e.g. 0055 030C e.g.
+         030C</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <additional_normalization_form value="support NFD NFKC NFKD"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-008.xsl"/>
+      </test>
+      <result>
+         <assert>empty(/out/node())</assert>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-009">
+      <description>test normalize-unicode() test Latin Capital D with dot above 1E0B;1E0B;0064
+         0307;1E0B;0064 0307;</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <additional_normalization_form value="support NFD"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><nfc>7691</nfc><nfc>7691</nfc><nfd>100 775</nfd><nfd>100 775</nfd></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-010">
+      <description>trivial test of normalized output (NFC)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-010.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>üss=['"]üß['"].*üss=['"]üss['"]</serialization-matches>
+            <serialization-matches>Straßenüberführung.*Straßenüberführung</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-011">
+      <description>trivial test of normalized output (xml, NFD)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <additional_normalization_form value="support NFD"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-011.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches><![CDATA[üss=['"]u&#(x308|776);ß['"].*üss=['"]u&#(x308|776);ss['"]]]></serialization-matches>
+            <serialization-matches><![CDATA[Straßenu&#(x308|776);berfu&#(x308|776);hrung.*Straßenu&#(x308|776);berfu&#(x308|776);hrung]]></serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-012">
+      <description>trivial test of normalized output (xml, NFKC)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <additional_normalization_form value="support NFKC"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-012.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>üss=['"]üß['"].*üss=['"]üss['"]</serialization-matches>
+            <serialization-matches>Straßenüberführung.*Straßenüberführung</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-013">
+      <description>trivial test of normalized output (xml, NFKD)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <additional_normalization_form value="support NFKD"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-013.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches><![CDATA[üss=['"]u&#(x308|776);ß['"].*üss=['"]u&#(x308|776);ss['"]]]></serialization-matches>
+            <serialization-matches><![CDATA[Straßenu&#(x308|776);berfu&#(x308|776);hrung.*Straßenu&#(x308|776);berfu&#(x308|776);hrung]]></serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-014">
+      <description>trivial test of normalized output (html, NFKD)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <additional_normalization_form value="support NFKD"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-014.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches><![CDATA[<p class="en">The quick brown fox</p>]]></serialization-matches>
+            <serialization-matches>Straßenu&#x308;berfu&#x308;hrung</serialization-matches>
+            <serialization-matches>&lt;p class="de"&gt;&lt;span class="u&#x308;ss"&gt;u&#x308;ß&lt;/span&gt;Straßenu&#x308;berfu&#x308;hrung</serialization-matches>
+            <serialization-matches>&lt;p class="de"&gt;&lt;span class="u&#x308;ss"&gt;u&#x308;ss&lt;/span&gt;Straßenu&#x308;berfu&#x308;hrung</serialization-matches>
+            <serialization-matches><![CDATA[<p class="ffi"><span class="ffi">ffi</span>Affinity]]></serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-015">
+      <description>trivial test of normalized output (uncommited method, NFKD)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2020-01-17" change="Allow decimal character references"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <additional_normalization_form value="support NFKD"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-015.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches><![CDATA[<p>The quick brown fox</p>]]></serialization-matches>
+            <serialization-matches>Straßenu&amp;(#x308|#776);berfu&amp;(#x308|#776);hrung</serialization-matches>
+            <serialization-matches>&lt;p norm="c" üss="u&amp;(#x308|#776);ß">Straßenu&amp;(#x308|#776);berfu&amp;(#x308|#776);hrung</serialization-matches>
+            <serialization-matches>&lt;p norm="d" üss="u&amp;(#x308|#776);ss">Straßenu&amp;(#x308|#776);berfu&amp;(#x308|#776);hrung</serialization-matches>
+            <serialization-matches><![CDATA[<p norm="kc" ffi="ffi">Affinity]]></serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-016">
+      <description>trivial test of normalized output (XHTML, result-document, NFC)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-016.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches><![CDATA[<div class="en">The quick brown fox</div>]]></serialization-matches>
+            <serialization-matches><![CDATA[<div class="de" norm="c" üss="üß">Straßenüberführung</div>]]></serialization-matches>
+            <serialization-matches><![CDATA[<div class="de" norm="d" üss="üss">Straßenüberführung</div>]]></serialization-matches>
+            <serialization-matches><![CDATA[<div class="ffi" norm="kc" ffi="ffi">Affinity</div>]]></serialization-matches>
+            <serialization-matches><![CDATA[<div class="ffi" norm="kd" ffi="ﬃ">Aﬃnity</div>]]></serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-017">
+      <description>trivial test of normalization-form="none"</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="John Lumley" on="2014-09-24" change="Support uppercase hexadecimal - Bug 26890"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-017.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches><![CDATA[<en>The quick brown fox</en>]]></serialization-matches>
+            <serialization-matches><![CDATA[<de norm="c" üss="üß">Straßenüberführung</de>]]></serialization-matches>
+            <serialization-matches><![CDATA[<de norm="d" üss="u&#(776|x308);ss">Straßenu&#(776|x308);berfu&#(776|x308);hrung</de>]]></serialization-matches>
+            <serialization-matches><![CDATA[<ffi norm="kc" ffi="ffi">Affinity</ffi>]]></serialization-matches>
+            <serialization-matches><![CDATA[<ffi norm="kd" ffi="&#(64259|xfb03|xFB03);">A&#(64259|xfb03|xFB03);nity</ffi>]]></serialization-matches>
+            <!-- TODO: should be a serialization test -->
+            <!--<assert-xml file="normalize-unicode-017.out"/>-->          
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="normalize-unicode-018">
+      <description>trivial test of normalization-form="none"</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="unicode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="normalize-unicode-018.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result><all-of>
+         <!-- TODO: should be a serialization test -->
+         <!--<assert-xml file="normalize-unicode-018.out"/>-->
+         <serialization-matches><![CDATA[<en>The quick brown fox</en>]]></serialization-matches>
+         <serialization-matches><![CDATA[<de norm="c" üss="üß">Straßenüberführung</de>]]></serialization-matches>
+         <serialization-matches><![CDATA[<de norm="d" üss="u&#(776|x308);ss">Straßenu&#(776|x308);berfu&#(776|x308);hrung</de>]]></serialization-matches>
+         <serialization-matches><![CDATA[<ffi norm="kc" ffi="ffi">Affinity</ffi>]]></serialization-matches>
+         <serialization-matches>&lt;ffi norm="kd" ffi="|&#xfb03;">A&#xfb03;nity&lt;/ffi></serialization-matches>
+         <!--<assert-serialization file="normalize-unicode-018.out"/>-->
+      </all-of>
+      </result>
+   </test-case>
+</test-set>

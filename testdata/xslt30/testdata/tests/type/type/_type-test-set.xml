@@ -1,0 +1,1294 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="type">
+   <description>Tests type</description>
+   <environment name="type-01">
+      <source role=".">
+         <content><![CDATA[<doc><a/><b/><c/></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="type-02">
+      <source role=".">
+         <content><![CDATA[<doc><el at="1"/><!--comment--><?pi?>text</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="type-03">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <schema role="stylesheet-import"
+              file="variousTypesSchemaType.xsd"
+              xsd-version="1.0"/>
+   </environment>
+   
+   <environment name="type-06">
+      <source role="." file="type-06.xml"/>
+   </environment>
+
+   <test-case name="type-0101">
+      <description>Test validation of LANGUAGE type.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema">;
+        <a>es</a><a>EN</a><a>en-us</a><a>EN-US</a><a>en-us-texan</a><a>i-jamaican</a><a>x-navajo</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0102">
+      <description>Test "treat as" on sequences. the next two are known at compile time here are some that aren't known until run-time</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0102.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0103">
+      <description>Test constructors for subtypes of integer.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0103.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0104">
+      <description>Test subtype relationships for subtypes of integer.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0104.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0104.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0105">
+      <description>Test comparisons between subtypes of integer.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0105.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0105.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0106">
+      <description>Test arithmetic between subtypes of integer.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0106.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0106.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0107">
+      <description>Test availability of subtypes of String.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0107.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0107.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0108">
+      <description>Test type hierarchy for subtypes of String.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0108.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0108.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0109">
+      <description>Test type hierarchy for subtypes of String.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0109.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0109.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0110">
+      <description>Test as attribute of xsl:variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0110.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0110.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0111">
+      <description>Test type attribute with parameter passing.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0111.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema">;
+        <q>a=100</q>;
+     <q>b=PT12H</q>;
+     <q>c+z=P1Y</q>;
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0112">
+      <description>Test as attribute on xsl:function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0112.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out att="1 x 1999-01-09"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0113">
+      <description>Test whitespace facet on casting from string.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0113.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0113.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0114">
+      <description>Test numeric subtypes with large values.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <maximum_number_of_decimal_digits value="30"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0114.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0114.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0115">
+      <description>Test xs:unsignedLong value out of range.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-12-03" change="all-of to any-of"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0115.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="FORG0001"/>
+            <error code="FOAR0002"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="type-0116">
+      <description>Test "instance of" on primitive types.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0116.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0116.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0117">
+      <description>Test "instance of item()".</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0117.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0117.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0118">
+      <description>Test "instance of" using xsd namespace.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0118.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0118.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0119">
+      <description>Test "instance of" returning false.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0119.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0119.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0120">
+      <description>Test "instance of" with occurrence indicators.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0120.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0120.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0121">
+      <description>Test "instance of" with occurrence counts producing false.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0121.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0121.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0122">
+      <description>Test "cast as" on primitive types.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0122.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0122.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0123">
+      <description>Test "cast as" on nodes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0123.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema">;
+      <t>2002-02-02T12:00:00,2002-02-03T12:00:00</t>;
+    </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0124">
+      <description>Test "instance of" on a temporary tree.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0124.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema">;
+      <t>true</t>;
+      <t>true</t>;
+      <t>true</t>;
+      <t>true</t>;            
+    </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0125">
+      <description>Test "treat as" on simple values. the next two are known at compile time here are some that aren't known until run-time</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0125.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema">;
+      
+      <t>23</t>;
+      <t>23</t>;
+      
+      
+      <t>23</t><t>17.6</t></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0126">
+      <description>Test cast as xs:boolean. force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0126.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>false</a><a>true</a><a>false</a><a>true</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0127">
+      <description>Test "castable as" operator. force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0127.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>true</a><a>false</a><a>true</a><a>false</a><a>2000-02-29</a><a>Invalid date</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0128">
+      <description>Test QName construction and extraction. force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0128.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+    Local Name: example-lname;
+    URI: example-uri;    
+    
+    Local Name: example-lname;
+    URI: ;  
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0129">
+      <description>Test QName comparison. force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0129.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t>OK</t>;
+    <f/>;   
+    <f/>;        
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0130">
+      <description>Test anyURI datatype. force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0130.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t>OK</t>;
+    <u>example-uri</u>;   
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0131">
+      <description>Test xs:boolean().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0131.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0131.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0132">
+      <description>Test implicit conversion of untyped attribute to integer, in backwards compatibility mode</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0132.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" test="###"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0133">
+      <description>Test implicit conversion of untyped attribute to integer, when not in backwards compatibility mode</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0133.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" test="###"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0134">
+      <description>Test use of xs:untypedAtomic.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0134.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>;
+        <q true="true"/><q true="true"/><q true="true"/><q true="true"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0135">
+      <description>Test use of xs:anyAtomicType.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0135.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><q true="true"/><q four="4" foo="foo"/><q false="false"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0136">
+      <description>Test exactly-one(), zero-or-one(), one-or-more(), success case. force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0136.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>1</a><b>1</b><b/><c>1</c><c>1 2 3</c></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0137">
+      <description>Test resolve-QName, success case. force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0137.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>,thing</a><b>http://magic.namespace.com/uri,thing</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0138">
+      <description>Test use of element(*) in a path expression.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0138.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>doc, a, b, c, </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0139">
+      <description>basic test of xs:hexBinary type.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0139.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:pre="http://magic.namespace.com/uri"><true>true</true><false>false</false><string>01020304A1B2C3D401020304A1B2C3D4</string></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0140">
+      <description>basic test of xs:base64Binary type.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0140.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><true>true</true><false>false</false><string>AQIDBKGyw9QBAgMEobLD1A==</string><hex>01020304A1B2C3D401020304A1B2C3D4</hex></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0141">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0141.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0142">
+      <description>test the type void()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0142.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>true</a><a>false</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0143">
+      <description>Test QName to string conversion. force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0143.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t>ppp:example-lname</t><n>my:element att</n><w>my:word</w></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0144">
+      <description>Test anyURI to string promotion. force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0144.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><i>false</i><c>true</c><c>true</c><f>true</f><f>34</f></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0150">
+      <description>Test dynamic casting of string to xs:QName - permitted in 3.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0150.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:pre="http://magic.namespace.com/uri">{http://magic.namespace.com/uri}thing</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0151">
+      <description>
+         Test exactly-one(), failure case. Error on line 19 FORG0005: 
+         A sequence of more than one item is not allowed as the first argument of exactly-one() force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0151.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0005"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0152">
+      <description>
+         Test exactly-one(), failure case. Error on line 19 FORG0005: 
+         An empty sequence is not allowed as the first argument of exactly-one() force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0152.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0005"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0153">
+      <description>
+         Test zero-or-one(), failure case. Error on line 19 FORG0005: 
+         A sequence of more than one item is not allowed as the first argument of exactly-one() force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0153.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0005"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0154">
+      <description>
+         Test one-or-more(), failure case. Error on line 22 FORG0004: 
+         An empty sequence is not allowed as the first argument of one-or-more() force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0154.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0155">
+      <description>Test resolve-QName, error case (badly formed name). force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0155.xsl"/>
+      </test>
+      <result>
+         <error code="FOCA0002"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0156">
+      <description>Test resolve-QName, error case (badly formed name). force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0156.xsl"/>
+      </test>
+      <result>
+         <error code="FOCA0002"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0157">
+      <description>Test resolve-QName, error case (undeclared namespace). force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0157.xsl"/>
+      </test>
+      <result>
+         <error code="FONS0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0158">
+      <description>Test resolve-QName, error case (no selected element). force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0158.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0159">
+      <description>Type error: applying templates to a variable of type string</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-04-30" change="not an error under XSLT 3.0"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0159.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0520"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0160">
+      <description>error test of xs:hexBinary type.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0160.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0161">
+      <description>error test of xs:hexBinary type.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0161.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0162">
+      <description>test type error when using "eq" on a sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0162.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0163">
+      <description>test type error when using "eq" on a sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0163.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0164">
+      <description>cast to a non-atomic type</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-02-18" change="alternative error code for XP3.1"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0164.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XPST0051"/> <!-- XPath 2.0 -->
+            <error code="XQST0052"/> <!-- XPath 3.1 -->
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="type-0165">
+      <description>compare untyped atomic to integer</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0165.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0166">
+      <description>error: compare an unordered type</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0166.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0167">
+      <description>check that decimal does not allow an exponent</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0167.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0168a">
+      <description>Test casting of string to QName. Not permitted at run-time in XSLT 2.0.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0168.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+   <test-case name="type-0168b">
+      <description>Test casting of string to QName. Permitted at run-time in XPath 3.0+.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0168.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "{http://magic.namespace.com/uri}thing"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="type-0169">
+      <description>Test "as" clauses on templates (with no schema)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0169.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0505"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0170">
+      <description>Test "as" clauses on templates (with no schema)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0170.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0505"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0171">
+      <description>Test "as" clauses on templates (with no schema)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0171.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0505"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0172">
+      <description>
+         Test "as" clauses on templates (with no schema) .
+         XTTE0505: Required type of result of template match="/" is element(xhtml); 
+         supplied value has type element(html, xs:untyped)
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0172.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0505"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0173">
+      <description>Test "as" clauses on templates (with no schema)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0173.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0505"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0174">
+      <description>Test that promotion from double to float is not allowed</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0174.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0570"/>
+      </result>
+   </test-case>
+   
+   <test-case name="type-0175">
+      <description>Test that promotion from double to float is not allowed</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0175.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0570"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0201">
+      <description>Test "instance of" on node types. &lt;t&gt;&lt;xsl:value-of select=". instance of namespace()"/&gt;&lt;/t&gt;;</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0201.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0202">
+      <description>Test "instance of" on attributes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0202.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0202.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0203">
+      <description>Test "instance of" on untyped nodes. force run-time evaluation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="type-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e>true</e><e>true</e><e>true</e><e>true</e><e>false</e><e>false</e><a>true</a><a>true</a><a>true</a><a>true</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0301">
+      <description>Test contructor functions for derived built-in types. The argument is a string/numeric literal</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="type-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0301.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0302">
+      <description>Test contructor functions for user defined types. The argument is a string/numeric literal</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="type-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0302.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0302.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0303">
+      <description>Test that an error is raised if @type is present in the stylesheet but the processor is a basic processor.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="type-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0303.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1660"/>
+      </result>
+   </test-case>
+
+   <test-case name="type-0401">
+      <description>Test "instance of" on dynamic types.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>1</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t>true</t><t>true</t><t>true</t><t>true</t></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-0501">
+      <description>Test "as" clauses on templates (with no schema)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-12-14" change="type-0501.out now pre-serialization XML"/>
+      <modified by="O'Neil Delpratt" on="2013-11-18" change="Changed the output method to XML since we are not testing HTML serialization"/>
+      <modified by="Michael Kay" on="2016-03-23" change="Add DTD dependency (uses id() function)"/>
+      <environment>
+         <source role="." file="type-05.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="type-0501.out"/>
+      </result>
+   </test-case>
+</test-set>

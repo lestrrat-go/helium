@@ -1,0 +1,151 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="type-expr">
+   <description>Tests type-expr</description>
+   
+   
+   
+   <dependencies>
+      <feature value="schema_aware"/>
+   </dependencies>
+
+   <test-case name="type-expr-0101">
+      <description>Test op:numeric-add where one operand is xs:decimal and the other is typed numeric value, either built-in or a user type derived by restriction from built-in numeric.</description>
+      <keywords>numeric-types op:numeric-add type-promotion xsl:import-schema fn:data</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="type-expr-01.xml" validation="strict"/>
+         <schema role="source-reference" file="variousTypesSchemaExpr.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-expr-0101.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/e1[1] = "-3.4 + -3.4 = -6.8"</assert>
+            <assert>/out/e2 = "-3.4 + -0 = -3.4"</assert>
+            <assert>/out/e3 = "-3.4 + -1.12 = -4.52"</assert>
+            <assert>/out/e4 = "-3.4 + -4 = -7.4"</assert>
+            <assert>/out/e5 = "-3.4 + -131072 = -131075.4"</assert>
+            <assert>/out/e6 = "-3.4 + -76 = -79.4"</assert>
+            <assert>/out/e7 = "-3.4 + 184 = 180.6"</assert>
+            <assert>/out/e8 = "-3.4 + 3 = -0.4"</assert>
+            <assert>/out/e9 = "-3.4 + -74 = -77.4"</assert>
+            <assert>/out/e10 = "-3.4 + -922337 = -922340.4"</assert>
+            <assert>/out/e11 = "-3.4 + 922337 = 922333.6"</assert>
+            <assert>/out/e12 = "-3.4 + 57 = 53.6"</assert>
+            <assert>/out/e13 = "-3.4 + -327 = -330.4"</assert>
+            <assert>/out/e14 = "-3.4 + 327 = 323.6"</assert>
+            <assert>/out/e15 = "-3.4 + 110 = 106.6"</assert>
+            <assert>/out/e16 = "-3.4 + 110 = 106.6"</assert>
+            <assert>/out/e17 = "-3.4 + -1.1 = -4.5"</assert>
+            <assert>/out/e18 = "-3.4 + 0.99 = -2.41"</assert>
+            <assert>/out/e19 = "-3.4 + -0 = -3.4"</assert>
+            <assert>/out/e20 = "-3.4 + -999 = -1002.4"</assert>
+            <assert>/out/e21 = "-3.4 + -8 = -11.4"</assert>
+            <assert>/out/e22 = "-3.4 + -100 = -103.4"</assert>
+            <assert>/out/e23 = "-3.4 + 1000 = 996.6"</assert>
+            <assert>/out/e24 = "-3.4 + 30 = 26.6"</assert>
+            <assert>/out/e25 = "-3.4 + -555 = -558.4"</assert>
+            <assert>/out/e26 = "-3.4 + -12233 = -12236.4"</assert>
+            <assert>/out/e27 = "-3.4 + 12233 = 12229.6"</assert>
+            <assert>/out/e28 = "-3.4 + 1686 = 1682.6"</assert>
+            <assert>/out/e29 = "-3.4 + -25000 = -25003.4"</assert>
+            <assert>/out/e30 = "-3.4 + 2000 = 1996.6"</assert>
+            <assert>/out/e31 = "-3.4 + 1 = -2.4"</assert>
+            <assert>/out/e32 = "-3.4 + 110 = 106.6"</assert>
+            <assert>/out/f1 = "-3.4 + -3.4 = -6.8"</assert>
+            <assert>/out/f2 = "-0 + -3.4 = -3.4"</assert>
+            <assert>/out/f3 = "-1.12 + -3.4 = -4.52"</assert>
+            <assert>/out/f4 = "-4 + -3.4 = -7.4"</assert>
+            <assert>/out/f5 = "-131072 + -3.4 = -131075.4"</assert>
+            <assert>/out/f6 = "-76 + -3.4 = -79.4"</assert>
+            <assert>/out/f7 = "184 + -3.4 = 180.6"</assert>
+            <assert>/out/f8 = "3 + -3.4 = -0.4"</assert>
+            <assert>/out/f9 = "-74 + -3.4 = -77.4"</assert>
+            <assert>/out/f10 = "-922337 + -3.4 = -922340.4"</assert>
+            <assert>/out/f11 = "922337 + -3.4 = 922333.6"</assert>
+            <assert>/out/f12 = "57 + -3.4 = 53.6"</assert>
+            <assert>/out/f13 = "-327 + -3.4 = -330.4"</assert>
+            <assert>/out/f14 = "327 + -3.4 = 323.6"</assert>
+            <assert>/out/f15 = "110 + -3.4 = 106.6"</assert>
+            <assert>/out/f16 = "110 + -3.4 = 106.6"</assert>
+            <assert>/out/f17 = "-1.1 + -3.4 = -4.5"</assert>
+            <assert>/out/f18 = "0.99 + -3.4 = -2.41"</assert>
+            <assert>/out/f19 = "-0 + -3.4 = -3.4"</assert>
+            <assert>/out/f20 = "-999 + -3.4 = -1002.4"</assert>
+            <assert>/out/f21 = "-8 + -3.4 = -11.4"</assert>
+            <assert>/out/f22 = "-100 + -3.4 = -103.4"</assert>
+            <assert>/out/f23 = "1000 + -3.4 = 996.6"</assert>
+            <assert>/out/f24 = "30 + -3.4 = 26.6"</assert>
+            <assert>/out/f25 = "-555 + -3.4 = -558.4"</assert>
+            <assert>/out/f26 = "-12233 + -3.4 = -12236.4"</assert>
+            <assert>/out/f27 = "12233 + -3.4 = 12229.6"</assert>
+            <assert>/out/f28 = "1686 + -3.4 = 1682.6"</assert>
+            <assert>/out/f29 = "-25000 + -3.4 = -25003.4"</assert>
+            <assert>/out/f30 = "2000 + -3.4 = 1996.6"</assert>
+            <assert>/out/f31 = "1 + -3.4 = -2.4"</assert>
+            <assert>/out/f32 = "110 + -3.4 = 106.6"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="type-expr-0201">
+      <description>Test op:bollean-equal where one operands are of type xs:boolean or a type derived by restriction from it; operands come from input file</description>
+      <keywords>InstanceOfExpr xs:boolean derived-xs-boolean xsl:import-schema ValueComp fn:data</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="type-expr-02.xml" validation="strict"/>
+         <schema role="source-reference" file="variousTypesSchemaExpr.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-expr-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><types>truetruetruetruetruetrue</types><e1>true</e1><e2>false</e2><e3>true</e3><e4>false</e4><e5>true</e5><e6>false</e6></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-expr-0301">
+      <description>Test op:duration-equal ('eq') where the operands are of type xs:duration or a type derived by restriction from it; operands come from input file</description>
+      <keywords>xs:duration InstanceOfExpr derived-xs-duration ValueComp xsl:import-schema fn:data</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="type-expr-03.xml" validation="strict"/>
+         <schema role="source-reference" file="variousTypesSchemaExpr.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-expr-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><types>truetruetruetruetruetruetruetruetrue</types><e1>true</e1><e2>false</e2><e3>true</e3><e4>true</e4><e5>false</e5></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="type-expr-0401">
+      <description>Test op:date-equal ('eq') where the operands are of type xs:date or a type derived by restriction from it; operands come from input file</description>
+      <keywords>xs:date derived-xs-date InstanceOfExpr ValueComp xsl:import-schema fn:data</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="type-expr-04.xml" validation="strict"/>
+         <schema role="source-reference" file="variousTypesSchemaExpr.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="type-expr-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><types>truetruetruetruetruetruetruetruetrue</types><e1>true</e1><e2>false</e2><e3>true</e3><e4>true</e4><e5>false</e5></out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

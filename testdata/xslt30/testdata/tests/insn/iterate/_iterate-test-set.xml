@@ -1,0 +1,652 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="iterate">
+
+  <description>Tests the xsl:iterate instruction introduced in XSLT 3.0</description>
+
+  <environment name="iterate001">
+    <source role="." file="iterate001.xml"/>
+  </environment>
+
+  <environment name="iterate005">
+    <source role="." file="iterate005.xml"/>
+  </environment>
+
+  <dependencies>
+    <spec value="XSLT30+"/>
+  </dependencies>
+
+  <test-case name="iterate-001">
+    <description>Basic Test of xsl:iterate instruction, including position() and last().</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate-001.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><item position="1" last="6"><TITLE>Pride and Prejudice</TITLE></item
+            ><item position="2" last="6"><TITLE>Wuthering Heights</TITLE></item
+            ><item position="3" last="6"><TITLE>Tess of the d'Urbervilles</TITLE></item
+            ><item position="4" last="6"><TITLE>Jude the Obscure</TITLE></item
+            ><item position="5" last="6"><TITLE>The Big Over Easy</TITLE></item
+            ><item position="6" last="6"><TITLE>The Eyre Affair</TITLE></item
+            ></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-002">
+    <description>Test of xsl:iterate instruction setting a parameter with xsl:next-iteration</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate-002.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><item cost="0"><TITLE>Pride and Prejudice</TITLE></item
+            ><item cost="4.95"><TITLE>Wuthering Heights</TITLE></item
+            ><item cost="11.53"><TITLE>Tess of the d'Urbervilles</TITLE></item
+            ><item cost="16.48"><TITLE>Jude the Obscure</TITLE></item
+            ><item cost="21.43"><TITLE>The Big Over Easy</TITLE></item
+            ><item cost="37.9"><TITLE>The Eyre Affair</TITLE></item
+            ></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-003">
+    <description>Test of xsl:iterate instruction with early exit using xsl:break</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate-003.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><item cost="0"><TITLE>Pride and Prejudice</TITLE></item
+            ><item cost="4.95"><TITLE>Wuthering Heights</TITLE></item
+            ><item cost="11.53"><TITLE>Tess of the d'Urbervilles</TITLE></item
+            ></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-004">
+    <description>Basic Test of xsl:iterate instruction showing it accepts xsl:fallback.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate-004.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><item position="1" last="6"><TITLE>Pride and Prejudice</TITLE></item
+            ><item position="2" last="6"><TITLE>Wuthering Heights</TITLE></item
+            ><item position="3" last="6"><TITLE>Tess of the d'Urbervilles</TITLE></item
+            ><item position="4" last="6"><TITLE>Jude the Obscure</TITLE></item
+            ><item position="5" last="6"><TITLE>The Big Over Easy</TITLE></item
+            ><item position="6" last="6"><TITLE>The Eyre Affair</TITLE></item
+            ></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-006">
+    <description>Basic Test of xsl:iterate instruction. Error, xsl:next-iteration must be lexically within xsl:iterate</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate-006.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE0010"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-007">
+    <description>Basic Test of xsl:iterate instruction. Error, xsl:break must be lexically within xsl:iterate</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2017-02-21" change="Allow alternative error code"/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate-007.xsl"/>
+    </test>
+    <result>
+      <any-of>
+        <error code="XTSE0010"/>
+        <error code="XTSE3120"/>
+      </any-of>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-008">
+    <description>Basic Test of xsl:iterate instruction. Error, xsl:next-iteration must come last</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate901err.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE0010"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-009">
+    <description>Basic Test of xsl:iterate instruction. Error, xsl:break must come last</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Abel Braaksma" on="2013-12-09"
+      change="Changed to specific error code XTSE3120 for xsl:iterate instruction."/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate-009.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE3120"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-010">
+    <description>Basic Test of xsl:iterate instruction. Error, xsl:break within a literal result element</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Abel Braaksma" on="2013-12-09"
+      change="Changed to specific error code XTSE3120 for xsl:iterate instruction."/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate-010.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE3120"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-011">
+    <description>Basic Test of xsl:iterate instruction. Error, xsl:break within xsl:for-each</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Abel Braaksma" on="2013-12-09"
+      change="Changed to specific error code XTSE3120 for xsl:iterate instruction."/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate-011.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE3120"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-012">
+    <description>Basic Test of xsl:iterate instruction. Error, two xsl:param elements with same name</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate-012.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE0580"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-013">
+    <description>Basic Test of xsl:iterate instruction. Error, two xsl:with-param elements with same name</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate-013.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE0670"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-014">
+    <description>Basic Test of xsl:iterate instruction, uses variables.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-014.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/out/*[7][self::page-break]</assert>
+        <assert>/out/*[11][self::page-break]</assert>
+        <assert>/out/*[16][self::page-break]</assert>
+        <assert>/out/*[20][self::page-break]</assert>
+        <assert>/out/*[23][self::page-break]</assert>
+        <assert>/out/*[27][self::page-break]</assert>
+        <assert>/out/*[31][self::page-break]</assert>
+        <assert>/out/*[36][self::page-break]</assert>
+        <assert>/out/*[40][self::page-break]</assert>
+        <assert>/out/*[45][self::page-break]</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-015">
+    <description>Basic Test of xsl:iterate instruction, uses variables and early exit.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-015.xsl"/>
+    </test>
+    <result>
+      <assert>count(/out/p) = 10</assert>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-016">
+    <description>Basic test of xsl:iterate; exercises xsl:on-completion and implicit continuation</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2014-01-31" change="reorder xsl:on-completion, see bug 24179"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-016.xsl"/>
+    </test>
+    <result>
+      <assert>/out/count = 2</assert>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-017">
+    <description>Basic test of xsl:iterate; params not given a value retain their previous value</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2014-01-31" change="reorder xsl:on-completion, see bug 24179"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-017.xsl"/>
+    </test>
+    <result>
+      <assert>/out/count[@h3='2'][@other='74']</assert>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-018">
+    <description>
+         Basic test of xsl:iterate; params not given a value retain their previous value, 
+         even when shadowed by a local variable
+      </description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2014-01-31" change="reorder xsl:on-completion, see bug 24179"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-018.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/out/p[1]='100000'</assert>
+        <assert>/out/p[11]='100001'</assert>
+        <assert>/out/p[20]='100002'</assert>
+        <assert>/out/count[@h3='2'][@other='74']</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-019">
+    <description>Basic test of xsl:iterate; xsl:break contains a sequence constructor</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-019.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/out/exit[@at="12"][@of="76"]</assert>
+        <assert>empty(/out/exit[@at="12"][@of="76"]/following-sibling::*)</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-020">
+    <description>Basic test of xsl:iterate; ensure params evaluated with correct context</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-020.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/out/loop[1][@n='5']</assert>
+        <assert>/out/loop[1]/z[3][@c="7" and @p="3"]</assert>
+        <assert>/out/loop[1]/z[12][@c="16" and @p="12"]</assert>
+        <assert>/out/loop[1]/exit[@at="12" and @of="76"]</assert>
+        <assert>/out/loop[2][@n='6']</assert>
+        <assert>/out/loop[2]/z[1][@c="6" and @p="2"]</assert>
+        <assert>/out/loop[2]/exit[@at="12" and @of="76"]</assert>
+        <assert>/out/loop[3]/exit[@at="12" and @of="76"]</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-021">
+    <description>
+         Basic test of xsl:iterate; ensure with-param evaluated with old values of params, unaffected by other with-param elements
+      </description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-021.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><z p="0" q="0"/><z p="1" q="1"/><z p="2" q="2"/><z p="3" q="3"
+            /><z p="4" q="4"/><z p="5" q="5"/><z p="6" q="6"/><z p="7" q="7"/><z p="8" q="8"
+            /><z p="9" q="9"/><z p="10" q="10"/><exit at="12" of="76"/></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-022">
+    <description>Basic Test of xsl:iterate instruction. Error, two xsl:with-param elements with same name</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Abel Braaksma" on="2013-12-09"
+      change="XTSE3130 (specific to xsl:iterate) instead of XTSE0680."/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-022.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE3130"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-023">
+    <description>xsl:on-completion is in the wrong place</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-023.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE0010"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-024">
+    <description>xsl:on-completion is in the wrong place</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-024.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE0010"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-025">
+    <description>context item is undefined within xsl:on-completion</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2013-06-19" change="specify initial template name"/>
+    <modified by="Michael Kay" on="2014-01-31" change="reorder xsl:on-completion, see bug 24179"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-025.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XPDY0002"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-026">
+    <description>context position is undefined within xsl:on-completion</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Abel Braaksma" on="2013-12-09" change="Added initial template name."/>
+    <modified by="Michael Kay" on="2014-01-31" change="reorder xsl:on-completion, see bug 24179"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-026.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XPDY0002"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-027">
+    <description>processing using xsl:iterate - group adjacent transactions by date. Same as serial017 but not streamed</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2014-01-31" change="reorder xsl:on-completion, see bug 24179"/>
+    <environment>
+      <source file="transactions.xml" uri="transactions.xml"/>
+    </environment>
+    <test>
+      <stylesheet file="iterate-027.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>deep-equal(/account/daily-transactions[1]/*/@value/number(), (13.24, 8.12))</assert>
+        <assert>deep-equal(/account/daily-transactions[2]/*/@value/number(), (-15.00))</assert>
+        <assert>deep-equal(/account/daily-transactions[3]/*/@value/number(), (6.00))</assert>
+        <assert>deep-equal(/account/daily-transactions[4]/*/@value/number(), (0.50, 2.33, 4.44))</assert>
+        <assert>deep-equal(/account/daily-transactions[5]/*/@value/number(), (-5.00))</assert>
+        <assert>deep-equal(/account/daily-transactions[6]/*/@value/number(), (8.99))</assert>
+        <assert>deep-equal(/account/daily-transactions[7]/*/@value/number(), (16.00))</assert>
+        <assert>deep-equal(/account/daily-transactions[8]/*/@value/number(), (-2.33, 5.60, 4.32))</assert>
+        <assert>deep-equal(/account/daily-transactions[9]/*/@value/number(), (6.78, 12.20, -248.05))</assert>
+        <assert>deep-equal(/account/daily-transactions[10]/*/@value/number(), (12.00, 13.99))</assert>
+        <assert>deep-equal(/account/final-daily-transactions/*/@value/number(), (14.20))</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-028">
+    <description>Basic test of xsl:iterate; xsl:break contains a select attribute</description>
+    <created by="Michael Kay" on="2013-10-04"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-028.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/out/text()[. = 'exit at 12 of 76']</assert>
+        <assert>empty(/out/text()[. = 'exit at 12 of 76']/following-sibling::*)</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-029">
+    <description>error, xsl:break contains a select attribute and a sequence constructor</description>
+    <created by="Michael Kay" on="2013-10-04"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-029.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE3125"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-030">
+    <description>xsl:on-completion with a select attribute</description>
+    <created by="Michael Kay" on="2013-10-04"/>
+    <modified by="Michael Kay" on="2014-01-31" change="reorder xsl:on-completion, see bug 24179"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-030.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/out/text()['count 2']</assert>
+        <assert>empty(/out/text()['count 2']/following-sibling::*)</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-031">
+    <description>error, xsl:on-completion with a select attribute and content</description>
+    <created by="Michael Kay" on="2013-10-04"/>
+    <modified by="Michael Kay" on="2014-01-31" change="reorder xsl:on-completion, see bug 24179"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-031.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE3125"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-032">
+    <description>xsl:on-completion refers to a local variable: see bug 24179</description>
+    <created by="Michael Kay" on="2013-12-30"/>
+    <modified by="Michael Kay" on="2014-04-28" change="reflect decision on bug 24179"/>
+    <modified by="Michael Kay" on="2017-02-21" change="correct expected error code"/>
+    <test>
+      <stylesheet file="iterate-032.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XPST0008"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-033">
+    <description>Initial value of parameter is an empty sequence</description>
+    <created by="Michael Kay" on="2015-07-01"/>
+    <test>
+      <stylesheet file="iterate-033.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><ok/><ok/></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-034">
+    <description>Nested xsl:iterate instructions</description>
+    <created by="Michael Kay" on="2015-12-28"/>
+    <test>
+      <stylesheet file="iterate-034.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><day date="2015-01-01" days.left="5"/><day date="2015-01-02" days.left="4"
+            /><day date="2015-01-03" days.left="3"/><day date="2015-01-04" days.left="2"
+            /><day date="2015-01-05" days.left="1"/><day date="2015-01-06" days.left="0"/></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-035">
+    <description>xsl:break within xsl:try.</description>
+    <created by="Michael Kay" on="2017-05-11"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-035.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>count(/out/p) = 10</assert>
+        <assert>/out/pos = "12"</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-036">
+    <description>xsl:break within xsl:catch.</description>
+    <created by="Michael Kay" on="2017-05-11"/>
+    <environment ref="iterate005"/>
+    <test>
+      <stylesheet file="iterate-036.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>count(/out/p) = 10</assert>
+        <assert>/out/divide-by-zero</assert>
+        <assert>not(/out/pos)</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-037">
+    <description>Absent focus within xsl:on-completion</description>
+    <created by="Michael Kay" on="2017-06-05"/>
+    <test>
+      <stylesheet file="iterate-037.xsl"/>
+    </test>
+    <result>
+      <error code="XPDY0002"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-038">
+    <description>Variable inlining into xsl:on-completion - Saxon bug 3243</description>
+    <created by="Michael Kay" on="2017-06-05"/>
+    <test>
+      <stylesheet file="iterate-038.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><book>Genesis</book><book>Exodus</book><book>Leviticus</book><book>Numbers</book><book>Deuteronomy</book><tome name="pentateuch"><book>Genesis</book><book>Exodus</book><book>Leviticus</book><book>Numbers</book><book>Deuteronomy</book></tome></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-039">
+    <description>Function conversion rules apply to xsl:iterate/xsl:with-param/@as</description>
+    <created by="Michael Kay" on="2018-11-08"/>
+    <test>
+      <stylesheet file="iterate-039.xsl"/>
+    </test>
+    <result>
+      <assert>/out = 'true'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-040">
+    <description>Use on-completion with a singleton iteration and empty body (Saxon bug 4542)</description>
+    <created by="Michael Kay" on="2020-05-05"/>
+    <test>
+      <stylesheet file="iterate-040.xsl"/>
+    </test>
+    <result>
+      <assert>/completion = 'test'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-041">
+    <description>Use on-completion with statically empty select expression (Saxon bug 4542)</description>
+    <created by="Michael Kay" on="2020-05-05"/>
+    <test>
+      <stylesheet file="iterate-041.xsl"/>
+    </test>
+    <result>
+      <assert>/completion = 'test'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-042">
+    <description>Supplied parameter value for xsl:with-param is atomized where necessary (Saxon bug 4541)</description>
+    <created by="Michael Kay" on="2020-05-05"/>
+    <test>
+      <stylesheet file="iterate-042.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<section>5</section>]]></assert-xml>
+    </result>
+  </test-case>
+  
+  <test-case name="iterate-043">
+    <description>Local variable with same name as parameter (Saxon bug 5190)</description>
+    <created by="Michael Kay" on="2021-12-27"/>
+    <test>
+      <stylesheet file="iterate-043.xsl"/>
+    </test>
+    <result>
+      <assert>/section = '29'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-901">
+    <description>Basic Test of xsl:iterate instruction. Error, xsl:param must come first</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate901err.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE0010"/>
+    </result>
+  </test-case>
+
+  <test-case name="iterate-902">
+    <description>Error, xsl:param must have a valid initial value. See spec bug 25158.</description>
+    <created by="Michael Kay" on="2014-03-26"/>
+    <modified by="Michael Kay" on="2017-02-21" change="add expected error code"/>
+    <environment ref="iterate001"/>
+    <test>
+      <stylesheet file="iterate902err.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE3520"/>
+    </result>
+  </test-case>
+
+</test-set>

@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-message">
+   <description>xsl:message with streaming</description>
+   
+   
+   <environment name="si-message-A">
+     <stylesheet file="si-message-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   
+   
+   <test-case name="si-message-001">
+      <description>Use xsl:message: atomic values, consuming</description>
+      <created by="Michael Kay" on="2018-10-08"/>
+      <environment ref="si-message-A"/>
+      <test>
+         <initial-template name="d-001"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+            <assert-message>
+               <assert-string-value>-15.00</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>-5.00</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>-2.33</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>-248.05</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-message-002">
+      <description>Use xsl:message: atomic values, consuming and non-consuming</description>
+      <created by="Michael Kay" on="2018-10-08"/>
+      <environment ref="si-message-A"/>
+      <test>
+         <initial-template name="d-002"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+            <assert-message>
+               <assert-string-value>-15.00 -5.00 -2.33 -248.05 101 102</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-message-003">
+      <description>Use xsl:message: climbing posture</description>
+      <created by="Michael Kay" on="2018-10-08"/>
+      <environment ref="si-message-A"/>
+      <test>
+         <initial-template name="d-003"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+            <assert-message>
+               <assert-string-value>-15.00</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>-5.00</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>-2.33</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>-248.05</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-message-004">
+      <description>Use xsl:message: climbing posture</description>
+      <created by="Michael Kay" on="2018-10-08"/>
+      <environment ref="si-message-A"/>
+      <test>
+         <initial-template name="d-004"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+            <assert-message>
+               <assert-string-value>-15.00</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>-5.00</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>-2.33</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>-248.05</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>101</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>102</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-message-005">
+      <description>Use xsl:message: striding posture, element nodes</description>
+      <created by="Michael Kay" on="2018-10-08"/>
+      <environment ref="si-message-A"/>
+      <test>
+         <initial-template name="d-005"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+            <assert-message>
+               <assert>/PRICE='4.95'</assert>
+            </assert-message>
+            <assert-message>
+               <assert>/PRICE='6.58'</assert>
+            </assert-message>
+            <assert-message>
+               <assert>/PRICE='16.47'</assert>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-message-006">
+      <description>Use xsl:message: striding posture, text nodes</description>
+      <created by="Michael Kay" on="2018-10-08"/>
+      <environment ref="si-message-A"/>
+      <test>
+         <initial-template name="d-006"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+            <assert-message>
+               <assert-string-value>4.95</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>6.58</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>16.47</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-message-007">
+      <description>Use xsl:message: striding posture, text nodes plus atomic values</description>
+      <created by="Michael Kay" on="2018-10-08"/>
+      <modified by="Michael Kay" on="2019-07-18" change="supply expected results"/>
+      <environment ref="si-message-A"/>
+      <test>
+         <initial-template name="d-007"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+            <assert-message>
+               <assert-string-value>4.95</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>6.58</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>16.47</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>101</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>102</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-message-008">
+      <description>Use xsl:message: striding posture, element nodes plus grounded elements</description>
+      <created by="Michael Kay" on="2018-10-08"/>
+      <modified by="Michael Kay" on="2019-07-18" change="supply expected results"/>
+      <environment ref="si-message-A"/>
+      <test>
+         <initial-template name="d-008"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+            <assert-message>
+               <assert-string-value>4.95</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>6.58</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>16.47</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>100.00</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>101.00</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-message-009">
+      <description>Use xsl:message: descendant text nodes</description>
+      <created by="Michael Kay" on="2018-10-08"/>
+      <modified by="Michael Kay" on="2019-07-18" change="supply expected results"/>
+      <environment ref="si-message-A"/>
+      <test>
+         <initial-template name="d-009"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+            <assert-message>
+               <assert-string-value>4.95</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>6.58</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>16.47</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-message-010">
+      <description>Use xsl:message: descendant text nodes plus atomic values</description>
+      <created by="Michael Kay" on="2018-10-08"/>
+      <modified by="Michael Kay" on="2019-07-18" change="supply expected results"/>
+      <environment ref="si-message-A"/>
+      <test>
+         <initial-template name="d-010"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out=''</assert>
+            <assert-message>
+               <assert-string-value>4.95</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>6.58</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>16.47</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>100</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>101</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-message-011">
+      <description>Use xsl:message: whole message unchanged</description>
+      <created by="Michael Kay" on="2018-10-08"/>
+      <modified by="Michael Kay" on="2019-07-18" change="supply expected results"/>
+      <environment ref="si-message-A"/>
+      <test>
+         <initial-template name="d-011"/>
+      </test>
+      <result>
+         <assert-message>
+            <assert>contains(., "Pride and Prejudice") and contains(., "Jane Austen") and contains(., "Wuthering Heights") and contains(., "Penguin Classics")</assert>
+         </assert-message> 
+      </result>
+   </test-case>
+   
+   <!-- dropped tests si-message-022, -023, -024 which were identical and incomplete: MHK 2019-07-18 -->
+   
+ 
+  
+   
+</test-set>

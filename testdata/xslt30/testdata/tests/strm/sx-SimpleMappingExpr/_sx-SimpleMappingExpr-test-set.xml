@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="sx-SimpleMappingExpr">
+   <description>Bang operator with streaming</description>
+   
+   <environment name="sx-bang-A">
+     <stylesheet file="sx-bang-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   
+   
+   <test-case name="sx-bang-001">
+      <description>Use bang operator within xsl:stream</description>
+      <created by="Michael Kay" on="2015-06-11"/>
+      <environment ref="sx-bang-A"/>
+      <test>
+         <initial-template name="bang-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction value="-15.00" date="2006-02-15"
+            /><transaction value="-5.00" date="2006-02-20"
+            /><transaction value="-2.33" date="2006-02-23"
+            /><transaction value="-248.05" date="2006-02-24"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-bang-002">
+      <description>Use bang operator within xsl:stream, with position() numbering</description>
+      <created by="Michael Kay" on="2015-06-11"/>
+      <environment ref="sx-bang-A"/>
+      <test>
+         <initial-template name="bang-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1 -15.00 2006-02-15 2 -5.00 2006-02-20 3 -2.33 2006-02-23 4 -248.05 2006-02-24</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-bang-003">
+      <description>Use bang operator within xsl:stream, with positional selection</description>
+      <created by="Michael Kay" on="2015-06-11"/>
+      <environment ref="sx-bang-A"/>
+      <test>
+         <initial-template name="bang-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1 13.24 2006-02-13 2 8.12 2006-02-13 3 -15.00 2006-02-15 4 6.00 2006-02-16</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-bang-004">
+      <description>Use bang operator over atomized nodes</description>
+      <created by="Michael Kay" on="2015-06-11"/>
+      <environment ref="sx-bang-A"/>
+      <test>
+         <initial-template name="bang-004"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1 0.50 2 2.33 3 4.44</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-bang-005">
+      <description>Crawling selection, inspection body</description>
+      <created by="Michael Kay" on="2015-06-11"/>
+      <environment ref="sx-bang-A"/>
+      <test>
+         <initial-template name="bang-005"/>
+      </test>
+      <result>
+         <assert>/out = "1 : BOOKLIST 2 : BOOKS 3 : ITEM 4 : TITLE 5 : AUTHOR 6 : PUBLISHER"</assert>
+      </result>   
+   </test-case>
+   
+   <test-case name="sx-bang-006">
+      <description>Crawling selection, inspection body</description>
+      <created by="Michael Kay" on="2015-06-11"/>
+      <environment ref="sx-bang-A"/>
+      <test>
+         <initial-template name="bang-006"/>
+      </test>
+      <result>
+         <assert>/out = "1 2 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 2 3 3 3"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-bang-008">
+      <description>Use parent axis within bang operator</description>
+      <created by="Michael Kay" on="2015-06-11"/>
+      <environment ref="sx-bang-A"/>
+      <test>
+         <initial-template name="bang-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>account account account account</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-bang-009">
+      <description>Use ancestor axis within bang operator</description>
+      <created by="Michael Kay" on="2015-06-11"/>
+      <environment ref="sx-bang-A"/>
+      <test>
+         <initial-template name="bang-009"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>account account account account</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-bang-010">
+      <description>Use subsequence() within bang operator/@select</description>
+      <created by="Michael Kay" on="2015-06-11"/>
+      <environment ref="sx-bang-A"/>
+      <test>
+         <initial-template name="bang-010"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>count(/out/transaction) = 4</assert>
+           <assert>/out/transaction[1]/@value = "13.24"</assert>
+           <assert>/out/transaction[4]/@value = "6.00"</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="sx-bang-011">
+      <description>Select attribute nodes within bang operator/@select.</description>
+      <created by="Michael Kay" on="2015-06-11"/>
+      <environment ref="sx-bang-A"/>
+      <test>
+         <initial-template name="bang-011"/>
+      </test>
+      <result>
+           <assert>/out = "13.24 8.12 6.00 0.50 2.33 4.44 8.99 16.00 5.60 4.32 6.78 12.20 12.00 13.99 14.20"</assert>  
+      </result>
+   </test-case>
+   
+   <test-case name="sx-bang-012">
+      <description>Iterate over ancestors in bang operator/@select; also tests outermost()</description>
+      <created by="Michael Kay" on="2015-06-11"/>
+      <environment ref="sx-bang-A"/>
+      <test>
+         <initial-template name="bang-012"/>
+      </test>
+      <result>
+           <assert-xml><![CDATA[<out xmlns="http://loan.shark.com/">2.1 22</out>]]></assert-xml>  
+      </result>
+   </test-case>
+
+
+   
+</test-set>

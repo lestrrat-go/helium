@@ -1,0 +1,251 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="xslt-compat">
+   <description>Tests xslt backwards compatibility (see also test set "backwards")</description>
+   <environment name="xsltbc001">
+      <source role="." file="xsltbc001.xml"/>
+   </environment>
+   <environment name="xsltbc005">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="xsltbc018">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <!-- 55 -->
+  <s flag="no">9</s>
+  <!-- 75 -->
+  <s flag="no">11</s>
+  <!-- 70 -->
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="xsltbc019">
+      <source role="." file="xsltbc019.xml"/>
+   </environment>
+   
+   <dependencies>
+      <feature value="backwards_compatibility"/>
+   </dependencies>
+
+   <test-case name="xslt-compat-001">
+      <description>Give the select attribute of xsl:value-of a path expression that selects more than one node. No @separator is given.</description>
+      <keywords>backwards-compatibility-mode 2.0-behaves-like-1.0 leading-double-slash version-attribute</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltbc001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xslt-compat-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Some</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xslt-compat-002">
+      <description>Test xsl:fallback inside xsl:next-match.</description>
+      <keywords>xsl:fallback</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltbc001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xslt-compat-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+Some at 1
+string at 2
+value at 3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xslt-compat-003">
+      <description>Test xsl:fallback inside xsl:result-document.</description>
+      <keywords>xsl:fallback xsl:result-document</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltbc001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xslt-compat-003.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out><log>((</log><log>))</log></out>]]></assert-xml>
+            <assert-result-document uri="xslt-compat-003-2.out">
+               <assert-xml file="xslt-compat-003-2.out"/>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="xslt-compat-004">
+      <description>Use version 1.0 on xsl:attribute to affect (new) select expression.</description>
+      <keywords>version-attribute backwards-compatibility-mode 2.0-behaves-like-1.0</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltbc001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xslt-compat-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out item1="Some"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xslt-compat-005">
+      <description>Use a path expression that selects more than one node in an attribute value template.</description>
+      <keywords>version-attribute 2.0-behaves-like-1.0 backwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltbc001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xslt-compat-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><sometag attributevalue="Some"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xslt-compat-006">
+      <description>Test xsl:fallback inside xsl:analyze-string.</description>
+      <keywords>xsl:analyze-string xsl:fallback</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltbc005"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xslt-compat-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a!racada!ra</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xslt-compat-007">
+      <description>Test xsl:fallback inside xsl:namespace.</description>
+      <keywords>xsl:namespace xsl:fallback</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltbc005"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xslt-compat-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><inner xmlns:foo="http://foo.example.com" a1="test"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xslt-compat-008">
+      <description>Test xsl:fallback inside xsl:sequence.</description>
+      <keywords>xsl:sequence xsl:fallback</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltbc005"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xslt-compat-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>A bc def ghij klmno</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xslt-compat-009">
+      <description>Test of 1.0 stylesheet that has an unguarded instruction set to version 2.0, and using new 2.0 attribute of that instruction.</description>
+      <keywords>xsl:attribute forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltbc005"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xslt-compat-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out attrib="Setting it the new way"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xslt-compat-010">
+      <description>Test of 1.0 stylesheet that has an unguarded instruction set to version 2.0, and using new 2.0 sub-element of that instruction, unguarded.</description>
+      <keywords>xsl:sort xsl:choose forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltbc005"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xslt-compat-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>300|4|-2|-1|1|0.5|-0.5|0|-50|-17|</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xslt-compat-011">
+      <description>Set a variable under version 1.0, then use it in an XPath on a version 2.0 element to show use of 2.0 XPath rules.</description>
+      <keywords>backwards-compatibility-mode xsl:variable global-variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltbc018"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xslt-compat-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><v>14</v><x>false</x></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xslt-compat-012">
+      <description>Set a variable with version 2.0 applying to xsl:variable, but use the variable under version 1.0 to invoke 1.0 XPath rules.</description>
+      <keywords>backwards-compatibility-mode xsl:variable global-variable fn:contains xsl:for-each xsl:if</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltbc019"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xslt-compat-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<v>38.56</v>
+<v toobig="yes">1.9345E122</v>
+<v>17.0034</v>
+<v toobig="yes">5.93784E217</v>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="xslt-compat-013">
+      <description>Use of xsl:fallback within (absent) extension elements.</description>
+      <keywords>extension-element xsl:fallback extension-element-prefixes-attribute</keywords>
+      <created by="Michael Kay" on="2013-12-12"/>
+      <environment ref="xsltbc019"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xslt-compat-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a/>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

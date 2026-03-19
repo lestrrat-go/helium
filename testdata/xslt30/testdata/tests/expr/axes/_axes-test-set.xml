@@ -1,0 +1,3609 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="axes">
+   <description>Tests axes</description>
+   <environment name="axes001">
+      <source role="." file="axes001.xml"/>
+   </environment>
+   <environment name="axes002">
+      <source role="." file="axes002.xml"/>
+   </environment>
+   <environment name="axes003">
+      <source role="." file="axes003.xml"/>
+   </environment>
+   <environment name="axes004">
+      <source role="." file="axes004.xml"/>
+   </environment>
+   <environment name="axes007">
+      <source role="." file="axes007.xml"/>
+   </environment>
+   <environment name="axes008">
+      <source role="." file="axes008.xml"/>
+   </environment>
+   <environment name="axes009">
+      <source role="." file="axes009.xml"/>
+   </environment>
+   <environment name="axes013">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <foo new="true"><baz>is new</baz></foo>
+  <foo new="true">xyz<baz>is new but has text</baz></foo>
+  <foo new="false"><baz>is not new</baz></foo>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="axes014">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <foo att1="c">
+    <foo att1="b">
+      <foo att1="a">
+        <baz/>
+      </foo>
+    </foo>
+  </foo>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="axes015">
+      <source role="." file="axes015.xml"/>
+   </environment>
+   <environment name="axes044">
+      <source role="." file="axes044.xml"/>
+   </environment>
+   <environment name="axes045">
+      <source role="." file="axes045.xml"/>
+   </environment>
+   <environment name="axes047">
+      <source role=".">
+         <content><![CDATA[<XXX xmlns:d="http://www.kitsite.com/v1/Container/DefaultAttribute"
+     xmlns:c="http://www.kitsite.com/v1/Container/Attribute"
+
+     c:x="1" c:y="2" d:x="3" d:y="4" z="5"/>
+]]></content>
+      </source>
+   </environment>
+   <environment name="axes048">
+      <source role="." file="axes048.xml"/>
+   </environment>
+   <environment name="axes049">
+      <source role="." file="axes049.xml"/>
+   </environment>
+   <environment name="axes050">
+      <source role="." file="axes050.xml"/>
+   </environment>
+   <environment name="axes052">
+      <source role=".">
+         <content><![CDATA[ 
+<a>
+  <b/><b/><b/>
+</a>]]></content>
+      </source>
+   </environment>
+   <environment name="axes053">
+      <source role=".">
+         <content><![CDATA[ 
+<a>
+  <c x="1"><x>1</x></c><c x="2"><x>2</x></c><b/>
+</a>]]></content>
+      </source>
+   </environment>
+   <environment name="axes058">
+      <source role=".">
+         <content><![CDATA[ 
+<a>
+    <b id="2"/>
+    <c id="3"/>
+    <d id="4"/>
+    <e id="5"/>
+    <f id="6"/>
+</a>]]></content>
+      </source>
+   </environment>
+   <environment name="axes059">
+      <source role=".">
+         <content><![CDATA[ 
+<a>
+    <b id="2" dummy="9"/>
+    <c id="3"/>
+    <d id="4"/>
+    <e id="5"/>
+    <f id="6"/>
+</a>]]></content>
+      </source>
+   </environment>
+   <environment name="axes060">
+      <source role="." file="axes060.xml"/>
+   </environment>
+   <environment name="axes061">
+      <source role=".">
+         <content><![CDATA[<a>
+  <b/>
+  <c/>
+  <d/>
+  <e>
+    <f/>
+    <g/>
+  </e>
+  <h/>
+</a>]]></content>
+      </source>
+   </environment>
+   <environment name="axes100">
+      <source role="." file="axes100.xml"/>
+   </environment>
+   <environment name="axes107">
+      <source role="." file="axes107.xml"/>
+   </environment>
+   <environment name="axes109">
+      <source role=".">
+         <content><![CDATA[<a>
+ <b>
+  <c x="x">
+   <d1/>
+   <d2 x="bad"/>
+  </c>
+  <c2/>
+ </b>
+ <b2/>
+</a>]]></content>
+      </source>
+   </environment>
+   <environment name="axes112">
+      <source role="." file="axes112.xml"/>
+   </environment>
+   <environment name="axes113">
+      <source role="." file="axes113.xml"/>
+   </environment>
+   <environment name="axes114">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <foo att1="c">
+     <foo att1="b">
+        <foo att1="a"/>
+     </foo>
+  </foo>
+  <baz/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="axes115">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <foo att1="c"/>
+  <foo att1="b"/>
+  <foo att1="a"/>
+  <baz/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="axes116">
+      <source role="." file="axes116.xml"/>
+   </environment>
+   <environment name="axes117">
+      <source role="." file="axes117.xml"/>
+   </environment>
+   <environment name="axes120">
+      <source role=".">
+         <content><![CDATA[<a:root xmlns:a="http://name-a/">
+  <b:sub xmlns:b="http://name-b/"/>
+  <c:sub xmlns:c="http://name-c/"/>
+</a:root>]]></content>
+      </source>
+   </environment>
+   <environment name="axes121">
+      <source role="." file="axes121.xml"/>
+   </environment>
+   <environment name="axes122">
+      <source role=".">
+         <content><![CDATA[<doc att1="e">
+  <foo att1="d">
+     <foo att1="c">
+        <foo att1="b">
+           <baz att1="a"/>
+        </foo>
+     </foo>
+  </foo>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="axes123">
+      <source role="." file="axes123.xml"/>
+   </environment>
+   <environment name="axes124">
+      <source role="." file="axes124.xml"/>
+   </environment>
+   <environment name="axes125">
+      <source role="." file="axes125.xml"/>
+   </environment>
+   <environment name="axes126">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>D
+  <!-- Comment 1 -->
+  <connection/>C
+  <?a-pi pi-1?>
+  <section>S
+    <!-- Comment 2 -->
+    <?a-pi pi-2?>
+    <inner/>I
+  </section>X
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="axes127">
+      <source role="." file="axes127.xml"/>
+   </environment>
+   <environment name="axes129">
+      <source role=".">
+         <content><![CDATA[<docs xmlns:test="http://tester.com">
+  <doc x="x" test:y="y" jad:z="z" xmlns:jad="http://administrator.com"/>
+</docs>]]></content>
+      </source>
+   </environment>
+   <environment name="axes130">
+      <source role=".">
+         <content><![CDATA[<north>
+  <center center-attr="here">
+     <south/>
+  </center>
+</north>]]></content>
+      </source>
+   </environment>
+   <environment name="axes131">
+      <source role="." file="axes131.xml"/>
+   </environment>
+   <environment name="axes132">
+      <source role=".">
+         <content><![CDATA[<?pi?>
+<!--comment-->
+<a xmlns="http://banana/">
+  <b/>
+  <c/>
+  <d/>
+  <e>
+    <f custard="pie" xml:space="preserve">clown</f>
+    <g/>
+  </e>
+  <h/>
+</a>]]></content>
+      </source>
+   </environment>
+   <environment name="axes201">
+      <source role="." file="axes201.xml"/>
+   </environment>
+   <environment name="axes203">
+      <source role="." file="axes203.xml"/>
+   </environment>
+   <environment name="axes204">
+      <source role="." file="axes204.xml"/>
+   </environment>
+   <environment name="axes207">
+      <source role="." file="axes207.xml"/>
+   </environment>
+   <environment name="axes208">
+      <source role="." file="axes208.xml"/>
+   </environment>
+   <environment name="axes209">
+      <source role="." file="axes209.xml"/>
+   </environment>
+   <environment name="axes210">
+      <source role="." file="axes210.xml"/>
+   </environment>
+   <environment name="axes211">
+      <source role="." file="axes211.xml"/>
+   </environment>
+   <environment name="axes213">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <foo new="true"><baz>is new</baz></foo>
+  <foo new="true">xyz<baz>is new but has text</baz></foo>
+  <foo new="false"><baz>is not new</baz></foo>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="axes214">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <foo att1="c">
+     <foo att1="b">
+        <foo att1="a">
+           <baz/>
+        </foo>
+     </foo>
+  </foo>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="axes219">
+      <source role="." file="axes219.xml"/>
+   </environment>
+   <environment name="axes244">
+      <source role="." file="axes244.xml"/>
+   </environment>
+   <environment name="axes245">
+      <source role="." file="axes245.xml"/>
+   </environment>
+   <environment name="axes246">
+      <source role="." file="axes246.xml"/>
+   </environment>
+   <environment name="axes247">
+      <source role="." file="axes247.xml"/>
+   </environment>
+   <environment name="axes248">
+      <source role="." file="axes248.xml"/>
+   </environment>
+   <environment name="axes256">
+      <source role="." file="axes256.xml"/>
+   </environment>
+   <environment name="axes257">
+      <source role="." file="axes257.xml"/>
+   </environment>
+   <environment name="axes258">
+      <source role="." file="axes258.xml"/>
+   </environment>
+   <environment name="axes259">
+      <source role="." file="axes259.xml"/>
+   </environment>
+   <environment name="axes260">
+      <source role="." file="axes260.xml"/>
+   </environment>
+   <environment name="axes262">
+      <source role=".">
+         <content><![CDATA[<doc
+    xmlns:ext="http://somebody.elses.extension"
+    xmlns:java="http://xml.apache.org/xslt/java"
+    xmlns:ped="http://tester.com"
+    xmlns:bdd="http://buster.com"/>]]></content>
+      </source>
+   </environment>
+   <environment name="axes265">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <north>
+    <center>found</center>
+  </north>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="axes266">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <north>
+    <center><!-- found --></center>
+  </north>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="axes267">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <north>
+    <center><?a-pi some data?></center>
+  </north>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="axes268">
+      <source role="." file="axes268.xml"/>
+   </environment>
+   <environment name="axes269">
+      <source role="." file="axes269.xml"/>
+   </environment>
+   <environment name="axes300">
+      <source role=".">
+         <content><![CDATA[<a><b><c id="1"/></b><c id="2"/></a>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="axes302">
+      <source role=".">
+         <content><![CDATA[<!DOCTYPE t04 [
+  <!ELEMENT t04 (a*)>
+  <!ELEMENT a EMPTY>
+  <!ATTLIST a  id ID #REQUIRED>
+]>
+<t04>
+  <a id="a"/>
+  <a id="b"/>
+  <a id="c"/>
+  <a id="d"/>
+</t04>]]></content>
+      </source>
+   </environment>
+   <environment name="axes303">
+      <source role=".">
+         <content><![CDATA[<a xmlns:a="http://alpha/">
+  <b>
+    <c xmlns:a="http://gamma/"/>
+  </b>
+</a>]]></content>
+      </source>
+   </environment>
+   <environment name="axes505">
+      <source role=".">
+         <content><![CDATA[<Test>
+  <Text LineCount="29" Object="RECORD" Status="?" Version="000">
+    <a/>
+    <b/>
+  </Text>  
+</Test>]]></content>
+      </source>
+   </environment>
+   <environment name="axes506">
+      <source role=".">
+         <content><![CDATA[<doc xml:base="http://some.com/thing.uri"><e/></doc>     ]]></content>
+      </source>
+   </environment>
+   <environment name="axes507">
+      <source role="." file="axes507.xml"/>
+   </environment>
+
+   <test-case name="axes-001">
+      <description>Test for 'ancestor::' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-north north near-north </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-002">
+      <description>Test for 'ancestor-or-self::' Axis Identifier</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-north north near-north center </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-003">
+      <description>Test for 'ancestor::' Axis Identifier with index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-north</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-004">
+      <description>Test for 'ancestor-or-self::' Axis Identifier with index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-005">
+      <description>Test for 'attribute::' Axis Identifier with index. Test for 'attribute::' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-006">
+      <description>Test for '@*' abbreviated syntax.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-007">
+      <description>Test for '@*' abbreviated syntax with index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-008">
+      <description>Test for 'child::' Axis Identifier with wildcard and index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-009">
+      <description>Test for 'child::' Axis Identifier with element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-010">
+      <description>Test for 'descendant::' Axis Identifier with wildcard and index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-south</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-011">
+      <description>Test for 'descendant::' Axis Identifier with specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-south</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-012">
+      <description>Test for 'descendant-or-self::' Axis Identifier with wildcard and index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>south</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-013">
+      <description>Test for 'descendant-or-self::' Axis Identifier with specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-south</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-014">
+      <description>Test for 'descendant-or-self::' Axis Identifier with self specified.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-015">
+      <description>Test for 'following::' Axis Identifier with wildcard and index. Test for 'following::' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-016">
+      <description>Test for 'following::' Axis Identifier with specified element name. Test for 'following::' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-017">
+      <description>Test for 'preceding::' Axis Identifier with wildcard and index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-018">
+      <description>Test for 'preceding::' Axis Identifier with specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-019">
+      <description>Test for 'following-sibling::' Axis Identifier with wildcard and index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-020">
+      <description>Test for 'following-sibling::' Axis Identifier with specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-021">
+      <description>Test for 'preceding-sibling::' Axis Identifier with wildcard and index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>west</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-022">
+      <description>Test for 'preceding-sibling::' Axis Identifier with specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>west</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-023">
+      <description>Test for 'parent::' Axis Identifier using specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-north</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-024">
+      <description>Test for 'parent::' Axis Identifier using wildcard and index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-north</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-025">
+      <description>Test for 'parent::' Axis Identifier using specified element name that is not found.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-026">
+      <description>Test for abbreviated '..' syntax.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-north</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-027">
+      <description>Test for 'self::' Axis Identifier with specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-028">
+      <description>Test for 'self::' Axis Identifier with wildcard and index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-029">
+      <description>Test for 'self::' Axis Identifier with specified element name that is not found.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-030">
+      <description>Test for abbreviated '.' syntax.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-031">
+      <description>Test for 'attribute::' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>
+      <environment ref="axes003"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-031.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center-attr-1 center-attr-2 center-attr-3 </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-032">
+      <description>Test for 'child::' Axis Identifier with wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes004"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-032.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-south-east near-south near-south-west </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-033">
+      <description>Test for 'descendant::' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes004"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-south-east near-south south far-south near-south-west </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-034">
+      <description>Test for 'descendant-or-self::' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes004"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-034.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center near-south-east near-south south far-south near-south-west </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-035">
+      <description>Test for 'following::' Axis Identifier. Test for 'following::' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes007"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-easteastfar-eastway-out-yonder-eastout-yonder-east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-036">
+      <description>Test for 'preceding::' Axis Identifier with wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes008"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>way-out-yonder-westout-yonder-westfar-westwestnear-west</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-037">
+      <description>Test for 'self::' Axis Identifier with child predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes008"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-038">
+      <description>Test for 'self::' Axis Identifier with attribute predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes008"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-039">
+      <description>Test for 'following-sibling::' Axis Identifier with wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-039.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-easteastfar-east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-040">
+      <description>Test for 'preceding-sibling::' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-040.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-westwestnear-west</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-041">
+      <description>Test for 'parent::' Axis Identifier using wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-041.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-north</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-042">
+      <description>Test for 'self::' Axis Identifier with wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-042.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-043">
+      <description>Test for ancestor::*[...][...] and index of ancestors.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes013"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-043.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>A:doc/foo/baz/is new
+B:doc/foo/baz/is new but has text
+B:doc/foo/baz/is not new
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-044">
+      <description>Test for ancestor-or-self::*[@att1][1]/@att1 vs. (ancestor-or-self::*)[@att1][1]/@att1.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes014"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-044.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a, c</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-045">
+      <description>Test for completion of tree using all axes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes015"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-045.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-045.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-046">
+      <description>Purpose: Test for completion of tree using all axes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes015"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-046.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-046.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-047">
+      <description>Test for repeated use of //name (Saxon optimisation).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-047.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-047.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-048">
+      <description>test preceding axis from an attribute. Bug report from Kurt Devlin</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes045"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-048.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>xml journal<br/>;
+	xsl journal<br/>;
+	css journal<br/>;
+	</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-049">
+      <description>test following axis from an attribute. Bug report from Kurt Devlin</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes045"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-049.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>css journal<br/>;
+	xml journal<br/>;
+	xsl journal<br/>;
+	</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-050">
+      <description>TEST namespace test on attribute axis (bug Saxon 6.2.2/002)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes047"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-050.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<foo xmlns:d="http://www.kitsite.com/v1/Container/DefaultAttribute" xmlns:c="http://www.kitsite.com/v1/Container/Attribute" c:x="1" c:y="2"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-051">
+      <description>Test ancestor and ancestor-or-self axes starting at an attribute.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes048"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-051.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-051.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-052">
+      <description>Test ancestor and ancestor-or-self axes starting at a namespace node.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes049"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-052.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-052.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-053">
+      <description>Test following axis starting at attribute node.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes050"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-053.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out count="38"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-054">
+      <description>Test ancestor axis with a specific name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes050"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-054.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>hey</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-055">
+      <description>Test elimination of duplicates from result of path expression.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes052"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-055.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-056">
+      <description>Test elimination of duplicates from result of path expression.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes053"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-056.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><attributes>1,2,</attributes><elements>1,2,</elements></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-057">
+      <description>Test all axes with a "simple text" temporary tree.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes053"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-057.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>every $e in /out/parent/* satisfies $e[self::ok]</assert>
+            <assert>every $e in /out/child/* satisfies $e[self::ok]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="axes-058">
+      <description>Test all axes with a single-element temporary tree.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes053"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-058.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>every $e in /out/parent/* satisfies $e[self::ok]</assert>
+            <assert>every $e in /out/child/* satisfies $e[self::ok]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="axes-059">
+      <description>Test root() function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes053"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-059.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetruetruetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-060">
+      <description>Test optimization of axes expressions under union, intersect, and difference .</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes058"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-060.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><u>2,3,4</u><i>2</i><d>3,4,5,6</d></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-061">
+      <description>Test optimization of path expressions under union, intersect, and difference .</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-09-05" change="make expected results independent of attribute order"/>
+      <environment ref="axes059"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-061.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/d = '2'</assert>
+            <any-of>
+               <assert>/out/u = '2,9,3,4'</assert>
+               <assert>/out/u = '9,2,3,4'</assert>
+            </any-of>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="axes-062">
+      <description>Test for 'ancestor::' Axis Identifier, with XPath 2.0 unordered() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes060"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-062.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ordered>far-north north near-north </ordered><unordered>   northfar-northnear-north</unordered></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-063">
+      <description>Test for sorted results with combination of axes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes061"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-063.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ordered>b c d e h </ordered></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-064">
+      <description>DOCUMENT: http://www.w3.org/TR/xpath SECTION: 2.2 Axes Test for generate-id() (on each tree model) The test is written to produce reproducible results</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes061"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-064.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-065">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes061"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-065.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><v>element: a; preceding: 0</v
+            ><v>element: x; preceding: 0</v
+            ><v>element: b; preceding: 2</v
+            ><v>element: x; preceding: 2</v
+            ><v>element: c; preceding: 4</v
+            ><v>element: x; preceding: 4</v></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-066">
+      <description>test use of axes within a tree that has an element node as its root AUTHOR: Michael Kay</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-04-04" change="see bug 29557"/>
+      <environment ref="axes061"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-066.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/v[.="element: a; preceding: 0"]/following-sibling::v[1][.="element: x; preceding: 0"]</assert>
+            <assert>/out/v[.="element: b; preceding: 0"]/following-sibling::v[1][.="element: x; preceding: 0"]</assert>
+            <assert>/out/v[.="element: c; preceding: 0"]/following-sibling::v[1][.="element: x; preceding: 0"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="axes-067">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-067.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> far-north north near-north center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-068">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-068.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-069">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-069.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-070">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-070.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> north-north-west1 north-north-west2 far-west west near-west</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-071">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-071.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>  Comment-2   Comment-3   Comment-4 </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-072">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-072.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> #text #text #text #text #text #text #text #text #text #text #text #text #text #text</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-073">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-073.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> pi-2 pi-3 pi-4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-074">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-074.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> Comment-5 Comment-6</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-075">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-075.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> pi-5 pi-6</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-076">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-076.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> center-attr-1 center-attr-2 center-attr-3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-077">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-077.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-078">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-078.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-079">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-079.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-080">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-080.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> far-north north near-north center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-081">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-081.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+    1. center-attr-1 center-attr-2 center-attr-3
+
+    2. center-attr-1 center-attr-2 center-attr-3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-082">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>
+      <environment ref="axes100"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-082.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> center-attr-1 center-attr-2 center-attr-3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-083">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Note that namespace nodes should not be included on the preceeding axis, and specifically that the implied declaration of xml: should not appear in the output. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes107"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-083.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>##north-north-west1##north-north-west2####a-pi#####a-pi###far-west##west##near-west####a-pi#</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-084">
+      <description>Purpose: Tests apply-templates starting with a attribute axes followed by additional relative-location-path steps. Author: Paul Dick</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes107"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-084.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-084.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-085">
+      <description>Purpose: Tests following axis starting from an attribute. Author: Scott Boag</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes109"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-085.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> d1 d2 c2 b2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-086">
+      <description>Purpose: Tests apply-templates starting with a attribute axis followed by additional relative-location-path steps.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes112"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-086.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> #text #text #text #text #text #text #text #text #text #text #text #text #text #text #text #text #text #text #text #text</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-087">
+      <description>Purpose: Comprehensive test of all axes Author: Dave Haffner Special handling for attribute axis.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes113"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-087.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-087.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-088">
+      <description>Test for preceding::foo[1] vs. (preceding::foo)[1], as discussed in the first NOTE in section 3.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes114"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-088.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a, c</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-089">
+      <description>Test for preceding-sibling::foo[1] vs. (preceding-sibling::foo)[1], similar to the treatment of preceding:: in the first NOTE in section 3.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes115"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-089.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a, c</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-090">
+      <description>Test for likely optimizations of descendant patterns to make sure they're done correctly. DS meands the location path is optimizable as a single descendant iterator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-090.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-090.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-091">
+      <description>Try 'ancestor-or-self::*' after walking down to it.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-091.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-north north near-north center </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-092">
+      <description>Purpose: Test for 'ancestor-or-self::*' Axis Identifier</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-092.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-north north near-north center </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-093">
+      <description>Purpose: Test for 'ancestor::' Axis Identifier with index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-093.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-north</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-094">
+      <description>Purpose: Test for 'ancestor-or-self::' Axis Identifier with index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-094.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-095">
+      <description>Purpose: Test for '@*' abbreviated syntax with index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-095.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-096">
+      <description>Purpose: Test for 'child::' Axis Identifier with index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-096.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-097">
+      <description>Purpose: Test for 'child::' Axis Identifier with element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-097.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-098">
+      <description>Purpose: Test for 'descendant::' Axis Identifier with index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-098.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-south</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-099">
+      <description>Purpose: Test for 'descendant::' Axis Identifier with specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-099.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-south</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-100">
+      <description>Purpose: Test for 'descendant-or-self::' Axis Identifier with index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-100.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>south</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-101">
+      <description>Purpose: Test for 'descendant-or-self::' Axis Identifier with specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-south</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-102">
+      <description>Purpose: Test for 'descendant-or-self::' Axis Identifier with self specified.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-103">
+      <description>Purpose: Test for 'following::' Axis Identifier with wildcard and index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-104">
+      <description>Purpose: Test for 'following::' Axis Identifier with specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-105">
+      <description>Purpose: Test for 'preceding::' Axis Identifier with index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-106">
+      <description>Purpose: Test for 'preceding::' Axis Identifier with specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-107">
+      <description>Purpose: Test for 'following-sibling::' Axis Identifier with index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-108">
+      <description>Purpose: Test for 'following-sibling::' Axis Identifier with specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-109">
+      <description>Purpose: Test for 'preceding-sibling::' Axis Identifier with wildcard and index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-109.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>west</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-110">
+      <description>Purpose: Test for 'preceding-sibling::' Axis Identifier with specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-110.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>west</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-111">
+      <description>Purpose: Test for 'parent::' Axis Identifier using specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-111.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-north</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-112">
+      <description>Purpose: Test for 'parent::' Axis Identifier using index (not that it's practical).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-112.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-north</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-113">
+      <description>Purpose: Test for 'parent::' Axis Identifier using specified element name that is not found.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-113.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-114">
+      <description>Purpose: Test for abbreviated '..' syntax.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-114.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-north</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-115">
+      <description>Purpose: Test for 'self::' Axis Identifier with specified element name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-115.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-116">
+      <description>Purpose: Test for 'self::' Axis Identifier with index (not that it's practical).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-116.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-117">
+      <description>Purpose: Test for 'self::' Axis Identifier with specified element name that is not found.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-117.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-118">
+      <description>Purpose: Test for abbreviated '.' syntax.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-118.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-119">
+      <description>Test of //@ sequences The above two, respectively, must equal the sums of sect-*-attribs and sect-*-titles below. Rather than iterate, we want to have a sub-element name lead the path expression.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes117"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-119.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-119.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-120">
+      <description>Check that namespace nodes exist separately on each element. To suppress empty lines</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes120"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-120.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-120.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-121">
+      <description>Test for '/descendant::*' to select all elements (excluding root node). No text or comments should be picked up.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes121"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-121.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-north north near-north far-west west near-west center
+near-south south near-south-west near-east east far-east </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-122">
+      <description>Test for last() on two-step paths, contrasting descendant-or-self with ancestor-or-self. Now reposition on the lowest node and look upward.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes122"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-122.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>From root: 5
+From doc: 5= e, a, a; 
+From baz: 5= e, e, a, e, a; 
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-123">
+      <description>Purpose: Tests apply-templates from an attribute using parent axis. This is a twist on axes96, where the context node is an element.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes123"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-123.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-north</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-124">
+      <description>Purpose: Tests apply-templates from a comment using parent axis.  suppress whitespace-only nodes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes124"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-124.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Center Comment</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-125">
+      <description>Ensure that preceding::node() doesn't get namespace or attribute nodes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes125"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-125.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> (D
+  ), connection (),  (C
+  ),  (S
+    ), </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-126">
+      <description>Ensure that preceding::node() does get comment or PI nodes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes126"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-126.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> (D
+  ),  ( Comment 1 ),  (
+  ), connection (),  (C
+  ), a-pi (pi-1),  (
+  ),  (S
+    ),  ( Comment 2 ),  (
+    ), a-pi (pi-2),  (
+    ), </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-127">
+      <description>Ensure that preceding::node() does get comment and PI nodes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes126"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-127.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> (D
+  ),  ( Comment 1 ),  (
+  ), connection (),  (C
+  ), a-pi (pi-1),  (
+  ),  (S
+    ),  ( Comment 2 ),  (
+    ), a-pi (pi-2),  (
+    ), </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-128">
+      <description>Ensure that following::node() doesn't get namespace or attribute nodes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes127"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-128.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> (I
+  ),  (X
+  ), connection (),  (C
+), </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-129">
+      <description>Check the namespace axis starting from an attribute; should be empty To suppress empty lines</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-09-05" change="expected results should not depend on order of attributes"/>
+      <environment ref="axes129"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-129.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/ns-count[@attr='x'][@count='0']</assert>
+            <assert>/out/ns-count[@attr='test:y'][@count='0']</assert>
+            <assert>/out/ns-count[@attr='jad:z'][@count='0']</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="axes-130">
+      <description>Test for 'self::' axis on an attribute FALSE: principal node type of self is element FALSE: principal node type of self is element</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes130"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-130.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><any-node>true</any-node><any-elem>false</any-elem><any-text>false</any-text><named>false</named></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-131">
+      <description>Test for descendant axis when siblings have some children or the context node has no siblings.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes131"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-131.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-131.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-132">
+      <description>Purpose: Test node-name function on all kinds of node (and none).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes132"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-132.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-132.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-133">
+      <description>Purpose: Traverse the ancestor::* axis Elaboration: First, jump to the center (via for-each so that we don't have interfering templates, which is less of a problem for ancestor than other axes), then apply-templates on all members of the axis under test. Also, demonstrate the statement in XSLT 5.4 that "The selected set of nodes is processed in document order, unless a sorting specification is present."</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes201"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-133.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-north north near-north </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-134">
+      <description>Purpose: Test for 'attribute::*' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>  
+      <environment ref="axes203"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-134.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center-attr-1 center-attr-2 center-attr-3 </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-135">
+      <description>Purpose: Test for 'attribute::' Axis Identifier with index.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes203"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-135.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center-attr-2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-136">
+      <description>Purpose: Test for 'child::*' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes204"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-136.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-south-east near-south near-south-west </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-137">
+      <description>Purpose: Test for 'descendant::*' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes204"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-137.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-south-east near-south south far-south near-south-west </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-138">
+      <description>Purpose: Test for 'descendant-or-self::*' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes204"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-138.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center near-south-east near-south south far-south near-south-west </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-139">
+      <description>Purpose: Test for 'following::*' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes207"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-139.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-east,
+east,
+far-east,
+way-out-yonder-east,
+out-yonder-east,
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-140">
+      <description>Purpose: Test for 'preceding::*' Axis Identifier with wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes208"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-140.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>way-out-yonder-westout-yonder-westfar-westwestnear-west</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-141">
+      <description>Purpose: Test for 'following-sibling::*' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes209"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-141.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-east,
+east,
+far-east,
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-142">
+      <description>Purpose: Test for 'preceding-sibling::*' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes210"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-142.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-westwestnear-west</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-143">
+      <description>Purpose: Test for 'self::*' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes210"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-143.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-144">
+      <description>Purpose: Test for 'parent::*' Axis Identifier.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes211"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-144.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-north</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-145">
+      <description>Purpose: Test for ancestor::*[...][...] and index of ancestors.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes213"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-145.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>doc/foo/baz/is new
+doc/foo/baz/is new but has text
+doc/foo/baz/is not new
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-146">
+      <description>Purpose: Test for ancestor-or-self::*[@att1][1]/@att1 vs. (ancestor-or-self::*)[@att1][1]/@att1.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes214"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-146.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a, c</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-147">
+      <description>Purpose: Test for '@*' abbreviated syntax.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>
+      <environment ref="axes219"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-147.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center-attr-1 center-attr-2 center-attr-3 </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-148">
+      <description>Test for 'child::*' in match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes219"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-148.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>far-west west near-west center near-east east far-east </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-149">
+      <description>Test for 'attribute::' Axis Identifier with name of attribute.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes244"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-149.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center-attr-2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-150">
+      <description>Test for '@' to select an attribute, with name of attribute.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes245"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-150.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center-attr-2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-151">
+      <description>Test for '..' and an attribute of parent node.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes246"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-151.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>22</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-152">
+      <description>Test for '..//name' and an attribute.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes247"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-152.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>cbaacbaa</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-153">
+      <description>Test for two 'child::' Axis Identifiers in succession.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes248"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-153.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>south</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-154">
+      <description>Test for 'child::*' followed by 'descendant::*' (i.e., all grandchildren and below).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes248"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-154.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>south far-south </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-155">
+      <description>Test for 'descendant::*' followed by 'child::*' (i.e., all grandchildren and below).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes248"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-155.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>south far-south </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-156">
+      <description>Test for '//' followed by 'child::*' (i.e., all grandchildren).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes248"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-156.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-south-east near-south south far-south near-south-west </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-157">
+      <description>Section: 2.2 Purpose: Test for '//' followed by 'descendant::*' (i.e., all children and below).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes248"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-157.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-south-east near-south south far-south near-south-west </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-158">
+      <description>Test for named node followed by 'descendant::*' (i.e., all children and below).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes248"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-158.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-south-east near-south south far-south near-south-west </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-159">
+      <description>Test for named node followed by 'child::*' (i.e., all children).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes248"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-159.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-south-east near-south near-south-west </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-160">
+      <description>Test for '//*' (i.e., all descendants, but elements only).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes248"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-160.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-south-east near-south south far-south near-south-west </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-161">
+      <description>Test that combination of // and descendant specifies node can be anywhere in ancestry.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes256"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-161.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>xxchild xxchild childofxx xxsub xxsubsub </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-162">
+      <description>Test that // goes down at least 15 levels.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes257"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-162.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-162.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-163">
+      <description>Check the attribute:: axis. The foo:doc selection is necessary to pick up the last doc, cuz, I change the default namespace.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>
+      <environment ref="axes258"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-163.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:foo="http://www.ped.com">x y z ay az by bz </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-164">
+      <description>Purpose: Step through names on the namespace axis. Ensure attributes aren't counted. To suppress empty lines</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes259"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-164.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-164.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-165">
+      <description>Test for 'attribute::*' in match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>
+      <environment ref="axes260"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-165.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center-attr-1 center-attr-2 center-attr-3 </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-166">
+      <description>Use a NameTest on the namespace axis. Do the same when the prefix is also declared here in the stylesheet. Shouldn't conflict.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes262"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-166.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<ped>http://tester.com</ped>
+<bdd>http://buster.com</bdd>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-167">
+      <description>Test for 'self::text()' being empty when it should be</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes265"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-167.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-168">
+      <description>Test for 'self::comment()' being empty when it should be</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes266"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-168.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-169">
+      <description>Test for 'self::processing-instruction()' being empty when it should be</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes267"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-169.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-170">
+      <description>Check that namespace axis includes all namespaces in scope.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes268"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-170.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-170.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-171">
+      <description>Compound test for preceding-sibling:: and following-sibling:: with explicit iteration.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-171.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-171.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-172">
+      <description>Compound test for preceding-sibling:: and following-sibling:: conjoined.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-172.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> west near-west center near-east east far-east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-173">
+      <description>Compound test for preceding-sibling:: and following-sibling:: conjoined, with positional predicate on the first axis.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-173.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> near-west center near-east east far-east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-174">
+      <description>Compound test for preceding-sibling:: and following-sibling:: conjoined, with positional predicates on both axes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-174.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-175">
+      <description>Compound test where we bounce "horizontally" across the tree, using positions. Nodes in order: west, east, far-west, near-east, far-east</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-175.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> far-east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-176">
+      <description>Compound test for following-sibling:: and preceding-sibling:: with explicit iteration.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-176.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-176.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-177">
+      <description>Compound test for following-sibling:: and preceding-sibling:: conjoined.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-177.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> far-west west near-west center near-east east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-178">
+      <description>Compound test for following-sibling:: and preceding-sibling:: conjoined, with positional predicate on the first axis.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-178.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> far-west west near-west center near-east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-179">
+      <description>Compound test for following-sibling:: and preceding-sibling:: conjoined, with positional predicates on both axes. Reverse document order applies.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-179.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> west</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-180">
+      <description>Compound test where we bounce "horizontally" across the tree, using positions. Nodes in order: east, west, far-east, near-west, far-west</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-180.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> far-west</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-181">
+      <description>Compound test for following::, parent, and child conjoined, with positional predicates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-181.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>north-north-west2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-182">
+      <description>Compound test for preceding::, parent, and following:: conjoined, with positional predicates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-182.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> north-north-east1 north-north-east2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-183">
+      <description>Compound test for preceding::, parent, descendant::, and following-sibling:: conjoined, with positional predicates and a node test.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-183.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-184">
+      <description>Test simple notation to select entire tree.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-184.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="axes-184.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="axes-185">
+      <description>Compound test selecting everything that has children.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-185.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> far-north north near-north center near-south south</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-186">
+      <description>Purpose: Compound test going "vertically" in the tree. The expression selects the set of all grandparents. "//*[count(ancestor::*) &gt;= 2]" is the set of all grandchildren.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-186.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> far-north north near-north center near-south</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-187">
+      <description>Alternate test to select the set of all grandparents.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-187.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> far-north north near-north center near-south</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-188">
+      <description>Purpose: Test to select the set of all aunts, great-aunts, etc. but exclude ancestors. "ancestor::*[count(child::*) &gt; 1]" is the set of all ancestors with other children. MHK: the test is incorrect in using "=" to test for node identity, but never mind...</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-188.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> north-north-west1 north-north-west2 far-west west near-west near-east east far-east north-north-east1 north-north-east2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-189">
+      <description>Traverse ancestor:: starting from attributes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-189.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> far-north north near-north center</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-190">
+      <description>Traverse following:: starting from attributes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-190.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> near-south-west near-south south far-south near-south-east near-east east far-east north-north-east1 north-north-east2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-191">
+      <description>Traverse preceding:: starting from attributes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-191.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> north-north-west1 north-north-west2 far-west west near-west</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-192">
+      <description>Test for union of preceding-sibling:: and following-sibling::</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-192.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> far-west west near-west near-east east far-east</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-193">
+      <description>Test for steps beyond union of two axes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-193.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> north-north-east2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-194">
+      <description>Test for union of two relative-location-paths</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes269"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-194.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> near-north near-south-west</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-195">
+      <description>test that adjacent text nodes are merged</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes300"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-195.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-196">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+        <source role=".">
+          <content><![CDATA[
+         	 <page title="A"><page title="B"><page title="C"><page title="D"/></page></page></page>
+          ]]></content>
+        </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-196.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>A/A_B/A_B_C/A_B_C_D</a><b>A/A_B/A_B_C/A_B_C_D</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-197">
+      <description>Test the id() function on a DTD-defined ID attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-06-11" change="Add DTD dependency"/>
+      <environment ref="axes302"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-197.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><H1>Test for id().</H1><HR/><P>Should say "c":</P><P>c</P></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-198">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes303"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-198.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one><c xmlns:a="http://gamma/"/></one><two><c xmlns:a="http://gamma/"/></two></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-199">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes505"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-199.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Test>
+  <Text LineCount="29" Object="RECORD" Status="?" Version="000">
+    <a/>
+    <b/>
+  </Text>  
+</Test>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-200">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes506"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-200.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z>http://some.com/thing.uri</z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="axes-201">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="axes507"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+         Using id():
+         Baltimore
+         Using idref():
+         [2]
+         BravoCharlie
+         End
+     </out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="axes-202">
+      <description>Handle a comment occurring before the DOCTYPE declaration</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<?xml version="1.0" encoding="UTF-8"?>
+<!--A comment-->
+<!DOCTYPE task PUBLIC "-//OASIS//DTD DITA Task//EN" "axes-202.dtd">
+<?Pub Inc?>
+<task/>]]></content>
+         </source>
+      </environment>  
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="axes-202.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = "A comment"</assert>
+            <assert>/out/b = 3</assert>
+            <assert>/out/c = 'Pub'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+</test-set>

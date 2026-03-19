@@ -1,0 +1,758 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="strip-space">
+   <description>Tests whitespace</description>
+   <environment name="strip-space-01">
+      <source role=".">
+         <content><![CDATA[<doc></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="strip-space-02">
+      <source role=".">
+         <content><![CDATA[<doc size="1.5">
+  <top-node><rubbish>Content of Rubbish</rubbish></top-node>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="strip-space-03">
+      <source role=".">
+         <content><![CDATA[<doc>
+   <foo/>
+   <foo/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="strip-space-04">
+      <source role="." file="environment-04.xml"/>
+   </environment>
+
+   <environment name="strip-space-05">
+      <source role="." file="environment-05.xml"/>
+   </environment>
+
+   <environment name="strip-space-06">
+      <source role="." file="environment-06.xml" validation="strict"/>
+      <schema role="source-reference" file="environment-06.xsd" xsd-version="1.0"/>
+   </environment>
+
+   <environment name="strip-space-07">
+      <source role=".">
+         <content><![CDATA[ 
+
+<doc>
+  <test1>
+       <a>a</a>
+       <b>b</b>
+  </test1>
+  <test2>
+       <c>c</c>
+       <d>d</d>
+  </test2>
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <environment name="strip-space-09">
+      <source role="." file="environment-09.xml"/>
+   </environment>
+
+   <environment name="strip-space-17">
+      <source role=".">
+         <content><![CDATA[<document>
+  <section/>  <section/>  <section/>
+</document>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="strip-space-001">
+      <description>
+         Was: whitespace-0114
+         Test with an element constructed with whitespace text node children. The element
+         is stored in a variable and its name is listed in xsl:strip-space. Confirm that the element
+         has a text node child. 
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="strip-space-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-001.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1] = "  "</assert>
+            <assert>/out/a[2] = "1"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-002">
+      <description>
+         Was: whitespace-0115
+         In xsl:strip-space, prefix of nametest must be declared 
+      </description>
+      <created by="Michael Kay" on="2013-09-22"/>
+      <environment ref="strip-space-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-002.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0280"/>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-003">
+      <description>
+         Was: whitespace-0401
+         Test xsl:preserve-space with @elements="*:NCName". Template rules have
+         match="*", match="*:NCName" and match="QName" 
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2016-03-22" change="Remove serialization requirement"/>
+      <environment ref="strip-space-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-003.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>string-join(string-to-codepoints(/out/b[1])!string(), " ") = "10 32 32 32 9 9 101 108 101 109 49 10 32 32 32 9 9 10"</assert>
+            <assert>string-join(string-to-codepoints(/out/b[2])!string(), " ") = "32 32 32 101 108 101 109 50 32 32 32"</assert>
+            <assert>string-join(string-to-codepoints(/out/b[3])!string(), " ") = "10 32 32 32 101 108 101 109 51"</assert>
+            <assert>string-join(string-to-codepoints(/out/b[4])!string(), " ") = "101 108 101 109 52 9 9 9"</assert>
+            <assert>string-join(string-to-codepoints(/out/b[5])!string(), " ") = "10 32 32 32 9 101 108 101 109 53 10"</assert>
+            <assert>string-join(string-to-codepoints(/out/b[6])!string(), " ") = "32 101 108 101 109 54 32"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-004">
+      <description>
+         Was: whitespace-0402
+         Test xsl:strip-space with @elements="*:NCName". Template rules have match="*",
+         match="*:NCName" and match="QName".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2016-03-22" change="Remove serialization requirement"/>
+      <environment ref="strip-space-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-004.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/b[1] eq "elem1"</assert>
+            <assert>/out/b[2] eq "elem2"</assert>
+            <assert>/out/b[3] eq "elem3"</assert>
+            <assert>/out/b[4] eq "elem4"</assert>
+            <assert>/out/b[5] eq "elem5"</assert>
+            <assert>/out/b[6] eq "elem6"</assert>
+            <assert>count(/out/text()[string-to-codepoints(.) eq 10]) = 7</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-005">
+      <description>
+         Was: whitespace-0501
+         Test xsl:preserve-space with @elements="NCName:*". Template rules have
+         match="*", match="NCName:* and match="QName".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2016-03-22" change="Remove serialization requirement"/>
+      <environment ref="strip-space-05"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-005.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>string-join(string-to-codepoints(/out/*[1][self::b])!string(), " ") = "10 32 32 32 9 9 101 108 49 10 32 32 32 9 9 10"</assert>
+            <assert>string-join(string-to-codepoints(/out/*[2][self::b])!string(), " ") = "32 32 32 101 108 101 109 50 32 32 32"</assert>
+            <assert>string-join(string-to-codepoints(/out/*[3][self::c])!string(), " ") = "101 108 101 109 51"</assert>
+            <assert>string-join(string-to-codepoints(/out/*[4][self::c])!string(), " ") = "101 108 101 109 52"</assert>
+            <assert>string-join(string-to-codepoints(/out/*[5][self::b])!string(), " ") = "10 32 32 32 9 105 116 101 109 53 10"</assert>
+            <assert>string-join(string-to-codepoints(/out/*[6][self::c])!string(), " ") = "101 108 101 109 54"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-006">
+      <description>
+         Was: whitespace-0502
+         Test xsl:strip-space with @elements="NCName:*". Template rules have match="*" ,
+         match="NCName:* and match="QName".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2016-03-22" change="Remove serialization requirement"/>
+      <environment ref="strip-space-05"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<b>el1</b>
+<b>elem2</b>
+<c>
+   elem3</c>
+<c>elem4			</c>
+<b>item5</b>
+<c> elem6 </c>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-007">
+      <description>
+         Was: whitespace-0601
+         Test that whitespace text nodes are stripped from elements with element only
+         content regardless of xsl:preserve-space or xsl:strip-space.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="strip-space-06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-007.xsl"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-008">
+      <description>
+         Was: whitespace-0602
+         Test that whitespace text nodes are not stripped from elements with simple
+         content regardless of xsl:preserve-space or xsl:strip-space.
+      </description>
+      <created by="Michael Kay" on="2012-12-07"/>
+      <environment ref="strip-space-06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-008.xsl"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-009">
+      <description>
+         Was: whitespace-0603
+         Test that whitespace text nodes are not stripped from elements having an
+         ancestor whose governing type contains an XSD 1.1 assertion. </description>
+      <created by="Michael Kay" on="2012-12-07"/>
+      <environment>
+         <source role="." file="strip-space-009.xml" uri="strip-space-009.xml" validation="strict"/>
+         <schema file="strip-space-009.xsd" uri="strip-space-009.xsd" role="source-reference"
+            xsd-version="1.1"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="schema_aware"/>
+         <feature value="XSD_1.1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-009.xsl"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-010">
+      <description>
+         Was: whitespace-0701
+         Another Test for white-space
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="strip-space-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ab
+       c
+       d
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-011">
+      <description>
+         Was: whitespace-0702
+         Another Test for white-space (xsl:strip-space)
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="strip-space-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>abcd</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-012">
+      <description>
+         Was: whitespace-0703
+         Another Test for white-space
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="strip-space-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>abcd</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-013">
+      <description>
+         Was: whitespace-0704
+         Another Test for white-space (xsl:strip-space and xsl:preserve-space)
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="strip-space-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ab
+       c
+       d
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-014">
+      <description>
+         Was: whitespace-0801
+         Another Test for white-space handling
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>
+    <a>a</a>
+    <b> <!-- test -->b</b>
+</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ab</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-015">
+      <description>
+         Was: whitespace-0901
+         Another Test for white-space
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="strip-space-09"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:ns1="http://ns1/">ab
+       c
+       d
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-016">
+      <description>
+         Was: whitespace-0902
+         Another Test for white-space
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="strip-space-09"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:ns1="http://ns1/">ab
+       c
+       d
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-017">
+      <description>Was: whitespace-1101</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<document>
+  <section/>  <section/>  <section/>
+</document>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Position:1,Last:3
+Position:2,Last:3
+Position:3,Last:3
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-018">
+      <description>
+         Was: whitespace-1401
+         test that the default namespace is NOT used for names in xsl:strip-space
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc xmlns="http://foo.uri/"><a> </a><b> </b><c> </c></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc xmlns="http://foo.uri/"><a> </a><b> </b><c> </c></doc>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-019">
+      <description>
+         Was: whitespace-1501
+         test two conflicting xsl:strip-space/preserve-space declarations (recoverable error)
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-02-11" change="XTSE0270 - is not a recoverable error in XSLT30, remove dependency on 3.0."/>
+      <modified by="Abel Braaksma" on="2015-04-02" change="Allow XTRE0270 to be thrown, add 3.0 variant of test"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><a> </a><b> </b><c> </c></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-019.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTRE0270" />
+            <assert-xml><![CDATA[<doc><a/><b> </b><c/></doc>]]></assert-xml>
+         </any-of>         
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-019a">
+      <description>
+         Was: whitespace-1501a
+         Two conflicting xsl:strip-space/preserve-space declarations (static error in XSLT 3.0)
+      </description>
+      <created by="Abel Braaksma" on="2015-04-02"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><a> </a><b> </b><c> </c></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+" />
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-019.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0270" />
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-020">
+      <description>
+         Was: whitespace-1601
+         Test import precedence for xsl:strip-space
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<abc:doc xmlns:abc="http://abc.uri/">
+<abc:w>   </abc:w>
+<abc:x>   </abc:x>
+<abc:y>   </abc:y>
+<abc:z>   </abc:z>
+<q>    </q>
+</abc:doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-020.xsl"/>
+         <stylesheet file="strip-space-020a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<abc:doc xmlns:abc="http://abc.uri/"><abc:w>   </abc:w><abc:x/><abc:y/><abc:z/><q>    </q></abc:doc>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-021">
+      <description>
+         Was: whitespace-1704
+         no confict reported in 2.0 if there are two identical strip-space or
+         preserve-space declarations
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="strip-space-17"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<document><section/><section/><section/></document>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-space-022">
+      <description>Was: whitespace-1801</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2016-03-22" change="Remove serialization requirement"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<a xml:space="preserve">
+  <b xml:space="default">  </b>
+  <c>  </c>
+  <d xml:space="preserve">  </d>
+  <e xml:space="default">
+    <f xml:space="preserve">  </f>
+  </e>
+</a>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-022.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/a[@xml:space='preserve']</assert>
+            <assert>string(/a/*[1][self::b][@xml:space="default"]) = ""</assert>
+            <assert>string(/a/*[2][self::c]) = "  "</assert>
+            <assert>string(/a/*[3][self::d][@xml:space='preserve']) = "  "</assert>
+            <assert>string(/a/*[4][self::e][@xml:space='default']) = "  "</assert>
+            <assert>string(/a/*[4][self::e][@xml:space='default']/f[@xml:space='preserve']) = "  "</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="strip-space-023">
+      <description>Input node is a whitespace text node subject to space-stripping</description>
+      <created by="Michael Kay" on="2016-11-28"/>
+      <environment>
+         <source role="." select="/a/b/text()">
+            <content><![CDATA[<a><b> </b><c> </c></a>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-023.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPDY0002"/>
+      </result>     
+   </test-case>
+   
+   <test-case name="strip-space-024">
+      <description>
+         Test that the @elements attribute can be an empty string
+      </description>
+      <created by="Michael Kay" on="2017-10-19"/>
+      <environment ref="strip-space-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-024.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1] = "  "</assert>
+            <assert>/out/a[2] = "1"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="strip-space-025">
+      <description>
+         Test EQNames in strip-space
+      </description>
+      <created by="Michael Kay" on="2019-01-25"/>
+      <environment ref="strip-space-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ab
+       c
+       d
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="strip-space-026">
+      <description>
+         no confict reported in 2.0 if there are two identical strip-space or
+         preserve-space declarations (using EQName syntax)
+      </description>
+      <created by="Michael Kay" on="2019-01-25"/>
+      <environment ref="strip-space-17"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<document><section/><section/><section/></document>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="strip-space-027">
+      <description>
+         Test import precedence for xsl:strip-space using EQName syntax
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<abc:doc xmlns:abc="http://abc.uri/">
+<abc:w>   </abc:w>
+<abc:x>   </abc:x>
+<abc:y>   </abc:y>
+<abc:z>   </abc:z>
+<q>    </q>
+</abc:doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-027.xsl"/>
+         <stylesheet file="strip-space-020a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<abc:doc xmlns:abc="http://abc.uri/"><abc:w>   </abc:w><abc:x/><abc:y/><abc:z/><q>    </q></abc:doc>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="strip-space-028">
+      <description>
+         Two conflicting xsl:strip-space/preserve-space declarations (static error in XSLT 3.0)
+      </description>
+      <created by="Michael Kay" on="2019-01-25"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><a> </a><b> </b><c> </c></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+" />
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-028.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0270" />
+      </result>
+   </test-case>
+   
+   <test-case name="strip-space-029">
+      <description>
+         xsl:strip-space/preserve-space referring to xsl namespace
+      </description>
+      <created by="Michael Kay" on="2019-02-04"/>
+      <environment>
+         <source role="." file="strip-space-029.xsl"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+" />
+      </dependencies>
+      <test>
+         <stylesheet file="strip-space-029.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>contains(/out, ' &lt;xsl:attribute')</assert>
+            <assert>contains(/out, '&gt;&lt;xsl:text&gt;  &lt;/xsl:text&gt;&lt;')</assert>
+            <assert>contains(/out, '&lt;/xsl:attribute&gt; ')</assert>
+         </all-of>
+      </result>
+   </test-case>
+</test-set>

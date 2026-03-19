@@ -1,0 +1,1990 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="accumulator">
+   <description>Tests accumulator</description>
+   <environment name="accumulator-001">
+      <source role="." file="accumulator-001.xml"/>
+   </environment>
+   
+   <environment name="accumulator-002">
+      <source role="." file="accumulator-002.xml"/>
+   </environment>
+   <environment name="accumulator-002s">
+      <source role="." file="accumulator-002.xml" streaming="true"/>
+   </environment>
+   <environment name="accumulator-004">
+      <source role="." file="accumulator-004.xml"/>
+   </environment>
+   <environment name="accumulator-004s">
+      <source role="." file="accumulator-004.xml" streaming="true"/>
+   </environment>
+   <environment name="accumulator-005">
+      <source role="." file="accumulator-005.xml"/>
+   </environment>
+   <environment name="accumulator-005s">
+      <source role="." file="accumulator-005.xml" streaming="true"/>
+   </environment>
+   <environment name="accumulator-015s">
+      <source role="." file="accumulator-015.xml" streaming="true"/>
+   </environment>
+   <environment name="accumulator-042">
+      <source role="." file="accumulator-042.xml" streaming="true"/>
+   </environment>
+   <environment name="accumulator-043">
+      <source role="." file="books.xml" streaming="true"/>
+   </environment>
+   <environment name="accumulator-044s">
+      <source role="." file="accumulator-044.xhtml" streaming="true"/>
+   </environment>
+   <environment name="accumulator-045s">
+      <source role="." file="accumulator-045.xhtml" streaming="true"/>
+   </environment>
+   <environment name="accumulator-052">
+      <source role="." file="accumulator-001.xml"/>
+      <stylesheet file="accumulator-052.xsl"/>
+   </environment>
+   <dependencies>
+      <spec value="XSLT30+"/>
+   </dependencies>
+
+   <test-case name="accumulator-001">
+      <description>Basic test of accumulator functions</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip fn:accumulator-before ElementTest</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Michael Kay" on="2015-03-02" change="Add use-accumulators to xsl:package element"/> 
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-001.xsl"/>
+         <param name="streamable" static="yes" select="'no'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 1: a diagram</p><p>Figure 2: another diagram</p><p>Figure 1: a third diagram</p><p>Figure 2: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-001s">
+      <description>Basic test of accumulator functions - streaming</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip fn:accumulator-before ElementTest streamable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Michael Kay" on="2015-03-02" change="Add use-accumulators to xsl:package element"/>
+      <environment>
+         <source role="." file="accumulator-001.xml" streaming="true"/>
+   	  </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-001.xsl"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 1: a diagram</p><p>Figure 2: another diagram</p><p>Figure 1: a third diagram</p><p>Figure 2: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-003">
+      <description>Pre-descent accumulator functions called before and after</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip fn:accumulator-before</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Debbie Lockett" on="2014-08-14" change="use streamable='false'"/>
+      <modified by="Michael Kay" on="2015-03-02" change="Add use-accumulators to xsl:package element"/>
+      <environment ref="accumulator-002"/>
+      <test>
+         <stylesheet file="accumulator-003.xsl"/>
+         <param name="streamable" static="yes" select="'false'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><pix><p>Figure 1 start</p><p>Figure 1 end</p></pix
+            ><pix><p>Figure 6 start</p><p>Figure 6 end</p></pix
+            ><pix><p>Figure 1 start</p><p>Figure 1 end</p></pix
+            ><pix><p>Figure 6 start</p><p>Figure 6 end</p></pix></figures>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-003s">
+      <description>Pre-descent accumulator functions called before and after - streaming</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip fn:accumulator-before streamable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Debbie Lockett" on="2014-08-14" change="use streamable=' true '"/>
+      <modified by="Michael Kay" on="2015-03-02" change="Add use-accumulators to xsl:package element"/>
+      <environment ref="accumulator-002s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-003.xsl"/>
+         <param name="streamable" static="yes" select="' true '"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><pix><p>Figure 1 start</p><p>Figure 1 end</p></pix
+            ><pix><p>Figure 6 start</p><p>Figure 6 end</p></pix
+            ><pix><p>Figure 1 start</p><p>Figure 1 end</p></pix
+            ><pix><p>Figure 6 start</p><p>Figure 6 end</p></pix></figures>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-005">
+      <description>Pre-descent and post-descent accumulator functions</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip fn:accumulator-before fn:accumulator-after</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Debbie Lockett" on="2014-08-14" change="use streamable='0'"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-002"/>
+      <test>
+         <stylesheet file="accumulator-005.xsl"/>
+         <param name="streamable" static="yes" select="'0'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><pix><p>Figure 1 start</p><p>Figure 1.5 end</p></pix
+            ><pix><p>Figure 2.5 start</p><p>Figure 3 end</p></pix
+            ><pix><p>Figure 1 start</p><p>Figure 1.5 end</p></pix
+            ><pix><p>Figure 2.5 start</p><p>Figure 3 end</p></pix></figures>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-005s">
+      <description>Pre-descent and post-descent accumulator functions - streaming</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip fn:accumulator-before fn:accumulator-after streamable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Debbie Lockett" on="2014-08-14" change="use streamable='1'"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-002s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-005.xsl"/>
+         <param name="streamable" static="yes" select="'1'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><pix><p>Figure 1 start</p><p>Figure 1.5 end</p></pix
+            ><pix><p>Figure 2.5 start</p><p>Figure 3 end</p></pix
+            ><pix><p>Figure 1 start</p><p>Figure 1.5 end</p></pix
+            ><pix><p>Figure 2.5 start</p><p>Figure 3 end</p></pix></figures>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-007">
+      <description>Multiple accumulators used in parallel; uses @applies-to</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip multiple-accumulators fn:accumulator-after applies-to-attribute</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-004"/>
+      <test>
+         <stylesheet file="accumulator-007.xsl"/>
+         <param name="streamable" static="yes" select="'no'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result min="-16" max="182" sum="277.43" count="16" avg="17.34"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-007s">
+      <description>Multiple accumulators used in parallel - with streaming; uses @applies-to</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip multiple-accumulators fn:accumulator-after streamable applies-to-attribute</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-004s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-007.xsl"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result min="-16" max="182" sum="277.43" count="16" avg="17.34"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-008s">
+      <description>post-descent accumulator function used in multiple instructions, with no preceding consuming instruction</description>
+      <created by="Michael Kay" on="2016-12-09"/>
+      <environment ref="accumulator-004s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-008.xsl"/>
+      </test>
+      <result>
+         <assert>/result[@min="-16" and @max="182" and @sum="277.43" and @count="16" and @avg="17.34"]</assert> 
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-009s">
+      <description>
+         Error: post-descent accumulator function used repeatedly in a single instruction,
+         with no preceding consuming instruction. This case differs from accumulator-008s because 
+         the rules take into account the order of instructions within a sequence constructor.</description>
+      <keywords>xsl:mode on-no-match-attribute deep-skip multiple-accumulators fn:accumulator-after streamable XTDE3420</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2016-11-21" change="Bug 30018: test should succeed under current rules"/>
+      <environment ref="accumulator-004s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-009.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-010">
+      <description>Hierarchic section numbers: uses accumulator rules with phase=end</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy fn:accumulator-before</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-005"/>
+      <test>
+         <stylesheet file="accumulator-010.xsl"/>
+         <param name="streamable" static="yes" select="'no'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc><span>1</span><span>Intro</span><p>In the beginning</p
+            ><span>1.1</span><span>Terminology</span><p>Aaron</p><p>Isaac</p><p>Jehovah</p
+            ><span>1.1.1</span><span>Place-names</span><p>Israel</p><p>Judea</p
+            ><span>1.2</span><span>Preamble</span><p>Translated from the Aramaic</p
+            ><span>1.2.1</span><span>Translators</span><p>King James</p
+            ><span>1.3</span><span>Bibliography</span
+            ><p>Genesis</p><p>Exodus</p><p>Job</p><p>Leviticus</p></doc>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-010s">
+      <description>Hierarchic section numbers: uses accumulator rules with phase=end. Once more with streaming.</description>
+      <keywords>xsl:mode on-no-match-attribute streamable shallow-copy streamable fn:accumulator-before</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-005s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-010.xsl"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc><span>1</span><span>Intro</span><p>In the beginning</p
+            ><span>1.1</span><span>Terminology</span><p>Aaron</p><p>Isaac</p><p>Jehovah</p
+            ><span>1.1.1</span><span>Place-names</span><p>Israel</p><p>Judea</p
+            ><span>1.2</span><span>Preamble</span><p>Translated from the Aramaic</p
+            ><span>1.2.1</span><span>Translators</span><p>King James</p
+            ><span>1.3</span><span>Bibliography</span
+            ><p>Genesis</p><p>Exodus</p><p>Job</p><p>Leviticus</p></doc>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-012">
+      <description>Accumulator matching text node</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy TextTest fn:accumulator-after</keywords>
+      <created by="Michael Kay" on="2013-09-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-005"/>
+      <test>
+         <stylesheet file="accumulator-012.xsl"/>
+         <param name="streamable" static="yes" select="'no'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc><head>Intro</head><p>In the beginning</p><head>Terminology</head
+         ><p>Aaron</p><p>Isaac</p><p>Jehovah</p><head>Place-names</head
+         ><p>Israel</p><p>Judea</p><last>Judea</last><last>Judea</last
+         ><head>Preamble</head><p>Translated from the Aramaic</p><head>Translators</head
+         ><p>King James</p><last>King James</last><last>King James</last><head>Bibliography</head
+         ><p>Genesis</p><p>Exodus</p><p>Job</p><p>Leviticus</p><last>Leviticus</last
+         ><last>Leviticus</last></doc>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-012s">
+      <description>Accumulator matching text node - streamable</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy TextTest fn:accumulator-after streamable</keywords>
+      <created by="Michael Kay" on="2013-09-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-005s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-012.xsl"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc><head>Intro</head><p>In the beginning</p><head>Terminology</head
+         ><p>Aaron</p><p>Isaac</p><p>Jehovah</p><head>Place-names</head
+         ><p>Israel</p><p>Judea</p><last>Judea</last><last>Judea</last
+         ><head>Preamble</head><p>Translated from the Aramaic</p><head>Translators</head
+         ><p>King James</p><last>King James</last><last>King James</last><head>Bibliography</head
+         ><p>Genesis</p><p>Exodus</p><p>Job</p><p>Leviticus</p><last>Leviticus</last
+         ><last>Leviticus</last></doc>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-014">
+      <description>Local use of $value to cause confusion</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip fn:accumulator-before $value</keywords>
+      <created by="Michael Kay" on="2013-11-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2017-03-22" change="Add xsl:mode/@use-accumulators"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 1: a diagram</p><p>Figure 2: another diagram</p><p>Figure 1: a third diagram</p><p>Figure 2: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-015s">
+      <description>Use post-descent accumulator function</description>
+      <keywords>xsl:mode streamable post-descent non-streamable _WRONG:illegal-accumulator-streaming-non-streaming</keywords>
+      <created by="Michael Kay" on="2013-12-20"/>
+      <modified by="Michael Kay" on="2014-07-03" change="make streamable, define expected result"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-015s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-015.xsl"/>
+      </test>
+      <result>
+         <assert>/Total-Cost = '91'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-016">
+      <description>Accumulators are always applicable to a document read using doc()</description>
+      <created by="Michael Kay" on="2016-11-08"/>
+      <test>
+         <stylesheet file="accumulator-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 1: a diagram</p><p>Figure 2: another diagram</p><p>Figure 1: a third diagram</p><p>Figure 2: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-017">
+      <description>Accumulators are always applicable to a temporary tree</description>
+      <created by="Michael Kay" on="2016-11-08"/>
+      <test>
+         <stylesheet file="accumulator-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 1: a diagram</p><p>Figure 2: another diagram</p><p>Figure 1: a third diagram</p><p>Figure 2: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-019s">
+      <description>
+      	Initial-value expression is not motionless. Error case when streaming.
+      	NOTE: focus for initial-value is still an open question.
+      </description>
+      <created by="Michael Kay" on="2014-07-04"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-004s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-007.xsl"/>
+         <param name="initial-count" as="xs:string" select="'//x'" static="yes"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-020">
+      <description>Namespace-qualified accumulator names</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2017-03-22" change="Add xsl:mode/@use-accumulators"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-020.xsl"/>
+         <param name="one" static="yes" select="'f:one'"/>
+         <param name="two" static="yes" select="'g:two'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 1: a diagram</p><p>Figure 2: another diagram</p><p>Figure 1: a third diagram</p><p>Figure 2: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-021">
+      <description>Namespace-qualified accumulator names</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-020.xsl"/>
+         <param name="one" static="yes" select="'Q{http://one.org/}one'"/>
+         <param name="two" static="yes" select="'Q{http://one.org/}two'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 1: a diagram</p><p>Figure 2: another diagram</p><p>Figure 1: a third diagram</p><p>Figure 2: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-022">
+      <description>Namespace-qualified accumulator names: error, duplicate names</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-020.xsl"/>
+         <param name="one" static="yes" select="'f:one'"/>
+         <param name="two" static="yes" select="'f2:one'"/>
+      </test>
+      <result>
+         <error code="XTSE3350"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-023">
+      <description>Import precedence applied to accumulators</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2015-04-29" change="Revert 023a to xsl:stylesheet, you can't do xsl:import on a package"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 2: a diagram</p><p>Figure 4: another diagram</p><p>Figure 2: a third diagram</p><p>Figure 4: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-024">
+      <description>An accumulator must have at least one rule</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-024.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-025">
+      <description>Initial value is mandatory</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-025.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-026">
+      <description>Rules matching attribute nodes are legal but ignored</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2017-03-22" change="Add xsl:mode/@use-accumulators"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 1: a diagram</p><p>Figure 2: another diagram</p><p>Figure 1: a third diagram</p><p>Figure 2: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-027">
+      <description>Duplicate accumulator name is OK provided there's another with higher precedence</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2015-08-07" change="Change xsl:package on the imported module back to xsl:stylesheet"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 2: a diagram</p><p>Figure 4: another diagram</p><p>Figure 2: a third diagram</p><p>Figure 4: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+      
+   <test-case name="accumulator-029s">
+      <description>Pattern declared streamable, but accumulator-rule/@match is not motionless</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-004s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-029.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-030s">
+      <description>Pattern declared streamable, but accumulator-rule/@select is not motionless</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-004s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-030.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-031">
+      <description>Accumulator has circular dependency on global variable</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2016-11-21" change="Bug 30019 - remove unintended type error"/>
+      <modified by="Michael Kay" on="2023-03-06" change="Make main template public"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-031.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE0640"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-032">
+      <description>Use an accumulator within a global variable (non-streaming)</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2019-03-05" change="Make main template public"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-032.xsl"/>
+         <param name="streamable" static="yes" select="'no'"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/o = '21'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-032s">
+      <description>Use an accumulator within a global variable (streaming)</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-032.xsl"/>
+         <param name="streamable" static="yes" select="'no'"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/o = '21'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-033s">
+      <description>Accumulator @select uses global variable</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2017-03-22" change="Add xsl:mode/@use-accumulators"/>
+      <environment>
+         <source role="." file="accumulator-001.xml" streaming="true"/>
+   	  </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 2: a diagram</p><p>Figure 4: another diagram</p><p>Figure 2: a third diagram</p><p>Figure 4: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-034">
+      <description>Accumulator patterns use local and global variables</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment>
+         <source role="." file="accumulator-001.xml" streaming="true"/>
+   	  </environment>
+      <test>
+         <stylesheet file="accumulator-034.xsl"/>
+         <param name="streamable" select="'no'" static="yes"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 0: a diagram</p><p>Figure 0: another diagram</p><p>Figure 0: a third diagram</p><p>Figure 0: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-034s">
+      <description>Accumulator patterns use local and global variables (streaming)</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment>
+         <source role="." file="accumulator-001.xml" streaming="true"/>
+   	  </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-034.xsl"/>
+         <param name="streamable" select="'yes'" static="yes"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 0: a diagram</p><p>Figure 0: another diagram</p><p>Figure 0: a third diagram</p><p>Figure 0: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-035s">
+      <description>Local variables in initial-value and select expressions</description>
+      <created by="Michael Kay" on="2014-07-07"/>
+      <modified by="Michael Kay" on="2014-08-01" change="Backlog (by AB), bug#26330 rename @new-value to @select" />
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment>
+         <source role="." file="accumulator-001.xml" streaming="true"/>
+   	  </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 2: a diagram</p><p>Figure 4: another diagram</p><p>Figure 2: a third diagram</p><p>Figure 4: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-036">
+      <description>Sequence constructor in accumulator rule</description>
+      <keywords>xsl:mode streamable post-descent non-streamable</keywords>
+      <created by="Michael Kay" on="2014-08-19"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-015s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-036.xsl"/>
+         <param name="streamable" static="yes" select="'no'"/>
+      </test>
+      <result>
+         <all-of> 
+            <assert>/Total-Cost/items = '5'</assert> 
+            <assert>/Total-Cost/cost = '91'</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-036s">
+      <description>Sequence constructor in accumulator rule</description>
+      <keywords>xsl:mode streamable post-descent</keywords>
+      <created by="Michael Kay" on="2014-08-02"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-015s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-036.xsl"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <all-of> 
+            <assert>/Total-Cost/items = '5'</assert> 
+            <assert>/Total-Cost/cost = '91'</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-037">
+      <description>Basic test of accumulator functions with streamable="No" (not allowed)</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip fn:accumulator-before ElementTest</keywords>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-037.xsl"/>
+         <param name="streamable" static="yes" select="'No'"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-038">
+      <description>Type error evaluating accumulator</description>
+      <keywords>fn:accumulator-after</keywords>
+      <created by="Michael Kay" on="2014-11-19"/>
+      <modified by="Michael Kay" on="2015-01-23" change="make it do what it says: fail with a type error"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <test>
+         <stylesheet file="accumulator-038.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-039">
+      <description>Local variable in initial-value/new-value of xsl:accumulator</description>
+      <keywords>fn:accumulator-after</keywords>
+      <created by="Michael Kay" on="2014-11-19"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2019-03-05" change="Make main template public"/>
+      <test>
+         <stylesheet file="accumulator-039.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>starts-with(/out/last, "2601 2704 2809 2916 3025 3136")</assert>
+           <assert>starts-with(/out/first, "4 9 16 25 36 49 64 81 100 121 144 169")</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-040">
+      <description>Accumulator function called within initialization of inlineable Local variable (from Martin Honnen)</description>
+      <keywords>fn:accumulator-after</keywords>
+      <created by="Michael Kay" on="2015-01-26"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2017-03-22" change="Add xsl:mode/@use-accumulators"/>
+      <environment>
+        <source role=".">
+           <content><![CDATA[<html lang="en"><head><title>Test 1</title></head><body><h1>Test 1</h1><p>This is test 1.</p></body></html>]]></content>
+        </source>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-040.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<html lang="en"><head><title>Test 1</title></head><body><p>This is test 1.</p></body></html>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-041">
+      <description>Keep a Word Count</description>
+      <keywords>xsl:accumulator</keywords>
+      <created by="Abel Braaksma / Eugene" on="2015-01-23"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2017-03-22" change="Add xsl:mode/@use-accumulators"/>
+      <environment>
+        <source role=".">
+           <content><![CDATA[<html lang="en"><head><title>Test 1</title></head><body><h1>Test 1</h1><p>This is test 1.</p></body></html>]]></content>
+        </source>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-041.xsl"/>
+      </test>
+      <result>
+     	 <assert>/p/text() = 'Word count: 9'</assert><!-- count(//text()/tokenize(string(.), '\W+')) -->
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-042">
+      <description>Output Hierarchic Section Numbers</description>
+      <keywords>xsl:accumulator</keywords>
+      <created by="Abel Braaksma / Eugene" on="2015-01-23"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2017-03-22" change="Add xsl:mode/@use-accumulators"/>
+      <modified by="Michael Kay" on="2017-02-28" change="Make result document well formed"/>
+      <environment ref="accumulator-042"/>
+      <test>
+         <stylesheet file="accumulator-042.xsl"/>
+      </test>
+      <result>
+     	 <assert-xml><![CDATA[<out><p>1</p><p>1.1</p><p>1.2</p><p>1.3</p><p>1.3.1</p><p>1.3.2</p></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-043">
+      <description>Compute a Histogram showing the Number of Books, by Publisher</description>
+      <keywords>xsl:accumulator</keywords>
+      <created by="Abel Braaksma / Eugene" on="2015-01-26"/>
+      <modified by="Michael Kay" on="2015-03-23" change="keys are untypedAtomic; sort results into predictable order"/> 
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2017-03-22" change="Add xsl:mode/@use-accumulators"/>
+      <environment ref="accumulator-043"/>
+      <test>
+         <stylesheet file="accumulator-043.xsl"/>
+      </test>
+      <result>
+     	 <assert-xml><![CDATA[<histogram
+     	 ><publisher name="Bantam Classics">1</publisher
+     	 ><publisher name="Hodder &amp; Stoughton">1</publisher
+     	 ><publisher name="Modern Library">1</publisher
+     	 ><publisher name="Penguin">1</publisher
+     	 ><publisher name="Penguin Classics">2</publisher
+     	 ></histogram>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-044s">
+      <description>Remember the Title of a Document</description>
+      <keywords>xsl:accumulator fn:accumulator-before</keywords>
+      <created by="Abel Braaksma / Eugene" on="2015-01-23"/>
+      <modified by="Michael Kay" on="2015-03-23" change="make select expression streamable"/>
+      <modified by="Abel Braaksma" on="2015-03-23" change="Fix bug 28318"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <modified by="Michael Kay" on="2017-03-22" change="Add xsl:mode/@use-accumulators"/>
+      <environment ref="accumulator-044s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-044.xsl"/>
+      </test>
+      <result>
+     	   <assert>/*:html/*:body/*:div[@class='heading-1']/text() = 'Different TITLE'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-045s">
+      <description>Remember the Title of a Document, counter-example of 044s.</description>
+      <keywords>xsl:accumulator fn:accumulator-before</keywords>
+      <created by="Abel Braaksma / Eugene" on="2015-01-23"/>
+      <modified by="Abel Braaksma" on="2015-03-23" change="Fix bug 28318"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28410, change xsl:stylesheet to xsl:package (no version or name, not required)"/>
+      <environment ref="accumulator-045s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-044.xsl"/>
+      </test>
+      <result>
+     	   <assert>empty(/*:html/*:body/*:div[@class='heading-1']/text())</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-046">
+      <description>Accumulator values are copied by copy-of()</description>
+      <created by="Michael Kay" on="2015-04-24"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-046.xsl"/>
+         <param name="streamable" static="yes" select="'no'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 3: a third diagram</p><p>Figure 4: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-046s">
+      <description>Accumulator values are copied by copy-of() - streaming</description>
+      <created by="Michael Kay" on="2015-04-24"/>
+      <environment>
+         <source role="." file="accumulator-001.xml" streaming="true"/>
+   	  </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-046.xsl"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 3: a third diagram</p><p>Figure 4: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-047">
+      <description>Accumulator values are copied by snapshot()</description>
+      <created by="Michael Kay" on="2015-04-24"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-047.xsl"/>
+         <param name="streamable" static="yes" select="'no'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 3: a third diagram</p><p>Figure 4: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-047s">
+      <description>Accumulator values are copied by snapshot() - streaming</description>
+      <created by="Michael Kay" on="2015-04-24"/>
+      <environment>
+         <source role="." file="accumulator-001.xml" streaming="true"/>
+   	  </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-047.xsl"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 3: a third diagram</p><p>Figure 4: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-048">
+      <description>Accumulator values are copied by xsl:copy-of with copy-accumulators="yes"</description>
+      <created by="Michael Kay" on="2015-04-24"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-048.xsl"/>
+         <param name="streamable" static="yes" select="'no'"/>
+         <param name="copyAcc" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 3: a third diagram</p><p>Figure 4: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-048s">
+      <description>Accumulator values are copied by xsl:copy-of with copy-accumulators="yes" - streaming</description>
+      <created by="Michael Kay" on="2015-04-24"/>
+      <environment>
+         <source role="." file="accumulator-001.xml" streaming="true"/>
+   	  </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-048.xsl"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+         <param name="copyAcc" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 3: a third diagram</p><p>Figure 4: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-049">
+      <description>Accumulator values are NOT copied by xsl:copy-of with copy-accumulators="no"</description>
+      <created by="Michael Kay" on="2015-04-24"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-048.xsl"/>
+         <param name="streamable" static="yes" select="'no'"/>
+         <param name="copyAcc" static="yes" select="'no'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 1: a third diagram</p><p>Figure 2: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accumulator-049s">
+      <description>Accumulator values are NOT copied by xsl:copy-of with copy-accumulators="no" - streaming</description>
+      <created by="Michael Kay" on="2015-04-24"/>
+      <environment>
+         <source role="." file="accumulator-001.xml" streaming="true"/>
+   	  </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-048.xsl"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+         <param name="copyAcc" static="yes" select="'no'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><p>Figure 1: a third diagram</p><p>Figure 2: a fourth diagram</p></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-050">
+      <description>Another variant on the section numbering example</description>
+      <created by="Michael Kay, after Phil Fearon" on="2015-09-06"/>
+      <modified by="Michael Kay" on="2017-03-22" change="Add xsl:mode/@use-accumulators"/>
+      <environment>
+         <source role="." file="accumulator-050.xml" streaming="false"/>
+   	  </environment>
+      <test>
+         <stylesheet file="accumulator-050.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in //p satisfies ($p/following-sibling::text()[1]/normalize-space() = '[' || $p || ']')</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-051">
+      <description>Check that accumulator-after is the value AFTER applying the post-descent rule (Saxon bug 2478)</description>
+      <created by="Michael Kay, after Marcus Lauer" on="2015-10-26"/>
+      <environment>
+         <source role="." file="accumulator-051.xml" streaming="false"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-051.xsl"/>
+         <param name="streamable" static="yes" select="false()"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><start state=""
+            /><start name="A" state="(A"
+            /><start name="B" state="(A (B"
+            /><start name="C" state="(A (B (C"
+            /><end name="C" state="(A (B (C C)"
+            /><start name="D" state="(A (B (C C) (D"
+            /><end name="D" state="(A (B (C C) (D D)"
+            /><end name="B" state="(A (B (C C) (D D) B)"
+            /><end name="A" state="(A (B (C C) (D D) B) A)"
+            /><end state="(A (B (C C) (D D) B) A)"/></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-051s">
+      <description>Check that accumulator-after is the value AFTER applying the post-descent rule (Saxon bug 2478)</description>
+      <created by="Michael Kay, after Marcus Lauer" on="2015-10-26"/>
+      <environment>
+         <source role="." file="accumulator-051.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-051.xsl"/>
+         <param name="streamable" static="yes" select="true()"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><start state=""
+            /><start name="A" state="(A"
+            /><start name="B" state="(A (B"
+            /><start name="C" state="(A (B (C"
+            /><end name="C" state="(A (B (C C)"
+            /><start name="D" state="(A (B (C C) (D"
+            /><end name="D" state="(A (B (C C) (D D)"
+            /><end name="B" state="(A (B (C C) (D D) B)"
+            /><end name="A" state="(A (B (C C) (D D) B) A)"
+            /><end state="(A (B (C C) (D D) B) A)"/></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-052a">
+      <description>Accumulator dependent on current dateTime. The idea here is to run the same stylesheet
+      twice against the same document, in two separate transformations; the accumulator values should
+      be different in each transformation. Ideally the transformations would run concurrently, though
+      we can't control that in the test driver environment. This test is useless (but still works...)
+      unless stylesheets and source documents defined in an environment are reused across tests.</description>
+      <created by="Michael Kay" on="2015-10-26"/>
+      <environment ref="accumulator-052"/>
+      <test>
+         <param name="start" select="12"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><end value="45"/></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-052b">
+      <description>Accumulator dependent on current dateTime. The idea here is to run the same stylesheet
+         twice against the same document, in two separate transformations; the accumulator values should
+         be different in each transformation. Ideally the transformations would run concurrently, though
+         we can't control that in the test driver environment. This test is useless (but still works...)
+         unless stylesheets and source documents defined in an environment are reused across tests.</description>
+      <created by="Michael Kay" on="2015-10-26"/>
+      <environment ref="accumulator-052"/>
+      <test>
+         <param name="start" select="24"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><end value="57"/></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-053">
+      <description>Check that accumulator-after is the value AFTER applying the post-descent rule (Saxon bug 2478)</description>
+      <created by="Michael Kay, after Martin Honnen" on="2016-01-02"/>
+      <modified by="Michael Kay" on="2016-02-14" change="the expected results were the (unrelated) results of test -051"/>
+      <environment>
+         <source role="." file="accumulator-053.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-053.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <!--map{"damson":1,"banana":2,"raspberry":1,"quince":1,"elderberry":1,"tangerine":1,"strawberry":1,"plum":1,"cherry":2,"apple":2,"greengage":1}-->
+            <assert>contains(., '"damson":1')</assert>
+            <assert>contains(., '"quince":1')</assert>
+            <assert>contains(., '"apple":2')</assert>
+            <assert>contains(., '"greengage":1')</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-054">
+      <description>Accumulators and streaming (see https://saxonica.plan.io/issues/2568)</description>
+      <created by="Michael Kay, after Martin Honnen" on="2016-05-03"/>
+      <environment>
+         <source role="." file="accumulator-054.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-054.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><item group-head="class1" class="class1">item 1</item><item group-head="class2" class="class2">item 2</item><item class="class1">item 3</item><item class="class1">item 4</item><item group-head="class3" class="class3">item 5</item><item class="class2">item 6</item></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-055">
+      <description>Accumulators used to count text node siblings (see https://saxonica.plan.io/issues/2864)</description>
+      <created by="Michael Kay, after Martin Honnen" on="2016-08-01"/>
+      <environment>
+         <source role="." file="accumulator-055.xml" streaming="false"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-055.xsl"/>
+         <param name="streamable" static="yes" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/root/p[1]/text()[1] = 'Tekst '</assert>
+            <assert>/root/p[1]/text()[2] = ' etc..'</assert>
+            <assert>/root/p[2]/text()[1] = 'Tekst '</assert>
+            <assert>/root/p[2]/text()[2] = ' etc..'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-055s">
+      <description>Accumulators used to count text node siblings (see https://saxonica.plan.io/issues/2864)</description>
+      <created by="Michael Kay, after Martin Honnen" on="2016-08-01"/>
+      <environment>
+         <source role="." file="accumulator-055.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-055.xsl"/>
+         <param name="streamable" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/root/p[1]/text()[1] = 'Tekst '</assert>
+            <assert>/root/p[1]/text()[2] = ' etc..'</assert>
+            <assert>/root/p[2]/text()[1] = 'Tekst '</assert>
+            <assert>/root/p[2]/text()[2] = ' etc..'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-056">
+      <description>Dynamic error in xsl:accumulator/@initial-value</description>
+      <created by="Michael Kay" on="2016-09-09"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-056.xsl"/>
+         <param name="streamable" static="yes" select="'no'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><divide-by-zero/><divide-by-zero/><divide-by-zero/><divide-by-zero/></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-056s">
+      <description>Dynamic error in xsl:accumulator/@initial-value</description>
+      <created by="Michael Kay" on="2016-09-09"/>
+      <environment>
+         <source role="." file="accumulator-001.xml" streaming="true"/>
+      </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-056.xsl"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><divide-by-zero/><divide-by-zero/><divide-by-zero/><divide-by-zero/></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-057">
+      <description>Dynamic error in xsl:accumulator-rule/@select</description>
+      <created by="Michael Kay" on="2016-09-09"/>
+      <environment ref="accumulator-001"/>
+      <test>
+         <stylesheet file="accumulator-057.xsl"/>
+         <param name="streamable" static="yes" select="'no'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><divide-by-zero/><divide-by-zero/><divide-by-zero/><divide-by-zero/></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-057s">
+      <description>Dynamic error in xsl:accumulator-rule/@select</description>
+      <created by="Michael Kay" on="2016-09-09"/>
+      <environment>
+         <source role="." file="accumulator-001.xml" streaming="true"/>
+      </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-057.xsl"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<figures><divide-by-zero/><divide-by-zero/><divide-by-zero/><divide-by-zero/></figures>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-058">
+      <description>Example in spec, modified as discussed in bug 29813</description>
+      <created by="Michael Kay" on="2016-09-30"/>
+      <environment>
+         <source role="." file="accumulator-058.xml" streaming="true"/>
+      </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-058.xsl"/>
+      </test>
+      <result>
+         <assert>//result = 'Total count of words in document : 14'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-059">
+      <description>Call on accumulator-after in pre-descent phase</description>
+      <created by="Michael Kay" on="2016-11-21"/>
+      <environment>
+         <source role="." file="accumulator-058.xml" streaming="true"/>
+      </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-059.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-060">
+      <description>Post-descent value of accumulator on parent node - not streamable</description>
+      <created by="Michael Kay" on="2016-11-22"/>
+      <environment ref="accumulator-002"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-060.xsl"/>
+         <param name="streamable" static="yes" select="'1'"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-061">
+      <description>Dynamic call to accumulator-after with streaming - gives dynamic error "no context item" (see 10.3.6)</description>
+      <created by="Michael Kay" on="2016-11-22"/>
+      <modified by="Michael Kay" on="2016-12-08" change="correct expected error code"/>
+      <environment ref="accumulator-002s"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-061.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE3350"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-062">
+      <description>Dynamic call to accumulator-before - non-streaming - succeeds with early binding of context item</description>
+      <created by="Michael Kay" on="2016-11-22"/>
+      <modified by="Michael Kay" on="2016-12-08" change="add expected result"/>
+      <modified by="Michael Kay" on="2019-03-05" change="Make main template public"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-062.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/doc/@aa="0"</assert>
+            <assert>/doc/a/@aa="1"</assert>
+            <assert>/doc/b/@aa="1"</assert>
+            <assert>/doc/c/@aa="1"</assert>
+         </all-of>        
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-063">
+      <description>Copying accumulator values using xsl:copy-of() before the first reference to the accumulator is evaluated</description>
+      <created by="Michael Kay" on="2017-06-27"/>
+      <modified by="Michael Kay" on="2019-03-05" change="Make main template public"/>
+      <test>
+         <stylesheet file="accumulator-063.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/doc/b-acc='3'</assert>
+            <assert>/doc/c-acc='4'</assert>
+         </all-of>           
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-064">
+      <description>Copying accumulator values using fn:copy-of() before the first reference to the accumulator is evaluated</description>
+      <created by="Michael Kay" on="2017-06-27"/>
+      <modified by="Michael Kay" on="2019-03-05" change="Make main template public"/>
+      <test>
+         <stylesheet file="accumulator-064.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/doc/b-acc='3'</assert>
+            <assert>/doc/c-acc='4'</assert>
+         </all-of>           
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-065">
+      <description>Copying accumulator values using dynamic call on fn:copy-of() before the first reference to the accumulator is evaluated</description>
+      <created by="Michael Kay" on="2017-06-27"/>
+      <modified by="Michael Kay" on="2016-12-08" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2019-03-05" change="Make main template public"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-065.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/doc/b-acc='3'</assert>
+            <assert>/doc/c-acc='4'</assert>
+         </all-of>           
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-066">
+      <description>Copying accumulator values using static call on fn:snapshot() before the first reference to the accumulator is evaluated</description>
+      <created by="Michael Kay" on="2017-06-27"/>
+      <modified by="Michael Kay" on="2018-11-07" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2019-03-05" change="Make main template public"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-066.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/doc/b-acc='3'</assert>
+            <assert>/doc/c-acc='4'</assert>
+         </all-of>           
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-067">
+      <description>Copying accumulator values using dynamic call on fn:snapshot() before the first reference to the accumulator is evaluated</description>
+      <created by="Michael Kay" on="2017-06-27"/>
+      <modified by="Michael Kay" on="2017-08-28" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2019-03-05" change="Make main template public"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-067.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/doc/b-acc='3'</assert>
+            <assert>/doc/c-acc='4'</assert>
+         </all-of>           
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-068">
+      <description>Streamable accumulator test</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-28"/>
+      <modified by="Michael Kay" on="2017-08-29" change="add streaming dependency"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-068.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml><![CDATA[<out>{"1":"Message 1","2":"Message 2"}</out>]]></assert-xml>
+            <assert-xml><![CDATA[<out>{"2":"Message 2","1":"Message 1"}</out>]]></assert-xml>
+         </any-of>           
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-069">
+      <description>Grouping using accumulators and maps (non-streamable version)</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-07-14"/>
+      <environment>
+         <source file="accumulator-069.xml" role="."/>
+      </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-069.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<TRANSACTION-LIST><transaction key="a"><count>2</count><amount>20</amount></transaction
+            ><transaction key="b"><count>2</count><amount>20</amount></transaction
+            ><transaction key="c"><count>2</count><amount>20</amount></transaction
+            ></TRANSACTION-LIST>]]></assert-xml>         
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-069s">
+      <description>Grouping using accumulators and maps (streamable version)</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-07-14"/>
+      <environment>
+         <source file="accumulator-069.xml" role="." streaming="true"/>
+      </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-069.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<TRANSACTION-LIST><transaction key="a"><count>2</count><amount>20</amount></transaction
+            ><transaction key="b"><count>2</count><amount>20</amount></transaction
+            ><transaction key="c"><count>2</count><amount>20</amount></transaction
+            ></TRANSACTION-LIST>]]></assert-xml>        
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-070">
+      <description>xsl:copy-of combining copy-accumulators=yes with validation=strict</description>
+      <created by="Michael Kay" on="2017-07-19"/>
+      <modified by="Michael Kay" on="2019-03-05" change="Make main template public"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-070.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/doc/b-acc='3'</assert>
+            <assert>/doc/b-acc/@typed='true'</assert>
+            <assert>/doc/c-acc='4'</assert>
+         </all-of>           
+      </result>
+   </test-case>
+ 
+   <test-case name="accumulator-071">
+      <description>xsl:copy-of combining copy-accumulators=yes with copy-namespaces="no"</description>
+      <created by="Michael Kay" on="2017-07-19"/>
+      <modified by="Michael Kay" on="2019-03-05" change="Make main template public"/>
+      <test>
+         <stylesheet file="accumulator-071.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/doc/b-acc='3'</assert>
+            <assert>/doc/c-acc='4'</assert>
+            <assert>not(/doc/b/namespace::p)</assert>
+         </all-of>           
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-072">
+      <description>Same as -063 but with a call-template interposed (changes the Saxon execution path)</description>
+      <created by="Michael Kay" on="2017-07-19"/>
+      <modified by="Michael Kay" on="2019-03-05" change="Make main template public"/>
+      <test>
+         <stylesheet file="accumulator-072.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/doc/b-acc='3'</assert>
+            <assert>/doc/c-acc='4'</assert>
+         </all-of>           
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-073">
+      <description>xsl:copy-of combining copy-accumulators=yes with validation=lax</description>
+      <created by="Michael Kay" on="2017-07-19"/>
+      <environment>
+         <source role="." file="books.xml" validation="strict"/>
+         <schema role="stylesheet-import" file="books.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-073.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><book title="Jude the Obscure" typed="true">16.48</book
+            ><book title="The Big Over Easy" typed="true">21.43</book
+            ><book title="The Eyre Affair" typed="true">37.9</book
+            ></out>]]></assert-xml>          
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-075">
+      <description>A streaming accumulator test (Saxon bug 3932)</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-10-02"/>
+      <environment>
+         <source role="." file="accumulator-075.xml"/>
+      </environment>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-075.xsl"/>
+         <param static="yes" name="STREAMABLE" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/html/body/section/h2 = 'Results'</assert>
+            <assert-result-document uri="item-results.xml">
+               <all-of>
+                  <assert>(//li)[1][@id='i1'][@pos='1'][@attPos='1'][@accum='']</assert>
+                  <assert>(//li)[2][@id='i2'][@pos='2'][@attPos='2'][@accum='i1']</assert>
+                  <assert>(//li)[3][@id='i3'][@pos='3'][@attPos='3'][@accum='i2']</assert>
+                  <assert>(//li)[4][@id='i4'][@pos='4'][@attPos='4'][@accum='i3']</assert>
+                  <assert>(//li)[5][@id='i5'][@pos='5'][@attPos='5'][@accum='i4']</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="item_i1.xml">
+               <all-of>
+                  <assert>Item[@id='i1'][@accum='']</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="item_i2.xml">
+               <all-of>
+                  <assert>Item[@id='i2'][@accum='i1']</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="item_i3.xml">
+               <all-of>
+                  <assert>Item[@id='i3'][@accum='i2']</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="item_i4.xml">
+               <all-of>
+                  <assert>Item[@id='i4'][@accum='i3']</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="item_i5.xml">
+               <all-of>
+                  <assert>Item[@id='i5'][@accum='i4']</assert>
+               </all-of>
+            </assert-result-document>
+         </all-of>            
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-075s">
+      <description>A streaming accumulator test involving xsl:result-document (Saxon bug 3932)</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-10-02"/>
+      <modified by="Michael Kay" on="2019-09-02" change="set streaming=true on source, to reflect the intent of the test"/>
+      <environment>
+         <source role="." file="accumulator-075.xml" streaming="true"/>
+      </environment>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-075.xsl"/>
+         <param static="yes" name="STREAMABLE" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/html/body/section/h2 = 'Results'</assert>
+            <assert-result-document uri="item-results.xml">
+               <all-of>
+                  <assert>(//li)[1][@id='i1'][@pos='1'][@attPos='1'][@accum='']</assert>
+                  <assert>(//li)[2][@id='i2'][@pos='2'][@attPos='2'][@accum='i1']</assert>
+                  <assert>(//li)[3][@id='i3'][@pos='3'][@attPos='3'][@accum='i2']</assert>
+                  <assert>(//li)[4][@id='i4'][@pos='4'][@attPos='4'][@accum='i3']</assert>
+                  <assert>(//li)[5][@id='i5'][@pos='5'][@attPos='5'][@accum='i4']</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="item_i1.xml">
+               <all-of>
+                  <assert>Item[@id='i1'][@accum='']</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="item_i2.xml">
+               <all-of>
+                  <assert>Item[@id='i2'][@accum='i1']</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="item_i3.xml">
+               <all-of>
+                  <assert>Item[@id='i3'][@accum='i2']</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="item_i4.xml">
+               <all-of>
+                  <assert>Item[@id='i4'][@accum='i3']</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="item_i5.xml">
+               <all-of>
+                  <assert>Item[@id='i5'][@accum='i4']</assert>
+               </all-of>
+            </assert-result-document>
+         </all-of>        
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-076">
+      <description>Streamed accumulator must be grounded and motionless</description>
+      <created by="Michael Kay" on="2018-10-03"/>
+      <environment ref="accumulator-001"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accumulator-076.xsl"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-077">
+      <description>A streaming accumulator test (Saxon bug 4293): accumulator-after called recursively</description>
+      <created by="Michael Kay after Martin Honnen" on="2019-09-02"/>
+      <environment>
+         <source role="." file="accumulator-077.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-077.xsl"/>
+         <param static="yes" name="STREAMABLE" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/header-value = 'header 1'</assert>
+         </all-of>            
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-077s">
+      <description>A streaming accumulator test (Saxon bug 4293): accumulator-after called recursively</description>
+      <created by="Michael Kay after Martin Honnen" on="2019-09-02"/>
+      <environment>
+         <source role="." file="accumulator-077.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-077.xsl"/>
+         <param static="yes" name="STREAMABLE" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/header-value = 'header 1'</assert>
+         </all-of>            
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-078">
+      <description>Syntax error, missing namespace on xsl:accumulator</description>
+      <created by="Michael Kay after Martin Honnen" on="2019-11-14"/>
+      <environment>
+         <source role="." file="accumulator-077.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-078.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0130"/>      
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-079">
+      <description>A streaming accumulator test (Saxon bug 4430): accumulator-after called recursively</description>
+      <created by="Michael Kay" on="2020-01-16"/>
+      <environment>
+         <source role="." file="accumulator-079.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-079.xsl"/>
+         <param static="yes" name="STREAMABLE" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/z[1] = '117'</assert>
+            <assert>/out/z[2] = '3144'</assert>
+         </all-of>            
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-079s">
+      <description>A streaming accumulator test (Saxon bug 4430): accumulator-after called recursively</description>
+      <created by="Michael Kay after Martin Honnen" on="2020-01-16"/>
+      <environment>
+         <source role="." file="accumulator-079.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-079.xsl"/>
+         <param static="yes" name="STREAMABLE" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/z[1] = '117'</assert>
+           <assert>/out/z[2] = '3144'</assert>
+         </all-of>            
+      </result>
+   </test-case>
+  
+  <test-case name="accumulator-080">
+    <description>A streaming accumulator test (Saxon bug 4430): accumulator-after has cyclic dependency</description>
+    <created by="Michael Kay" on="2020-01-16"/>
+    <environment>
+      <source role="." file="accumulator-079.xml"/>
+    </environment>
+    <test>
+      <stylesheet file="accumulator-080.xsl"/>
+      <param static="yes" name="STREAMABLE" select="false()"/>
+    </test>
+    <result>
+      <!-- Note: catastrophic failure is also permitted -->
+      <error code="XTDE3400"/>          
+    </result>
+  </test-case>
+  
+  <test-case name="accumulator-080s">
+    <description>A streaming accumulator test (Saxon bug 4430): accumulator-after has cyclic dependency</description>
+    <created by="Michael Kay after Martin Honnen" on="2020-01-16"/>
+    <environment>
+      <source role="." file="accumulator-079.xml" streaming="true"/>
+    </environment>
+    <test>
+      <stylesheet file="accumulator-080.xsl"/>
+      <param static="yes" name="STREAMABLE" select="true()"/>
+    </test>
+    <result>
+      <!-- Note: catastrophic failure is also permitted -->
+      <error code="XTDE3400"/>           
+    </result>
+  </test-case>
+   
+   <test-case name="accumulator-081">
+      <description>Ambiguous accumulator rule</description>
+      <created by="Michael Kay after David Maus" on="2020-07-27"/>
+      <test>
+         <stylesheet file="accumulator-081.xsl"/>
+      </test>
+      <result>
+         <assert>/out='2'</assert>          
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-082">
+      <description>Accumulator containing xsl:iterate/xsl:param (Saxon bug 4724)</description>
+      <created by="Michael Kay after Martin Honnen after Tom Hillman" on="2020-09-06"/>
+      <environment>
+         <source role="." file="accumulator-082.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-082.xsl"/>
+      </test>
+      <result>
+         <assert>/root/foo[@accumulator-test='1']</assert>          
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-083">
+      <description>Accumulator rule containing XSLT local variable declaration</description>
+      <created by="Michael Kay" on="2020-09-06"/>
+      <environment>
+         <source role="." file="accumulator-082.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-083.xsl"/>
+      </test>
+      <result>
+         <assert>/root/foo[@accumulator-test='-1']</assert>          
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-084">
+      <description>Accumulator rule containing XPath local variable declaration</description>
+      <created by="Michael Kay" on="2020-09-06"/>
+      <environment>
+         <source role="." file="accumulator-082.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-084.xsl"/>
+      </test>
+      <result>
+         <assert>/root/foo[@accumulator-test='-1']</assert>          
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-085">
+      <description>Accumulator rule containing XPath local variable in a predicate of the match pattern</description>
+      <created by="Michael Kay" on="2020-09-06"/>
+      <environment>
+         <source role="." file="accumulator-082.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-085.xsl"/>
+      </test>
+      <result>
+         <assert>/root/foo[@accumulator-test='0']</assert>          
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-086">
+      <description>Saxon bug 4725</description>
+      <created by="Michael Kay" on="2020-09-16"/>
+      <environment>
+         <source role="." file="accumulator-082.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-086.xsl"/>
+      </test>
+      <result>
+         <assert>/root/foo[@accumulator-test='1']</assert>          
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-087">
+      <description>Saxon bug 4786</description>
+      <created by="Michael Kay" on="2020-10-10"/>
+      <environment>
+         <source role="." file="accumulator-087.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-087.xsl"/>
+         <param name="streamable" static="yes" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/processed[1][@node='/'][@value='init, matched root /']</assert>
+            <assert>/out/processed[2][@node='/root'][@value='init, matched root /, matched element /root']</assert>
+            <assert>/out/processed[3][@node='/root/foo'][@value='init, matched root /, matched element /root, matched element /root/foo']</assert>
+         </all-of>      
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-087s">
+      <description>Saxon bug 4786</description>
+      <created by="Michael Kay" on="2020-10-10"/>
+      <environment>
+         <source role="." file="accumulator-087.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-087.xsl"/>
+         <param name="streamable" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/processed[1][@node='/'][@value='init, matched root /']</assert>
+            <assert>/out/processed[2][@node='/root'][@value='init, matched root /, matched element /root']</assert>
+            <assert>/out/processed[3][@node='/root/foo'][@value='init, matched root /, matched element /root, matched element /root/foo']</assert>
+         </all-of>       
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-088">
+      <description>Saxon bug 4786</description>
+      <created by="Michael Kay" on="2020-10-10"/>
+      <test>
+         <stylesheet file="accumulator-088.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/processed[1][@path='/Q{}foo[1]'][@value='init, matched /Q{}foo[1]']</assert>
+            <assert>/out/processed[2][@path='Q{http://www.w3.org/2005/xpath-functions}root()'][@value='init, matched Q{http://www.w3.org/2005/xpath-functions}root()']</assert>
+         </all-of>      
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-089">
+      <description>Saxon bug 4920</description>
+      <created by="Michael Kay" on="2021-03-05"/>
+      <environment>
+         <source role="." file="accumulator-089.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-089.xsl"/>
+      </test>
+      <result>
+         <assert>out = '2019-01-01'</assert>    
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-090">
+      <description>Accumulator referenced from global variable - Saxon bug 5338</description>
+      <created by="Michael Kay" on="2022-02-25"/>
+      <environment>
+         <source role="." file="accumulator-089.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-090.xsl"/>
+      </test>
+      <result>
+         <assert>out = '2019-01-01'</assert>    
+      </result>
+   </test-case>
+   
+   <test-case name="accumulator-091">
+      <description>Accumulator referencing global variable in match pattern - Saxon bug 6095</description>
+      <created by="Michael Kay" on="2023-06-25"/>
+      <environment>
+         <source role="." file="accumulator-089.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="accumulator-091.xsl"/>
+      </test>
+      <result>
+         <error code="XPST0008"/>
+      </result>
+   </test-case>
+     
+ 
+</test-set>

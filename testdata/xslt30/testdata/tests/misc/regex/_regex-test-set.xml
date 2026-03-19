@@ -1,0 +1,1236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="regex">
+   <description>Tests regex</description>
+   <environment name="regex001">
+      <source role=".">
+         <content><![CDATA[<doc>
+Mary had a little lamb
+Its fleece was black as soot
+And everywhere that Mary went
+It put its sooty foot
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="regex002">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="regex006">
+      <source role="." file="regex006.xml"/>
+   </environment>
+   
+   <environment name="regex009">
+      <source role=".">
+         <content><![CDATA[<doc><str1>hello&#x0A;world</str1></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="regex010">
+      <source role="." file="regex010.xml"/>
+   </environment>
+   <environment name="regex011">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <str1>aBcDeFgHiJkLmNoPq</str1>
+  <str2>abcdefGHIJklmnopq</str2>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="regex012">
+      <source role=".">
+         <content><![CDATA[<poem author="Wilhem Busch">Kaum hat dies der Hahn gesehen,</poem>]]></content>
+      </source>
+   </environment>
+   <environment name="regex013">
+      <source role=".">
+         <content><![CDATA[<poem author="Wilhem Busch">
+Kaum hat dies der Hahn gesehen,
+Fangt er auch schon an zu krahen: 
+Kikeriki! Kikikeriki!! 
+Tak, tak, tak! - da kommen sie.</poem>]]></content>
+      </source>
+   </environment>
+   <environment name="regex024">
+      <source role=".">
+         <content><![CDATA[<doc><date>23 March 2002</date></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="regex025">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <str1>zzzaBcDeFgHiJkLmNoPq</str1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="regex030">
+      <source role="." file="regex030.xml"/>
+   </environment>
+   <environment name="regex031">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <str1>aBcDeFgHiJkLmNoPqzzzaBcDeFgHiJkLmNoPq</str1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="regex039">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <str>a</str>
+  <str>b</str>
+  <str>banana</str>
+  <str>c</str>
+  <str>d</str>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+
+
+   <test-case name="regex-001">
+      <description>test matches() function with two arguments.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="regex-001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="regex-002">
+      <description>test matches() function with line mode.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="regex-002.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="regex-003">
+      <description>test replace() function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="regex-003.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="regex-004">
+      <description>test matches() function with a regular expression not known until run-time.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><true result="true"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-005">
+      <description>test replace() function with a regular expression not known until run-time.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><true result="abXXcadabXX"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-009">
+      <description>test xf:tokenize() function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>[|Mary|had|a|little|lamb|Its|fleece|was|black|as|soot|And|everywhere|that|Mary|went|It|put|its|sooty|foot|]</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-010">
+      <description>test xf:tokenize() function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>[12|14|3|17|24||5 ]</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-011">
+      <description>test xf:tokenize() function with three arguments.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>[|Mary had a little lamb|Its fleece was black as soot|And everywhere that Mary went|It put its sooty foot|]</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-013">
+      <description>test tokenize() with a pattern that matches ambiguously.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>|r|c|d|r|</a><b>|br|c|d|br|</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-014">
+      <description>test tokenize() with case-blind matching.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>Some unparsed|HTML|text</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-015">
+      <description>test replace() with case-blind matching.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>Some unparsed\nHTML\ntext</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-016">
+      <description>test replace() with \$ and \\ in replacement string.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>Some $\ HTML</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-017">
+      <description>regex bug sumbitted by Bob du Charme.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o><b>true</b><n>AAB</n></o>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-018">
+      <description>test regex-group() within non-matching-substring.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>{10}[][]{10}[][]{10}[]{10}[]{10}</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-019">
+      <description>test backreferences.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>He said, [I don't] eat [grass]</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-020">
+      <description>test tokenize with a regex that's not known statically.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>a b c d e f g</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-021">
+      <description>test regex containing \s in conjunction with 'x' flag (Priscilla Walmsley bug).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-03-14" change="well-formed output document"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>false</a><a>true</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-022">
+      <description>test regex negation of a difference (Priscilla Walmsley bug)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>false</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-023">
+      <description>test backreferences: \19 where there are not 19 capturing subgroups</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>He said, [I don't] eat [grass]</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-024">
+      <description>test backreferences: \10 where there are 10 capturing subgroups</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>He said, "I don't" eat [grass](b5)</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-025">
+      <description>test reference to a group that doesn't exist in replace()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>He said, [I don't]## eat [grass]##</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-026">
+      <description>test that "." in a regex matches a surrogate pair</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>true</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-027">
+      <description>test empty non-matching-substring element.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>;
+      [e][e][e][e][e][e][e][e][e]</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-028">
+      <description>test empty matching-substring element.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>|Mary had a littl lamb|Its flc was black as soot|And vrywhr that Mary wnt|It put its sooty foot|</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-029">
+      <description>test xf:tokenize() function applied to a zero-length string.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ans count="0" length="0"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-030">
+      <description>test xf:tokenize() function applied to an empty sequence.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ans count="0" length="0"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-031">
+      <description>test replace() with multi-digit substring references.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-031.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="regex-031.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="regex-032">
+      <description>test matches() with multi-digit back-references.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-032.xsl"/>
+      </test>
+      <result>
+         <assert>/out/a = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-038">
+      <description>test replace() with $x in replacement string: not allowed.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-038.xsl"/>
+      </test>
+      <result>
+         <error code="FORX0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="regex-039">
+      <description>test replace() with $ at end of replacement string: not allowed.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-039.xsl"/>
+      </test>
+      <result>
+         <error code="FORX0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="regex-040">
+      <description>test replace() with \ followed by disallowed character.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-040.xsl"/>
+      </test>
+      <result>
+         <error code="FORX0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="regex-041">
+      <description>test replace() with \ at end of string.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-041.xsl"/>
+      </test>
+      <result>
+         <error code="FORX0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="regex-043">
+      <description>test tokenize() with a pattern that matches the empty string.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-10-03" change="drop unnecessary xsl:message output"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-043.xsl"/>
+      </test>
+      <result>
+         <error code="FORX0003"/>
+      </result>
+   </test-case>
+
+   <test-case name="regex-044">
+      <description>test tokenize() with a pattern that matches an empty string.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-044.xsl"/>
+      </test>
+      <result>
+         <error code="FORX0003"/>
+      </result>
+   </test-case>
+
+   <test-case name="regex-054">
+      <description>Testcase with matches($input?,$pattern) on a literal string where pattern uses positional metacharacters ^ and $. Includes case where $input is an empty string or an empty sequence.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-054.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true, true, true, true, true, true, false, false, false, false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-055">
+      <description>Testcase with matches($input?,$pattern) on a literal string where pattern uses back-references. Verifies that back-references match the exact string that was already matched by the capturing subexpressions they refer to and not just its pattern. Includes case where $input is an empty string or an empty sequence as well as cases where second digit of back-reference is or is not considered to be part of it because of sufficient/insufficient number of capturing substrings.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-055.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true, true, true, true, true, true, true, true, true, false, false, false, false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-056">
+      <description>Simple testcase with matches($input?,$pattern) on a string literal where pattern is more commonly used regular expressions from XML Schema Part2:Datatypes second edition.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-056.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="regex-056.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="regex-057">
+      <description>Testcase with replace($input?,$pattern,$replacement) on a literal string or empty sequence where pattern uses positional metacharacters ^ and $. Included border cases: - $input is an empty string - $input is an empty sequence - $pattern does not find a match</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-057.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/E1 = "a*cada*"</assert>
+            <assert>/out/E2 = "*"</assert>
+            <assert>/out/E3 = "*"</assert>
+            <assert>/out/E4 = "*"</assert>
+            <assert>/out/E5 = ""</assert>
+            <assert>/out/E6 = ""</assert>
+            <assert>/out/E7 = "*bbracadabra"</assert>
+            <assert>/out/E8 = "abracadabra"</assert>
+            <assert>/out/E9 = "abracadabra"</assert>
+            <assert>/out/E10 = "abracadabra"</assert>
+            <assert>/out/E11 = "abracadabra"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="regex-058">
+      <description>
+         Testcase with replace($input?,$pattern,$replacement) on a literal string or empty sequence 
+         where pattern uses reluctant quantifiers. Included border cases: 
+         - $input is an empty string - $input is an empty sequence - $pattern does not find a match
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-058.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/e1 = "b"</assert>
+            <assert>/out/E1 = "bbbb"</assert>
+            <assert>/out/E2 = "bbb"</assert>
+            <assert>/out/e3 = "b"</assert>
+            <assert>/out/E3 = "bbb"</assert>
+            <assert>/out/e4 = "bb"</assert>
+            <assert>/out/E4 = "bbb"</assert>
+            <assert>/out/E5 = "a"</assert>
+            <assert>/out/E6 = ""</assert>
+            <assert>/out/E7 = ""</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="regex-059">
+      <description>
+         Testcase with replace($input?,$pattern,$replacement) on a literal string or empty sequence 
+         where pattern uses backreferences. Verifies that backreferences match the exact string that 
+         was already matched by the capturing subexpressions they refer to and not just its pattern.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-059.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/E1 = "kikikeriki!! Tak, tak, tak! - *."</assert>
+            <assert>/out/E2 = "*!! Tak, tak, tak! - da kommen sie."</assert>
+            <assert>/out/E3 = "*keriki!! Tak, tak, tak! - da kommen sie."</assert>
+            <assert>/out/E4 = "kikikeriki* - da kommen sie."</assert>
+            <assert>/out/E5 = "*!! Tak, tak, tak! - da kommen sie."</assert>
+            <assert>/out/E6 = ""</assert>
+            <assert>/out/E7 = ""</assert>
+            <assert>/out/E8 = "*"</assert>
+            <assert>/out/E9 = "*"</assert>
+            <assert>/out/E10 = "kikikeriki!! Tak, tak, tak! - da kommen sie."</assert>
+            <assert>/out/E11 = "kikikeriki!! Tak, tak, tak! - da kommen sie."</assert>
+            <assert>/out/E12 = "123kikikeriki456"</assert>
+            <assert>/out/E13 = " "</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="regex-060">
+      <description>Basic test of tokenize($input,$pattern) where $pattern is a non-whitespace separator.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-060.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>8; 1; 4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-061">
+      <description>Basic test of tokenize($input,$pattern) where $pattern is a whitespace separator.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-061.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2; 1; 4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-062">
+      <description>Testcase with tokenize($input,$pattern) where $pattern is a multi-character separator using character class regular expression notation.</description>
+      <created by="XSLT editors" on="2012-11-07"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-062.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1; 15; 24; 50</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-066">
+      <description>Testcase with matches($input?,$pattern, $flag) using 'dot-all' mode ($flag is set to 's'). Test contrasts the result of metacharacter '.' when the flag is on and off.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex009"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-066.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false, true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="regex-068">
+      <description>Testcase with replace($input?,$pattern,$replacement,$flags) using multiline mode ($flags is set to 'm').</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex010"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-068.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="regex-068.out"/>
+      </result>
+   </test-case>
+   
+   <environment name="regex070">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <stylesheet file="regex-070.xsl"/>
+   </environment>
+   
+   <test-case name="regex-070a">
+      <description>test replace() with special characters in replacement string.</description>
+      <created by="Debbie Lockett" on="2018-07-02"/>
+      <environment ref="regex070"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="a"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "Special characters*?*"</assert>
+            <assert>/out/B = "Special characters*?*"</assert>
+            <assert>/out/C = "Special characters*?*"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-070b">
+      <description>test replace() with special characters in replacement string (with and without
+         'q' flag).</description>
+      <created by="Debbie Lockett" on="2018-07-02"/>
+      <environment ref="regex070"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="b"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "Special characters$?$"</assert>
+            <assert>/out/B = "Special characters$?$"</assert>
+            <assert>/out/C = "Special characters$?$"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-070c">
+      <description>test replace() with special characters in replacement string (with and without
+         'q' flag).</description>
+      <created by="Debbie Lockett" on="2018-07-02"/>
+      <environment ref="regex070"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="c"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "Special characters*\?"</assert>
+            <assert>/out/B = "Special characters*\?"</assert>
+            <assert>/out/C = "Special characters*\?"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-070d">
+      <description>test replace() with special characters in replacement string (with and without
+         'q' flag).</description>
+      <created by="Debbie Lockett" on="2018-07-02"/>
+      <environment ref="regex070"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="d"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "Special characters\$\"</assert>
+            <assert>/out/B = "Special characters\$\"</assert>
+            <assert>/out/C = "Special characters\$\"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-070e">
+      <description>test replace() with special characters in replacement string (with and without
+         'q' flag).</description>
+      <created by="Debbie Lockett" on="2018-07-02"/>
+      <environment ref="regex070"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="e"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "Special characters*"</assert>
+            <assert>/out/B = "Special characters*"</assert>
+            <assert>/out/C = "Special characters*"</assert>
+            <assert>/out/D = "Special characters$'"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-070f">
+      <description>test replace() with special characters in replacement string (with and without
+         'q' flag).</description>
+      <created by="Debbie Lockett" on="2018-07-02"/>
+      <environment ref="regex070"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="f"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "Special characters*"</assert>
+            <assert>/out/B = "Special characters*"</assert>
+            <assert>/out/C = "Special characters*"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-070g">
+      <description>test replace() with special characters in replacement string.</description>
+      <created by="Debbie Lockett" on="2018-07-02"/>
+      <environment ref="regex070"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="g"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "Special characters*"</assert>
+            <assert>/out/B = "Special characters*"</assert>
+            <assert>/out/C = "Special characters*"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-070h">
+      <description>test replace() with special characters in replacement string (with and without
+         'q' flag).</description>
+      <created by="Debbie Lockett" on="2018-07-02"/>
+      <environment ref="regex070"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="h"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "Special characters*"</assert>
+            <assert>/out/B = "Special characters*"</assert>
+            <assert>/out/C = "Special characters*"</assert>
+            <assert>/out/D = "Special characters*"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-070i">
+      <description>test replace() with special characters in replacement string.</description>
+      <created by="Debbie Lockett" on="2018-07-02"/>
+      <environment ref="regex070"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="i"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "Special characters*"</assert>
+            <assert>/out/B = "Special characters*"</assert>
+            <assert>/out/C = "Special characters*"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-070j">
+      <description>test replace() with special characters in replacement string (with and without
+         'q' flag).</description>
+      <created by="Debbie Lockett" on="2018-07-02"/>
+      <environment ref="regex070"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="j"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "Special characters*"</assert>
+            <assert>/out/B = "Special characters*"</assert>
+            <assert>/out/C = "Special characters*"</assert>
+            <assert>/out/D = "Special characters*"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-070k">
+      <description>test replace() with special characters in replacement string (with and without
+         'q' flag).</description>
+      <created by="Debbie Lockett" on="2018-07-02"/>
+      <environment ref="regex070"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="k"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "Special characters*"</assert>
+            <assert>/out/B = "Special characters*"</assert>
+            <assert>/out/C = "Special characters*"</assert>
+            <assert>/out/D = "Special characters*"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-070l">
+      <description>test replace() with special characters in replacement string (with and without
+         'q' flag).</description>
+      <created by="Debbie Lockett" on="2018-07-02"/>
+      <environment ref="regex070"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="l"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "Special characters$&amp;"</assert>
+            <assert>/out/B = "Special characters$&amp;"</assert>
+            <assert>/out/C = "Special characters\?"</assert>
+            <assert>/out/D = "Special characters$1"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-071">
+      <description>test replace() with special characters in replacement string</description>
+      <created by="Debbie Lockett" on="2018-10-03"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-071.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "Replace some WORDSWORDS in this SENTENCESENTENCE."</assert>
+            <assert>/out/B = "Replace some $$ in this $$."</assert>
+            <assert>/out/C = "Replace some WORDS-WORDS in this SENTENCE-SENTENCE."</assert>
+            <assert>/out/D = "Replace some $-$ in this $-$."</assert>
+         </all-of>
+      </result>
+   </test-case>
+  
+  <test-case name="regex-072">
+    <description>Saxon bug 4527</description>
+    <created by="Michael Kay" on="2020-04-24"/>
+    <dependencies>
+      <spec value="XSLT30+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="regex-072.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/out = 'false'</assert>
+    </result>
+  </test-case>
+
+   <environment name="regex086">
+      <source role=".">
+         <content><![CDATA[<doc><str1>abraacadabra</str1></doc>]]></content>
+      </source>
+      <stylesheet file="regex-086.xsl"/>
+   </environment>
+
+   <test-case name="regex-086a">
+      <description>
+         Testcase with matches($input?,$pattern) where $input comes from a variable, node, 
+         context node(.) and subsequence; pattern uses reluctant quantifiers.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex086"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="a"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "true"</assert>
+            <assert>/out/B = "true"</assert>
+            <assert>/out/C = "true"</assert>
+            <assert>/out/D = "true"</assert>
+            <assert>/out/E = "true"</assert>
+            <assert>/out/F = "true"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-086b">
+      <description>
+         Testcase with matches($input?,$pattern) where $input comes from a variable, node, 
+         context node(.) and subsequence; pattern uses reluctant quantifiers.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex086"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="b"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "true"</assert>
+            <assert>/out/B = "true"</assert>
+            <assert>/out/C = "true"</assert>
+            <assert>/out/D = "true"</assert>
+            <assert>/out/E = "true"</assert>
+            <assert>/out/F = "true"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-086c">
+      <description>
+         Testcase with matches($input?,$pattern) where $input comes from a variable, node, 
+         context node(.) and subsequence; pattern uses reluctant quantifiers.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex086"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="c"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "true"</assert>
+            <assert>/out/B = "true"</assert>
+            <assert>/out/C = "true"</assert>
+            <assert>/out/D = "true"</assert>
+            <assert>/out/E = "true"</assert>
+            <assert>/out/F = "true"</assert>
+            <assert>/out/G = "false"</assert>
+            <assert>/out/H = "true"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-086d">
+      <description>
+         Testcase with matches($input?,$pattern) where $input comes from a variable, node, 
+         context node(.) and subsequence; pattern uses reluctant quantifiers.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex086"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="d"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/A = "true"</assert>
+            <assert>/out/B = "true"</assert>
+            <assert>/out/C = "true"</assert>
+            <assert>/out/D = "true"</assert>
+            <assert>/out/E = "true"</assert>
+            <assert>/out/F = "true"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-090">
+      <description>Dynamic call on regex-group() returns zero-length string - see XSLT 3.0 spec §5.3.4</description>
+      <created by="Michael Kay" on="2019-07-25"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-090.xsl"/>
+      </test>
+      <result>
+         <assert>/out and not(/out/node())</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="regex-091">
+      <description>Dynamic call on regex-group() returns zero-length string - see XSLT 3.0 spec §5.3.4; also Saxon bug 5098</description>
+      <created by="Michael Kay" on="2021-09-17"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="regex-091.xsl"/>
+      </test>
+      <result>
+         <assert>/out and not(/out/node())</assert>
+      </result>
+   </test-case>
+</test-set>

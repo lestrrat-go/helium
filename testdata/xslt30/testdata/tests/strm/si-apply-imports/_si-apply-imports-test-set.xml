@@ -1,0 +1,82 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="si-apply-imports">
+   <description>xsl:next-match with streaming</description>
+
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+    <test-case name="si-apply-imports-068">
+      <description>Within a streaming template, use xsl:apply-imports with tunnel and non-tunnel
+         parameters</description>
+      <keywords>xsl:import xsl:with-param tunnel-parameter xsl:apply-templates fn:outermost crawling-then-striding PathExpr complex-use-case</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="si-apply-imports-068.xsl"/>
+         <stylesheet file="si-apply-imports-068a.xsl" role="secondary"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/prio5) = 39</assert>
+            <assert>every $P in /out/prio5 satisfies ($P/@p="17" and $P/@q="23" and $P/prio4 and
+               not($P/prio4[2]))</assert>
+            <assert>every $P in /out/prio5/prio4 satisfies ($P/(@p="18" and @q="23" and
+               @r="42"))</assert>
+            <assert>deep-equal(subsequence(/out/prio5/prio4/data(.), 1, 5), ('Genesis', 'Exodus',
+            'Leviticus', 'Numbers', 'Deuteronomy'))</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-apply-imports-069">
+      <description>Within a streaming template, use xsl:apply-imports with tunnel and non-tunnel
+         parameters</description>
+      <keywords>leading-lone-slash xsl:import xsl:with-param tunnel-parameter xsl:apply-templates fn:outermost crawling-then-striding PathExpr complex-use-case</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="si-apply-imports-069.xsl"/>
+         <stylesheet file="si-apply-imports-069a.xsl" role="secondary"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/prio5) = 39</assert>
+            <assert>every $P in /out/prio5 satisfies ($P/@p="17" and $P/@q="23" and $P/prio4 and
+               not($P/prio4[2]))</assert>
+            <assert>every $P in /out/prio5/prio4 satisfies ($P/(@p="18" and @q="23" and
+               @r="42"))</assert>
+            <assert>deep-equal(subsequence(/out/prio5/prio4/data(.), 1, 5), ('Genesis', 'Exodus',
+            'Leviticus', 'Numbers', 'Deuteronomy'))</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="si-apply-imports-070">
+      <description>Within a streaming template, use xsl:apply-imports with tunnel and non-tunnel
+         parameters</description>
+      <keywords>complex-use-case leading-lone-slash xsl:import xsl:with-param tunnel-parameter xsl:apply-templates fn:outermost crawling-then-striding PathExpr</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="si-apply-imports-070.xsl"/>
+         <stylesheet file="si-apply-imports-069a.xsl" role="secondary"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/prio5) = 39</assert>
+            <assert>every $P in /out/prio5 satisfies ($P/@p="17" and $P/@q="23" and $P/prio4 and
+               not($P/prio4[2]))</assert>
+            <assert>every $P in /out/prio5/prio4 satisfies ($P/(@p="18" and @q="23" and
+               @r="42"))</assert>
+            <assert>deep-equal(subsequence(/out/prio5/prio4/data(.), 1, 5), ('Genesis', 'Exodus',
+            'Leviticus', 'Numbers', 'Deuteronomy'))</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+
+   
+</test-set>

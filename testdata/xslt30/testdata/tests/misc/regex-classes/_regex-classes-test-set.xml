@@ -1,0 +1,1585 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="regex-classes">
+   
+   <description>
+      Tests regular expression character classes and Unicode blocks.
+      The tests in this test-set may take a little time to execute...
+   </description>
+   
+   <environment name="regex-classes">
+      <stylesheet file="reclass.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT20+"/>      
+      <unicode-version value="6.0" satisfied="true"/>
+   </dependencies>
+
+   <test-case name="regex-classes-001">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'C'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-002">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Cc'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-003">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Cf'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-004">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Cn'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-005">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Co'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-006">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'L'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-007">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Ll'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-008">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Lm'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-009">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Lo'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-010">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Lt'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-011">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Lu'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-012">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'M'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-013">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Mc'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-014">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Me'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-015">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Mn'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-016">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'N'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-017">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Nd'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-018">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Nl'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-019">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'No'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-020">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'P'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-021">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Pc'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-022">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Pd'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-023">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Pe'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-024">
+      <description>see reclass-Pf</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'C'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-025">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Pi'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-026">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Po'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-027">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Ps'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-028">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'S'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-029">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Sc'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-030">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Sk'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-031">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Sm'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-032">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'So'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-033">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Z'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-034">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Zl'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-035">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Zp'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-036">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'Zs'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-037">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsBasicLatin'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-038">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsLatin-1Supplement'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-039">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsLatinExtended-A'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-040">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsLatinExtended-B'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-041">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsIPAExtensions'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-042">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsSpacingModifierLetters'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-043">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsCombiningDiacriticalMarks'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-044">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsGreek'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-045">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsCyrillic'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-046">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsArmenian'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-047">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsHebrew'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-048">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsArabic'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-049">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsSyriac'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-050">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsThaana'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-051">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsDevanagari'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-052">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsBengali'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-053">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsGurmukhi'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-054">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsGujarati'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-055">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsOriya'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-056">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsTamil'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-057">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsTelugu'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-058">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsKannada'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-059">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsMalayalam'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-060">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsSinhala'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-061">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsThai'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-062">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsLao'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-063">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsTibetan'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-064">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsMyanmar'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-065">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsGeorgian'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-066">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsHangulJamo'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-067">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsEthiopic'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-068">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsCherokee'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-069">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class"
+                as="xs:string"
+                select="'IsUnifiedCanadianAboriginalSyllabics'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-070">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsOgham'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-071">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsRunic'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-072">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsKhmer'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-073">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsMongolian'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-074">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsLatinExtendedAdditional'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-075">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsGreekExtended'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-076">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsGeneralPunctuation'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-077">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsSuperscriptsandSubscripts'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-078">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsCurrencySymbols'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-079">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsCombiningMarksforSymbols'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-080">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsLetterlikeSymbols'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-081">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsNumberForms'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-082">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsArrows'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-083">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsMathematicalOperators'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-084">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsMiscellaneousTechnical'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-085">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsControlPictures'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-086">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsOpticalCharacterRecognition'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-087">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsEnclosedAlphanumerics'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-088">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsBoxDrawing'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-089">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsBlockElements'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-090">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsGeometricShapes'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-091">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsMiscellaneousSymbols'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-092">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsDingbats'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-093">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsBraillePatterns'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-094">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsCJKRadicalsSupplement'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-095">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsKangxiRadicals'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-096">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class"
+                as="xs:string"
+                select="'IsIdeographicDescriptionCharacters'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-097">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsCJKSymbolsandPunctuation'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-098">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsHiragana'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-099">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsKatakana'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-100">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsBopomofo'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-101">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsHangulCompatibilityJamo'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-102">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsKanbun'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-103">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsBopomofoExtended'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-104">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsEnclosedCJKLettersandMonths'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-105">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsCJKCompatibility'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-106">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class"
+                as="xs:string"
+                select="'IsCJKUnifiedIdeographsExtensionA'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-107">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsCJKUnifiedIdeographs'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-108">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsYiSyllables'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-109">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsYiRadicals'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-110">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsHangulSyllables'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-111">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsPrivateUse'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-112">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsCJKCompatibilityIdeographs'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-113">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsAlphabeticPresentationForms'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-114">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsArabicPresentationForms-A'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-115">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsCombiningHalfMarks'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-116">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsCJKCompatibilityForms'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-117">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsSmallFormVariants'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-118">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsArabicPresentationForms-B'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-119">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsSpecials'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+
+   <test-case name="regex-classes-120">
+      <description>Test character classes and block names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex-classes"/>
+      <test>
+         <param name="class" as="xs:string" select="'IsHalfwidthandFullwidthForms'"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/true</assert>
+      </result>
+   </test-case>
+</test-set>

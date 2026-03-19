@@ -1,0 +1,483 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="namespace-alias">
+   <description>Tests xsl:namespace-alias declarations</description>
+
+   <environment name="namespace-alias-10">
+      <source role="." file="namespace-alias-10.xml"/>
+   </environment>
+
+   <environment name="namespace-alias-19">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="namespace-alias-26">
+      <source role=".">
+         <content><![CDATA[<data/>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="namespace-alias-36">
+      <source role=".">
+         <content><![CDATA[<doc>
+<a>
+<b/>
+</a>
+<c/>
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <environment name="namespace-alias-42">
+      <source role=".">
+         <content><![CDATA[<source>
+  <gen_a name="foo"/>
+  <gen_b name="bar"/>
+</source>]]></content>
+      </source>
+   </environment>
+
+   <environment name="namespace-alias-47">
+      <source role=".">
+         <content><![CDATA[<elements>
+<block>h1</block>
+</elements>]]></content>
+      </source>
+   </environment>
+
+   <environment name="namespace-alias-58">
+      <source role=".">
+         <content><![CDATA[
+<thisisroot>
+</thisisroot>]]></content>
+      </source>
+   </environment>
+   
+   <test-case name="namespace-alias-0901">
+      <description>Stylesheet-prefix = result-prefix causing error</description>
+      <created by="Michael Kay" on="2014-03-04"/>
+      <environment ref="namespace-alias-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-0901.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="namespace-alias-0902">
+      <description>Saxon bug 2563</description>
+      <created by="John Lumley" on="2016-01-05"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-0902.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:attribute/></result>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="namespace-alias-0903">
+      <description>Prefixes used in xsl:namespace-alias map immediately to a URI</description>
+      <created by="Michael Kay" on="2018-11-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-0903.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><bar:one xmlns:bar="http://bar1"/><bar:two xmlns:bar="http://bar2"/><bar:three xmlns:bar="http://bar3"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-1001">
+      <description>TEST namespace-alias on attribute names BUG Saxon 6.3/013</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="namespace-alias-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<html xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xsl:version="2.0"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-1002">
+      <description>TEST namespace-alias - two declarations with different precedence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="namespace-alias-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1002.xsl"/>
+         <stylesheet file="namespace-alias-1002a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<html xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xsl:version="2.0"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-1003">
+      <description>Test multiple namespace-alias declarations with namespaces declared locally</description>
+      <created by="Michael Kay" on="2019-01-23"/>
+      <environment ref="namespace-alias-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><A:v xmlns:A="http://A.com/"/><B:w xmlns:B="http://B.com/"
+            /><C:x xmlns:C="http://C.com/"/><D:y xmlns:D="http://D.com/"/><E:z xmlns:E="http://E.com/"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="namespace-alias-1004">
+      <description>Test multiple namespace-alias declarations with the same target; namespaces declared locally</description>
+      <created by="Michael Kay" on="2019-01-23"/>
+      <environment ref="namespace-alias-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><A:v xmlns:A="http://A.com/"/><B:w xmlns:B="http://A.com/"
+            /><C:x xmlns:C="http://A.com/"/><D:y xmlns:D="http://A.com/"/><E:z xmlns:E="http://A.com/"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="namespace-alias-1005">
+      <description>Test multiple namespace-alias declarations with the same target prefix and URI</description>
+      <created by="Michael Kay" on="2019-01-23"/>
+      <environment ref="namespace-alias-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><A:v xmlns:A="http://A.com/"/><A:w xmlns:A="http://A.com/"
+            /><A:x xmlns:A="http://A.com/"/><A:y xmlns:A="http://A.com/"/><A:z xmlns:A="http://A.com/"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="namespace-alias-1006">
+      <description>A circular chain of namespace aliases</description>
+      <created by="Michael Kay" on="2019-01-23"/>
+      <environment ref="namespace-alias-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><b:v xmlns:b="http://b.com/"/><c:w xmlns:c="http://c.com/"
+            /><d:x xmlns:d="http://d.com/"/><e:y xmlns:e="http://e.com/"/><a:z xmlns:a="http://a.com/"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-1901">
+      <description>TEST xsl:namespace-alias - stylesheet-prefix="#default"</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2012-12-11" change="deleted xml:space=preserve - see bug 20270"/>
+      <modified by="Michael Kay" on="2019-01-24" change="see discussion in W3C bug 30397"/>
+      <environment ref="namespace-alias-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1901.xsl"/>
+         <stylesheet file="namespace-alias-1002a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml file="namespace-alias-1901.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-1902">
+      <description>TEST xsl:namespace-alias - result-prefix="#default"</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2012-12-11" change="deleted xml:space=preserve - see bug 20270"/>
+      <environment ref="namespace-alias-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1902.xsl"/>
+         <stylesheet file="namespace-alias-1002a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml file="namespace-alias-1902.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-1903">
+      <description>TEST xsl:namespace clashing with namespace of parent element</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="namespace-alias-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1903.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ns_0:e xmlns:ns="http://nstwo.uri/" xmlns:ns_0="http://nsone.uri/"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-1904">
+      <description>test use of stylesheet-prefix=#default when there is no default namespace (Note: see bug 30397)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="namespace-alias-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1904.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" proc="bah">boo</xsl:stylesheet>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-1905">
+      <description>Alias the XML namespace</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="namespace-alias-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1905.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc xml:space="preserve">text</doc>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="namespace-alias-1906">
+      <description>Error case - missing stylesheet-prefix</description>
+      <created by="Michael Kay" on="2017-06-13"/>
+      <environment ref="namespace-alias-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1906.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="namespace-alias-1907">
+      <description>Error case - missing result-prefix</description>
+      <created by="Michael Kay" on="2017-06-13"/>
+      <environment ref="namespace-alias-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1907.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="namespace-alias-1908">
+      <description>test use of result-prefix=#default when there is no default namespace (Note: see bug 30397)</description>
+      <created by="Michael Kay" on="2019-02-20"/>
+      <environment ref="namespace-alias-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1908.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<foo bar="baz"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="namespace-alias-1909">
+      <description>namespace-alias forces two attributes into conflict. See spec bug 30400. Test currently allows a variety of outcomes.</description>
+      <created by="Michael Kay" on="2019-02-20"/>
+      <environment ref="namespace-alias-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1909.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0813"/>
+            <assert-xml><![CDATA[<foo bar="baz"/>]]></assert-xml>
+            <assert-xml><![CDATA[<foo bar="zoo"/>]]></assert-xml>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="namespace-alias-1910">
+      <description>namespace-alias used to swap two namespaces.</description>
+      <created by="Michael Kay" on="2019-02-20"/>
+      <environment ref="namespace-alias-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-1910.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<b:foo xmlns:b="http://b/com/" xmlns:a="http://a/com/" b:bar="baz" a:bar="zoo"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-2613">
+      <description>Example of xsl:namespace-alias from the 2.0 spec</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="namespace-alias-26"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-2613.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<name xml:space="preserve"><first>James</first> <last>Clark</last></name>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-2620">
+      <description>A test of xsl:namespace-alias with import precedence: see spec bug 9812</description>
+      <created by="Michael Kay, from a bug submitted by Tim Mills"
+               on="2012-11-07"/>
+      <environment ref="namespace-alias-26"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-2620.xsl"/>
+         <stylesheet file="namespace-alias-2620a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<y:transform xmlns:y="http://www.example.org/My/Transform/Language"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-3602">
+      <description>
+         Testing an attribute not from the XSLT namespace, which is legal provided that the expanded
+         name of the attribute has a non-null namespace URI. This tests for many xslt elements, apparent 
+         code path are different for numerous elements. Should actually output a "bogus" stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="namespace-alias-36"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-3602.xsl"/>
+         <stylesheet file="namespace-alias-3602a.xsl" role="secondary"/>
+         <stylesheet file="namespace-alias-3602b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<xsl:stylesheet xmlns:ped="http://www.ped.com/" 
+            xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+            xmlns:lotus="http://www.lotus.com"
+            version="1.0"><xsl:template match="/"><out>Yeee ha</out></xsl:template></xsl:stylesheet>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+   <test-case name="namespace-alias-4201">
+      <description>Verify that namespace-alias is honored in included stylesheets.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2013-01-28" change="Added role attributes"/>
+      <environment ref="namespace-alias-42"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-4201.xsl" role="principal"/>
+         <stylesheet file="namespace-alias-4201a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml file="namespace-alias-4201.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-4701">
+      <description>Purpose: Test basic functionality of namespace-alias. 
+         Where XSL elements are created by using Literal Result Elements. 
+         namespace24 is very similar, but it creates the axsl:stylesheet element via xsl:element.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="namespace-alias-47"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-4701.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="namespace-alias-4701.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-4702">
+      <description>Test basic functionality of namespace-alias. Where XSL elements are created by using xsl:element command.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="namespace-alias-47"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-4702.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="namespace-alias-4702.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="namespace-alias-5801">
+      <description>Another test for aliasing the XSL namespace</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<thisisroot/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="namespace-alias-5801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<xsl:template xmlns:xsl="http://www.w3.org/1999/XSL/Transform" match="/"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+</test-set>

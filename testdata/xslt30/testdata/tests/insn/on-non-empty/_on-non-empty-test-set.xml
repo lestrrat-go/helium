@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="on-non-empty">
+   <description>
+      Tests sequence constructors containing xsl:on-non-empty instructions
+   </description>
+   
+
+   
+   <environment name="on-non-empty-A">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<item>a</item>
+	<item>b</item>
+	<item>c</item>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+
+   <test-case name="on-non-empty-001">
+      <description>Simple use of xsl:on-non-empty with no other instructions</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-non-empty-002">
+      <description>Simple use of xsl:on-non-empty with other instructions yielding empty</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-non-empty-003">
+      <description>Simple use of xsl:on-non-empty with other instructions yielding empty</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-non-empty-004">
+      <description>Simple use of xsl:on-non-empty with other instructions yielding non-non-empty</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>23<doc><item>a</item><item>b</item><item>c</item></doc></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-non-empty-005">
+      <description>Simple use of xsl:on-non-empty with other instructions yielding non-non-empty</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><doc><item>a</item><item>b</item><item>c</item></doc>23</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-non-empty-006">
+      <description>Multiple xsl:on-non-empty instructions yielding empty</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-non-empty-007">
+      <description>Multiple xsl:on-non-empty instructions with local variables</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>21 23<in/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-non-empty-008">
+      <description>Stereotypical use case for xsl:on-non-empty</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-non-empty-009">
+      <description>Stereotypical use case for xsl:on-non-empty</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>itemitemitem<p>There are some items</p></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-non-empty-010">
+      <description>Use xsl:on-non-empty with xsl:sort</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><item>a</item>apple<item>b</item>apple<item>c</item>apple</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-non-empty-011">
+      <description>Zero-length text node is considered empty</description>
+      <created by="Michael Kay" on="2015-08-16"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-non-empty-012">
+      <description>Empty document node is considered empty</description>
+      <created by="Michael Kay" on="2015-08-16"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-non-empty-013">
+      <description>on-empty must come last</description>
+      <created by="Michael Kay" on="2015-08-16"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-013.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="on-non-empty-014">
+      <description>on-empty and on-non-empty can coexist</description>
+      <created by="Michael Kay" on="2015-08-16"/>
+      <environment ref="on-non-empty-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-non-empty-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>EMPTY</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+</test-set>

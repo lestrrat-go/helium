@@ -1,0 +1,154 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="castable">
+   <description>Tests castable</description>
+   <environment name="castbl01">
+      <source role="." file="castbl01.xml"/>
+   </environment>
+
+   <test-case name="castable-001">
+      <description>Test "castable as" operator.</description>
+      <keywords>CastableExpr descendant-or-self-axis buildin-types</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="castbl01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="castable-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="castable-001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="castable-002">
+      <description>Test "castable as" operator.</description>
+      <keywords>CastableExpr xsl:variable variable-reference CastExpr buildin-datatypes descendant-or-self-axis</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="castbl01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="castable-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="castable-002.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="castable-003">
+      <description>Test "castable as" operator.</description>
+      <keywords>CastableExpr xsl:variable variable-reference CastExpr buildin-datatypes descendant-or-self-axis</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="castbl01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="castable-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="castable-003.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="castable-004">
+      <description>Test "castable as" operator.</description>
+      <keywords>CastableExpr xsl:variable variable-reference CastExpr buildin-datatypes descendant-or-self-axis</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="castbl01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="castable-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><a>true</a><a>true</a><a>true</a><a>true</a><b>false</b><b>false</b><b>false</b><b>false</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="castable-005">
+      <description>Test "castable as" operator applied to schema-defined union types (conversion of QT3 tests)</description>
+      <created by="Michael Kay" on="2018-06-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="castable-005.xsl"/>
+      </test>
+      <result>
+         <assert>empty(/out/failure)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="castable-006">
+      <description>Test "castable as" operator applied to schema-defined list types (conversion of QT3 tests)</description>
+      <created by="Michael Kay" on="2018-06-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="castable-006.xsl"/>
+      </test>
+      <result>
+         <assert>empty(/out/failure)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="castable-007">
+      <description>Test "castable as" xs:NMTOKENS</description>
+      <created by="Michael Kay" on="2018-06-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="castable-007.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>every $e in //t satisfies $e = 'true'</assert>
+            <assert>every $e in //f satisfies $e = 'false'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="castable-008">
+      <description>Test "castable as" xs:IDREFS</description>
+      <created by="Michael Kay" on="2018-06-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="castable-008.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>every $e in //t satisfies $e = 'true'</assert>
+            <assert>every $e in //f satisfies $e = 'false'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="castable-009">
+      <description>Test "castable as" xs:ENTITIES</description>
+      <created by="Michael Kay" on="2018-06-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="castable-009.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>every $e in //t satisfies $e = 'true'</assert>
+            <assert>every $e in //f satisfies $e = 'false'</assert>
+         </all-of>
+      </result>
+   </test-case>
+</test-set>

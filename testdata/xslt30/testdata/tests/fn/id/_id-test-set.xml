@@ -1,0 +1,836 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="id">
+   <description>Tests id</description>
+     
+   <environment name="id017">
+      <source role=".">
+         <content><![CDATA[<!DOCTYPE t04 [
+  <!ELEMENT t04 (a*)>
+  <!ELEMENT a EMPTY>
+  <!ATTLIST a id ID #REQUIRED>
+]>
+<t04>
+  <a id="a"/>
+  <a id="b"/>
+  <a id="c"/>
+  <a id="d"/>
+</t04>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="id027">
+      <source role=".">
+         <content><![CDATA[
+<!DOCTYPE doc [
+<!ELEMENT doc (baz*)>
+<!ELEMENT baz EMPTY>
+<!ATTLIST baz id ID #REQUIRED>
+]>
+<doc>
+  <baz id="Z"/>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   
+   <environment name="id130">
+      <source role="." file="id130.xml"/>
+   </environment>
+   
+   <environment name="id140">
+      <source role="." file="id140.xml"/>
+   </environment>
+   
+
+   <test-case name="id-001">
+      <description>Test for document() using a fragment identifier</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="id010.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <recognize_id_as_uri_fragment/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="id-001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="id-002">
+      <description>test id() function with a node-set argument and multiple IDs</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="id011.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<list new="xslt2.0">a,b,c,d,e,f</list>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-003">
+      <description>Test use of id() in a pattern</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id017"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><non-id id="a"/><non-id id="b"/><id id="c"/><non-id id="d"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-004">
+      <description>Test for id() with a non-matching value.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id017"/>     
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<P/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-005">
+      <description>Test for id(string), where string is a whitespace-separated list of values.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id017"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<n>bcd</n>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-006">
+      <description>Test for id(list) and position() in a for-each loop</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id017"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<item>b is at position 1</item>
+<item>c is at position 2</item>
+<item>d is at position 3</item>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-007">
+      <description>Test for id(list) and position() in apply-templates</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id017"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<item>a is at position 1</item>
+<item>c is at position 2</item>
+<item>d is at position 3</item>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-008">
+      <description>Test for count() of id(), multiple values.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id017"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-009">
+      <description>Test for count() of id(), one value.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id017"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-010">
+      <description>Test for count() of id(), no matching values.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id017"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-011">
+      <description>test for id() applied to an empty sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id017"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<P/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-012">
+      <description>Test that IDs defined in DTD internal subset are recognized. Was bug27</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id027"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Z</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-013">
+      <description>Threw NullPointerException in Saxon 6.4.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="id079.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result><person name="Susan" job="Pilot" spouse="Dave"/><person name="Jane" job="Doctor" spouse="Fred"/></result>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-014">
+      <description>AElfred parser bug - parameter entities in internal subset (see XML source document)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2015-04-07" change="Bug 28430, fixing spacing issues"/>
+      <environment>
+         <source role="." file="id080.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="id-014.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="id-015">
+      <description>Purpose: Test for id().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2018-01-09" change="Move DOCTYPE inline to make life easier for test drivers"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[
+<!DOCTYPE t04 [
+  <!ELEMENT t04 (a*)>
+  <!ELEMENT a EMPTY>
+  <!ATTLIST a  id ID #REQUIRED> ]>
+<t04><a id="a"/><a id="b"/><a id="c"/><a id="d"/></t04>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>c</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-016">
+      <description>Test for id() in complex structure.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="id122.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="id-016.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="id-017">
+      <description>Test for id(node-set), where node-set has multiple values.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="id126.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>WXY</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-018">
+      <description>Test id() in a for-each-group starting-with pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id130"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><g>20 18</g><g>12 19 14</g></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-019">
+      <description>Test id() in a for-each-group starting-with pattern, within a union pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id130"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><g>20</g><g>18 12</g><g>19 14</g></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-020">
+      <description>Test id() in a for-each-group ending-with pattern, with a multvalued idref.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id130"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><g>20 18</g><g>12 19</g><g>14</g></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-021">
+      <description>Test id() in a for-each-group starting-with pattern, with variables.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id130"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><g>20 18 12</g><g>19 14</g></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-022">
+      <description>Test id() in a for-each-group ending-with pattern, with a local variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id130"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><g>20</g><g>18 12 19</g><g>14</g></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-023">
+      <description>Test id() in a key match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id130"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><x>a</x><y/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-024">
+      <description>Test id() in a xsl:number from pattern, with a local variable</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id130"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><g>1</g><g>2</g><g>3</g><g>1</g><g>2</g></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-025">
+      <description>Test id(list) filtered by a predicate, in a match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id130"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<other>a</other>
+<big>b</big>
+<other>c</other>
+<big>d</big>
+<other>e</other></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-026">
+      <description>Test id() filtered by a predicate, in a match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id130"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<big>a</big>
+<big>b</big>
+<other>c</other>
+<bigD>d</bigD>
+<other>e</other></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-027">
+      <description>Test id(list) with lower path filtered by a predicate, in a match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id130"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<other>a</other>
+<big>b</big>
+<other>c</other>
+<big>d</big>
+<other>e</other></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-028">
+      <description>Find text in a node with particular ID, via match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id140"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="id-028.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="id-029">
+      <description>Find all text under a node with particular ID, via match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id140"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<other>
+    *id1*
+    </other>
+<x>id2</x>
+<x>id3</x>
+<x>id4</x>
+<x>id5</x>
+<other>*id6*</other>
+<other>*id7*</other>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-030">
+      <description>Find all text under IDed node and apply predicate, via match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id140"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<other>
+    *id1*
+    </other>
+<x>id2</x>
+<x>id3</x>
+<bee>id4</bee>
+<x>id5</x>
+<other>*id6*</other>
+<other>*id7*</other>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-031">
+      <description>Use variables in predicate of match pattern that also has id()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id140"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-031.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<other>
+    *id1*
+    </other>
+<x>id2</x>
+<x>id3</x>
+<bee>id4</bee>
+<x>id5</x>
+<other>*id6*</other>
+<other>*id7*</other>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-032">
+      <description>Test for id(node-set), where node-set has a string with a list of ID values.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="id157.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-032.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>WYZ</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-033">
+      <description>Test for id($var), where $var has a string with a list of ID values.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="id158.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>WXZ</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-034">
+      <description>Purpose: Try multiple child steps after id() in match patterns </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="id160.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-034.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/match-l1-v = "Text from doc/l1/v"</assert>
+            <assert>/out/match-v[1] = "Text from doc/l1/l2/v"</assert>
+            <assert>/out/match-v[2] = "Text from doc/l1/l2/l3/v"</assert>
+            <assert>/out/match-l1-l2-w = "Text from doc/l1/l2/w"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="id-035">
+      <description>Test id() returning multiple results</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="id164.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-035.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/body/dep[@name="Computer"]/ul/li = "John"</assert>
+            <assert>/body/dep[@name="Computer"]/ul/li = "Peter"</assert>
+            <assert>/body/dep[@name="Business"]/ul/li = "Peter"</assert>
+            <assert>/body/dep[@name="Business"]/ul/li = "Anne"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="id-036">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="id017"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><H1>Test for id().</H1><P>Only worked with the XML4J 1.1.16 liaison at one time!</P><HR/><P>Should say "c":</P><P>c</P></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-037">
+      <description>test use of id() in pattern with a variable (XSLT 2.0 feature)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2015-04-07" change="Bug 28430, fixing spacing issues"/>
+      <environment ref="id017"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<d>[a][b][*c*][d]</d>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-038">
+      <description>test second parameter to id() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="id234.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a id="b" value="gotcha"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-039">
+      <description>basic test of idref() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="id301.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-039.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a id="a" from="d"/><a id="b" ref="c" from=""/><a id="c" ref="d" from="b"/><a id="d" ref="a" from="c"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-040">
+      <description>basic test of idref() function using IDREFS values</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="id302.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-040.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a id="a" from="c,d"/><a id="b" ref="c d" from="d"/><a id="c" ref="d a" from="b"/><a id="d" ref="a b" from="b,c"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-041">
+      <description>basic test of idref(), it shouldn't tokenize like fn:id() does</description>
+      <created by="Abel Braaksma" on="2019-02-27"/>
+      <environment>
+         <source role="." file="id302.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-041.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a id="a" from=""/><a id="b" ref="c d" from=""/><a id="c" ref="d a" from=""/><a id="d" ref="a b" from=""/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-042">
+      <description>basic test of idref(), multiple strings as argument should match multiple IDREF attributes</description>
+      <created by="Abel Braaksma" on="2019-02-27"/>
+      <environment>
+         <source role="." file="id302.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-042.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a id="a" from="c,d"/><a id="b" ref="c d" from="c,d"/><a id="c" ref="d a" from="b,c,d"/><a id="d" ref="a b" from="b,c,d"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="id-043">
+      <description>basic test of idref(), using two arguments with different document</description>
+      <created by="Abel Braaksma" on="2019-02-27"/>
+      <environment>
+         <source select="parse-xml('&lt;root/>')" role="." />
+         <source uri="id302.xml" file="id302.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="id-043.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><idref for="a" from="c,d"/><idref for="b" from="c,d"/><idref for="c" from="b,c,d"/><idref for="d" from="b,c,d"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+</test-set>

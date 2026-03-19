@@ -1,0 +1,221 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="function-available">
+   <description>Tests the function-available() function</description>
+
+
+   <environment name="function-available-08">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+<name>substring</name>
+<name>floor</name>
+<name>bench</name>
+<name>ceiling</name>
+<name>pineapple</name>
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <environment name="function-available-10">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="function-available-0204">
+      <description>test function-available() on stylesheet function</description>
+      <keywords>xsl:function stylesheet-function fn:function-available</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-available-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-available-0204.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><true>true</true><false>false</false></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+   <test-case name="function-available-0801">
+      <description>test function-available() called dynamically from an expression evaluated lazily</description>
+      <keywords>stylesheet-function xsl:function fn:function-available predicate</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-available-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-available-0801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring,floor,ceiling</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-available-1006">
+      <description>test function-available() using the fn:namespace</description>
+      <keywords>fn:function-available xpath-function-namespace namespace-resolution variable-reference</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-available-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-available-1006.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="function-available-1006.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-available-1008">
+      <description>Test function-available() with two arguments</description>
+      <keywords>stylesheet-function xsl:function fn:function-available buildin-functions arity</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-01-05" change="simplify assertions; create variant for XSLT 4.0"/>
+      <environment ref="function-available-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-available-1008.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/@a = 'true'</assert>
+            <assert>/out/@b = 'true'</assert>
+            <assert>/out/@c = 'true'</assert>
+            <assert>/out/@d = 'true'</assert>
+            <assert>/out/@e = 'true'</assert>
+            <assert>/out/@f = 'true'</assert>
+            <assert>/out/@g = 'true'</assert>
+            <assert>/out/@h = 'false'</assert>
+            <assert>/out/@i = 'false'</assert>
+            <assert>/out/@j = 'false'</assert>
+            <assert>/out/@k = 'false'</assert>
+            <assert>/out/@l = 'false'</assert>
+            <assert>/out/@m = 'false'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="function-available-1010">
+      <description>Test function-available() with dynamic arguments</description>
+      <keywords>stylesheet-function xsl:function fn:function-available buildin-functions arity</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-available-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-available-1010.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="function-available-1010.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="function-available-1011">
+      <description>Test function-available() with EQName arguments</description>
+      <keywords>stylesheet-function xsl:function fn:function-available buildin-functions arity EQName namespace-resolution</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-available-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-available-1011.xsl"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/a = 'true'</assert>
+           <assert>/out/b = 'true'</assert>
+           <assert>/out/c = 'false'</assert>
+           <assert>/out/d = 'true'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="function-available-1015">
+      <description>Test of function-available() on the functions true() and false()</description>
+      <keywords>stylesheet-function xsl:function fn:function-available buildin-functions arity fn:true fn:false</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-available-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-available-1015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>true</a><b>true</b><a>true</a><b>true</b><a>false</a><b>false</b><a>true</a><b>true</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-available-1016">
+      <description>Test of function-available() on constructor functions for abstract types</description>
+      <keywords>fn:function-available constructor-functions</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-available-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-available-1016.xsl"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/a = 'false'</assert>
+           <assert>/out/b = 'false'</assert>
+           <assert>/out/c = 'false'</assert>
+           <assert>/out/d = 'false'</assert>
+           <assert>/out/e = 'false'</assert>
+           <assert>/out/f = 'false'</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="function-available-1017">
+      <description>Test of function-available() on map functions</description>
+      <keywords>fn:function-available maps</keywords>
+      <created by="Michael Kay" on="2016-03-21"/>
+      <modified by="Michael Kay" on="2016-10-20" change="fix bug 29542"/>
+      <modified by="Michael Kay" on="2021-09-27" change="change example of non-existent function, as map:entries() is a proposed addition for 4.0"/>
+      <environment ref="function-available-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-available-1017.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>every $n in /out/*/*[not(self::z)] satisfies $n = 'true'</assert>
+            <assert>every $n in /out/*/z satisfies $n = 'false'</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="function-available-1018">
+      <description>Test of function-available() on higher-order functions</description>
+      <keywords>fn:function-available maps</keywords>
+      <created by="Michael Kay" on="2016-03-21"/>
+      <modified by="Michael Kay" on="2017-04-30" change="correction: sort#3 depends on HOF feature, sort#2 does not"/>
+      <modified by="Michael Kay" on="2017-09-04" change="add dependency on HOF feature"/>
+      <environment ref="function-available-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-available-1018.xsl"/>
+      </test>
+      <result>
+         <assert>every $n in /out/* satisfies $n = 'true'</assert>
+      </result>
+   </test-case>
+
+</test-set>

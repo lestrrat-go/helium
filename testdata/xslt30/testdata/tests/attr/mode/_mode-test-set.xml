@@ -1,0 +1,3094 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="mode">
+   <description>Tests the use of modes in xsl:template and xsl:apply-templates</description>
+   <environment name="mode-01">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a test="a attribute">a-text</a>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="mode-02">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+<a test="a attribute">brown-fox</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="mode-03">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <x test="x attribute">content
+    <y>why</y>
+  </x>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="mode-04">
+      <source role=".">
+         <content><![CDATA[<doc>
+<!-- This test executed properly. -->
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="mode-05">
+      <source role=".">
+         <content><![CDATA[<doc>
+<?PITarget Processing-Instruction 1 type="text/xml"?>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="mode-06">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <child1>This is the child number 1.</child1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="mode-07">
+      <source role=".">
+         <content><![CDATA[<doc attribute1="attribute1"/>]]></content>
+      </source>
+   </environment>
+   <environment name="mode-08">
+      <source role=".">
+         <content><![CDATA[<sss><sss><i>Not OK</i></sss></sss>]]></content>
+      </source>
+   </environment>
+   <environment name="mode-09">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a test="a attribute">a-text</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="mode-10">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a test="a attribute">lazy-dog</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="mode-11">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <str>brown-fox</str>
+  <yet>lazy-dog</yet>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="mode-12">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a/>
+  <b/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="mode-13">
+      <source role=".">
+         <content><![CDATA[ 
+<wrap>
+<doc>
+  <a/>
+  <b/>
+</doc>
+</wrap>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="mode-14">
+      <source role="." file="mode-14.xml"/>
+   </environment>
+   
+   <environment name="mode-14s">
+      <source role="." file="mode-14.xml" streaming="true"/>
+   </environment>
+   
+   <environment name="mode-15">
+      <source role=".">
+         <content><![CDATA[<doc><para><?pi PI ?>text <foo><baz/></foo></para></doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="mode-0001">
+      <description>Test xsl:mode on-no-match with comment nodes</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference comment-nodes parentless-nodes</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c><!--abracadabra--></c><d/><s/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0002">
+      <description>Test xsl:mode on-no-match with comment nodes; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference comment-nodes streamable parentless-nodes</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c><!--abracadabra--></c><d/><s/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0003">
+      <description>Test xsl:mode on-no-match with processing instruction nodes</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference processing-instruction-nodes parentless-nodes</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c><?nnn abracadabra?></c><d/><s/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0004">
+      <description>Test xsl:mode on-no-match with processing instruction nodes; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference processing-instruction-nodes parentless-nodes streamable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c><?nnn abracadabra?></c><d/><s/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0005">
+      <description>Test xsl:mode on-no-match with text nodes</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference text-nodes parentless-nodes</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c>abracadabra</c><d/><s>abracadabra</s></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0006">
+      <description>Test xsl:mode on-no-match with text nodes; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference text-nodes parentless-nodes streamable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c>abracadabra</c><d/><s>abracadabra</s></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0007">
+      <description>Test xsl:mode on-no-match with attribute nodes</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference attribute-nodes parentless-nodes</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c a="abracadabra"/><d/><s>abracadabra</s></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0008">
+      <description>Test xsl:mode on-no-match with attribute nodes; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference attribute-nodes parentless-nodes streamable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0008.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c a="abracadabra"/><d/><s>abracadabra</s></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0009">
+      <description>Test xsl:mode on-no-match with namespace nodes</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference namespace-nodes parentless-nodes non-streamable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c xmlns:a="http://abracadabra.com/"/><d/><s/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0010">
+      <description>Test xsl:mode on-no-match with namespace nodes; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference namespace-nodes parentless-nodes streamable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0010.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c xmlns:a="http://abracadabra.com/"/><d/><s/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-0011">
+      <description>Use boolean function call in predicate. Saxon bug 1992</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy attribute-nodes stylesheet-function predicate</keywords>
+      <created by="John Lumley" on="2014-01-31"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0011.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/*:stylesheet/*:template/*:attribute[@name="IS-AVT{local-name(.)}"]</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-0012">
+      <description>Test xsl:mode on-no-match with namespace nodes; streaming= " yes ", "true", and "1"</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference namespace-nodes parentless-nodes streamable</keywords>
+      <created by="Debbie Lockett" on="2014-08-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0012.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c xmlns:a="http://abracadabra.com/"/><d/><s/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-0013">
+      <description>Test xsl:mode on-no-match with namespace nodes; streaming= "no", "false" and "0"</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference namespace-nodes parentless-nodes non-streamable</keywords>
+      <created by="Debbie Lockett" on="2014-08-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0013.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c xmlns:a="http://abracadabra.com/"/><d/><s/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-0014">
+      <description>Test xsl:mode on-no-match with namespace nodes; streaming= "YES" (not allowed)</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference namespace-nodes parentless-nodes streamable</keywords>
+      <created by="Debbie Lockett" on="2014-08-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0014.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-0015">
+      <description>Test xsl:mode on-no-match matching elements having attribute nodes. See bug 28774.</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference namespace-nodes parentless-nodes</keywords>
+      <created by="Michael Kay" on="2015-06-12"/>
+      <modified by="Debbie Lockett" on="2016-06-06" change="Removed redundant streaming dependency"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0015.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c><foo><matched/></foo></c><d><matched/></d><s/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-0016">
+      <description>Test xsl:mode on-no-match matching elements having namespace nodes..</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip shallow-copy text-only-copy variable-reference namespace-nodes parentless-nodes</keywords>
+      <created by="Michael Kay" on="2016-06-01"/>
+      <modified by="Debbie Lockett" on="2016-06-06" change="Removed redundant streaming dependency"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0016.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out
+            ><c><x:foo xmlns:x="http://ns.x/" xmlns:y="http://ns.y/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><matched attribute="bar"/><matched attribute="type"/>3</x:foo></c
+            ><d><matched attribute="bar"/><matched attribute="type"/></d
+            ><s>3</s></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-0101">
+      <description>Simple test of xsl:apply-templates with mode.</description>
+      <keywords>matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0102">
+      <description>Simple test of xsl:apply-templates with mode not found.</description>
+      <keywords>non-matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0103">
+      <description>Simple test of xsl:apply-templates with no mode.</description>
+      <keywords>xsl:apply-templates without-mode-attribute</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>no-mode:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0104">
+      <description>Simple test of xsl:apply-templates with mode, using the default rule.</description>
+      <keywords> matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0105">
+      <description>Simple test of xsl:apply-templates with mode, using a qualified name.</description>
+      <keywords>matching-mode qname-resolution</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:foo="http://foo.com">mode-foo:a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0106">
+      <description>Simple test of xsl:apply-templates with mode, using a non-qualified name, but with a qualified name in scope.</description>
+      <keywords>matching-mode qname-resolution</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:foo="http://foo.com">mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0107">
+      <description>Test apply-templates to the root of a temporary tree</description>
+      <keywords>matching-mode temporary-tree</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><tree><x/></tree></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0108">
+      <description>Test apply-templates when context node is a temporary tree</description>
+      <keywords>temporary-tree matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><x/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0201">
+      <description>Simple test of xsl:apply-templates with moded template calling xsl:apply-templates on another template.</description>
+      <keywords>mode-switching matching-mode non-matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-02"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-b: no-mode:brown-fox</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0301">
+      <description>FileName: MODES10 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 5.7 Modes</description>
+      <keywords>mode-switching mode-scope xsl:call-template matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="mode-0301.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0401">
+      <description>FileName: modes11 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 5.7</description>
+      <keywords>matching-mode comment-nodes</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> This test executed properly. </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0501">
+      <description>FileName: modes12 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 5.7</description>
+      <keywords>matching-mode processing-instruction-nodes</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-05"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Processing-Instruction 1 type="text/xml"</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0601">
+      <description>FileName: modes13 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 5.7</description>
+      <keywords>matching-mode AnyKindTest</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  This is the child number 1.
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0701">
+      <description>FileName: modes14 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 5.7</description>
+      <keywords>matching-mode attribute-nodes</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>attribute1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0801a">
+      <description>Ambiguous match</description>
+      <keywords>conflict-resolution matching-mode multiple-matching-templates</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-08"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="recover"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0801.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="mode-0801.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-0801b">
+      <description>Ambiguous match</description>
+      <keywords>conflict-resolution matching-mode multiple-matching-templates</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-08"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="error"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0801.xsl"/>
+      </test>
+      <result>
+         <error code="XTRE0540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-0801c">
+      <description>Ambiguous match</description>
+      <keywords>conflict-resolution matching-mode multiple-matching-templates</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-08"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0801.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="mode-0801.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-0802">
+      <description>Ambiguous match, use warning-on-multiple-match=" yes "</description>
+      <keywords>conflict-resolution matching-mode multiple-matching-templates</keywords>
+      <created by="Debbie Lockett" on="2014-08-13"/>
+      <environment ref="mode-08"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0802.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml file="mode-0801.out"/>
+            <assert-warning/>            
+         </all-of>     
+      </result>
+   </test-case>
+   
+   <test-case name="mode-0803">
+      <description>Ambiguous match, use warning-on-multiple-match="no"</description>
+      <keywords>conflict-resolution matching-mode multiple-matching-templates</keywords>
+      <created by="Debbie Lockett" on="2014-08-13"/>
+      <environment ref="mode-08"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0803.xsl"/>
+      </test>
+      <result>
+            <assert-xml file="mode-0801.out"/>              
+      </result>
+   </test-case>
+   
+   <test-case name="mode-0804">
+      <description>Ambiguous match, use warning-on-multiple-match="true" and "1"</description>
+      <keywords>conflict-resolution matching-mode multiple-matching-templates</keywords>
+      <created by="Debbie Lockett" on="2014-08-13"/>
+      <environment ref="mode-08"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0804.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml file="mode-0801.out"/>
+            <assert-warning/>            
+         </all-of>     
+      </result>
+   </test-case>
+   
+   <test-case name="mode-0805">
+      <description>Ambiguous match, use warning-on-multiple-match="false" and "0"</description>
+      <keywords>conflict-resolution matching-mode multiple-matching-templates</keywords>
+      <created by="Debbie Lockett" on="2014-08-13"/>
+      <environment ref="mode-08"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0805.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="mode-0801.out"/>              
+      </result>
+   </test-case>
+   
+   <test-case name="mode-0806">
+      <description>Ambiguous match, use warning-on-multiple-match="Yes" (not allowed)</description>
+      <keywords>conflict-resolution matching-mode multiple-matching-templates</keywords>
+      <created by="Debbie Lockett" on="2014-08-13"/>
+      <environment ref="mode-08"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0806.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>              
+      </result>
+   </test-case>
+
+   <test-case name="mode-0901">
+      <description>FileName: MODES16 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 5.7 Modes</description>
+      <keywords>non-matching-mode qname-resolution</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-09"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-moo:a, a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1001">
+      <description>FileName: MODES17 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 5.7 Modes</description>
+      <keywords>matching-mode syntax</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>_1st_mode: mode-a:lazy-dog</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1101">
+      <description>Match a template whose mode list is just X, where a named mode X is set at the time the transformation is launched.</description>
+      <keywords>initial-mode matching-mode</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="mode-11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1101.xsl"/>
+         <initial-mode name="X"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+	 	 mode-X (doc): 
+	  inside named-templates: mode-X: brown-fox</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1102">
+      <description>Match a template whose mode list is X and other names, but not #default. Where a named mode X is set at the time the transformation is launched.</description>
+      <keywords>initial-mode multiple-mode-template matching-mode</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2017-06-12" change="Vary the whitespace in the mode attribute in the light of Saxon bug 3264"/>
+      <environment ref="mode-11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1102.xsl"/>
+         <initial-mode name="X"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+	 	 mode-bXc (doc): 
+	  inside named-templates: mode-X: brown-fox</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1103">
+      <description>Match a template whose mode list is #all. Where a named mode X is set at the time the transformation is launched.</description>
+      <keywords>mode-#all initial-mode matching-mode</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="mode-11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1103.xsl"/>
+         <initial-mode name="X"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+	 	 mode-#all (doc): 
+	  inside named-templates: mode-X: brown-fox</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1104">
+      <description>
+         Set stylesheet params, at least one of which will be used in the match="/" mode="X" template. 
+         Where a named mode X is set at the time the transformation is launched.
+      </description>
+      <keywords>initial-mode mode-#all matching-mode</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2013-01-29" change="Fixed param/@select"/>
+      <environment ref="mode-11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1104.xsl"/>
+         <param name="Sparam" as="xs:string" select="'assignedValue'"/>
+         <initial-mode name="X"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+	 	 mode-X (/): assignedValue
+	 	 mode-#all (doc): 
+	  inside named-templates: mode-X: brown-fox</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1105">
+      <description>
+      	Set an initial context node, and have a template to match that node in mode X. 
+      	Where a named mode X is set at the time the transformation is launched.</description>
+      <keywords>initial-mode initial-context-node matching-mode</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." select="/doc">
+            <content><![CDATA[<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>]]></content>
+         </source>
+      </environment>   
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1105.xsl"/>
+         <initial-mode name="X"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><mode-X at="doc"/><inside>mode-X: brown-fox</inside></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1106a">
+      <description>
+         Test xsl:mode/@use-accumulators, non-streaming.</description>
+      <created by="Michael Kay" on="2016-10-30"/>
+      <modified by="Michael Kay" on="2017-06-12" change="Vary the whitespace in the mode attribute in the light of Saxon bug 3264"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>]]></content>
+         </source>
+      </environment>   
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1106.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+         <initial-mode name="X"/>
+      </test>
+      <result>
+         <assert>/out = 3</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1106b">
+      <description>
+         Test xsl:mode/@use-accumulators, non-streaming.</description>
+      <created by="Michael Kay" on="2016-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>]]></content>
+         </source>
+      </environment>   
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1106.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+         <initial-mode name="Y"/>
+      </test>
+      <result>
+         <error code="XTDE3362"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1106c">
+      <description>
+         Test xsl:mode/@use-accumulators, non-streaming.</description>
+      <created by="Michael Kay" on="2016-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>]]></content>
+         </source>
+      </environment>   
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1106.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+         <initial-mode name="Z"/>
+      </test>
+      <result>
+         <assert>/out = 3</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1106d">
+      <description>
+         Test xsl:mode/@use-accumulators, non-streaming.</description>
+      <created by="Michael Kay" on="2016-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>]]></content>
+         </source>
+      </environment>   
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1106.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <assert>/out = 3</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1106e">
+      <description>
+         Test xsl:mode/@use-accumulators, non-streaming.</description>
+      <created by="Michael Kay" on="2016-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>]]></content>
+         </source>
+      </environment>   
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1106.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+         <initial-mode name="Y"/>
+      </test>
+      <result>
+         <error code="XTDE3362"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1107a">
+      <description>
+         Test xsl:mode/@use-accumulators with streaming.</description>
+      <created by="Michael Kay" on="2016-10-30"/>
+      <environment>
+         <source role="." streaming="true">
+            <content><![CDATA[<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>]]></content>
+         </source>
+      </environment>   
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1106.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+         <initial-mode name="X"/>
+      </test>
+      <result>
+         <assert>/out = 3</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1107b">
+      <description>
+         Test xsl:mode/@use-accumulators with streaming.</description>
+      <created by="Michael Kay" on="2016-10-30"/>
+      <environment>
+         <source role="." streaming="true">
+            <content><![CDATA[<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>]]></content>
+         </source>
+      </environment>   
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1106.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+         <initial-mode name="Y"/>
+      </test>
+      <result>
+         <error code="XTDE3362"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1107c">
+      <description>
+         Test xsl:mode/@use-accumulators with streaming.</description>
+      <created by="Michael Kay" on="2016-10-30"/>
+      <environment>
+         <source role="." streaming="true">
+            <content><![CDATA[<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>]]></content>
+         </source>
+      </environment>   
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1106.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+         <initial-mode name="Z"/>
+      </test>
+      <result>
+         <assert>/out = 3</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1108">
+      <description>
+         Error: xsl:mode element must be empty.</description>
+      <created by="Michael Kay" on="2017-01-28"/>
+      <modified by="Michael Kay" on="2017-06-12" change="Vary the whitespace in the mode attribute in the light of Saxon bug 3264"/>
+      <environment>
+         <source role="." streaming="true">
+            <content><![CDATA[<doc><str>brown-fox</str><yet>lazy-dog</yet></doc>]]></content>
+         </source>
+      </environment>   
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1108.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+         <initial-mode name="Z"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0010"/>
+            <error code="XTSE0260"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+
+   <test-case name="mode-1201">
+      <description>Basic test for mode="#all" (XSLT 2.0)</description>
+      <keywords>mode-#all matching-mode conflict-resolution</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><m1><a mode="m1"/><b mode="#all"/></m1><m2><a mode="m2"/><b mode="#all"/></m2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1202">
+      <description>Test for mode="#all" appearing before the specific templates (XSLT 2.0)</description>
+      <keywords>mode-#all priority conflict-resolution</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><m1><a mode="m1"/><b mode="m1"/></m1><m2><a mode="m2"/><b mode="m2"/></m2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1203">
+      <description>Test for mode="#all" appearing before the specific templates and with higher priority (XSLT 2.0)</description>
+      <keywords>mode-#all priority conflict-resolution</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><m1><a mode="m1"/><b mode="#all"/></m1><m2><a mode="m2"/><b mode="#all"/></m2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1204">
+      <description>Test for mode="#all" with next-match (XSLT 2.0)</description>
+      <keywords>mode-#all xsl:next-match priority conflict-resolution</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1204.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><m1><a mode="m1"/><b mode="#all"/><b mode="m1"/></m1><m2><a mode="m2"/><b mode="#all"/><b mode="m2"/></m2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1301">
+      <description>Test for mode="#all" with built-in template rules (XSLT 2.0)</description>
+      <keywords>buildin-template-rules mode-#all matching-mode conflict-resolution</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-13"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><m1><a mode="m1"/><b mode="#all"/></m1><m2><a mode="m2"/><b mode="m2"/></m2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1401">
+      <description>Test for mode="#current" in a function reverts to the unnamed mode (XSLT 2.0, clarfied by erratum XT.E19)</description>
+      <keywords>matching-mode mode-#current mode-#default erratum-XT.E19 xsl:function</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1401.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1402">
+      <description>Test for mode="#current" in an attribute set retains the current mode (XSLT 2.0, clarfied by erratum XT.E19)</description>
+      <keywords>matching-mode mode-#current xsl:attribute-set erratum-XT.E19 mode-#default</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><chapter a="m:Chapter 1"/><chapter a="m:Chapter 2"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1403">
+      <description>Test for mode="#current" in a global variable uses the unnamed mode (XSLT 2.0, clarfied by erratum XT.E19)</description>
+      <keywords>matching-mode mode-#current mode-#default global-variable erratum-XT.E19</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="modes37.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><chapter a="#default:Chapter 1"/><chapter a="#default:Chapter 1"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1404">
+      <description>Test for mode="#current" in a global variable uses the unnamed mode (XSLT 2.0, clarfied by erratum XT.E19)</description>
+      <keywords>matching-mode mode-#current mode-#default erratum-XT.E19 global-variable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="modes37.xsl"/>
+         <initial-mode name="m"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><chapter a="#default:Chapter 1"/><chapter a="#default:Chapter 1"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1405">
+      <description>Test xsl:mode on-no-match="text-only-copy"</description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Debbie Lockett" on="2014-08-12" change="use normalize-space in assert"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1405.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert>starts-with(normalize-space(.), "The First Book of Moses, Called GENESIS.")</assert>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1406">
+      <description>Test xsl:mode on-no-match="text-only-copy", streaming</description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy streamable buildin-template-rules</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Debbie Lockett" on="2014-08-12" change="use normalize-space in assert"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1406.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert>starts-with(normalize-space(.), "The First Book of Moses, Called GENESIS.")</assert>         
+      </result>
+   </test-case>
+
+   <test-case name="mode-1407">
+      <description>Test xsl:mode on-no-match="text-only-copy"</description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Debbie Lockett" on="2014-08-12" change="use normalize-space in assert"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1407.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert>starts-with(normalize-space(.), "The First Book of Moses, Called GENESIS.")</assert>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1408">
+      <description>Test xsl:mode on-no-match="text-only-copy"; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy streamable initial-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Debbie Lockett" on="2014-08-12" change="use normalize-space in assert"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1408.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert>starts-with(normalize-space(.), "The First Book of Moses, Called GENESIS.")</assert>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1409">
+      <description>Test xsl:mode on-no-match="text-only-copy"</description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy TextTest</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Debbie Lockett" on="2014-08-12" change="use normalize-space in assert"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1409.xsl"/>
+      </test>
+      <result>
+         <assert>starts-with(normalize-space(.), "THE FIRST BOOK OF MOSES, CALLED GENESIS.")</assert>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1410">
+      <description>Test xsl:mode on-no-match="text-only-copy"; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy TextTest streamable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Debbie Lockett" on="2014-08-12" change="use normalize-space in assert"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1410.xsl"/>
+      </test>
+      <result>
+         <assert>starts-with(normalize-space(.), "THE FIRST BOOK OF MOSES, CALLED GENESIS.")</assert>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1411">
+      <description>Test xsl:mode on-no-match="copy"</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy typed-no buildin-template-rules</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1411.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1411.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1412">
+      <description>Test xsl:mode on-no-match="copy"; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy buildin-template-rules streamable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1412.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1412.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1413">
+      <description>Test xsl:mode on-no-match="copy"</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy attribute-axis matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1413.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1413.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1414">
+      <description>Test xsl:mode on-no-match="copy"; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy streamable attribute-axis matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1414.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1414.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1415">
+      <description>Test xsl:mode on-no-match="copy"</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy TextTest</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1415.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1415.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1416">
+      <description>Test xsl:mode on-no-match="copy"; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy TextTest streamable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1416.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1416.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1417">
+      <description>Test xsl:mode on-no-match="shallow-skip"</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1417.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<book><bktlong/><bktshort/></book>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1418">
+      <description>Test xsl:mode on-no-match="shallow-skip"; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute streamable shallow-skip matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1418.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<book><bktlong/><bktshort/></book>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1419">
+      <description>Test xsl:mode on-no-match="shallow-skip"</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-skip matching-mode xsl:next-match</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1419.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Genesis</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1420">
+      <description>Test xsl:mode on-no-match="shallow-skip"; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute streamable shallow-skip matching-mode xsl:next-match</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-06-12" change="spec change for bug 28774"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1420.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Genesis<nr>1</nr><nr>2</nr></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1421">
+      <description>Test xsl:mode on-no-match="shallow-skip"</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy shallow-skip matching-mode xsl:next-match non-matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1421.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1421.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1422">
+      <description>Test xsl:mode on-no-match="shallow-skip"; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute streamable shallow-copy shallow-skip matching-mode non-matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1422.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1422.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1423">
+      <description>Test xsl:mode on-no-match=fail, no failure occurs</description>
+      <keywords>xsl:mode on-no-match-attribute fail</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1423.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1423.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1424">
+      <description>Test xsl:mode on-no-match=fail, no failure occurs; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute streamable fail</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1424.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1424.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1425">
+      <description>Test xsl:mode on-no-match=fail, failure occurs but is caught</description>
+      <keywords>xsl:mode on-no-match-attribute fail xsl:try xsl:catch XTDE0555</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1425.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1425.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1426">
+      <description>Test xsl:mode on-no-match=fail, failure occurs but is caught; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute streamable fail xsl:try xsl:catch XTDE0555</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2015-03-23"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1426.xsl"/>
+      </test>
+      <result>
+         <assert>count(/book/chapter/v/c[. = 'error XTDE0555 caught']) = 56</assert>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1427">
+      <description>Test xsl:mode warning-on-no-match=yes</description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy matching-mode xsl:apply-imports</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Debbie Lockett" on="2014-08-12" change="assert-warning added, use normalize-space in assert"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1427.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>starts-with(normalize-space(.), "The First Book of Moses, Called GENESIS.")</assert>
+            <assert-message>
+               <assert-string-value><![CDATA[** Expect no-matching-template warnings **]]></assert-string-value>
+            </assert-message>
+            <assert-warning/>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1428">
+      <description>Test xsl:mode warning-on-no-match=yes; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute streamable text-only-copy matching-mode warning-on-no-match</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Debbie Lockett" on="2014-08-12" change="assert-warning added, use normalize-space in assert"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1428.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>starts-with(normalize-space(.), "The First Book of Moses, Called GENESIS.")</assert>
+            <assert-message>
+               <assert-string-value><![CDATA[** Expect no-matching-template warnings **]]></assert-string-value>
+            </assert-message>
+            <assert-warning/>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1429">
+      <description>Test xsl:mode warning-on-no-match=no</description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy EQName warning-on-no-match</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Debbie Lockett" on="2014-08-12" change="use normalize-space in assert"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1429.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>starts-with(normalize-space(.), "The First Book of Moses, Called GENESIS.")</assert>
+            <assert-message>
+               <assert-string-value><![CDATA[** Expect NO no-matching-template warnings **]]></assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1430">
+      <description>Test xsl:mode warning-on-no-match=no; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy matching-mode warning-on-no-match xsl:apply-imports</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Debbie Lockett" on="2014-08-12" change="use normalize-space in assert"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1430.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>starts-with(normalize-space(.), "The First Book of Moses, Called GENESIS.")</assert>
+            <assert-message>
+               <assert-string-value><![CDATA[** Expect NO no-matching-template warnings **]]></assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1431">
+      <description>Test xsl:mode on-no-match=fail, failure occurs</description>
+      <keywords>xsl:mode on-no-match-attribute fail XTDE0555</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1431.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0555"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1432">
+      <description>Test xsl:mode on-no-match=fail, failure occurs; streaming</description>
+      <keywords>xsl:mode on-no-match-attribute streamable fail XTDE0555</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1432.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0555"/>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1433">
+      <description>Test default-mode attribute</description>
+      <keywords> mode-#current</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1433.xsl"/>
+         <initial-mode name="dm"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>
+ The First Book of Moses, Called GENESIS.
+ <book><QED>Genesis</QED></book>
+ Chapter 1
+ Chapter 2
+</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1434">
+      <description>Test default-mode attribute</description>
+      <keywords>mode-#current mode-#unnamed</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1434.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>
+ The First Book of Moses, Called GENESIS.
+ <book><QED>Genesis</QED></book>
+ Chapter 1
+ Chapter 2
+</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="mode-1435">
+      <description>Test default-mode attribute</description>
+      <keywords>mode-#current non-matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1435.xsl"/>
+         <initial-mode xmlns:a="http://example.com/a" name="a:mode"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>
+ The First Book of Moses, Called GENESIS.
+ <book><QED>Genesis</QED></book>
+ Chapter 1
+ Chapter 2
+</root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1436">
+      <description>Test xsl:mode on-no-match=deep-skip, deep skip should not skip document node</description>
+      <keywords>xsl:mode on-no-match-attribute deep-skip document-node</keywords>
+      <created by="Michael Kay" on="2013-06-15"/>
+      <modified by="Michael Kay" on="2018-01-31" change="see bug #30220, bug #30219, deep-skip does not skip document nodes anymore"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1436.xsl"/>
+      </test>
+      <result>
+         <assert>/ = 'bookbktlong'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1437">
+      <description>Test xsl:mode on-no-match=deep-skip; streaming, deep skip should not skip document node</description>
+      <keywords>xsl:mode on-no-match-attribute streamable deep-skip document-node</keywords>
+      <created by="Michael Kay" on="2013-06-15"/>
+      <modified by="Michael Kay" on="2015-07-02" change="bug #30220, bug #30219, effect of deep-skip on document nodes has changed"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1437.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o>book<o>bktlong</o></o>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1437a">
+      <description>Non-streaming version of mode-1437, deep skip should not skip document node</description>
+      <keywords>xsl:mode on-no-match-attribute deep-skip document-node</keywords>
+      <created by="Michael Kay" on="2017-11-02"/>
+      <modified by="Michael Kay" on="2015-07-02" change="bug #30220, bug #30219, effect of deep-skip on document nodes has changed"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1437.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o>book<o>bktlong</o></o>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1438">
+      <description>Test xsl:mode with typed="yes", fails because nodes are untyped</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy typed-yes XTTE3100</keywords>
+      <created by="Michael Kay" on="2013-06-15"/>
+      <modified by="Debbie Lockett" on="2014-08-13" change="Fixed mode name"/>
+      <environment ref="mode-14s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1438.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <error code="XTTE3100"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1439">
+      <description>Test xsl:mode with typed="yes", fails because nodes are untyped</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy matching-mode typed-yes XTTE3100</keywords>
+      <created by="Michael Kay" on="2013-06-15"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1439.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <error code="XTTE3100"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1440">
+      <description>Test xsl:mode warning-on-no-match="true"</description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy matching-mode xsl:apply-imports</keywords>
+      <created by="Debbie Lockett" on="2014-08-12"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1440.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>starts-with(normalize-space(.), "The First Book of Moses, Called GENESIS.")</assert>
+            <assert-message>
+               <assert-string-value><![CDATA[** Expect no-matching-template warnings **]]></assert-string-value>
+            </assert-message>
+            <assert-warning/>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1441">
+      <description>Test xsl:mode warning-on-no-match="false"</description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy warning-on-no-match</keywords>
+      <created by="Debbie Lockett" on="2014-08-12"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1441.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>starts-with(normalize-space(.), "The First Book of Moses, Called GENESIS.")</assert>
+            <assert-message>
+               <assert-string-value><![CDATA[** Expect NO no-matching-template warnings **]]></assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+         
+   <test-case name="mode-1442">
+      <description>Test xsl:mode warning-on-no-match="1"</description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy matching-mode xsl:apply-imports</keywords>
+      <created by="Debbie Lockett" on="2014-08-12"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1442.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>starts-with(normalize-space(.), "The First Book of Moses, Called GENESIS.")</assert>
+            <assert-message>
+               <assert-string-value><![CDATA[** Expect no-matching-template warnings **]]></assert-string-value>
+            </assert-message>
+            <assert-warning/>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1443">
+      <description>Test xsl:mode warning-on-no-match="0"</description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy warning-on-no-match</keywords>
+      <created by="Debbie Lockett" on="2014-08-12"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1443.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>starts-with(normalize-space(.), "The First Book of Moses, Called GENESIS.")</assert>
+            <assert-message>
+               <assert-string-value><![CDATA[** Expect NO no-matching-template warnings **]]></assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1444">
+      <description>Test xsl:mode warning-on-no-match="Yes" (not allowed) </description>
+      <keywords>xsl:mode on-no-match-attribute text-only-copy matching-mode xsl:apply-imports</keywords>
+      <created by="Debbie Lockett" on="2014-08-12"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1444.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1445">
+      <description>Test xsl:mode typed=" false "</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy typed-false buildin-template-rules</keywords>
+      <created by="Debbie Lockett" on="2014-08-13"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1445.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1411.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1446">
+      <description>Test xsl:mode typed="0"</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy typed-0 buildin-template-rules</keywords>
+      <created by="Debbie Lockett" on="2014-08-13"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1446.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <assert-xml file="mode-1411.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1447">
+      <description>Test xsl:mode typed="No" (not allowed)</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy typed buildin-template-rules</keywords>
+      <created by="Debbie Lockett" on="2014-08-13"/>
+      <environment ref="mode-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1447.xsl"/>
+         <initial-mode name="s"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+      
+   <test-case name="mode-1501">
+      <description>Test for mode="#all" with match="node()"</description>
+      <keywords>mode-#all mode-#current</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1501.xsl"/>
+         <initial-mode name="baz"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc><para><?pi PI ?>text <bar><baz/></bar></para></doc>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1502">
+      <description>Conflicting attributes on xsl:mode declarations</description>
+      <keywords>xsl:mode on-no-match-attribute shallow-copy text-only-copy on-multiple-match-attribute fail XTSE0545</keywords>
+      <created by="Michael Kay" on="2014-04-30"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1502.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0545"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1503">
+      <description>Conflicting attributes on xsl:mode declarations, resolved by import precedence</description>
+      <keywords>xsl:mode on-no-match-attribute deep-copy xsl:import conflict-resolution</keywords>
+      <created by="Michael Kay" on="2014-04-30"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1503.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out/x</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1504">
+      <description>Conflicting attributes on xsl:mode declarations, resolved by import precedence
+        although declarations are not in import order</description>
+      <keywords>xsl:mode on-no-match-attribute deep-copy conflict-resolution xsl:import</keywords>
+      <created by="Michael Kay" on="2014-04-30"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1504.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out/x</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1505">
+      <description>Conflicting attributes on xsl:mode declarations at the same import precedence, 
+      resolved by another declaration at higher import precedence</description>
+      <keywords>xsl:mode on-no-match-attribute deep-copy xsl:import conflict-resolution</keywords>
+      <created by="Michael Kay" on="2014-04-30"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1505.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out/x</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1506">
+      <description>Conflicting attributes on xsl:mode declarations at the same import precedence, 
+      unresolved by another declaration at higher import precedence</description>
+      <keywords>xsl:mode on-no-match-attribute deep-copy xsl:import conflict-resolution</keywords>
+      <created by="Michael Kay" on="2014-04-30"/>
+      <modified by="Michael Kay" on="2022-08-28" change="add streaming dependency"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1506.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0545"/>
+      </result>
+   </test-case>   
+   
+   <test-case name="mode-1507">
+      <description>Unnamed mode cannot be public</description>
+      <created by="Michael Kay" on="2015-08-30"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1507.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case> 
+   
+   <test-case name="mode-1508">
+      <description>Unnamed mode cannot be final</description>
+      <created by="Michael Kay" on="2015-08-30"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1508.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case> 
+   
+   <test-case name="mode-1509">
+      <description>Named mode cannot be abstract</description>
+      <created by="Michael Kay" on="2015-08-30"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1509.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>   
+   
+   <test-case name="mode-1510">
+      <description>Conflicting xsl:mode/@use-accumulators</description>
+      <created by="Michael Kay" on="2017-05-02"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1510.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0545"/>
+      </result>
+   </test-case>   
+   
+   <test-case name="mode-1511">
+      <description>Non-Conflicting xsl:mode/@use-accumulators because precedence differs </description>
+      <created by="Michael Kay" on="2017-05-02"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1511.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out='12'</assert>
+      </result>
+   </test-case>   
+   
+   <test-case name="mode-1512">
+      <description>Changing the order of use-accumulator names is not a conflict </description>
+      <created by="Michael Kay" on="2017-05-02"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1512.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out='8'</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="mode-1513">
+      <description>No conflict between use-accumulator names if masked by something with higher precedence </description>
+      <created by="Michael Kay" on="2017-05-02"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1513.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out='8'</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="mode-1514">
+      <description>No conflict between use-accumulator names. Namespace prefixes and order of declaration differ.</description>
+      <created by="Michael Kay" on="2017-05-02"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1514.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out='8'</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="mode-1515">
+      <description>Conflict between use-accumulator names, although namespace prefixes differ.</description>
+      <created by="Michael Kay" on="2017-05-02"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1515.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0545"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1516">
+      <description>Use on-multiple-match="fail" when a node matches two branches of the same union pattern. See spec bug 30402.</description>
+      <created by="Michael Kay" on="2019-02-27"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1516.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out/unambiguous-match</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1517">
+      <description>Parenthesized pattern is not a union pattern</description>
+      <created by="Michael Kay" on="2019-02-27"/>
+      <environment ref="mode-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1517.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out/unambiguous-match</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1601">
+      <description>Test attribute default-mode (named mode) on literal result element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>  
+   
+   <test-case name="mode-1602">
+      <description>Test attribute default-mode (unnamed mode) on literal result element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1602.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>no-mode:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>   
+   
+   <test-case name="mode-1603">
+      <description>Test attribute default-mode (namespaced mode) on literal result element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1603.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>  
+   
+   <test-case name="mode-1604">
+      <description>Test attribute default-mode (named mode) on xsl:template element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1604.xsl"/>
+         <initial-mode name="a"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>     
+   
+   <test-case name="mode-1605">
+      <description>Test attribute default-mode (unnamed mode) on xsl:template element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1605.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>no-mode:a-text</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="mode-1606">
+      <description>Test attribute default-mode (namespaced mode) on xsl:template element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1606.xsl"/>
+         <initial-mode name="test:a" xmlns:test="http://example.com/test"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>     
+   
+   <test-case name="mode-1607">
+      <description>Test attribute default-mode (named mode) on xsl:for-each element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1607.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1608">
+      <description>Test attribute default-mode (unnamed mode) on xsl:for-each element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1608.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>no-mode:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>   
+   
+   <test-case name="mode-1609">
+      <description>Test attribute default-mode (namespaced mode) on xsl:for-each element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1609.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1610">
+      <description>Test attribute default-mode (named mode) on xsl:if element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1610.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1611">
+      <description>Test attribute default-mode (unnamed mode) on xsl:if element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1611.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>no-mode:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1612">
+      <description>Test attribute default-mode (namespaced mode) on xsl:if element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1612.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="mode-1613">
+      <description>Test attribute default-mode on nested elements</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1613.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>no-mode:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1614">
+      <description>Test attribute default-mode on nested elements</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <modified by="Michael Kay" on="2015-11-01" change="correct for the fact that the default initial mode is xsl:transform/@default-mode"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1614.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-b:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1615">
+      <description>Test attribute default-mode on nested elements</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <modified by="Michael Kay" on="2015-11-01" change="correct for the fact that the default initial mode is xsl:transform/@default-mode"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1615.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1616">
+      <description>Test attribute default-mode on included stylesheet</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1616.xsl"/>
+         <stylesheet file="mode-1616a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1617">
+      <description>Test attribute default-mode on included stylesheet</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1617.xsl"/>
+         <stylesheet file="mode-1616a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1618">
+      <description>Test attribute default-mode on nested elements</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1618.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>element-mode-a:a attribute</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1619">
+      <description>Test attribute default-mode on nested elements</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1619.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>element-mode-a:attribute-mode-b</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1701">
+      <description>Test attribute default-mode on package element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <modified by="Abel Braaksma" on="2016-07-07" change="Bug 29376, made mode public"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1701.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="mode-1701a">
+      <description>Test attribute default-mode on package element, which is hidden by default</description>
+      <created by="Abel Braaksma" on="2016-07-07"/>
+      <modified by="Michael Kay" on="2017-08-07" change="fix bug 30144"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1701a.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ok/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1702">
+      <description>Test attribute default-mode on package element, with declared-modes="no"</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <modified by="Abel Braaksma" on="2016-07-07" change="Bug 29376, made mode public (implicit modes are always private)"/>
+      <modified by="Abel Braaksma" on="2016-11-05" change="Bug 29773, added #unnamed invocation explicitly, for purposes of API independence (in case an API defaults to using @default-mode)"/>
+      <modified by="Abel Braaksma" on="2016-11-05" change="Bug 29773, set mode='#unnamed' on the xsl:template, as this appears to be the intent of the test."/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1702.xsl" role="principal"/>
+         <initial-mode name="#unnamed" />
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1702a">
+      <description>Test attribute default-mode on package element, with declared-modes="no", error scenario</description>
+      <created by="Abel Braaksma" on="2016-07-07"/>
+      <modified by="Abel Braaksma" on="2016-11-03" change="Fixed to call an implicit, but named mode"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1702a.xsl" role="principal"/>
+         <initial-mode name="test" />
+      </test>
+      <result>
+         <error code="XTDE0045"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1703">
+      <description>Mode referenced in default-mode attribute must be declared in package, 
+         when declared-modes="yes" (by default)</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1703.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3085"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1704">
+      <description>Unnamed mode referenced in default-mode attribute must be declared in package, 
+         when declared-modes="yes" (by default)</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1704.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3085"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1705">
+      <description>Test attribute default-mode on xsl:package element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1705.xsl" role="principal"/>
+         <initial-mode name="a"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1705a">
+      <description>Test attribute default-mode on xsl:package element, pointing to an implicitly private mode, this is allowed</description>
+      <created by="Abel Braaksma" on="2016-07-07"/>
+      <modified by="Abel Braaksma" on="2019-02-25" change="Fix, see bug #30144, default-mode is always eligible. Was: expect XTDE0045, fix: no error (updated descr to reflect this, added mode-1705b for the error variant)"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1705a.xsl" role="principal"/>
+         <initial-mode name="a"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1705b">
+      <description>Test attribute default-mode on xsl:package element, error scenario, initial mode is not the default mode and is private</description>
+      <created by="Abel Braaksma" on="2019-02-25"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1705b.xsl" role="principal"/>
+         <initial-mode name="private-mode"/>
+      </test>
+      <result>
+         <error code="XTDE0045" />
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1706">
+      <description>Test attribute default-mode on xsl:package element</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <modified by="Michael Kay" on="2015-11-01" change="restore original intent, initial-mode=#unnamed"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <!-- uses 1705, not 1706, this is intentional -->
+         <package file="mode-1705.xsl" role="principal"/>
+         <initial-mode name="#unnamed"/>
+      </test>
+      <result>
+         <assert>/ok-unnamed</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1707">
+      <description>Test attribute default-mode (named mode) on xsl:template element inside package</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1707.xsl" role="principal"/>
+         <initial-mode name="a"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1708">
+      <description>Test attribute default-mode (unnamed mode) on xsl:template element inside package</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1708.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>no-mode:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1709">
+      <description>Test attribute default-mode (named mode) on xsl:apply-templates element inside package</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1709.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1710">
+      <description>Test attribute default-mode (unnamed mode) on xsl:apply-templates element inside package</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1710.xsl" role="principal"/>
+         <initial-mode name="a"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>no-mode:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1711">
+      <description>Test attribute xsl:default-mode (named mode) on literal result element inside package</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1711.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>mode-a:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1712">
+      <description>Test attribute xsl:default-mode (unnamed mode) on literal result element inside package</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1712.xsl" role="principal"/>
+         <initial-mode name="a"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>no-mode:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1713">
+      <description>Test attribute default-mode (unnamed mode) on nested elements inside package</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1713.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>no-mode:a-text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1714err">
+      <description>Error scenario: test attribute default-mode (named mode) on xsl:template element inside package: not eligible as initial mode</description>
+      <created by="Debbie Lockett" on="2015-09-07"/>
+      <environment ref="mode-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="mode-1714err.xsl" role="principal"/>
+         <initial-mode name="a"/>
+      </test>
+      <result>
+         <error code="XTDE0045" />
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1801">
+      <description>Global context item differs from initial match selection</description>
+      <created by="Michael Kay" on="2016-11-29"/>
+      <environment>
+         <source role="." file="mode-14.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1801.xsl" role="principal"/>
+         <initial-mode name="m" select="1 to 5"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-result-document uri="verse1.xml">
+               <assert-xml><![CDATA[<chapter nr="1" verse="1"><v>In the beginning <deity>God</deity> created the heaven and the earth.</v></chapter>]]></assert-xml>
+            </assert-result-document>
+            <assert-result-document uri="verse2.xml">
+               <assert-xml><![CDATA[<chapter nr="1" verse="2"><v>And the earth was without form, and void; and darkness was upon the face of the deep. And the Spirit of <deity>God</deity> moved upon the face of the waters.</v></chapter>]]></assert-xml>
+            </assert-result-document>
+            <assert-result-document uri="verse3.xml">
+               <assert-xml><![CDATA[<chapter nr="1" verse="3"><v>And <deity>God</deity> said, Let there be light: and there was light.</v></chapter>]]></assert-xml>
+            </assert-result-document>
+            <assert-result-document uri="verse4.xml">
+               <assert-xml><![CDATA[<chapter nr="1" verse="4"><v>And <deity>God</deity> saw the light, that it was good: and <deity>God</deity> divided the light from the darkness.</v></chapter>]]></assert-xml>
+            </assert-result-document>
+            <assert-result-document uri="verse5.xml">
+               <assert-xml><![CDATA[<chapter nr="1" verse="5"><v>And <deity>God</deity> called the light Day, and the darkness he called Night. And the evening and the morning were the first day.</v></chapter>]]></assert-xml>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1802">
+      <description>Space-stripping nodes in initial match selection</description>
+      <created by="Michael Kay" on="2016-11-29"/>
+      <environment>
+         <source role="." file="mode-14.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1802.xsl" role="principal"/>
+         <initial-mode name="m" select="doc('mode-14.xml')//v[position() = 1 to 5]"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-result-document uri="verse1.xml">
+               <assert-xml><![CDATA[<chapter nr="1" verse="1" book="Genesis"><v>In the beginning <deity>God</deity> created the heaven and the earth.</v></chapter>]]></assert-xml>
+            </assert-result-document>
+            <assert-result-document uri="verse2.xml">
+               <assert-xml><![CDATA[<chapter nr="1" verse="2" book="Genesis"><v>And the earth was without form, and void; and darkness was upon the face of the deep. And the Spirit of <deity>God</deity> moved upon the face of the waters.</v></chapter>]]></assert-xml>
+            </assert-result-document>
+            <assert-result-document uri="verse3.xml">
+               <assert-xml><![CDATA[<chapter nr="1" verse="3" book="Genesis"><v>And <deity>God</deity> said, Let there be light: and there was light.</v></chapter>]]></assert-xml>
+            </assert-result-document>
+            <assert-result-document uri="verse4.xml">
+               <assert-xml><![CDATA[<chapter nr="1" verse="4" book="Genesis"><v>And <deity>God</deity> saw the light, that it was good: and <deity>God</deity> divided the light from the darkness.</v></chapter>]]></assert-xml>
+            </assert-result-document>
+            <assert-result-document uri="verse5.xml">
+               <assert-xml><![CDATA[<chapter nr="1" verse="5" book="Genesis"><v>And <deity>God</deity> called the light Day, and the darkness he called Night. And the evening and the morning were the first day.</v></chapter>]]></assert-xml>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1803">
+      <description>Default-mode refers to a mode that is otherwise unmentioned (not useful, but not an error either)</description>
+      <created by="Michael Kay" on="2017-09-19"/>
+      <environment>
+         <source role="." file="mode-14.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="mode-1803.xsl" role="principal"/>
+         <initial-mode name="a"/>
+      </test>
+      <result>
+         <assert>true()</assert> <!-- Stylesheet does nothing; we're only concerned that it doesn't fail -->
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1901">
+      <description>Override on-no-match attribute</description>
+      <created by="Michael Kay" on="2021-10-17"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE0555"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1902">
+      <description>Override visibility attribute</description>
+      <created by="Michael Kay" on="2021-10-17"/>
+      <environment ref="mode-11"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1902.xsl"/>
+         <initial-mode name="X"/>
+      </test>
+      <result>
+         <error code="XTDE0045"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1903">
+      <description>Two xsl:mode declarations, one specifies streamable="yes"</description>
+      <created by="Michael Kay" on="2021-10-17"/>
+      <modified by="Michael Kay" on="2022-07-13" change="add streaming dependency"/>
+      <environment ref="mode-11"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1903.xsl"/>
+         <initial-mode name="X"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1904">
+      <description>Two xsl:mode declarations, conflicting visibility attributes, resolved by another at higher precedence</description>
+      <created by="Michael Kay" on="2021-10-17"/>
+      <environment ref="mode-11"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1904.xsl"/>
+         <initial-mode name="X"/>
+      </test>
+      <result>
+         <error code="XTSE0545"/>
+      </result>
+   </test-case>
+   
+   <test-case name="mode-1905">
+      <description>Two xsl:mode declarations, conflicting visibility attributes, resolved by another at higher precedence</description>
+      <created by="Michael Kay" on="2021-10-17"/>
+      <environment ref="mode-11"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="mode-1904a.xsl"/>
+         <initial-mode name="X"/>
+      </test>
+      <result>
+         <assert>exists(/scout)</assert>
+      </result>
+   </test-case>
+   
+  
+   
+</test-set>

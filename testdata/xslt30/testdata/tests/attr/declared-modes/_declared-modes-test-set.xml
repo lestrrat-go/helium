@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="declared-modes">
+   <description>Tests the effect of the declared-modes attribute on xsl:package (or its absence)</description>
+
+   <dependencies>
+     <spec value="XSLT30+"/>
+   </dependencies>
+   
+   <test-case name="declared-modes-001">
+      <description>By default within a package mode used on xsl:template must be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3085"/>
+      </result>
+   </test-case>
+   
+   <test-case name="declared-modes-002">
+      <description>By default within a package mode used on xsl:apply-templates must be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3085"/>
+      </result>
+   </test-case>
+   
+   <test-case name="declared-modes-003">
+      <description>By default within a package, unnamed mode used implicitly on xsl:template must be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3085"/>
+      </result>
+   </test-case>
+   
+   <test-case name="declared-modes-004">
+      <description>By default within a package, unnamed mode used implicitly on xsl:apply-templates must be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3085"/>
+      </result>
+   </test-case>
+   
+   <test-case name="declared-modes-005">
+      <description>With declared-modes='yes' within a package mode used on xsl:template must be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3085"/>
+      </result>
+   </test-case>
+   
+   <test-case name="declared-modes-006">
+      <description>With declared-modes='yes' within a package mode used on xsl:apply-templates must be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3085"/>
+      </result>
+   </test-case>
+   
+   <test-case name="declared-modes-007">
+      <description>With declared-modes='yes' within a package, unnamed mode used implicitly on xsl:template must be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3085"/>
+      </result>
+   </test-case>
+   
+   <test-case name="declared-modes-008">
+      <description>With declared-modes='yes' within a package, unnamed mode used implicitly on xsl:apply-templates must be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-008.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3085"/>
+      </result>
+   </test-case>
+   
+   <test-case name="declared-modes-009">
+      <description>With declared-modes='no' within a package mode used on xsl:template need not be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/a</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="declared-modes-010">
+      <description>With declared-modes='no' within a package mode used on xsl:apply-templates need not be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-010.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/a</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="declared-modes-011">
+      <description>With declared-modes='no' within a package, unnamed mode used implicitly on xsl:template need not be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-011.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/a</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="declared-modes-012">
+      <description>With declared-modes='no' within a package, unnamed mode used implicitly on xsl:apply-templates need not be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-012.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/a</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="declared-modes-013">
+      <description>With declared-modes='yes' within a package, #unnamed mode used explicitly on xsl:template must be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-013.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3085"/>
+      </result>
+   </test-case>
+   
+   <test-case name="declared-modes-014">
+      <description>With declared-modes='yes' within a package, #unnamed mode used explicitly on xsl:apply-templates must be declared</description>
+      <created by="Michael Kay" on="2015-08-19"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="declared-modes-014.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3085"/>
+      </result>
+   </test-case>
+
+
+
+</test-set> 

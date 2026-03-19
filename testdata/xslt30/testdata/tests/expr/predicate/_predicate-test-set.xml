@@ -1,0 +1,1068 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="predicate">
+   <description>Tests predicate</description>
+   <environment name="predicate01">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a>1</a>
+  <a>2</a>
+  <a>3</a>
+  <a>4</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="predicate06">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a>1</a>
+  <a>2
+    <achild>target</achild>
+  </a>
+  <a>3</a>
+  <a>4</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="predicate11">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a>1</a>
+  <a>2
+    <achild>target</achild>
+  </a>
+  <a>3</a>
+  <a>target</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="predicate12">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a squish="heavy">1</a>
+  <a>2
+    <achild>target</achild>
+  </a>
+  <a>3</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="predicate13">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a squish="heavy">1</a>
+  <a>2
+    <achild>target</achild>
+  </a>
+  <a>3</a>
+  <a>target</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="predicate14">
+      <source role="." file="predicate14.xml"/>
+   </environment>
+   <environment name="predicate17">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a squish="heavy">1</a>
+  <a>2
+    <achild size="large">child2</achild>
+  </a>
+  <a>3</a>
+  <a attrib="present">4
+    <achild>child4</achild>
+  </a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="predicate18">
+      <source role="." file="predicate18.xml"/>
+   </environment>
+   <environment name="predicate19">
+      <source role="." file="predicate19.xml"/>
+   </environment>
+   <environment name="predicate21">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a>1</a>
+  <a>2<achild>target</achild></a>
+  <a>3</a>
+  <a>4<achild>missed</achild></a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="predicate31">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a>1</a>
+  <a>2</a>
+  <a>3</a>
+  <a>4</a>
+  <a>2</a>
+  <a>2</a>
+  <a>1</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="predicate37">
+      <source role=".">
+         <content><![CDATA[<a> 
+  <b>This is a B</b> 
+  <c></c> 
+</a> ]]></content>
+      </source>
+   </environment>
+   <environment name="predicate38">
+      <source role="." file="predicate38.xml"/>
+   </environment>
+   <environment name="predicate39">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <child1>Text from child1<child2></child2></child1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="predicate40">
+      <source role="." file="predicate40.xml"/>
+   </environment>
+   <environment name="predicate42">
+      <source role="." file="predicate42.xml"/>
+   </environment>
+   <environment name="predicate43">
+      <source role="." file="predicate43.xml"/>
+   </environment>
+   <environment name="predicate44">
+      <source role="." file="predicate44.xml"/>
+   </environment>
+   <environment name="predicate45">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <element1>Wrong node selected!!</element1>
+  <element1>Test executed successfully</element1>
+  <element1>Wrong node selected!!</element1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="predicate48">
+      <source role="." file="predicate48.xml"/>
+   </environment>
+   <environment name="predicate57">
+      <source role="." file="predicate57.xml"/>
+   </environment>
+   <environment name="predicate58">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a>1</a>
+  <a ex="">2</a>
+  <a ex="value">3</a>
+  <a why="">4</a>
+  <a why="value">5</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="predicate59">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="predicate-001">
+      <description>FileName: PREDICATE01 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-002">
+      <description>FileName: PREDICATE04 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-003">
+      <description>FileName: PREDICATE05 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-004">
+      <description>FileName: PREDICATE07 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1234</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-005">
+      <description>FileName: PREDICATE08 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1234</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-006">
+      <description>FileName: PREDICATE09 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>123</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-007">
+      <description></description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-008">
+      <description> Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-009">
+      <description>FileName: PREDICATE28 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-010">
+      <description>FileName: PREDICATE29 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-011">
+      <description>FileName: PREDICATE30 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-012">
+      <description>FileName: PREDICATE32 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-013">
+      <description>FileName: PREDICATE33 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>123</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-014">
+      <description>FileName: PREDICATE34 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>123</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-015">
+      <description>FileName: PREDICATE35 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-016">
+      <description>FileName: PREDICATE06 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2
+    target
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-017">
+      <description>FileName: PREDICATE20 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2
+    target
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-018">
+      <description>FileName: PREDICATE11 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2
+    target
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-019">
+      <description>FileName: PREDICATE12 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12
+    target
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-020">
+      <description>FileName: PREDICATE13 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3 target</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-021">
+      <description>FileName: PREDICATE14 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1235</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-022">
+      <description>FileName: PREDICATE15 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>13</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-023">
+      <description>FileName: PREDICATE16 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1235</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-024">
+      <description>FileName: PREDICATE17 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate17"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2
+    child2
+  3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-025">
+      <description>FileName: PREDICATE18 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 4.2</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate18"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>f</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-026">
+      <description>FileName: PREDICATE19 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 4.2</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>abcdq</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-027">
+      <description>FileName: PREDICATE21 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate21"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4missed</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-028">
+      <description>FileName: PREDICATE22 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate21"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4missed</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-029">
+      <description>FileName: PREDICATE31 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate31"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>123</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-030">
+      <description>FileName: PREDICATE37 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate37"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>( This is a B )</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-031">
+      <description>FileName: predicate38 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-29" change="See Bug 20022" />
+      <environment ref="predicate38"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-031.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><predicate1>1 is 4,5,6,</predicate1><predicate2>2 is 10,11,12,</predicate2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-032">
+      <description>FileName: predicate39 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate39"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-032.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Text from child1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-033">
+      <description>FileName: predicate40 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate40"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Text from child2 of second element (correct execution)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-034">
+      <description>FileName: predicate41 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate40"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-034.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Text from child2 of second element (correct execution)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-035">
+      <description>FileName: predicate42 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate42"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Text from child2 of second element (correct execution)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-036">
+      <description>FileName: predicate43 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate43"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Text from first element (correct execution)
+    </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-037">
+      <description>FileName: predicate44 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate44"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-038">
+      <description>FileName: predicate45 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate45"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-039">
+      <description>FileName: predicate46 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate45"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-039.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-040">
+      <description>FileName: predicate47 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate45"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-040.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-041">
+      <description>FileName: predicate48 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate48"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-041.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><test-info>(a and b)</test-info><test-output>c d e f </test-output></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-042">
+      <description>FileName: predicate49 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate48"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-042.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><test-info>((a or b) and c)</test-info><test-output>6 7 a b e f </test-output></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-043">
+      <description>FileName: predicate50 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate48"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-043.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><test-info>(a and (b or c) and d)</test-info><test-output>b d f </test-output></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-044">
+      <description>FileName: predicate51 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate48"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-044.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><test-info>(a and b or c and d)</test-info><test-output>3 7 b c d e f </test-output></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-045">
+      <description>FileName: predicate52 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate48"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-045.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><test-info>((a and b) or (c and d))</test-info><test-output>3 7 b c d e f </test-output></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-046">
+      <description>FileName: predicate53 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate48"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-046.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><test-info>(a or (b and c) or d)</test-info><test-output>1 3 5 6 7 8 9 a b c d e f </test-output></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-047">
+      <description>FileName: predicate54 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate48"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-047.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><test-info>((a or b) and (c or d))</test-info><test-output>5 6 7 9 a b d e f </test-output></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-048">
+      <description>FileName: predicate55 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate48"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-048.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><test-info>(a or b and c or d)</test-info><test-output>1 3 5 6 7 8 9 a b c d e f </test-output></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-049">
+      <description>FileName: predicate56 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 3.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate48"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-049.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><test-info>(a or b or c)</test-info><test-output>2 3 4 5 6 7 8 9 a b c d e f </test-output></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-050">
+      <description>FileName: predicate57 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate57"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-050.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>tr nodes: 8, tr nodes with 3 td children: 2
+<nodes>2.1, 2.2, 2.3
+  7.1, 7.2, 7.3
+  </nodes></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-051">
+      <description>FileName: predicate58 Document: http://www.w3.org/TR/xpath DocVersion: 19991116 Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2018-05-23" change="Make results easier to compare"/>
+      <environment ref="predicate58"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-051.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a/@value = "2"</assert>
+            <assert>/out/b/@value = "1"</assert>
+            <assert>/out/c/@value = "4"</assert>
+            <assert>/out/d/@value = "1"</assert>
+            <assert>/out/e/@value = "1"</assert>
+            <assert>/out/f/@value = "3"</assert>
+            <assert>/out/g/@value = "4"</assert>
+            <assert>/out/h/@value = "1"</assert>
+            <assert>/out/i/@value = "1"</assert>
+            <assert>/out/j/@value = "1"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="predicate-052">
+      <description>two calls on current() in a single predicate - bug in Saxon 8.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="predicate59"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-052.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>ok1</a><a>ok2</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="predicate-053">
+      <description>An opportunity for an optimizer to reorder predicates</description>
+      <created by="Michael Kay" on="2015-06-18"/>
+      <environment ref="predicate48"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-053.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><bar a="1" b="0" c="0" d="0" seq="8"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="predicate-054">
+      <description>Another opportunity for an optimizer to reorder predicates</description>
+      <created by="Michael Kay" on="2015-06-18"/>
+      <environment ref="predicate48"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-054.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><bar seq="8"/><bar seq="9"/><bar seq="a"/><bar seq="b"/><bar seq="c"/><bar seq="d"/><bar seq="e"/><bar seq="f"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="predicate-055">
+      <description>Regression test for Saxon optimizer bug 3769</description>
+      <created by="Michael Kay" on="2018-05-02"/>
+      <environment>
+         <source role="." file="predicate-055.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-055.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "Correct"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="predicate-056">
+      <description>Predicates involving map lookups</description>
+      <created by="Michael Kay after Martin Honnen" on="2019-02-12"/>
+      <environment ref="predicate48"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-056.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="predicate-057">
+      <description>Saxon bug 4583 (a static type checking issue)</description>
+      <created by="Michael Kay" on="2020-06-13"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="predicate-057.xsl"/>
+      </test>
+      <result>
+         <assert>/i = '0'</assert>
+      </result>
+   </test-case>
+   
+</test-set>

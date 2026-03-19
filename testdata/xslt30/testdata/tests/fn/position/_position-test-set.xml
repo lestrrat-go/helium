@@ -1,0 +1,3887 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="position">
+   <description>Tests the position() function</description>
+
+   <environment name="position-02">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a>1</a>
+  <a>2</a>
+  <a>3</a>
+  <a>4</a>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="position-03">
+      <source role="." file="position-03.xml"/>
+   </environment>
+   <environment name="position-04">
+      <source role="." file="position-04.xml"/>
+   </environment>
+   <environment name="position-05">
+      <source role="." file="position-05.xml"/>
+   </environment>
+   <environment name="position-06">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a test="true">a</a>
+  <a>b</a>
+  <a test="false">c</a>
+  <a test="true">d</a>
+  <a>e</a>
+  <a test="false">f</a>
+  <a test="true">g</a>
+  <a test="false">h</a>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="position-07">
+      <source role="." file="position-07.xml"/>
+   </environment>
+   <environment name="position-08">
+      <source role=".">
+         <content><![CDATA[ 
+<letters>
+  <letter>a</letter>
+  <letter>b</letter>
+  <letter>c</letter>
+  <letter>d</letter>
+  <letter>e</letter>
+  <letter>f</letter>
+</letters>
+]]></content>
+      </source>
+   </environment>
+   <environment name="position-09">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <p/>
+  <p/>
+  <p/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-10">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <p/>
+  <p/>
+  <p/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-11">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <a>1</a>
+  <a>2</a>
+  <a>3</a>
+  <a>4</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-12">
+      <source role="." file="position-12.xml"/>
+   </environment>
+   <environment name="position-13">
+      <source role="." file="position-13.xml"/>
+   </environment>
+   <environment name="position-14">
+      <source role="." file="position-14.xml"/>
+   </environment>
+   <environment name="position-15">
+      <source role="." file="position-15.xml"/>
+   </environment>
+   <environment name="position-16">
+      <source role="." file="position-16.xml"/>
+   </environment>
+   <environment name="position-17">
+      <source role=".">
+         <content><![CDATA[<doc>
+<a/><b/><c/><d/><e/><f/><g/><h/><i/><j/><k/><l/><m/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-18">
+      <source role=".">
+         <content><![CDATA[<TEST>
+  <LINE>1</LINE>
+  <LINE>2</LINE>
+  <LINE>3</LINE>
+  <LINE>4</LINE>
+</TEST>]]></content>
+      </source>
+   </environment>
+   <environment name="position-19">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <a>1</a>
+  <a>2</a>
+  <a>3</a>
+  <a>4</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-20">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <a>1</a>
+  <a>2</a>
+  <a>3</a>
+  <a>4</a>
+  <b/>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+   
+   <environment name="position-23">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <inner att2="blob"></inner>
+  <inner blat="bar"></inner>
+  <inner blat="barr"></inner>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-24">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <inner att2="blob"></inner>
+  <inner blat="bar"></inner>
+  <inner blat="barr"></inner>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-25">
+      <source role="." file="position-25.xml"/>
+   </environment>
+   <environment name="position-26">
+      <source role="." file="position-26.xml"/>
+   </environment>
+   <environment name="position-27">
+      <source role="." file="position-27.xml"/>
+   </environment>
+   <environment name="position-28">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <inner att2="blob">1</inner>
+  <inner blat="bar">2</inner>
+  <inner blat="barr">3</inner>
+  <inner blat="baarr">4</inner>
+  <inner blat="bdaarr">5</inner>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-29">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <inner1>k1</inner1>
+  <inner2>k2</inner2>
+  <inner3>k3</inner3>
+  <inner4>k4</inner4>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-30">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <inner1>k1</inner1>
+  <inner1>k2</inner1>
+  <inner1>k3</inner1>
+  <inner1>k4</inner1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-31">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <inner1>k1<cd></cd></inner1>
+  <inner1>k2</inner1>
+  <inner1>k3</inner1>
+  <inner1>k4</inner1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-32">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <a>1</a>
+  <a>2</a>
+  <a>3</a>
+  <a>4</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-33">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a>1</a>
+  <a>2</a>
+  <a>3</a>
+  <a>4</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-34">
+      <source role="." file="position-34.xml"/>
+   </environment>
+   <environment name="position-35">
+      <source role="." file="position-35.xml"/>
+   </environment>
+   <environment name="position-36">
+      <source role="." file="position-36.xml"/>
+   </environment>
+   <environment name="position-37">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a test="true">a</a>
+  <a>b</a>
+  <a test="false">c</a>
+  <a test="true">d</a>
+  <a>e</a>
+  <a test="false">f</a>
+  <a test="true">g</a>
+  <a test="false">h</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-38">
+      <source role="." file="position-38.xml"/>
+   </environment>
+   <environment name="position-39">
+      <source role="." file="position-39.xml"/>
+   </environment>
+   <environment name="position-40">
+      <source role="." file="position-40.xml"/>
+   </environment>
+   <environment name="position-41">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <a mark="a1"/>
+  <b mark="b1"><bb/></b>
+  <c mark="c1"/>
+  <c mark="c2"/>
+  <a mark="a2"/>
+  <a mark="a3"/>
+  <b mark="b2"/>
+  <c mark="c3"/>
+  <b mark="b3"/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-42">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <item>XSLT</item>
+  <item>processors</item>
+  <item>must</item>
+  <item>use</item>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-43">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <item>XSLT</item>
+  <item>processors</item>
+  <item>must</item>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-44">
+      <source role=".">
+         <content><![CDATA[<doc> 
+  <item>XSLT</item> 
+  <item>processors</item> 
+  <item>must</item> 
+  <item>use</item> 
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-45">
+      <source role="." file="position-45.xml"/>
+   </environment>
+   <environment name="position-46">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <north-west1/>
+  <north-west2/>
+  <north/>
+  <north-east1/>
+  <north-east2/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-47">
+      <source role="." file="position-47.xml"/>
+   </environment>
+   <environment name="position-48">
+      <source role=".">
+         <content><![CDATA[ 
+<letters>
+  <letter>a</letter>
+  <letter>b</letter>
+  <letter>c</letter>
+  <letter>d</letter>
+  <letter>e</letter>
+  <letter>f</letter>
+</letters>]]></content>
+      </source>
+   </environment>
+   <environment name="position-49">
+      <source role=".">
+         <content><![CDATA[<Doc bar:foo1="attr1" xmlns:bar="http://example.org/bar" bar:foo2="attr2"
+     xmlns:foo="http://example.org/foo"/>]]></content>
+      </source>
+   </environment>
+   <environment name="position-50">
+      <source role="." file="position-50.xml"/>
+   </environment>
+   <environment name="position-51">
+      <source role=".">
+         <content><![CDATA[<foolist>
+ <foo>alpha</foo>
+ <foo>beta</foo>
+ <foo>gamma</foo>
+ <foo>delta</foo>
+</foolist>]]></content>
+      </source>
+   </environment>
+   <environment name="position-52">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-53">
+      <source role=".">
+         <content><![CDATA[<doc>A<a>1</a>B<a>2</a>C<a>3</a>D<a>4</a>E</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-54">
+      <source role=".">
+         <content><![CDATA[ 
+<letters>
+  <letter>a</letter>
+  <letter>b</letter>
+  <letter>c</letter>
+  <letter>d</letter>
+  <letter>e</letter>
+  <letter>f</letter>
+  <letter>g</letter>
+</letters>]]></content>
+      </source>
+   </environment>
+   <environment name="position-55">
+      <source role="." file="position-55.xml"/>
+   </environment>
+   
+   <environment name="position-57">
+      <source role="." file="position-57.xml"/>
+   </environment>
+   <environment name="position-58">
+      <source role="." file="position-58.xml"/>
+   </environment>
+   <environment name="position-59">
+      <source role="." file="position-59.xml"/>
+   </environment>
+   <environment name="position-60">
+      <source role="." file="position-60.xml"/>
+   </environment>
+   
+   <environment name="position-63">
+      <source role="." file="position-63.xml"/>
+   </environment>
+   <environment name="position-64">
+      <source role="." file="position-64.xml"/>
+   </environment>
+   
+   <environment name="position-67">
+      <source role="." file="position-67.xml"/>
+   </environment>
+   <environment name="position-68">
+      <source role="." file="position-68.xml"/>
+   </environment>
+   
+   <environment name="position-70">
+      <source role="." file="position-70.xml"/>
+   </environment>
+   
+   
+   <environment name="position-73">
+      <source role="." file="position-73.xml"/>
+   </environment>
+   <environment name="position-74">
+      <source role="." file="position-74.xml"/>
+   </environment>
+   <environment name="position-75">
+      <source role="." file="position-75.xml"/>
+   </environment>
+   <environment name="position-76">
+      <source role="." file="position-76.xml"/>
+   </environment>
+   <environment name="position-77">
+      <source role="." file="position-77.xml"/>
+   </environment>
+   <environment name="position-78">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a z="3">1st</a>
+  <a z="2">2nd</a>
+  <a z="4">3rd</a>
+  <a z="1">4th</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="position-79">
+      <source role=".">
+         <content><![CDATA[ 
+<root>
+  <a>
+    <b/>
+    <b/>
+  </a>
+  <a>
+    <b/>
+    <b/>
+    <b/>
+  </a>
+</root>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="position-80">
+      <source role="." file="position-80.xml"/>
+   </environment>
+   
+   <environment name="position-82">
+      <source role="." file="position-82.xml"/>
+   </environment>
+   
+   
+
+   <test-case name="position-0101">
+      <description>Node Set Functions Test of 'last()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><a>1</a><a>2</a><a>3</a><a>4</a></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="position-0102">
+      <description>Integer subscripting: Saxon bug report.</description>
+      <created by="Vliadimir Nestorovsky" on="2013-10-25"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0102.xsl"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>X X</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="position-0103">
+      <description>Pass argument depending on position() to user function call: Saxon bug report.</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-08-24"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0103.xsl"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/m/out[1][@pos="1"][@value="foo 1, 1"]</assert>
+            <assert>/m/out[2][@pos="1 8"][@value="foo 1, 2"]</assert>
+            <assert>/m/out[3][@pos="1 8 27"][@value="foo 2, 1"]</assert>
+            <assert>/m/out[4][@pos="1 8 27 64"][@value="foo 2, 2"]</assert>
+            <assert>/m/out[5][@pos="1 8 27 64 125"][@value="foo 3, 2"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="position-0201">
+      <description>Node Set Functions Test of 'position()' function with wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-02"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4
+  1
+  2
+  3
+  4
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-0202">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-02"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  1,
+  2,
+  3,
+  4
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-0301">
+      <description>Node Set Functions Test of 'position()' function with wildcard and attribute test.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-0302">
+      <description>Node Set Functions, 2.4 Predicates Test of 'position()' in 2nd predicate.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-0401">
+      <description>Node Set Functions, 2.4 Predicates Test of 'position()' when used with xsl:key.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-0501">
+      <description>Node Set Functions Test of 'count()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-05"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>8</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-0601">
+      <description>Node Set Functions. Test of 'last()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>h</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-0701">
+      <description>test position() with and without sorting</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>16 22 34 43 51 65 11 22 33 44 55 66 </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-0702">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0702.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1_6 2_2 3_4 4_3 5_1 6_5 
+  Now, sort the data...    
+    1_1 2_2 3_3 4_4 5_5 6_6 </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-0801">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-08"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a, b, c, d, e, f</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-0901">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-09"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false,true,false,</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-0902">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-09"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-0902.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false,true,false,</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1001">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true,true,true,</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1002">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true,true,true,</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1101">
+      <description>Node Set Functions Test of 'last()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1102">
+      <description>Node Set Functions Test of 'position()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1103">
+      <description>Node Set Functions Test of 'position()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1104">
+      <description>Node Set Functions Test of 'position()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1105">
+      <description>Node Set Functions Test of 'position()' function in predicate.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1106">
+      <description>DOCUMENT: http://www.w3.org/TR/xpath SECTION: 2.4 Predicates Test of positional indexing.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1107">
+      <description>DOCUMENT: http://www.w3.org/TR/xpath SECTION: 2.4 Predicates Test of positional indexing.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1108">
+      <description>DOCUMENT: http://www.w3.org/TR/xpath SECTION: 2.4 Predicates Test of positional indexing.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1109">
+      <description>DOCUMENT: http://www.w3.org/TR/xpath SECTION: 2.4 Predicates Test of positional indexing.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1109.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1110">
+      <description>Node Set Functions Test of 'last()' function with current context position.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1110.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true,true,true,true,</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1111">
+      <description>Node Set Functions Test of 'position()' function with wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1111.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1112">
+      <description>Node Set Functions Test of 'position()' function with wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1112.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1113">
+      <description>Node Set Functions Test of 'position()' function with wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1113.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1114">
+      <description>Node Set Functions Test of positional indexing with wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1114.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1115">
+      <description>Node Set Functions Test of positional indexing with wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1115.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1116">
+      <description>Node Set Functions Test of positional indexing with wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1116.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1117">
+      <description>Node Set Functions Test of positional indexing with wildcard.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1117.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1118">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1118.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1119">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1119.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1120">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1120.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1121">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1121.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1122">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1122.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1123">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1123.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1124">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1124.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1125">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1125.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true,true,true,true,</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1126">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1126.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1127">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1127.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1128">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1128.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1129">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1129.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1130">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1130.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1131">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1131.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1132">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1132.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1201">
+      <description>Node Set Functions Test of 'position()' function with wildcard and attribute test.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+3
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1202">
+      <description>Node Set Functions Test of 'position()' function with wildcard and attribute test.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+1
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1203">
+      <description>Node Set Functions Test of 'position()' function with wildcard and attribute test.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+2
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1204">
+      <description>Node Set Functions, 2.4 Predicates. Test of 'position()' in 2nd predicate.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1204.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1205">
+      <description>Node Set Functions, 2.4 Predicates. Test of 'position()' in 2nd predicate.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1205.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1206">
+      <description>Node Set Functions, 2.4 Predicates. Test of 'position()' in 2nd predicate.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1206.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1207">
+      <description>Node Set Functions, 2.4 Predicates. Test of positional indexing in 2nd predicate.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1207.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1208">
+      <description>Node Set Functions, 2.4 Predicates. Test of positional indexing in 2nd predicate.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1208.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1209">
+      <description>Node Set Functions, 2.4 Predicates. Test of positional indexing in 2nd predicate.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1209.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1210">
+      <description>Node Set Functions, 2.4 Predicates. Test of positional indexing in 2nd predicate.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1210.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1211">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1211.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+3
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1212">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1212.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+1
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1213">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1213.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+2
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1214">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1214.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1215">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1215.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1216">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1216.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1217">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1217.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1218">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1218.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1301">
+      <description>Node Set Functions, 2.4 Predicates. Test of 'position()' when used with xsl:key.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>7</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1302">
+      <description>Node Set Functions, 2.4 Predicates. Test of 'position()' when used with xsl:key.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1303">
+      <description>Node Set Functions, 2.4 Predicates. Test of 'position()' when used with xsl:key.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1303.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1304">
+      <description>Node Set Functions, 2.4 Predicates. Test of positional indexing when used with xsl:key.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1304.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1305">
+      <description>Node Set Functions, 2.4 Predicates. Test of positional indexing when used with xsl:key.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1305.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1306">
+      <description>Node Set Functions, 2.4 Predicates. Test of positional indexing when used with xsl:key.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1306.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1307">
+      <description>Node Set Functions, 2.4 Predicates. Test of positional indexing when used with xsl:key.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1307.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1308">
+      <description>Node Set Functions, 2.4 Predicates. Test of positional indexing when used with xsl:key and xsl:apply-templates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1308.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><B>4</B></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1309">
+      <description>Node Set Functions, 2.4 Predicates. Test of 'position()' when used with xsl:key and xsl:apply-templates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1309.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><B>3</B></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1310">
+      <description>Node Set Functions, 2.4 Predicates. Test of 'position()' when used with xsl:key and xsl:apply-templates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1310.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><B>1</B></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1311">
+      <description>Node Set Functions, 2.4 Predicates. Test of 'position()' when used with xsl:key and xsl:apply-templates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1311.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><B>2</B></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1312">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1312.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>7</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1313">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1313.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1314">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1314.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1315">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1315.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1316">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1316.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1317">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1317.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1318">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1318.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><B>4</B></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1319">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1319.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><B>3</B></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1320">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1320.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><B>1</B></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1401">
+      <description>Node Set Functions. Test of 'count()'..</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1402">
+      <description>Node Set Functions. Test of 'count()'..</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1403">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1403.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1404">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1404.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1501">
+      <description>Node Set Functions. Test of 'last()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>h</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1502">
+      <description>Node Set Functions. Test of 'last()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1502.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>g</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1503">
+      <description>Node Set Functions. Test of 'last()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1503.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>g</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1504">
+      <description>Node Set Functions. Test of 'last()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1504.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>e</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1505">
+      <description>Node Set Functions. Test of 'last()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1505.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>e</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1506">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1506.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>h</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1507">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1507.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>g</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1508">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1508.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>g</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1509">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1509.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>e</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1510">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1510.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>e</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1601">
+      <description>Node Set Functions. Test of 'last()' against each axis.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-16"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1601.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="position-1601.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="position-1602">
+      <description>Node Set Functions. Test of '[position()=last()]' against each axis.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>
+      <environment ref="position-16"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1602.xsl"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/ancestor = 'doc'</assert>
+           <assert>/out/ancestor-or-self = 'doc'</assert>
+           <assert>/out/descendant = 'c5'</assert>
+           <assert>/out/descendant-or-self = 'c5'</assert>
+           <assert>/out/following = 'a5'</assert>
+           <assert>/out/following-sibling = 'b4'</assert>
+           <assert>/out/parent = 'a3'</assert>
+           <assert>/out/preceding = 'a1'</assert>
+           <assert>/out/preceding-sibling = 'b1'</assert>
+           <assert>/out/self = 'b3'</assert>
+           <assert>/out/attribute = ('x', 'y', 'z') (:order is unpredictable:)</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="position-1701">
+      <description>Node Set Functions. Test of '[position()=n]' optimizations.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-17"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>;
+  <a/><b/><c/>;
+  <a/><b/><c/>;  
+  <e/><f/><g/><h/><i/><j/><k/><l/><m/>;  
+  <e/><f/><g/><h/><i/><j/><k/><l/><m/>;  
+  <d/><e/><f/><g/>;  
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1702">
+      <description>Node Set Functions. Test of recursive '[position()&gt;1]' optimizations.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1702.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a/><b/><c/><d/><e/><f/><g/><h/><i/><j/><k/><l/><m/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1703">
+      <description>Node Set Functions. Test of recursive '[position()&gt;1]' optimizations. this is a variant of pos63 in which the expression $nodes[1] is replaced by a numeric expression whose value (and indeed type) is not known statically. This takes a different (and difficult) path through the FilterExpression code</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1703.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a/><b/><c/><d/><e/><f/><g/><h/><i/><j/><k/><l/><m/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1801">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2015-03-20" change="Removed serialization requirement, bug 20894"/>
+      <environment ref="position-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<html><body><P>1</P><P>2</P><P>3</P>4</body></html>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-1901">
+      <description>Node Set Functions Test optimization of positional predicates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-1901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>1</a><a>2</a><a>3</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2001">
+      <description>Node Set Functions Test optimization of positional predicates on a reverse axis.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>3</a><a>4</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2101">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<a/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><x length="3" stack="d c b" stack1="d" stack2="c" stack3="b" stack-2-="c b"
+            /><x length="2" stack="c b" stack1="c" stack2="b" stack3="" stack-2-="b"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2201">
+      <description>bug report from Jonathan Williford: last() fails when applied to an axis on a virtual copy of a node</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2019-12-03" change="drop unused entity declaration"/>
+      <environment>
+         <source role="." file="position-22.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ir:math xmlns:ir="http://www.gh-mathspeak.com/mathspeak-internal-representation"
+            ><ir:multiscripts><ir:base>10</ir:base><ir:superscript><ir:multiscripts><ir:base>4</ir:base></ir:multiscripts
+            ></ir:superscript><ir:base-line/></ir:multiscripts></ir:math>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2301">
+      <description>Test of fn:position()'s return value as xs:integer</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-23"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1 | true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2401">
+      <description>Test of fn:last()'s return value as xs:integer</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-24"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1 | true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2402">
+      <description>Test of fn:count()'s return value as xs:integer</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-24"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3 | true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2501">
+      <description>Test of fn:position() in predicate in conjunction with wildcard</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-25"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>4</t1><t2>4</t2><t3>3</t3><t4>3</t4></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2601">
+      <description>Test of fn:last() in predicate in conjunction with wildcard</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-26"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>5</t1><t2>5</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2701">
+      <description>Test of fn:count() in conjunction with wildcard</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-27"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>5</t1><t2>2</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2801">
+      <description>Test of position() in conjunction with operator eq</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-28"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>4</t1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2802">
+      <description>Test of position() in conjunction with operator ne</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-28"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2802.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>1 2 3 5</t1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2803">
+      <description>Test of position() in conjunction with operator lt</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-28"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2803.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>1 2 3</t1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2804">
+      <description>Test of position() in conjunction with operator le</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-28"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2804.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>1 2 3 4</t1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2805">
+      <description>Test of position() in conjunction with operator gt</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-28"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2805.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>4 5</t1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2806">
+      <description>Test of position() in conjunction with operator ge</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-28"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2806.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>3 4 5</t1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2901">
+      <description>Test of fn:position() indexing on sequence consisting of atomic values</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-29"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>1 true --10-17</t1><t2>true</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2902">
+      <description>Test of fn:last() with sequence consisting of atomic values</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-29"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2902.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>2005-10</t1><t2>true</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-2903">
+      <description>Test of fn:count() in conjunction with the element() nodes</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-29"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-2903.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>4</t1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3001">
+      <description>Test of fn:position() indexing on sequence consisting of atomic and node types</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>false</t1><t2>k1 k2 k3 k4</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3002">
+      <description>Test of fn:position() indexing on sequence using RangeExpr</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>false</t1><t2>9 10</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3003">
+      <description>Test of fn:last() on sequence using RangeExpr</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>10</t1><t2>1 7 8 9 10</t2><t3>true</t3></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3004">
+      <description>Test of fn:count() on sequence using ForExpr</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>9</t1><t2>18</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3101">
+      <description>Test of fn:position() on copied nodes</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>k4</t1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3102">
+      <description>Test of fn:last() indexing on copied nodes using xsl:copy-of</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>k4</t1><t2>k1 k2 k3 k4</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3103">
+      <description>Test of fn:count() indexing on copied nodes using xsl:copy-of</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>4</t1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3104">
+      <description>Test of position with forward axes</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="position-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>6</t1><t2>c1</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3201">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-32"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3301">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4
+  1
+  2
+  3
+  4
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3302">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  1,
+  2,
+  3,
+  4
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3303">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3303.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>34</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3304">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3304.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3305">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3305.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>234</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3306">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3306.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>123</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3307">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3307.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>134</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3308">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3308.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3309">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3309.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3401">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-34"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3402">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-34"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3501">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-35"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3601">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-36"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>8</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3701">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-37"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>h</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3801">
+      <description>Section: 4.1 Node Set Functions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-38"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  
+    1,
+    2,
+    3,
+  
+  
+    4,
+    5,
+    6,
+  
+  
+    7,
+    8,
+    9,
+  
+  
+    
+    
+    
+  
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-3901">
+      <description>Section: 2.2</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-39"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-3901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6 nodes on this axis:
+Root Node
+E: far-north
+E: north
+E: near-north
+E: center
+T:  Still Level-4
+           
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-4001">
+      <description>Section: 2.2</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-40"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6 nodes on this axis:
+Root Node
+E: far-north
+E: north
+E: near-north
+E: center
+C:  Comment-4 
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-4101">
+      <description>FileName: position102 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 5.6</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-41"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4101.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="position-4101.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="position-4102">
+      <description>position() used in pattern predicate: scope for optimization</description>
+      <created by="Michael Kay" on="2017-07-23"/>
+      <environment ref="position-41"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><odd/><even/><odd/><even/><odd/><even/><odd/><even/><odd/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="position-4103">
+      <description>position() used in pattern predicate: scope for optimization</description>
+      <created by="Michael Kay" on="2017-07-23"/>
+      <environment ref="position-41"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a-odd/><b-odd/><c-odd/><c-even/><a-even/><a-odd/><b-even/><c-odd/><b-odd/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="position-4104">
+      <description>position() used in pattern predicate using the descendant axis</description>
+      <created by="Michael Kay" on="2017-07-26"/>
+      <environment ref="position-41"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><odd/><even/><even/><odd/><even/><odd/><even/><odd/><even/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="position-4105">
+      <description>position() used in pattern predicate in for-each-group: scope for optimization</description>
+      <created by="Michael Kay" on="2017-07-26"/>
+      <environment ref="position-41"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><group><a mark="a1"/><b mark="b1"><bb/></b></group><group><c mark="c1"/><c mark="c2"/></group
+            ><group><a mark="a2"/><a mark="a3"/></group><group><b mark="b2"/><c mark="c3"/></group><group><b mark="b3"/></group></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="position-4201">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-42"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1, 1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-4301">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-43"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>must, XSLT</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-4401">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-44"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>must, must</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-4501">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-45"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Success</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-4601">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-46"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>last preceding: north-west1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-4602">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-46"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4602.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>last following: north-east2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-4701">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-47"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>north-west1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-4702">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-47"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4702.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>north-east2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-4801">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-48"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a, b, c, d, e, f</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-4901">
+      <description>Section: 5</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-49"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-4901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> OK OK OK OK OK</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-5001">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-50"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-south-west, near-south, </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-5002">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-50"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>north, near-north, </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-5101">
+      <description>FileName: posn114 Document: http://www.w3.org/TR/xpath20 Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-51"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1 1 1 1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-5201">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-52"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-5301">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-53"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>A</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-5302">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-53"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>C</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-5401">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-54"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>First: a+bc-Middle: d-ef+Last: g</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-5501">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-55"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5501.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="position-5501.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="position-5601">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="position-56.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1. 1
+2. 2
+3. under2
+4. under3
+5. under4.5
+6. under5
+7. under6.5
+8. 7
+9. under7
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-5701">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-57"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>From the x node...
+under2
+under3
+under4.5
+under5
+under6
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-5801">
+      <description>FileName: position48 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 10</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-58"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Order should be cfdaegb...
+    cfdaegb</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-5901">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-59"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-5902">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-59"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5902.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-5903">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-59"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-5903.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-6001">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-60"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-6001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>MSFT13,IBM23,Lotus33</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-6002">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-60"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-6002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+IBM13,Lotus23,MSFT33
+IBM13,Lotus23,MSFT33
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-6101">
+      <description>Section: 5.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment >
+         <source role="." file="position-61.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-6101.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="position-6101.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="position-6201">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[ 
+<?a-pi some data?>
+<?b-pi some data?>
+<doc>
+  test
+</doc>
+<?c-pi some data?>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-6201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Found PI: b-pi</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-6301">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-63"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-6301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>HERE
+            1.4
+            1.3
+          1.2
+        1.1
+      1
+    OUTER
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-6302">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-63"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-6302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1. OUTER
+  2. 1
+    3. 1.1
+      4. 1.2
+        5. 1.3
+          6. 1.4
+            7. HERE
+            </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-6401">
+      <description>Section: 2.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-64"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-6401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>HERE
+1. we 2. found
+              3. the 4. rest
+                5. of
+                  6. the 7. tree</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-6501">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>
+  <a test="true">A1<b>B1</b>A2<!-- This is the 1st comment -->A3<b>B2</b>
+    A4<!-- This is the 2nd comment -->A5</a>
+</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-6501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>B2,
+    B2,
+    B2;
+    A5,
+    A5;
+     This is the 2nd comment ,
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-6601">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-6601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>xml</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-6701">
+      <description>FileName: position77 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 5.4</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-67"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-6701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>immediate11
+====== tickers ======
+MSFT13,IBM23,Lotus33
+====== sectors ======
+unitedstates12,automotive22</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-6801">
+      <description>Section: 2.2</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-68"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-6801.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="position-6801.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="position-6802">
+      <description>Section: 2.2</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-68"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-6802.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="position-6802.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="position-6901">
+      <description>Section: 2.2</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="position-69.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-6901.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="position-6901.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="position-7001">
+      <description>Section: 2.2</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-70"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-7001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+      Title= BBB<name last-of="2">section</name>
+      Title= CCC<name last-of="3">section</name>
+      Title= EEE<name last-of="4">section</name></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-7002">
+      <description>Section: 2.2</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-70"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-7002.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="position-7002.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="position-7101">
+      <description>Section: 3.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[ 
+<doc>
+  <foo att1="c">
+     <foo att1="b">
+        <foo att1="a">
+           <baz/>
+        </foo>
+     </foo>
+  </foo>
+</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-7101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a, a, c, c, c</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-7201">
+      <description>Section: 3.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="position-72.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-7201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><footnote>hello</footnote>
+<footnote>goodbye</footnote>
+<footnote>aloha</footnote>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-7301">
+      <description>Section: 3.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-73"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-7301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><greeting>ahoy</greeting>
+<greeting>sayonara</greeting>
+<greeting>yo</greeting>
+<greeting>ciao</greeting>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-7302">
+      <description>Section: 3.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-73"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-7302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><greeting>ahoy</greeting>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-7401">
+      <description>Section: 3.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-74"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-7401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><greeting>sayonara</greeting>
+<greeting>yo</greeting>
+<greeting>ciao</greeting>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-7501">
+      <description>Section: 3.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-75"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-7501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><greeting>aloha</greeting>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-7601">
+      <description>Section: 3.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-76"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-7601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<noted>subsection A2c</noted></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-7701">
+      <description>Section: 3.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-77"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-7701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><x1>1</x1>
+<x6>2</x6>
+<xL>10</xL></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-7801">
+      <description>Section: 4.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-78"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-7801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<a4>4th</a4>
+<a2>2nd</a2>
+<a1>1st</a1>
+<a3>3rd</a3>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-7901">
+      <description>FileName: position94 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 11.6</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-79"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-7901.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="position-7901.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="position-8001">
+      <description></description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-80"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-8001.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="position-8001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="position-8101">
+      <description></description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="position-81.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-8101.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="position-8101.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="position-8201">
+      <description></description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-82"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-8201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6 nodes on this axis:
+Root Node
+E: far-north
+E: north
+E: near-north
+E: center
+A: center-attr-3
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="position-8202">
+      <description></description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="position-82"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-8202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5 nodes on this axis:
+Root Node
+E: far-north
+E: north
+E: near-north
+E: center
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="position-8301">
+      <description>Saxon bug 3758: loop-lifting subexpression that depends on position()</description>
+      <created by="Michael Kay" on="2018-04-24"/>
+      <environment>
+         <source file="position-83.xml" role="."/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="position-8301.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '212'</assert>
+      </result>
+   </test-case>
+</test-set>

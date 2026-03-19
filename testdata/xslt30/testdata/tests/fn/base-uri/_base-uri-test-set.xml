@@ -1,0 +1,979 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="base-uri">
+   <description>Tests base-uri</description>
+   <environment name="baseuri001">
+      <source role=".">
+         <content><![CDATA[<doc>http://www.baseuri.exmpl/001.xml</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="baseuri002">
+      <source role=".">
+         <content><![CDATA[<doc>
+<str1 att="002.xml"/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="baseuri004">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="baseuri009">
+      <source role=".">
+         <content><![CDATA[<doc>
+<str1>http://www.baseuri.exmpl/001.xml</str1>
+<str2>http://www.one.exmpl/</str2>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="baseuri010">
+      <source role=".">
+         <content><![CDATA[<doc>
+<str1>010.xml</str1>
+<str2>http://www.one.exmpl/001.xml</str2>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="baseuri023">
+      <source role="." file="baseuri023.xml"/>
+   </environment>
+   <environment name="baseuri025">
+      <source role="." file="baseuri025.xml"/>
+   </environment>
+   <environment name="baseuri027">
+      <source role="." file="baseuri027.xml"/>
+   </environment>
+   <environment name="baseuri033">
+      <source role="." file="baseuri033.xml"/>
+   </environment>
+   <environment name="baseuri035">
+      <source role="." file="baseuri035.xml"/>
+   </environment>
+   <environment name="baseuri036">
+      <source role="." file="baseuri036.xml"/>
+   </environment>
+   <environment name="baseuri037">
+      <source role="." file="baseuri037.xml"/>
+   </environment>
+   <environment name="baseuri038">
+      <source role="." file="baseuri038.xml"/>
+   </environment>
+   <environment name="baseuri039">
+      <source role=".">
+         <content><![CDATA[<doc>
+<!--Comment node-->
+<str1>string1
+	<substring1 attr="attribute1" xml:base="/main/">substring</substring1>
+</str1>
+<str2>string2</str2>
+<?PI name="processing" ?>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="baseuri042">
+      <source role="." file="baseuri042.xml"/>
+   </environment>
+   <environment name="baseuri043">
+      <source role="." file="baseuri043.xml"/>
+   </environment>
+   <environment name="baseuri044">
+      <source role="." file="baseuri044.xml"/>
+   </environment>
+
+   <test-case name="base-uri-001">
+      <description>Testcase with fn:resolve-uri($relative) where $relative is an absolute URI. The result is $relative unchanged. $relative value is a literal string, node, variable and subsequence.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="base-uri-001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-002">
+      <description>Testcase with fn:resolve-uri($relative) where $relative is an absolute URI. The result is $relative unchanged. $relative value is a literal string, node, variable and subsequence.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="base-uri-002.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-003">
+      <description>Testcase with fn:resolve-uri($relative) where $relative is an empty string.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<output>
+<out>http://www.baseuri.exmpl/tests/</out>
+<out>http://www.baseuri.exmpl/tests/</out></output>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-004">
+      <description>Testcase with fn:resolve-uri($relative) where $relative is the empty sequence.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<output>
+<out/>
+<out/></output>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-005">
+      <description>Testcase to verify that the result from fn:resolve-uri($relative) is of type xs:anyURI.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<output>
+<out>true</out>
+<out>true</out>
+<out>true</out>
+<out>true</out></output>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-006">
+      <description>Testcase with fn:resolve-uri($relative) where $relative is a relative URI. Different argument syntax constructs are tested.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="base-uri-006.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-007">
+      <description>Testcase to verify that the result from fn:resolve-uri($relative, $base) is of type xs:anyURI.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<output>
+<out>true</out>
+<out>true</out>
+<out>true</out>
+<out>true</out></output>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-008">
+      <description>Testcase with fn:static-base-uri to verify the result is of type xs:anyURI.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-009">
+      <description>Testcase with fn:static-base-uri to return the base-uri property defined on the xsl:stylesheet element.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.baseuri.exmpl/tests/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-010">
+      <description>Testcase with fn:static-base-uri to return the base-uri property which has been overriden several times by descendant elements.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xml:base="http://www.two.org/tests/">http://www.three.org/tests/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-011">
+      <description>Testcase with fn:base-uri to verify the result is of type xs:anyURI.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-012">
+      <description>Testcase with fn:base-uri($arg) where $arg is the empty sequence. The empty sequence is returned.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-013">
+      <description>Test with fn:base-uri($arg) on a temporary tree that consists entirely of locally constructed elements and attributes.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>d://tests/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-014">
+      <description>Test with base-uri() on LRE and elements created with xsl:element. Stylesheet and each element has different xml:base explicitly set.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-014.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/static-base="http://www.example.org/main/"</assert>
+            <assert>/out/example1/text() = "http://www.example.org/xxx/: "</assert>
+            <assert>/out/example1/abc/@xml:base = "/xxx/"</assert>
+            <assert>/out/example1/abc = "http://www.example.org/xxx/"</assert>
+            <assert>/out/example2/text() = "http://www.example.org/yyy/: "</assert>
+            <assert>/out/example2/abc/@xml:base = "/yyy/"</assert>
+            <assert>/out/example2/abc = "http://www.example.org/"</assert>
+         </all-of> 
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-015">
+      <description>Testcase with fn:base-uri($arg) where $arg is an attribute, text or comment node created from scratch and with no parents.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><example1/><example2/><example3/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-016">
+      <description>Testcase with fn:base-uri of a variable. Relative URI is set in @xml:base on the variable instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/main/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-017">
+      <description>Testcase with fn:resolve-uri($relative, $base) where $relative is an absolute URI. The result is $relative unchanged. $relative and $base values are a literal strings, nodes, variables and subsequences.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri009"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="base-uri-017.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-018">
+      <description>Testcase with fn:resolve-uri($relative, $base) where $relative is a relative URI. $relative is resolved agains $base. $relative and $base values are a literal strings, nodes, variables and subsequences.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri010"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="base-uri-018.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-019">
+      <description>Testcase with fn:resolve-uri($relative) where $relative is an empty string. Value of $base is returned.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri010"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<output>
+<out>http://www.one.exmpl/</out>
+<out>http://www.one.exmpl/001.xml</out>
+<out>http://www.one.exmpl/001.xml</out></output>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-020">
+      <description>Testcase with fn:resolve-uri($relative) where $relative is the empty sequence. Empty sequence is returned no mather what the value of $base is.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri010"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<output>
+<out/>
+<out/>
+<out/></output>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-021">
+      <description>Testcase to verify that base-uri() and base-uri(.) return the same result.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri023"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-022">
+      <description>Testcase with fn:base-uri($arg) to verify the result if of type xs:anyURI. Includes test with document node</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri025"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-023">
+      <description>Testcase with fn:base-uri($arg) on six kinds of nodes: processing-instruction, comment node, element node, text node, attribute node, namespace node. Base-uri property is declared on nodes themselves or on their ancestors.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri027"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="base-uri-023.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-024">
+      <description>Test with base-uri($arg) where $arg is a copied single element node (no parents).</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri033"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.com/xml/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-025">
+      <description>Test with base-uri($arg) where $arg is a copied element node attached as a child to a newly created element.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri033"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/xxx/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-026">
+      <description>Test with base-uri($arg) where $arg is a deep copy of an element node (no parents).</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri033"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.com/str1/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-027">
+      <description>Test with base-uri($arg) where $arg is a deep copy of an element node attached as a child to a newly created element.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri033"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.com/str1/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-028">
+      <description>Test with base-uri($arg) where $arg is a copied element node attached as a child to a newly created element that has an xml:base attribute. The copied node's parent in the input file has xml:base set.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri035"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/main/ , http://www.example.org/xxx/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-029">
+      <description>Test with base-uri($arg) where $arg is a copied element node attached as a child to a newly created document node with no xml:base attribute.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri035"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-030">
+      <description>Test with base-uri($arg) where $arg is a copied element node attached as a child to a newly created document node (containing variable has an explicit xml:base attribute).</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri035"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/main/ , http://www.example.org/main/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-031">
+      <description>Test with base-uri($arg) where $arg is a deep copy of an element node attached as a child to a newly created document node with no xml:base attribute.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri035"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-031.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-032">
+      <description>Test with base-uri($arg) where $arg is a copied element node attached as a child to a newly created element with @xml:base and the copied node had an @xml:base=absolute-URI in the source file.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri036"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-032.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/main/ , http://www.example.org/xxx/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-033">
+      <description>Test with base-uri($arg) where $arg is a copied element node attached as a child to a newly created document node, containing variable has an explicit xml:base attribute, and the copied element had an @xml:base=absolute-URI in the source file.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri036"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/main/ , http://www.example.org/main/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-034">
+      <description>Test with base-uri($arg) where $arg is a copied element node attached as a child to a newly created element with @xml:base and the copied node had an xml:base=relative-URI attribute in the sources file.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri037"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-034.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/main/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-035">
+      <description>Test with base-uri($arg) where $arg is a copied element node attached as a child to a newly created document node, containing variable has an explicit xml:base attribute, and the copied element had an xml:base=relative-URI attribute in the source file.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri037"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/main/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-036">
+      <description>Test with base-uri($arg) where $arg is a copied element node attached as a child to a newly created element with @xml:base and the copied node's parent had an xml:base=relative-URI attribute in the source file.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri038"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/main/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-037">
+      <description>Test with base-uri($arg) where $arg is a deep copy of an element node attached as a child to a newly created element with @xml:base and the copied node's parent had an xml:base=relative-URI attribute in the source file.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri038"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/main/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-038">
+      <description>Test with base-uri($arg) where $arg is a copied element node attached as a child to a newly created document node, containing variable has an explicit xml:base attribute, and the copied node's parent had an xml:base=relative-URI attribute in the source file.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri038"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/main/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-039">
+      <description>Test with base-uri($arg) where $arg is a deep copy of an element node attached as a child to a newly created document node, containing variable has an explicit xml:base attribute, and the copied node's parent had an xml:base=relative-URI attribute in the source file.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri038"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-039.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/main/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-040">
+      <description>Test with base-uri($arg) and two nested xsl:copy instructions. Base-uri of second copied node is the base-uri of its parent -the first copied node.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri039"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-040.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>e1 substring1 str1 *** http://www.example.org/xxx/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-041">
+      <description>Test with base-uri($arg) where $arg is a deep copy of an element node attached as a child to a newly created element that has an xml:base attribute.The copied node's parent in the input file has xml:base set.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri042"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-041.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/main/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-042">
+      <description>Test with base-uri($arg) where $arg is a copied element node attached as a child to a newly created document node (containing variable has an explicit xml:base attribute).</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri042"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-042.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/main/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-043">
+      <description>Test with base-uri($arg) where $arg is a deep copy of an element node which has an @xml:base=absolute-URI in the source file. The copy of the element node has no parent.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri043"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-043.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.com/xml/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-044">
+      <description>Test with base-uri($arg) where $arg is a copied element node attached as a child to a newly created element with @xml:base and the copied node had an @xml:base=absolute-URI in the source file.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri043"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-044.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.com/xml/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-045">
+      <description>Test with base-uri($arg) where $arg is a deep copy of an element node attached as a child to a newly created document node, containing variable has an explicit xml:base attribute, and the copied element had an @xml:base=absolute-URI in the source file.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri043"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-045.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.com/xml/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-046">
+      <description>Test with base-uri($arg) where $arg is a deep copy of an element node which has an @xml:base=relative-URI in the source file. The copy of the element node has no parent.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri044"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-046.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/xml/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-047">
+      <description>Test with base-uri($arg) where $arg is a deep copy of an element node attached as a child to a newly created element with @xml:base and the copied node had an xml:base=relative-URI attribute in the source file.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri044"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-047.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/xml/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="base-uri-048">
+      <description>Test with base-uri($arg) where $arg is a deep copy of an element node attached as a child to a newly created document node, containing variable has an explicit xml:base attribute, and the copied element had an xml:base=relative-URI attribute in the source file.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="baseuri044"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-048.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.example.org/xml/</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="base-uri-049">
+      <description>Test static-base-uri() in different parts of the stylesheet where the base URI varies.</description>
+      <created by="Michael Kay" on="2016-12-21"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-049.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/initial/@base = 'http://www.example.org/'</assert>
+            <assert>/out/a/@base = 'http://www.example.org/a'</assert>
+            <assert>/out/b/@base = 'http://www.example.org/b'</assert>
+            <assert>/out/c/@base = 'http://www.example.org/c'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="base-uri-050">
+      <description>Test effect of implicit static-base-uri() in different parts of the stylesheet where the base URI varies.</description>
+      <created by="Michael Kay" on="2016-12-21"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-050.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>ends-with(/out/a/@base, 'baseuri023.xml')</assert>
+            <assert>ends-with(/out/b/@base, 'baseuri025.xml')</assert>
+            <assert>ends-with(/out/c/@base, 'baseuri027.xml')</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="base-uri-051">
+      <description>base-uri() applied to elements within an external entity.</description>
+      <created by="Michael Kay" on="2016-12-21"/>
+      <environment>
+         <source role="." file="baseuri051.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-051.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>ends-with(/out/one, 'fn/base-uri/baseuri051.xml')</assert>
+            <assert>ends-with(/out/two, 'fn/base-uri/dir/data.xml')</assert>
+            <assert>ends-with(/out/three, 'fn/base-uri/dir/dir2/data.xml')</assert>
+            <assert>ends-with(/out/four, 'fn/base-uri/dir/data.xml')</assert>
+            <assert>ends-with(/out/five, 'fn/base-uri/dir/dir5/data.xml')</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="base-uri-051a">
+      <description>base-uri() applied to elements within an external entity, read using the doc() function</description>
+      <created by="Michael Kay" on="2016-12-21"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-051.xsl"/>
+         <initial-template name="base-uri-051a"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>ends-with(/out/one, 'fn/base-uri/baseuri051.xml')</assert>
+            <assert>ends-with(/out/two, 'fn/base-uri/dir/data.xml')</assert>
+            <assert>ends-with(/out/three, 'fn/base-uri/dir/dir2/data.xml')</assert>
+            <assert>ends-with(/out/four, 'fn/base-uri/dir/data.xml')</assert>
+            <assert>ends-with(/out/five, 'fn/base-uri/dir/dir5/data.xml')</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="base-uri-051b">
+      <description>base-uri() applied to elements within an external entity, read using the document() function</description>
+      <created by="Michael Kay" on="2016-12-21"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-051.xsl"/>
+         <initial-template name="base-uri-051b"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>ends-with(/out/one, 'fn/base-uri/baseuri051.xml')</assert>
+            <assert>ends-with(/out/two, 'fn/base-uri/dir/data.xml')</assert>
+            <assert>ends-with(/out/three, 'fn/base-uri/dir/dir2/data.xml')</assert>
+            <assert>ends-with(/out/four, 'fn/base-uri/dir/data.xml')</assert>
+            <assert>ends-with(/out/five, 'fn/base-uri/dir/dir5/data.xml')</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="base-uri-052">
+      <description>base-uri() applied to elements within a document read using XInclude. (Saxon bug 3530)</description>
+      <created by="Michael Kay" on="2016-12-21"/>     
+      <environment>
+         <source role="." file="baseuri052.xml" xinclude="true"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-051.xsl"/> <!--sic-->
+      </test>
+      <result>
+         <all-of>
+            <assert>ends-with(/out/one, 'fn/base-uri/baseuri052.xml')</assert>
+            <assert>ends-with(/out/two, 'fn/base-uri/dir/data1.xml')</assert>
+            <assert>ends-with(/out/three, 'fn/base-uri/dir/dir2/data.xml')</assert>
+            <assert>ends-with(/out/four, 'fn/base-uri/dir/data1.xml')</assert>
+            <!-- The spec says "If an xml:base attribute information item is already present, it is replaced by the new attribute"
+                 but Xerces doesn't appear to do this -->
+            <assert>ends-with(/out/five, 'fn/base-uri/dir5/data.xml')</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="base-uri-053">
+      <description>Base URI of nodes constructed using built-in templates (shallow-copy and deep-copy). Saxon bug 4097.</description>
+      <created by="Michael Kay" on="2019-01-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="base-uri-053.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>every $a in /out/*/@a satisfies ends-with($a, 'base-uri/base-uri-001.out')</assert>
+            <assert>every $b in /out/*/@b satisfies ends-with($b, 'base-uri/base-uri-002.out')</assert>
+         </all-of>
+      </result>
+   </test-case>
+</test-set>

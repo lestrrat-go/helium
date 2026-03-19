@@ -1,0 +1,535 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="notation">
+   <description>Tests notation</description>
+   <environment name="notation-01">
+      <source role="." file="notation-01.xml" validation="strict"/>
+      <schema role="source-reference"
+              file="noNamespaceNotation.xsd"
+              xsd-version="1.0"/>
+   </environment>
+   <environment name="notation-02">
+      <source role="." file="notation-02.xml" validation="strict"/>
+      <schema role="source-reference"
+              file="noNamespaceNotation.xsd"
+              xsd-version="1.0"/>
+   </environment>
+   <environment name="notation-03">
+      <source role="." file="notation-03.xml" validation="strict"/>
+      <schema role="source-reference"
+              file="namespaceNotationTest.xsd"
+              xsd-version="1.0"/>
+      <schema role="secondary" file="importSchema.xsd" xsd-version="1.0"/>
+   </environment>
+   <environment name="notation-04">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>]]></content>
+      </source>
+      <schema role="secondary" file="importSchema.xsd" xsd-version="1.0"/>
+      <schema role="stylesheet-import"
+              file="namespaceNotationTest.xsd"
+              xsd-version="1.0"/>
+   </environment>
+   <environment name="notation-05">
+      <source role="." file="notation-05.xml" validation="strict"/>
+      <schema role="source-reference"
+              file="noNamespaceNotation.xsd"
+              xsd-version="1.0"/>
+   </environment>
+   <environment name="notation-06">
+      <source role="." file="notation-06.xml"/>
+   </environment>
+   <environment name="notation-07">
+      <source role="." file="notation-07.xml" validation="strict"/>
+      <schema role="source-reference"
+              file="namespaceNotationTest.xsd"
+              xsd-version="1.0"/>
+      <schema role="secondary" file="importSchema.xsd" xsd-version="1.0"/>
+      <schema role="source-reference"
+              file="simpleNamespaceNotation.xsd"
+              xsd-version="1.0"/>
+   </environment>
+
+   <test-case name="notation-0001">
+      <description>Test casting of strings to notations, and notations to QNames, as permitted in XPath 3.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>{http://test.notation.example.com}wav</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0002">
+      <description>Test castability of strings to notations, and notations to QNames, as permitted in XPath 3.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a result="true"/><b result="true"/><d result="true"/><e result="true"/><g result="true"/><h result="true"/><i result="true"/><j result="true"/><k result="false"/><l result="false"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0003">
+      <description>Test casting of strings to notations, and notations to QNames, as permitted in XPath 3.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>{http://test.notation.example.com}wav</a><b>{http://test.notation.example.com}wav</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0004">
+      <description>Test casting of strings to notations, and notations to QNames, as permitted in XPath 3.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>{http://test.notation.example.com}wav</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0101">
+      <description>Test that the result of 'eq' on xs:NOTATION type arguments is of type xs:boolean. The schema has no @targetNamespace.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetruetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0102">
+      <description>Test that the result of 'ne' on xs:NOTATION type arguments is of type xs:boolean. The schema has no @targetNamespace.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetruetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0103">
+      <description>Test 'eq' and 'ne' on one and the same attribute value. The schema has no @targetNamespace.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetruefalse</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0201">
+      <description>
+      	Test 'eq' on two attributes of the same type derived from xs:NOTATION. 
+      	The schema is not imported and notations are declared with a local name only. 
+      	The schema has no @targetNamespace. Check that the attributes are of type xs:NOTATION. 
+      	Cases tested: 
+      	- attributes have the same enumeration value, returns true 
+      	- attributes have different enumeration and system identifier values, returns false 
+      	- attributes have different enumeration values but the same system identifier, returns false 
+      	- attributes have different enumeration values but the same public identifier, returns false 
+      	- attributes have different enumeration values but the same public and system identifier, returns false
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><types><type n="a" v="true"/><type n="b" v="true"/><type n="c" v="true"/><type n="d" v="true"/><type n="e" v="true"/></types><case1>true</case1><case2>false</case2><case3>false</case3><case4>false</case4><case5>false</case5></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0202">
+      <description>
+                Test 'ne' on two attributes of the same type derived from xs:NOTATION. The schema is not 
+  				imported and notations are declared with a local name only. The schema has no @targetNamespace.
+  				Check that the attributes are of type xs:NOTATION. Cases tested:
+				- attributes have the same enumeration value, returns false
+				- attributes have different enumeration and system identifier values, returns true
+				- attributes have different enumeration values but the same system identifier, returns true
+				- attributes have different enumeration values but the same public identifier, returns true
+				- attributes have different enumeration values but the same public and system identifier, returns true
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><types a="true" b="true" c="true" d="true" e="true"/><case1>false</case1><case2>true</case2><case3>true</case3><case4>true</case4><case5>true</case5></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0301">
+      <description>
+         Test 'eq' on two attributes of the same type derived from xs:NOTATION. 
+         The default namespace is used for some attribute values. 
+         The schema is not imported.
+         Check that the attributes are of type xs:NOTATION. 
+         The schema has a @targetNamespace.
+         Cases tested: 
+         -attributes have enumeration values with matching prefix and local name, returns true 
+         -attributes have enumeration values with different prefix but same namespace binding and same local name, returns true 
+         -attributes have enumeration values with different prefix and matching local name, returns false 
+         -attributes have enumeration values with matching prefix but different local names, returns false
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0301.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/types/type[@name="a"] = "true"</assert>
+            <assert>/out/types/type[@name="b"] = "true"</assert>
+            <assert>/out/types/type[@name="c"] = "true"</assert>
+            <assert>/out/types/type[@name="d"] = "true"</assert>
+            <assert>/out/types/type[@name="e"] = "true"</assert>
+            <assert>/out/types/type[@name="f"] = "true"</assert>
+            <assert>/out/case1 = "true"</assert>
+            <assert>/out/case2 = "truetrue"</assert>
+            <assert>/out/case3 = "falsefalse"</assert>
+            <assert>/out/case4 = "false"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0302">
+      <description>Test 'ne' on two attributes of the same type derived from xs:NOTATION. The default namespace is used for some attribute values.The schema is not imported.Check that the attributes are of type xs:NOTATION. The schema has a @targetNamespace.Cases tested: -attributes have enumeration values with matching prefix and local name, returns false -attributes have enumeration values with different prefix but same namespace binding and same local name, returns false -attributes have enumeration values with different prefix and matching local name, returns true -attributes have enumeration values with matching prefix but different local name, returns true</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0302.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/types/type[@name="a"] = "true"</assert>
+            <assert>/out/types/type[@name="b"] = "true"</assert>
+            <assert>/out/types/type[@name="c"] = "true"</assert>
+            <assert>/out/types/type[@name="d"] = "true"</assert>
+            <assert>/out/types/type[@name="e"] = "true"</assert>
+            <assert>/out/types/type[@name="f"] = "true"</assert>
+            <assert>/out/case1 = "false"</assert>
+            <assert>/out/case2 = "falsefalse"</assert>
+            <assert>/out/case3 = "truetrue"</assert>
+            <assert>/out/case4 = "true"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0303">
+      <description>Test with fn:distinct-values where the argument is a sequence of values of type derived from xs:NOTATION.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0303.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>one:mp3 two:mp3 one:wav</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0304">
+      <description>TTest with xsl:for-each-group, grouping values of type xs:NOTATION.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0304.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ade</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0305">
+      <description>Test with xsl:key and key() selecting nodes with attribute values of type xs:NOTATION.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0305.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a b c f</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0401">
+      <description>Test 'eq' on two variables of the same type derived from xs:NOTATION. The schema is imported and the variable values are explicitly constructed.The schema has a @targetNamespace. Check that the variables are both of the type declared in the schema and xs:NOTATION. Cases tested: -the variables have the same enumeration value, returns true -the variables have enumeration values with different prefix but same namespace binding and same local name, returns true -the variables have enumeration values with different prefix and matching local name, returns false -the variables have enumeration values with matching prefix but different local name, returns false</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0401.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/types/type[@p="1"][@val="one:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="2"][@val="one:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="3"][@val="first:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="4"][@val="two:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="5"][@val="one:wav"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/case1 = "true"</assert>
+            <assert>/out/case2 = "true"</assert>
+            <assert>/out/case3 = "false"</assert>
+            <assert>/out/case4 = "false"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0402">
+      <description>Test 'ne' on two variables of the same type derived from xs:NOTATION. The schema is imported and variable values are explicitly constructed.The schema has a @targetNamespace. Check that the variables are both of the type declared in the schema and xs:NOTATION Cases tested: -the variables have enumeration values with matching prefix and local name, returns false -the variables have enumeration values with different prefix but same namespace binding and same local name, returns false -the variables have enumeration values with different prefix and matching local name, returns true -the variables have enumeration values with matching prefix but different local name, returns true</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0402.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/types/type[@p="1"][@val="one:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="2"][@val="one:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="3"][@val="first:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="4"][@val="two:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="5"][@val="one:wav"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/case1 = "false"</assert>
+            <assert>/out/case2 = "false"</assert>
+            <assert>/out/case3 = "true"</assert>
+            <assert>/out/case4 = "true"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0403">
+      <description>Test 'eq' on two variables of the same type derived from xs:NOTATION. Type is set by @as, the schema is imported and has a @targetNamespace. Check that the variables are both of the derived type and of xs:NOTATION. Cases tested: -the variables have the same enumeration value, returns true -the variables have enumeration values with different prefix but same namespace binding and same local name, returns true -the variables have enumeration values with different prefix and matching local name, returns false -the variables have enumeration values with matching prefix but different local name, returns false</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0403.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/types/type[@p="1"][@val="one:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="2"][@val="one:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="3"][@val="first:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="4"][@val="two:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="5"][@val="one:wav"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/case1 = "true"</assert>
+            <assert>/out/case2 = "true"</assert>
+            <assert>/out/case3 = "false"</assert>
+            <assert>/out/case4 = "false"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0404">
+      <description>Test 'ne' on two variables of the same type derived from xs:NOTATION. Type is set by @as, the schema is imported and has a @targetNamespace.Check that the variables are both of the derived type and of xs:NOTATION. Cases tested: -the variables have enumeration values with matching prefix and local name, returns false -the variables have enumeration values with different prefix but same namespace binding and same local name, returns false -the variables have enumeration values with different prefix and matching local name, returns true -the variables have enumeration values with matching prefix but different local name, returns true</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0404.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/types/type[@p="1"][@val="one:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="2"][@val="one:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="3"][@val="first:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="4"][@val="two:mp3"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@p="5"][@val="one:wav"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/case1 = "false"</assert>
+            <assert>/out/case2 = "false"</assert>
+            <assert>/out/case3 = "true"</assert>
+            <assert>/out/case4 = "true"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0501">
+      <description>Test 'eq' on two attributes of two different types derived from xs:NOTATION with at least one matching enumeration value. The schema is not imported and has no @targetNamespace.Check that the attributes are of type xs:NOTATION. Cases tested: -attributes have the same enumeration value, returns true -attributes have different enumeration values, returns false</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0501.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/types/type[@val="a"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@val="b"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/case1 = "true"</assert>
+            <assert>/out/case2 = "false"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0502">
+      <description>Test 'ne' on two attributes of two different types derived from xs:NOTATION with at least one matching enumeration value. The schema is not imported and has no @targetNamespace.Check that the attributes are of type xs:NOTATION. Cases tested: -attributes have the same enumeration value, returns false -attributes have different enumeration values, returns true</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0502.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/types/type[@val="a"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/types/type[@val="b"][@is1="true"][@is2="true"]</assert>
+            <assert>/out/case1 = "true"</assert>
+            <assert>/out/case2 = "false"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0601">
+      <description>
+         Test with NOTATION declared in a DTD and an attribute pointing to it. 
+         Show that the type of the attribute is xs:untypedAtomic and not xs:NOTATION.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0701">
+      <description>
+         Test 'eq' with two attributes of two different types derived from xs:NOTATION defined in separate schemas,
+         with different targetNamespaces. Input document is validated against each, using the same prefix in both cases,
+         but prefix bound to the appropriate namespace for each value.Returns false.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ns1:mp3 * ns1:mp3 * false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="notation-0702">
+      <description>
+         Test 'ne' with two attributes of two different types derived from xs:NOTATION defined in separate schemas, 
+         with different targetNamespaces. Input document is validated against each, using the same prefix in both cases, 
+         but prefix bound to the appropriate namespace for each value.Returns true.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="notation-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="notation-0702.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ns1:mp3 * ns1:mp3 * true</out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

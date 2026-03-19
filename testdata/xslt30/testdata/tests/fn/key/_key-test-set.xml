@@ -1,0 +1,1855 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="key">
+   
+   <description>Test xsl:key and the key() function</description>
+   
+   <environment name="key101">
+      <source role="." file="key101.xml"/>
+   </environment>
+
+   <environment name="key105">
+      <source role="." file="key105.xml"/>
+   </environment>
+
+   <environment name="key107">
+      <source role=".">
+         <content><![CDATA[<doc att="gulp">text1
+  <a/>
+  <b/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="key110">
+      <source role="." file="key110.xml"/>
+   </environment>
+   
+   
+   <environment name="key116">
+      <source role="." file="key116.xml"/>
+   </environment>
+   
+   
+   
+   
+   
+   
+   <environment name="key132">
+      <source role="." file="key132.xml"/>
+   </environment>
+   <environment name="key134">
+      <source role="." file="key134.xml"/>
+   </environment>
+   <environment name="key144">
+      <source role="." file="key144.xml"/>
+   </environment>
+   
+   <environment name="key206">
+      <source role="." file="key206.xml"/>
+   </environment>
+   
+   <environment name="key216">
+      <source role="." file="key216.xml"/>
+   </environment>
+   
+   <environment name="key219">
+      <source role=".">
+         <content><![CDATA[<t04>
+  <a id="a" code="1" value="10"/>
+  <a id="b" code="2" value="20"/>
+  <a id="c" code="2" value="30"/>
+  <a id="d" code="1" value="50"/>
+</t04>]]></content>
+      </source>
+   </environment>
+   
+   
+   <environment name="key236">
+      <source role="." file="key236.xml"/>
+   </environment>
+   
+   <environment name="key242">
+      <source role="." file="key242.xml"/>
+   </environment>
+   <environment name="key303">
+      <source role=".">
+         <content><![CDATA[<a>
+<b>John</b>
+<b>Mary</b>
+<b>James</b>
+<b>Ann</b>
+<b>Phil</b>
+</a>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="key285">
+      <source role="." file="key101.xml"/>
+      <stylesheet file="key-085.xsl"/>
+   </environment>
+   
+
+   <test-case name="key-001">
+      <description>Test generate-id() as used in grouping.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key101"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-002">
+      <description>test use of third parameter of key() to select a subtree</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key101"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ct-only><town name="Enfield" state="CT"/></ct-only><all-states><town name="Enfield" state="NH"/><town name="Enfield" state="ME"/><town name="Enfield" state="CT"/></all-states></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-003">
+      <description>Test for xsl:key, where value of use is a string constant.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key105"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Intro Section SS Section Exp Section Num Section,Intro Section,</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-004">
+      <description>Test for xsl:key, where value of use is an integer.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key105"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Intro Section,Exp Section,SS Section,Num Section</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-005">
+      <description>Test of 'generate-id()' - ensure same node generates same ID.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key107"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-005.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="key-006">
+      <description>Test of generate-id() uniqueness. All IDs should be different.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key107"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-006.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "Success"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="key-007">
+      <description>Test for match attribute being first in xsl:key.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key110"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>Intro Section.SS Section.Exp Section.</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-008">
+      <description>Test for use attribute being first in xsl:key.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key110"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>Intro Section.SS Section.Exp Section.</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-009">
+      <description>Test key() with a node-set as second argument. "When the second argument to key is of type node-set, then the result is the union of the result of applying the key function to the string value of each of the nodes in the argument node-set."</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key110"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>Intro Section.SS Section.Exp Section.</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-010">
+      <description>Test for xsl:key and key() with a qualified name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key110"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root xmlns:baz="http://xsl.lotus.com/ns1">Intro Section. SS Section. Exp Section.</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-011">
+      <description>Author: David Marston Purpose: Test for xsl:key being imported</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key110"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>Intro Section. SS Section. Exp Section.</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-012">
+      <description>Test for nested calls to key() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key110"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>
+  The next key finds three divisions:
+  </root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-013">
+      <description>Test for xsl:key and key() with a qualified name, different prefix.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key110"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>Intro Section. SS Section. Exp Section.</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-014">
+      <description>Test for xsl:key and key() with a leading underscore in the name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key110"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Intro Section. SS Section. Exp Section.</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-015">
+      <description>Test for xsl:key matching multiple keys on same node. "There can be multiple keys in a document with the same node, same key name, but different key values."</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key112.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>Intro Section.SS Section.Exp Section.SS Section.</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-016">
+      <description>Test for xsl:key matching multiple nodes on same looked-up value. "There can be multiple keys in a document with the same key name, same key value, but different nodes."</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-10-03" change="Trivial change to avoid spurious warnings"/>
+      <environment>
+         <source role="." file="key113.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>4 divisions:
+  Intro Section.SS Section.
+  The next key finds two divisions:
+  Exp Section.Second Exp Section.</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-017">
+      <description>Test xsl:key where match nodes occur at different levels in the document.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key115.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-018">
+      <description>Test for three keyspaces using the same nodes as keys.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>Intro Section.SS Section.Exp Section.
+Intro Section.SS Section.Exp Section.
+SS Section.Exp Section.</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-019">
+      <description>David Marston --&gt; Purpose: Test for variable as first argument to key().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>
+  Using keyspace bigspace...
+  Intro Section.SS Section.Exp Section.</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-020">
+      <description>Test for three keyspaces, some being imported.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key116"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-020.xsl"/>
+         <stylesheet file="key-020a.xsl" role="secondary"/>
+         <stylesheet file="key-020b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>
+bigspace...Intro Section.SS Section.Exp Section.
+smallspace...Intro Section.SS Section.Exp Section.
+filterspace...SS Section.Exp Section.</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-021">
+      <description>Test combination of key() and document() as suggested in spec.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key118.xml"/>
+         <source file="bib.xml" uri="bib.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-021.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-022">
+      <description>Test whether blank keying (use) value works or is ignored.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key127.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Intro Section,SS Section,Exp Section,Untitled Section,Sort Section</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-023">
+      <description>Test whether blank keying (use) value works when it's an attribute.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key128.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Intro Section,SS Section,Exp Section,Untitled Section,Sort Section</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-024">
+      <description>Use content of an element as the "use" value.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key129.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Introduction,Stylesheet Structure,Expressions,(none),Sorting</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-025">
+      <description>
+        Test that 'generate-id()' on various kinds of nodes yields unique values for each 
+        Get in position so we have nodes on the following axis. Build up a string containing 
+        generated IDs for nodes on the following axis, plus attributes they carry.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key130.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Number of IDs accumulated: 18</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-026">
+      <description>
+        Test of 'generate-id()' on namespace nodes Build up a string containing generated IDs
+        for nodes on the namespace axes of self and all lower elements. Since call-template 
+        doesn't change context, iterate by position number.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key131.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Number of IDs accumulated: 10</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-027">
+      <description>Use key() for sorting with apply-templates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key132"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-027.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-028">
+      <description>Use key() for sorting in for-each.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key132"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-028.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-029">
+      <description>Test descendants of node-set from key().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key134"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Intro Section.
+Body of Intro.
+Intro to SS subsection.
+Body of SS Intro.
+Intro to Appendix.
+Body of App1.
+Body of App2.
+Body of App3sub.
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-030">
+      <description>Test descendants of node-set from key() in a match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key134"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-030.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-031">
+      <description>Test simple key()// filtered by a predicate, in a match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key144"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-031.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-031.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-032">
+      <description>test key() in a template match pattern, with a variable reference, not the last step in the pattern</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key144"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-032.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/non-desc[@of='Ted']/string(), 
+               ('Lee', 'Amby', 'Julie', 'Daniel', 'Pedro', 'Nathaniel', 'Samual', 'Pablo', 'Benjamin', 
+               'Lucy', 'Jake', 'Jeffery', 'Christopher', 'Jabriella'))</assert>
+            <assert>deep-equal(/out/desc[@of='Ted']/string(), 
+               ('Ted', 'Joshua', 'Lauren'))</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="key-033">
+      <description>test key() in an xsl:key, with a variable reference, not the last step in the pattern</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key144"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><match>Joshua</match><no-match/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-034">
+      <description>test key() in an xsl:number pattern, with a variable reference, involves atomization, also part of a union pattern</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key144"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-034.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-034.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-035">
+      <description>test key() in an xsl:number pattern, with a variable reference, involves atomization, not the last step in the pattern</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key144"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-035.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-036">
+      <description>test key() in an xsl:for-each-group pattern, with a variable reference, involves atomization, last step in the pattern</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key144"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><p>Lee Amby Jules</p><p>Daniel Ted Joshua Lauren Pedro</p><p>Nate Sam Pablo Ben Lucy Jake Jeff</p><p>Christopher Jabriella</p></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-037">
+      <description>test key() in an xsl:for-each-group pattern, with a variable reference in the key() call, and another in the use expression, involves atomization, last step in the pattern</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key144"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><p>Lee Amby Jules Daniel Ted Joshua Lauren Pedro Nate Sam Pablo Ben Lucy Jake Jeff</p><p>Christopher Jabriella</p></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-038">
+      <description>Test complex key()// filtered by a predicate in predicate, in a match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key145.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-038.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-039">
+      <description>Test complex key()//x in match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key146.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-039.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-039.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-040">
+      <description>Test complex key()//x/x in match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key147.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-040.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-040.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-041">
+      <description>Section: 5.2 Test complex key()//x/x, with complex predicate in match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key148.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-041.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-041.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-042">
+      <description>
+         Test generate-id() when nodes are coming from different documents. 
+         All IDs should be distinct. 
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key149.xml"/>
+         <source file="key-042a.xml" uri="key-042a.xml"/>
+         <source file="key-042b.xml" uri="key-042b.xml"/>
+         <source file="key-042c.xml" uri="key-042c.xml"/>
+         <source file="key-042d.xml" uri="key-042d.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-042.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Number of IDs accumulated: 35</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-043">
+      <description>
+         Test combination of key() and document() reading from stylesheet. 
+         Elaboration: "Look-up table 1.6 is worth a close look because it uses an advanced XSLT technique. 
+         It builds up the lookup-table right in the stylesheet, using a distinct namespace. 
+         You can see the x:ns-to-binding elements right below the key. 
+         If you are familiar with keys, you are aware that they define indices that will be built on the nodes
+         in the original source document that match the pattern in the match attribute. 
+         What is not as well known is that every time an additional source document is loaded with the XSLT document() 
+         function, all keys are applied to it as well. 
+         The xsl:variable...uses a special form of document() call to load the stylesheet itself as an additional source document. 
+         Thus the nodes in the stylesheet that match the ns-to-binding are indexed. 
+         This is a very useful technique for setting up a look-up table without having to hack at 
+         the source document or depend on an additional file." Lookup table 1.6: WSDL binding types.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><bind>HTTP</bind><bind>SOAP</bind></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-043.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><bound>HTTP- http://schemas.xmlsoap.org/wsdl/http/</bound><bound>SOAP- http://schemas.xmlsoap.org/wsdl/soap/</bound></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-044">
+      <description>
+         Test two calls to generate-id() on the same file. All IDs should be the same. 
+         If both filenames were given literally, the spec says that IDs must match. 
+         Retrieving the name from the principal XML document should still clearly mean the same file. 
+         Putting nodes in a variable is more of a gray area.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><a>key151a.xml</a></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-044.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "Success"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="key-045">
+      <description>Test combination of key() and document() on multiple files.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key152.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-045.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-045.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-046">
+      <description>Test xsl:key with union in "use" attribute. Changed to supply the key values as strings rather than as numbers</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key159.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-046.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/group[@k="25"]/title/string(), ("Introduction", "Expressions", "Numbers"))</assert>
+            <assert>deep-equal(/out/group[@k="39"]/title/string(), ("Introduction"))</assert>
+            <assert>deep-equal(/out/group[@k="44"]/title/string(), ("Expressions", "Numbers"))</assert>
+            <assert>deep-equal(/out/group[@k="75"]/title/string(), ("Structure", "Numbers"))</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="key-047">
+      <description>Test for xsl:key, and key() used to create hyperlinks</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key201.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-047.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-047.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-048">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key202.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-048.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><P>Intro Section.</P><P>SS Section.</P><P>Exp Section.</P></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-049">
+      <description>Test for xsl:key pattern matching.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key203.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-049.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/P/t1 = "Intro Section."</assert>
+            <assert>/out/P/t2 = "SS Section."</assert>
+            <assert>/out/P/t3 = "Exp Section."</assert>
+            <assert>/out/P/t4 = "Pat Section."</assert>
+            <assert>count(/out/P/*) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="key-050">
+      <description>test a key whose value is a node-set, including duplicates</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key206"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-050.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><item>2<s>22</s></item><item>3<s>23</s><s>22</s></item><item>5<s>21</s><s>22</s><s>23</s><s>22</s></item></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-051">
+      <description>test a key with a numeric predicate in the match pattern</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key206"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-051.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><item>2<s>22</s></item>;
+      </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-052">
+      <description>test a key with a numeric predicate in the match pattern</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key206"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-052.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-053">
+      <description>test a key with a boolean predicate in the match pattern</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key206"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-053.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><item>3<s>23</s><s>22</s></item><item>5<s>21</s><s>22</s><s>23</s><s>22</s></item></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-054">
+      <description>test key() function with a node-set argument</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key212.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-054.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<list>aa,kk</list>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-055">
+      <description>A classic 2-level Muenchian Grouping example for each distinct domain</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key213.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-055.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="key-055.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-056">
+      <description>Select every primary keyword only once despite duplicate key definition</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key214.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-056.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc><val for="First">1</val><val for="Second">2</val><val for="Third">1</val></doc>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-058">
+      <description>tests the use of current() within xsl:key. See Saxon bug 520552.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key216"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-058.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Namespace "http://aURI/" used in 1, 4
+Namespace "http://bURI/" used in 2
+Namespace "" used in 3
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-059">
+      <description>tests the use of variables within xsl:key match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key216"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-059.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "1 4"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="key-060">
+      <description>tests the use of variables declared within xsl:key match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key216"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-060.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "1 4"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="key-061">
+      <description>Test use of variables in a key match pattern (XSLT 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<t04>
+  <a id="a" code="1" value="10"/>
+  <a id="b" code="2" value="20"/>
+  <a id="c" code="2" value="30"/>
+  <a id="d" code="1" value="40"/>
+</t04>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-061.xsl"/>
+      </test>
+      <result>
+         <assert>/out/@total = "50"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="key-062">
+      <description>Test use of variables in a key use expression (XSLT 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key219"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-062.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/@total-one = "0"</assert>
+            <assert>/out/@total-two = "50"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="key-063">
+      <description>Test use of key() in a key use expression (XSLT 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key219"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-063.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/@total-one = "50"</assert>
+            <assert>/out/@total-two = "0"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="key-064">
+      <description>Test use of key() in a key match expression (XSLT 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key219"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-064.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/@total-one = "50"</assert>
+            <assert>/out/@total-two = "60"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="key-065">
+      <description>test use of key() in pattern with a variable (XSLT 2.0 feature)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<t04>
+  <a id="a"/>
+  <a id="b"/>
+  <a id="c"/>
+  <a id="d"/>
+</t04>
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-065.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<d>[a][b][*c*][d]</d>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-066">
+      <description>test case for a bug found in Saxon 6.5.2</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<Course>
+    <Codes><Code>709001</Code><Code>752001</Code></Codes>
+    <Quota footnote="$#001">650</Quota>
+</Course>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-066.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Output xmlns:d="http://mydata.com/"><FootnoteCodes><Footnote>ABC</Footnote><Footnote>DEF</Footnote></FootnoteCodes></Output>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-067">
+      <description>test xsl:key with decimal keys</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key225.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-067.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a,b,d,e</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-068">
+      <description>test xsl:key with type=xs:double</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key226.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-068.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a,b,d,e,g</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-069">
+      <description>test xsl:key with type=xs:dateTime test key matching on dateTime values Should select a, c, d</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key227.xml"/>
+      </environment>     
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-069.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a,c,d</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-070">
+      <description>test xsl:key with type=xs:double using NaN as a key value</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<data>
+<item id="a">10.00</item>
+<item id="b">10.0</item>
+<item id="c">15.3</item>
+<item id="d">NaN</item>
+<item id="e">0010</item>
+</data>
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-070.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-071">
+      <description>test xsl:key with a multi-valued variable in a key() pattern</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key230.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-071.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><item id="a">10.00</item><item id="d">NaN</item><item id="f">banana</item></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-072">
+      <description>Saxon 7.4 bug </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay, Saxonica" on="2019-01-21" change="correct unintended error (reserved namespace in extension-element-prefixes)"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><chap name="s"/></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-072.xsl"/>
+      </test>
+      <result>
+         <assert>/testing="true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="key-073">
+      <description>test xsl:key containing variables in the use expression</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key236"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-073.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[@code="97"]/@values = "alfred:charlie:isaac:james:karl"</assert>
+            <assert>/out/a[@code="98"]/@values = "bertie"</assert>
+            <assert>/out/a[@code="99"]/@values = "charlie:eric:isaac"</assert>
+            <assert>/out/a[@code="100"]/@values = "alfred:desmond:freddie"</assert>
+            <assert>/out/a[@code="101"]/@values = "alfred:bertie:charlie:desmond:eric:freddie:george:henry:james"</assert>
+            <assert>/out/a[@code="102"]/@values = "alfred:freddie"</assert>
+            <assert>/out/a[@code="103"]/@values = "george"</assert>
+            <assert>/out/a[@code="104"]/@values = "charlie:henry"</assert>
+            <assert>/out/a[@code="105"]/@values = "bertie:charlie:eric:freddie:isaac"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="key-074">
+      <description>test key() function with three arguments</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key236"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-074.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[@code="97"]/@values = "alfred:charlie:isaac:james:karl"</assert>
+            <assert>/out/a[@code="98"]/@values = "bertie"</assert>
+            <assert>/out/a[@code="99"]/@values = "charlie:eric:isaac"</assert>
+            <assert>/out/a[@code="100"]/@values = "alfred:desmond:freddie"</assert>
+            <assert>/out/a[@code="101"]/@values = "alfred:bertie:charlie:desmond:eric:freddie:george:henry:james"</assert>
+            <assert>/out/a[@code="102"]/@values = "alfred:freddie"</assert>
+            <assert>/out/a[@code="103"]/@values = "george"</assert>
+            <assert>/out/a[@code="104"]/@values = "charlie:henry"</assert>
+            <assert>/out/a[@code="105"]/@values = "bertie:charlie:eric:freddie:isaac"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="key-075">
+      <description>test xsl:key with two definitions of the same key</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key236"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-075.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[@code="97"]/@values = "alfred:charlie:isaac:james:karl"</assert>
+            <assert>/out/a[@code="98"]/@values = "bertie"</assert>
+            <assert>/out/a[@code="99"]/@values = "charlie:eric:isaac"</assert>
+            <assert>/out/a[@code="100"]/@values = "alfred:desmond:freddie"</assert>
+            <assert>/out/a[@code="101"]/@values = "alfred:bertie:charlie:desmond:eric:freddie:george:henry:james"</assert>
+            <assert>/out/a[@code="102"]/@values = "alfred:freddie"</assert>
+            <assert>/out/a[@code="103"]/@values = "george"</assert>
+            <assert>/out/a[@code="104"]/@values = "charlie:henry"</assert>
+            <assert>/out/a[@code="105"]/@values = "bertie:charlie:eric:freddie:isaac"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="key-076">
+      <description>Test that xml:id is recognized as an ID attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key241.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-076.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "Expressions"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="key-077">
+      <description>Test that xml:id is recognized in a temporary tree</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key242"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-077.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "Damson"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="key-078">
+      <description>Two xsl:key definitions with the same name matching overlapping node sets</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key242"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-078.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:tt="http://www.powerware.com/nz/tt" a="11" b="11"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-079">
+      <description>Error: unknown key name as string literal</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key242"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-079.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE1260"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-080">
+      <description>Error: unknown key name as run-time expression</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key242"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-080.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE1260"/>
+      </result>
+   </test-case>
+
+   <test-case name="key-081">
+      <description>test a key with a numeric type</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key303"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-081.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one><b>John</b><b>Mary</b><b>Phil</b></one><two/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-082">
+      <description>test a key with a content constructor rather than a use expression</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key303"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-082.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><four><b>John</b><b>Mary</b><b>Phil</b></four><three><b>Ann</b></three></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-083">
+      <description>test a key with a numeric type in a template match pattern</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="key303"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-083.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><four>John</four><four>Mary</four><five>James</five><three>Ann</three><four>Phil</four></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="key-084">
+      <description>test a key whose match pattern declares local range variables</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="key306.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-084.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o><elem type="a"><active>true</active><dataset><field1>x</field1><field2>x</field2><field3><field4>x</field4><field5>x</field5></field3></dataset></elem></o>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="key-085a">
+      <description>
+        Test a key whose match pattern depends on a parameter. 
+        See Saxon bug https://saxonica.plan.io/issues/1968
+        This test and key-085b both work when run individually, but in Saxon 9.5 the second
+        test fails because the index is built based on the original value of the parameter, 
+        and is then re-used in the second test.
+      </description>
+      <created by="Michael Kay" on="2014-06-04"/>
+      <environment ref="key285">
+         <source role="." file="key306.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <param name="min" select="8"/>
+      </test>
+      <result>
+         <assert>/out = "Cambridge Manchester Pittsfield Rochester Springfield"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="key-085b">
+      <description>Test a key whose match pattern depends on a parameter. See Saxon bug https://saxonica.plan.io/issues/1968</description>
+      <created by="Michael Kay" on="2014-06-04"/>
+      <environment ref="key285">
+         <source role="." file="key306.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <param name="min" select="2"/>
+      </test>
+      <result>
+         <assert>/out = "Amherst Auburn Cambridge Grafton Hudson Lincoln Manchester Pittsfield Rochester Salem Springfield"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="key-086">
+      <description>test for xsl:key, with composite="yes".</description>
+      <created by="Debbie Lockett" on="2014-08-04"/>
+      <environment ref="key105"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-086.xsl"/>
+      </test>
+      <result>
+         <assert>/out='3'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="key-087">
+      <description>In XSLT 3.0, the xsl:key match pattern can match namespace nodes.</description>
+      <created by="Michael Kay" on="2014-10-18"/>
+      <modified by="Abel Braaksma" on="2014-11-02" change="Test is dependent on namespace axis"/>
+      <environment>
+         <source role="." file="key131.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="namespace_axis" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-087.xsl"/>
+      </test>
+      <result>
+         <assert>deep-equal(/out/e/string(), ("doc", "section", "inner"))</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="key-088">
+      <description>Test a key having values of several data types including untyped atomic</description>
+      <created by="Michael Kay" on="2014-10-25"/>
+      <environment ref="key101"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-088.xsl"/>
+      </test>
+      <result>
+        <all-of>
+          <assert>/out/fields="PittsfieldVT SpringfieldVT"</assert>
+          <assert>/out/non-fields="BristolVT CambridgeVT GraftonVT ManchesterVT NewportVT RochesterVT WashingtonVT"</assert>
+          <assert>/out/sevens="AmherstNH BristolNH EnfieldNH GraftonNH LincolnNH NewportNH"</assert>
+          <assert>/out/u-sevens="BristolRI LincolnRI NewportRI"</assert>
+          <assert>/out/nh="AmherstNH AuburnNH BristolNH EnfieldNH GraftonNH HudsonNH LincolnNH ManchesterNH NewportNH PittsfieldNH RochesterNH SalemNH WashingtonNH"</assert>
+        </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="key-089">
+      <description>key() invoking a user-defined function: a test case from Gerrit Imsieke</description>
+      <created by="Michael Kay" on="2015-04-29"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>
+ <p key="a">A</p>
+ <p key="b">B</p>
+ <p key="c">C</p>
+</doc>]]></content>
+         </source>
+      </environment>   
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-089.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/doc/p[@key='a']='A'</assert>
+            <assert>/doc/p[@key='b']='B'</assert>
+            <assert>count(/doc/p) = 2</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="key-090">
+      <description>In XSLT 3.0, the xsl:key match pattern can match namespace nodes. (Variant of -087)</description>
+      <created by="Michael Kay" on="2016-12-22"/>
+      <environment>
+         <source role="." file="key131.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="namespace_axis" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-090.xsl"/>
+      </test>
+      <result>
+         <assert>deep-equal(/out/e/string(), ("doc", "section", "inner"))</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="key-091">
+      <description>xsl:key with no name attribute</description>
+      <created by="Michael Kay" on="2017-06-13"/>
+      <environment>
+         <source role="." file="key131.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="key-091.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="key-092">
+      <description>xsl:key with contained xsl:template</description>
+      <created by="Michael Kay" on="2017-06-13"/>
+      <environment>
+         <source role="." file="key131.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="key-092.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="key-093">
+      <description>composite xsl:key with subtree selection</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-20"/>
+      <environment>
+         <source role="." file="key-093.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-093.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><node id="a"><section id="a_1" method="run"><item id="0" method="a"
+            ><attribute><color>Red</color><status>1</status><condition>good</condition></attribute></item></section
+            ><section id="a_2" method="run"><item id="0" method="a"><attribute><color>Red</color><status>1</status><condition>good</condition></attribute
+            ></item></section></node><node id="b"><section id="b_1" method="create"><user id="b_1a" method="x"><attribute><origin>us</origin></attribute
+            ></user><user id="b_1b"><attribute>a</attribute></user></section
+            ><section id="b_2"><user id="b_1a" method="x"><attribute><name>John</name><origin>us</origin></attribute></user></section
+            ></node></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="key-094">
+      <description>Multiple key declarations must have consistent values for @composite</description>
+      <created by="Michael Kay" on="2017-08-16"/>
+      <modified by="Michael Kay" on="2020-10-03" change="drop unused and unsatisfied source file dependency"/>
+      <environment ref="key101"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-094.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1222"/>
+      </result>
+   </test-case>
+   
+   <test-case name="key-095">
+      <description>Multiple key declarations must have consistent values for @composite</description>
+      <created by="Michael Kay" on="2017-08-16"/>
+      <modified by="Michael Kay" on="2020-10-03" change="drop unused and unsatisfied source file dependency"/>
+      <environment ref="key101"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-095.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1222"/>
+      </result>
+   </test-case>
+   
+   <test-case name="key-096">
+      <description>Composite key with variable number of items</description>
+      <created by="Michael Kay" on="2017-08-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-096.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "Hot July brings cooling showers, Apricots and gillyflowers."</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="key-097">
+      <description>Composite key. Saxon problem raised at https://saxonica.plan.io/boards/3/topics/7274?pn=1</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-07-28"/>
+      <environment>
+         <source role="." file="key097.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-097.xsl"/>
+      </test>
+      <result>
+         <assert>count(/Message2/Response/CE) = 2</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="key-098">
+      <description>Namespaces in xsl:key match pattern. Saxon bug https://saxonica.plan.io/issues/4624</description>
+      <created by="Michael Kay after Wendell Piez" on="2020-06-29"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-098.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>report/run[1]/data1 = "data1 key gives me 1"</assert>
+            <assert>report/run[1]/data2 = "data2 key gives me 1"</assert>
+            <assert>report/run[2]/data1 = "data1 key gives me 2"</assert>
+            <assert>report/run[2]/data2 = "data2 key gives me 2"</assert>
+            <assert>report/run[3]/data1 = "data1 key gives me 2"</assert>
+            <assert>report/run[3]/data2 = "data2 key gives me 2"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="key-099">
+      <description>Default namespaces in xsl:key use expression. Saxon bug 5230</description>
+      <created by="Michael Kay" on="2022-01-25"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="key-099.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>report/@count = "1"</assert>
+         </all-of>
+      </result>
+   </test-case>
+</test-set>

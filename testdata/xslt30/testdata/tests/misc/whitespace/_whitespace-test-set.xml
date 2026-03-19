@@ -1,0 +1,583 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="whitespace">
+   <description>Tests whitespace</description>
+   <environment name="whitespace-01">
+      <source role=".">
+         <content><![CDATA[<doc></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="whitespace-02">
+      <source role=".">
+         <content><![CDATA[<doc size="1.5">
+  <top-node><rubbish>Content of Rubbish</rubbish></top-node>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="whitespace-03">
+      <source role=".">
+         <content><![CDATA[<doc>
+   <foo/>
+   <foo/>
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <environment name="whitespace-10">
+      <source role=".">
+         <content><![CDATA[ 
+
+<doc>
+</doc>
+]]></content>
+      </source>
+   </environment>
+
+   <environment name="whitespace-12">
+      <source role=".">
+         <content><![CDATA[ 
+
+<doc>
+  <foo>a</foo>
+</doc>
+]]></content>
+      </source>
+   </environment>
+
+   <environment name="whitespace-17">
+      <source role=".">
+         <content><![CDATA[<document>
+  <section/>  <section/>  <section/>
+</document>]]></content>
+      </source>
+   </environment>
+
+
+   <test-case name="whitespace-001">
+      <description>
+         Was: whitespace-0101
+         Test that whitespace text nodes as children of xsl:analyze-string which has
+         @xml:space=preserve do not interfere with processing of the instruction.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="whitespace-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><E1>a*cada*</E1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-002">
+      <description>
+         Was: whitespace-0102
+         Test that whitespace text nodes as children of xsl:apply-imports which has
+         @xml:space=preserve do not interfere with processing of the instruction.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="whitespace-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-002.xsl"/>
+         <stylesheet file="import1.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><b>primary stylesheet</b><a> imported stylesheet </a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-003">
+      <description>
+         Was: whitespace-0103
+         Test that whitespace text nodes as children of xsl:character-map which has
+         @xml:space=preserve do not interfere with processing of the instruction.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2016-03-24" change="Declared serialization dependency"/>
+      <environment ref="whitespace-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="serialization"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-003.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches>bbbbbb</serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-004">
+      <description>
+         Was: whitespace-0104
+         Test that whitespace text nodes as children of xsl:next-match which has
+         @xml:space=preserve do not interfere with processing of the instruction.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="whitespace-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><b>primary stylesheet</b><a> next match </a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-005">
+      <description>
+         Was: whitespace-0105
+         Test that whitespace text nodes as children of xsl:apply-templates which has
+         @xml:space=preserve do not interfere with processing of the instruction.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="whitespace-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><b>template for root</b><a> template for doc </a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-006">
+      <description>
+         Was: whitespace-0106
+         Test that whitespace text nodes as children of xsl:attribute-set which has
+         @xml:space=preserve do not interfere with processing of the instruction.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="whitespace-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><item color="red" number="2"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-007">
+      <description>
+         Was: whitespace-0107
+         Test that whitespace text nodes as children of xsl:call-template which has
+         @xml:space=preserve do not interfere with processing of the instruction.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="whitespace-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><b>template for doc</b><a> temp template </a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-008">
+      <description>
+         Was: whitespace-0108
+         Test that whitespace text nodes as children of xsl:choose which has
+         @xml:space=preserve do not interfere with processing of the instruction.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="whitespace-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>true</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-009">
+      <description>
+         Was: whitespace-0109
+         Test that whitespace text nodes as children of xsl:stylesheet which has
+         @xml:space=preserve do not interfere with processing of the instruction.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="whitespace-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>test</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-010">
+      <description>
+         Was: whitespace-0110
+         Test that whitespace text nodes as children of xsl:transform which has
+         @xml:space=preserve do not interfere with processing of the instruction.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="whitespace-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>test</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-011">
+      <description>
+         Was: whitespace-0111
+         Test referencing an internal whitespace entity and an external parameter
+         whitespace entity defined in a DTD.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2016-03-24" change="Declared serialization and DTD dependencies"/>
+      <environment ref="whitespace-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+         <feature value="serialization"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-011.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches><![CDATA[<a>\r?\n\r?\n</a>]]></serialization-matches>
+            <serialization-matches><![CDATA[<b>\stest</b>]]></serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-012">
+      <description>
+         Was: whitespace-0112
+         Test with LRE that contains two text nodes with comment in between. First text
+         node has whitespace only. Cases tested: - second text node starts with whitespace - second
+         text node does not start with whitespace
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="whitespace-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e>   h   </e><e>   h   </e></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-013">
+      <description>
+         Was: whitespace-0113
+         Test with LRE that contains two text nodes with processing-instruction in
+         between. First text node has whitespace only. Cases tested: - second text node starts with
+         whitespace - second text node does not start with whitespace 
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="whitespace-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e>   h</e><e>h   </e></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-014">
+      <description>
+         Was: whitespace-0201
+         Test with whitespace text nodes as preceding-siblings of xsl:param. Parent has
+         @xml:space=preserve. Whitespace must be stripped.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="whitespace-02"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-014.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = "Content of Rubbish"</assert>
+            <assert>/out/b = "Content of Rubbish"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-015">
+      <description>
+         Was: whitespace-0201
+         Test with whitespace text nodes as preceding-siblings of xsl:sort. Parent has
+         @xml:space=preserve. Whitespace must be stripped.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="whitespace-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o>32 32 9 32 10 32 13 10 32 32 9 32 10 32 13 10</o>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-016">
+      <description>Was: whitespace-1001</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="whitespace-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-017">
+      <description>Was: whitespace-1002</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="whitespace-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-018">
+      <description>Was: whitespace-1003</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="whitespace-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+      x
+      </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-019">
+      <description>Was: whitespace-1004</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-03-24" change="say that output is not well-formed"/>
+      <environment ref="whitespace-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-019.xsl"/>
+         <output well-formed="no"/>
+      </test>
+      <result>
+         <!-- result is a tree containing a document node owning a text node -->
+         <all-of>
+            <assert>matches(., '\n\s+x\n\s+')</assert>
+            <assert>/child::text()</assert>
+            <assert>count(/child::node()) = 1</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-020">
+      <description>Was: whitespace-1005</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="whitespace-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><foo/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-021">
+      <description>Was: whitespace-1201</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="whitespace-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> test </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-022">
+      <description>Was: whitespace-1202</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-03-24" change="say that output is not well-formed"/>
+      <environment ref="whitespace-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-022.xsl"/>
+         <output well-formed="no"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/text() = "test"</assert>
+            <assert>not(/*)</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-023">
+      <description>Was: whitespace-1203</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-03-24" change="say that output is not well-formed"/>
+      <environment ref="whitespace-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-023.xsl"/>
+         <output well-formed="no"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/text() = "a"</assert>
+            <assert>not(/*)</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-024">
+      <description>Was: whitespace-1301</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[ 
+
+<doc/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-025">
+      <description>Was: whitespace-1701</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-03-24" change="produce well-formed output"/>
+      <environment ref="whitespace-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-025.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "'test''test'"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-026">
+      <description>Was: whitespace-1702</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="whitespace-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><!--[[[fred]]]--><!--[[[ fred ]]]--></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-027">
+      <description>Was: whitespace-1703</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="whitespace-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><?p [[[fred]]]?><?q [[[ fred ]]]?></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="whitespace-028">
+      <description>
+         Was: whitespace-1705
+         liberal use of whitespace in attribute values in the stylesheet: see erratum E2
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="whitespace-17"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="whitespace-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<document><section/><section/><section/></document>]]></assert-xml>
+      </result>
+   </test-case>
+
+</test-set>

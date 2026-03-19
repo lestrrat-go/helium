@@ -1,0 +1,839 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="source-document">
+   <description>
+   		Tests the xsl:source-document (streamable="yes")  instruction introduced in XSLT 3.0.
+   		The tests in this section focus on variants of the xsl:source-document (streamable="yes")  instruction itself,
+   		and not on testing the streamability of its content.
+   </description>
+
+   <environment name="stream-A">
+     <stylesheet file="stream-A.xsl"/>
+     <param name="STREAMABLE" static="yes" select="true()"/> 
+   </environment>
+   
+   <environment name="stream-B">
+     <stylesheet file="stream-B.xsl"/>
+      <param name="STREAMABLE" static="yes" select="true()"/>
+     <schema role="stylesheet-import" file="books.xsd"/> 
+   </environment>
+   
+   <environment name="non-stream-A">
+      <stylesheet file="stream-A.xsl"/>
+      <param name="STREAMABLE" static="yes" select="false()"/> 
+   </environment>
+   
+   <environment name="non-stream-B">
+      <stylesheet file="stream-B.xsl"/>
+      <param name="STREAMABLE" static="yes" select="false()"/>
+      <schema role="stylesheet-import" file="books.xsd"/> 
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="stream-001">
+      <description>Test empty xsl:source-document (streamable="yes")  instruction</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-001"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-002">
+      <description>Test xsl:source-document (streamable="yes")  instruction, non-existent document</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-002"/>
+      </test>
+      <result>
+         <error code="FODC0002"/>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-003">
+      <description>Test xsl:source-document (streamable="yes")  instruction, computed document URI</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-003"/>
+      </test>
+      <result>
+         <assert>/out/BOOKLIST</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-004">
+      <description>Test xsl:source-document (streamable="yes")  instruction, use base URI</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-004"/>
+      </test>
+      <result>
+         <assert>/out/*:catalog</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-005">
+      <description>Context position is 1</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-005"/>
+      </test>
+      <result early-exit-possible="true">
+         <all-of>
+           <assert>/out/@position = "1"</assert>
+           <assert>/out/@is-doc = "true"</assert>
+           <assert>ends-with(/out/@base-uri, 'insn/source-document/books.xml')</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-006">
+      <description>Test xsl:source-document (streamable="yes")  instruction, invalid URI</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-006"/>
+      </test>
+      <result>
+         <error code="FODC0005"/>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-007">
+      <description>Test xsl:source-document (streamable="yes")  instruction, use strip-space</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-007"/>
+      </test>
+      <result>
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-008">
+      <description>Test xsl:source-document (streamable="yes")  instruction, use preserve-space</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-008"/>
+      </test>
+      <result>
+         <assert>/out = "4"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-009">
+      <description>Test xsl:source-document (streamable="yes")  instruction, xsl:fallback child is ignored</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-009"/>
+      </test>
+      <result>
+         <assert>/out = "4"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-010">
+      <description>Test xsl:source-document (streamable="yes")  instruction, two nested streams over the same document</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-010"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/cat[@code="P"][@count="4"]</assert>
+           <assert>/out/cat[@code="MMP"][@count="1"]</assert>
+           <assert>/out/cat[@code="H"][@count="1"]</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="stream-011">
+      <description>Test xsl:source-document (streamable="yes")  instruction, validation="strip"</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-011"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-012">
+      <description>Test xsl:source-document (streamable="yes")  instruction, validation="preserve"</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-012"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="stream-013">
+      <description>Test xsl:source-document (streamable="yes")  instruction, validation="lax"</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-013"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-014">
+      <description>Test xsl:source-document (streamable="yes")  instruction, default-validation has no effect</description>
+      <created by="Michael Kay" on="2017-04-18"/>
+      <environment ref="stream-A"/>
+      <test>
+         <initial-template name="s-014"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-101">
+      <description>Test xsl:source-document (streamable="yes")  instruction, validation="strict"</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="s-101"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-102">
+      <description>Test xsl:source-document (streamable="yes")  instruction, validation="strict" failure</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="s-102"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-103">
+      <description>Test xsl:source-document (streamable="yes")  instruction, validation by type</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="s-103"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-104">
+      <description>Test xsl:source-document (streamable="yes")  instruction, validation by type, invalid</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="s-104"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-105">
+      <description>Test xsl:source-document (streamable="yes")  instruction, partial validation, valid</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="s-105"/>
+      </test>
+      <result>
+         <assert>/out/ITEM/TITLE = "Pride and Prejudice"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-106">
+      <description>Test xsl:source-document (streamable="yes")  instruction, partial validation, invalid</description>
+      <created by="Michael Kay" on="2013-12-03"/>
+      <environment ref="stream-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="s-106"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-107">
+      <description>Test xsl:source-document (streamable="yes")  called within a function</description>
+      <created by="Michael Kay" on="2015-07-09"/>
+      <environment ref="stream-B"/>
+      <test>
+         <initial-template name="s-107"/>
+      </test>
+      <result>
+         <assert>/out = '9.06'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-108">
+      <description>Test xsl:source-document (streamable="yes")  called with early termination</description>
+      <created by="Michael Kay" on="2015-07-09"/>
+      <environment ref="stream-B"/>
+      <test>
+         <initial-template name="s-108"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-109">
+      <description>Test xsl:source-document (streamable="yes")  called within a function calling a constructor function</description>
+      <created by="Michael Kay" on="2015-07-09"/>
+      <environment ref="stream-B"/>
+      <test>
+         <initial-template name="s-109"/>
+      </test>
+      <result>
+         <assert>/out = '9.06'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-200">
+      <description>Extract two parts from a partwise MusicXML score</description>
+      <created by="Michael Kay" on="2016-02-13"/>
+      <test>
+         <stylesheet file="stream-200.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>exists(//part[@id="P1"])</assert>
+            <assert>exists(//part[@id="P2"])</assert>
+            <assert>empty(//part[@id="P3"])</assert>
+            <assert>empty(//part[@id="P4"])</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-201">
+      <description>Extract two parts from a partwise MusicXML score: variant using predicate in pattern</description>
+      <created by="Michael Kay" on="2016-02-13"/>
+      <test>
+         <stylesheet file="stream-201.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>exists(//part[@id="P1"])</assert>
+            <assert>exists(//part[@id="P2"])</assert>
+            <assert>empty(//part[@id="P3"])</assert>
+            <assert>empty(//part[@id="P4"])</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-202">
+      <description>Extract two parts from a partwise MusicXML score: variant using xs:string in map</description>
+      <created by="Michael Kay" on="2016-02-13"/>
+      <test>
+         <stylesheet file="stream-202.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>exists(//part[@id="P1"])</assert>
+            <assert>exists(//part[@id="P2"])</assert>
+            <assert>empty(//part[@id="P3"])</assert>
+            <assert>empty(//part[@id="P4"])</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-203">
+      <description>Extract two parts from a partwise MusicXML score: cannot put xs:untypedAtomic in map that expects xs:string</description>
+      <created by="Michael Kay" on="2016-02-13"/>
+      <modified by="Michael Kay" on="2016-09-12" change="move the call to accumulator-before() out of the pattern so the error is not masked"/>
+      <test>
+         <stylesheet file="stream-203.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-204">
+      <description>Extract two parts from a partwise MusicXML score: variant with non-motionless pattern in accumulator rule</description>
+      <created by="Michael Kay" on="2016-02-13"/>
+      <test>
+         <stylesheet file="stream-204.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-205">
+      <description>Streamability issue with xsl:with-param</description>
+      <created by="Michael Kay after David Rudel" on="2017-08-31"/>
+      <modified by="Michael Kay" on="2017-09-20" change="add expected results"/>
+      <test>
+         <stylesheet file="stream-205.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(distinct-values(//@args)) = 2</assert>
+            <assert>count(distinct-values(//@details)) = 12</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-206">
+      <description>Streamability issue with xsl:with-param</description>
+      <created by="Michael Kay after David Rudel" on="2017-08-31"/>
+      <modified by="Michael Kay" on="2017-09-20" change="add expected results"/>
+      <test>
+         <stylesheet file="stream-206.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(distinct-values(//@args)) = 1</assert>
+            <assert>count(distinct-values(//@details)) = 12</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-207">
+      <description>Same streamed input file as principal input and read using xsl:source-document</description>
+      <created by="Michael Kay" on="2017-11-28"/>
+      <modified by="Michael Kay" on="2018-01-31" change="supply expected results"/>
+      <environment>
+         <source role="." file="Psalm100.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="stream-207.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/data/part[@id='P1'][@name='Cantus'][@measures='4']</assert>
+            <assert>/data/part[@id='P2'][@name='Altus'][@measures='4']</assert>
+            <assert>/data/part[@id='P3'][@name='Tenor'][@measures='4']</assert>
+            <assert>/data/part[@id='P4'][@name='Bassus'][@measures='4']</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-208">
+      <description>xsl:source-document body does early exit, but accumulator prevents it. Saxon bug 5484.</description>
+      <created by="Michael Kay" on="2022-05-11"/>
+      <test>
+         <stylesheet file="stream-208.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/data/has-measure = 'true'</assert>
+            <assert>/data/count-measures = '16'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-210">
+      <description>xsl:source-document (streamable="yes")  reading the same input file more than once</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-02-19"/>
+      <test>
+         <stylesheet file="stream-210.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-result-document uri="product-1-result.xml">
+               <assert-xml><![CDATA[<root xmlns:xs="http://www.w3.org/2001/XMLSchema"><product type="product-1"><foo>BOOT</foo></product><product type="product-1"><foo>HAT</foo></product></root>]]></assert-xml>
+            </assert-result-document>
+            <assert-result-document uri="product-3-result.xml">
+               <assert-xml><![CDATA[<root xmlns:xs="http://www.w3.org/2001/XMLSchema"><product type="product-3"><foo>SCARF</foo></product></root>]]></assert-xml>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-211">
+      <description>xsl:source-document (streamable="yes")  with key() access to a second source document</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-07-05"/>
+      <test>
+         <stylesheet file="stream-211.xsl"/>
+      </test>
+      <result>
+      <assert-xml><![CDATA[<root><item id="i1"><foo>new 1</foo></item><item id="i2"><foo>original 2</foo></item><item id="i3"><foo>new 3</foo></item></root>]]></assert-xml>      </result>
+   </test-case>
+   
+   <test-case name="stream-500">
+      <description>Test xsl:source-document (streamable="yes")  instruction. From a Saxon 9.6 bug report (bug 2389).</description>
+      <created by="Michael Kay" on="2015-06-05"/>
+      <test>
+         <stylesheet file="stream-500.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root xmlns="urn:gba:sqg"
+      xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+      xmlns:xenc="http://www.w3.org/2001/04/xmlenc#"><body><cases module="17/7" pseud_procedure="17/5_17/7"
+      ><case><patient twodigitik="10"><pseudonym V="1234567890" alg="0"/></patient><test id="1"/></case
+	  ><case><patient twodigitik="10"><pseudonym V="0987654321" alg="0"/></patient><test id="2"/></case
+	  ></cases></body></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-001">
+      <description>Test empty xsl:source-document (streamable="no") instruction</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-A"/>
+      <test>
+         <initial-template name="s-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-002">
+      <description>Test xsl:source-document (streamable="no") instruction, non-existent document</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-A"/>
+      <test>
+         <initial-template name="s-002"/>
+      </test>
+      <result>
+         <error code="FODC0002"/>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-003">
+      <description>Test xsl:source-document (streamable="no") instruction, computed document URI</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-A"/>
+      <test>
+         <initial-template name="s-003"/>
+      </test>
+      <result>
+         <assert>/out/BOOKLIST</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-004">
+      <description>Test xsl:source-document (streamable="no") instruction, use base URI</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-A"/>
+      <test>
+         <initial-template name="s-004"/>
+      </test>
+      <result>
+         <assert>/out/*:catalog</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-005">
+      <description>Context position is 1</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-A"/>
+      <test>
+         <initial-template name="s-005"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/@position = "1"</assert>
+            <assert>/out/@is-doc = "true"</assert>
+            <assert>ends-with(/out/@base-uri, 'insn/source-document/books.xml')</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-006">
+      <description>Test xsl:source-document (streamable="no") instruction, invalid URI</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-A"/>
+      <test>
+         <initial-template name="s-006"/>
+      </test>
+      <result>
+         <error code="FODC0005"/>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-007">
+      <description>Test xsl:source-document (streamable="no") instruction, use strip-space</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-A"/>
+      <test>
+         <initial-template name="s-007"/>
+      </test>
+      <result>
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-008">
+      <description>Test xsl:source-document (streamable="no") instruction, use preserve-space</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-A"/>
+      <test>
+         <initial-template name="s-008"/>
+      </test>
+      <result>
+         <assert>/out = "4"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-009">
+      <description>Test xsl:source-document (streamable="no") instruction, xsl:fallback child is ignored</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-A"/>
+      <test>
+         <initial-template name="s-009"/>
+      </test>
+      <result>
+         <assert>/out = "4"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-010">
+      <description>Test xsl:source-document (streamable="no") instruction, two nested streams over the same document</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-A"/>
+      <test>
+         <initial-template name="s-010"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/cat[@code="P"][@count="4"]</assert>
+            <assert>/out/cat[@code="MMP"][@count="1"]</assert>
+            <assert>/out/cat[@code="H"][@count="1"]</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-011">
+      <description>Test xsl:source-document (streamable="no") instruction, validation="strip"</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-A"/>
+      <test>
+         <initial-template name="s-011"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-012">
+      <description>Test xsl:source-document (streamable="no") instruction, validation="preserve"</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-A"/>
+      <test>
+         <initial-template name="s-012"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-013">
+      <description>Test xsl:source-document (streamable="no") instruction, validation="lax"</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-A"/>
+      <test>
+         <initial-template name="s-013"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-101">
+      <description>Test xsl:source-document (streamable="no") instruction, validation="strict"</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-B"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="s-101"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-102">
+      <description>Test xsl:source-document (streamable="no") instruction, validation="strict" failure</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-B"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="s-102"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-103">
+      <description>Test xsl:source-document (streamable="no") instruction, validation by type</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-B"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="s-103"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-104">
+      <description>Test xsl:source-document (streamable="no") instruction, validation by type, invalid</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-B"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="s-104"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-105">
+      <description>Test xsl:source-document (streamable="no") instruction, partial validation, valid</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-B"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="s-105"/>
+      </test>
+      <result>
+         <assert>/out/ITEM/TITLE = "Pride and Prejudice"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-106">
+      <description>Test xsl:source-document (streamable="no") instruction, partial validation, invalid</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-B"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="s-106"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-107">
+      <description>Test xsl:source-document (streamable="no") called within a function</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-B"/>
+      <test>
+         <initial-template name="s-107"/>
+      </test>
+      <result>
+         <assert>/out = '9.06'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-108">
+      <description>Test xsl:source-document (streamable="no") called with early termination</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-B"/>
+      <test>
+         <initial-template name="s-108"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-109">
+      <description>Test xsl:source-document (streamable="no") called within a function calling a constructor function</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <environment ref="non-stream-B"/>
+      <test>
+         <initial-template name="s-109"/>
+      </test>
+      <result>
+         <assert>/out = '9.06'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-200">
+      <description>Test xsl:source-document (streamable="no") does not have to satisfy streamability constraints</description>
+      <created by="Michael Kay" on="2016-08-28"/>
+      <test>
+         <stylesheet file="non-stream-200.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>exists(//part[@id="P1"])</assert>
+            <assert>exists(//part[@id="P2"])</assert>
+            <assert>empty(//part[@id="P3"])</assert>
+            <assert>empty(//part[@id="P4"])</assert>
+            <assert>/processing-instruction(count) = '1251'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="non-stream-201">
+      <description>Use-accumulators applies even when not streaming</description>
+      <created by="Michael Kay" on="2016-09-12"/>
+      <test>
+         <stylesheet file="non-stream-201.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE3362"/>
+      </result>
+   </test-case>
+   
+
+</test-set>

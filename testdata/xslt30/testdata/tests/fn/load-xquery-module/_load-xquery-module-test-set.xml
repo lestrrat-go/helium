@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="load-xquery-module">
+   <description>Tests load-xquery-module() function in XSLT 3.0</description>
+   
+   <environment name="load-xquery-module-A">
+         <resource uri="http://www.w3.org/fots/fn/load-xquery-module/valid/module"
+            file="valid-module.xqm"
+            media-type="application/xquery"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="XPath_3.1"/>
+      <feature value="higher_order_functions"/>
+   </dependencies>
+
+   <test-case name="load-xquery-module-001">
+      <description>Returns error, module is not available (non-existent file)</description>
+      <created by="Michael Kay" on="2017-08-17"/>
+      <modified by="Michael Kay" on="2019-03-06" change="make entry point public"/>
+      <modified by="Michael Kay" on="2019-11-26" change="allow error FOQM0006 when no XQuery processor is available"/>
+      <environment ref="load-xquery-module-A"/>           
+      <test>
+         <stylesheet file="load-xquery-module-001.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XQST0059"/>
+            <error code="FOQM0006"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="load-xquery-module-002">
+      <description>Read value of a global variable from query module</description>
+      <created by="Michael Kay" on="2017-08-17"/>
+      <modified by="Michael Kay" on="2019-03-06" change="make entry point public"/>
+      <modified by="Michael Kay" on="2019-11-26" change="allow error FOQM0006 when no XQuery processor is available"/>
+      <environment ref="load-xquery-module-A"/>           
+      <test>
+         <stylesheet file="load-xquery-module-002.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "var1"</assert>
+            <error code="FOQM0006"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="load-xquery-module-003">
+      <description>Invoke a function from query module</description>
+      <created by="Michael Kay" on="2017-08-17"/>
+      <modified by="Michael Kay" on="2019-03-06" change="make entry point public"/>
+      <modified by="Michael Kay" on="2019-11-26" change="allow error FOQM0006 when no XQuery processor is available"/>
+      <environment ref="load-xquery-module-A"/>           
+      <test>
+         <stylesheet file="load-xquery-module-003.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "func1"</assert>
+            <error code="FOQM0006"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="load-xquery-module-004">
+      <description>Bind statically to a function from query module</description>
+      <created by="Michael Kay" on="2017-08-17"/>
+      <modified by="Michael Kay" on="2019-03-06" change="make entry point public"/>
+      <modified by="Michael Kay" on="2019-11-26" change="allow error FOQM0006 when no XQuery processor is available"/>
+      <environment ref="load-xquery-module-A"/>           
+      <test>
+         <stylesheet file="load-xquery-module-004.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "func1"</assert>
+            <error code="FOQM0006"/>
+         </any-of>
+      </result>
+   </test-case>
+ 
+
+
+
+</test-set>

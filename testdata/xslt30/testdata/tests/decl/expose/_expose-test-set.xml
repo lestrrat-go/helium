@@ -1,0 +1,563 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="expose">
+   <description>Tests xsl:expose in XSLT 3.0</description>
+   
+   <environment name="expose-A">
+      <package file="expose-A.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/expose-A" package-version="1.0.0"/>
+   </environment>
+   
+   <environment name="expose-B">
+      <package file="expose-B.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/expose-B" package-version="1.0.0"/>
+   </environment>
+
+   <dependencies>
+      <spec value="XSLT30+"/>
+   </dependencies>
+
+   <test-case name="expose-001">
+      <description>Syntax variations of xsl:expose</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398) (expose-001a/b/c for original and error variants)"/>
+      <modified by="Michael Kay" on="2020-02-06" change="Draft erratum E36 makes it an error to name a function with no explicit arity"/>
+     <test>
+         <package file="expose-001.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-001a">
+      <description>Error case XTDE0040, initial template must be explicitly public under xsl:package</description>
+      <created by="Abel Braaksma" on="2019-02-19"/>
+      <modified by="Michael Kay" on="2023-03-05" change="Remove unintended error, missing function arity"/>
+      <test>
+         <package file="expose-001a.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE0040" />
+      </result>
+   </test-case>
+   
+   <test-case name="expose-001b">
+      <description>Error case XTDE0040, initial template explicitly declared private </description>
+      <created by="Abel Braaksma" on="2019-02-19"/>
+      <modified by="Michael Kay" on="2023-03-05" change="Remove unintended error, missing function arity"/>
+      <test>
+         <package file="expose-001b.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE0040" />
+      </result>
+   </test-case>
+   
+   <test-case name="expose-001c">
+      <description>Error case XTDE0040, initial template explicitly exposed private </description>
+      <created by="Abel Braaksma" on="2019-02-19"/>
+      <modified by="Michael Kay" on="2023-03-05" change="Remove unintended error, missing function arity"/>
+      <test>
+         <package file="expose-001c.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE0040" />
+      </result>
+   </test-case>
+   
+   <test-case name="expose-002">
+      <description>Simple use of xsl:expose to make everything public</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Michael Kay" on="2015-11-02" change="remove template main from expose-A as it causes conflicts"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="expose-A"/>
+      <test>
+         <package file="expose-002.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>0</t1><t2>0</t2><f1>1</f1><f2>2</f2></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-003">
+      <description>Failure to access components not made public</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="expose-A"/>
+      <test>
+         <package file="expose-003.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPST0017"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-004">
+      <description>Simple use of xsl:expose to make variables and attribute sets final</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Michael Kay" on="2015-11-02" change="remove template main from expose-B as it causes conflicts"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="expose-B"/>
+      <test>
+         <package file="expose-004.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a1 A="0" B="0"/><a2 A="0"/><v1>0</v1><v2>0</v2></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-005">
+      <description>Fail to override attribute set exposed as final</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="expose-B"/>
+      <test>
+         <package file="expose-005.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3060"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-006">
+      <description>Fail to access variable not exposed as public</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="expose-B"/>
+      <test>
+         <package file="expose-006.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPST0008"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-007">
+      <description>xsl:expose in top-level package (Saxon bug 3182)</description>
+      <created by="Michael Kay" on="2017-03-29"/>
+      <test>
+         <package file="expose-007.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out=''</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-008">
+      <description>xsl:expose has no effect on the unnamed mode (Saxon bug 5231)</description>
+      <created by="Michael Kay" on="2022-01-25"/>
+      <test>
+         <package file="expose-008a.xsl" role="principal"/>
+         <package file="expose-008b.xsl" role="secondary"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out='YYY'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-009">
+      <description>xsl:expose has no effect on the unnamed mode. With declared-modes=no. (Saxon bug 5231)</description>
+      <created by="Michael Kay" on="2022-01-25"/>
+      <test>
+         <package file="expose-009a.xsl" role="principal"/>
+         <package file="expose-009b.xsl" role="secondary"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out='YYY'</assert>
+      </result>
+   </test-case>
+   
+   
+   
+   <test-case name="expose-901">
+      <description>Error, attribute set not declared in package</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-901.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-902">
+      <description>Error, variable not declared in package</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-902.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-903">
+      <description>Error, function not declared in package with correct arity</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-903.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-904">
+      <description>Error, cannot reference unnamed mode</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-904.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-905">
+      <description>Error, trying to expose component that matches by name but not by component type</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-02" change="Package tried to expose '#unnamed' which is not a valid token and not the aim of this test (lead to other error), see also expose-915, accept-915" />
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-905.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-906">
+      <description>Error, unknown component kind</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-906.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-907">
+      <description>Error, unknown component kind</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-907.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-908">
+      <description>Error, cannot change visibility of xsl:param by masquerading as a variable</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-908.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-909">
+      <description>Error, cannot increase visibility from private to public</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-909.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-910">
+      <description>Error, cannot increase visibility from private to public</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-910.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-911">
+      <description>Error, cannot increase visibility from private to final</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-911.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-912a">
+      <description>Error, cannot increase visibility from private to abstract, matching function components have mixed declared and non-declared visibility</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-15" change="Allow also XTSE3025, see -912b/c/d for stricter variants"></modified>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-912a.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE3010"/>
+            <error code="XTSE3025"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-912b">
+      <description>Error, cannot increase visibility from private to abstract, all matching function components have a declared visibility</description>
+      <created by="Abel Braaksma" on="2019-02-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-912b.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-912c">
+      <description>Error, cannot increase visibility from implicitly private to abstract, all matching function components have no declared visibility</description>
+      <created by="Abel Braaksma" on="2019-02-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-912c.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3025"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-912d">
+      <description>Error, cannot increase visibility from implicitly private to abstract, with wildcard match</description>
+      <created by="Abel Braaksma" on="2019-02-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-912d.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3025"/>
+      </result>
+   </test-case>
+   
+
+   <test-case name="expose-913">
+      <description>Error, cannot increase visibility from final to public</description>
+      <created by="Michael Kay" on="2015-08-27"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-913.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="expose-914">
+      <description>Error, cannot use component="*" with explicit names. See bug 29478</description>
+      <created by="Michael Kay" on="2016-04-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-914.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3022"/>
+      </result>
+   </test-case>
+
+    <test-case name="expose-915">
+      <description>Error, cannot use special token #unnamed to refer to the always private-to-a-package unnamed mode (like accept-915)</description>
+      <created by="Abel Braaksma" on="2019-02-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-915.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+    <test-case name="expose-916">
+      <description>Error, cannot expose an existing declaration abstract when it doesn't have a visibility attribute</description>
+      <created by="Abel Braaksma" on="2019-02-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-916.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3025"/>
+      </result>
+   </test-case>
+   
+    <test-case name="expose-917">
+      <description>Error, cannot change a declaration from public to abstract</description>
+      <created by="Abel Braaksma" on="2019-02-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-917.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3010"/>
+      </result>
+   </test-case>
+   
+    <test-case name="expose-918">
+      <description>Error, cannot change an abstract declaration to public</description>
+      <created by="Abel Braaksma" on="2019-02-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-918.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3010"/>
+      </result>
+   </test-case>
+   
+    <test-case name="expose-919">
+      <description>Error, cannot change an abstract declaration to private</description>
+      <created by="Abel Braaksma" on="2019-02-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-919.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3010"/>
+      </result>
+   </test-case>
+   
+    <test-case name="expose-920">
+      <description>Error, cannot change an abstract declaration to final</description>
+      <created by="Abel Braaksma" on="2019-02-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-920.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3010"/>
+      </result>
+   </test-case>
+   
+    <test-case name="expose-921">
+      <description>Error, cannot expose xsl:mode as abstract</description>
+      <created by="Abel Braaksma" on="2019-02-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-921.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3025"/>
+      </result>
+   </test-case>
+   
+    <test-case name="expose-922">
+      <description>Error, wildcard match cannot make a matching component abstract</description>
+      <created by="Abel Braaksma" on="2019-02-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-922.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3025"/>
+      </result>
+   </test-case>
+   
+    <test-case name="expose-923">
+      <description>Error, component="*" match cannot make a matching component (template) abstract</description>
+      <created by="Abel Braaksma" on="2019-02-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-923.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3025"/>
+      </result>
+   </test-case>
+   
+    <test-case name="expose-924">
+      <description>Error, component="*" match cannot make a matching mode abstract</description>
+      <created by="Abel Braaksma" on="2019-02-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="expose-924.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3025"/>
+      </result>
+   </test-case>
+  
+  <test-case name="expose-925">
+    <description>Error, can't use #0 to indicate the arity of a named template</description>
+    <created by="Michael Kay" on="2020-02-06"/>
+    <test>
+      <package file="expose-925.xsl" role="principal"/>
+    </test>
+    <result>
+      <error code="XTSE3020"/>
+    </result>
+  </test-case>
+  
+  <test-case name="expose-926">
+    <description>Error, when the component is a function then the arity must be given (erratum E36)</description>
+    <created by="Michael Kay" on="2020-02-06"/>
+    <test>
+      <package file="expose-926.xsl" role="principal"/>
+    </test>
+    <result>
+      <error code="XTSE3020"/>
+    </result>
+  </test-case>
+  
+  <test-case name="expose-927">
+    <description>Use name foo:* with foo prefix undeclared</description>
+    <created by="Michael Kay" on="2020-04-08"/>
+    <test>
+      <package file="expose-927.xsl" role="principal"/>
+    </test>
+    <result>
+      <error code="XTSE0020"/>
+    </result>
+  </test-case>
+   
+</test-set>

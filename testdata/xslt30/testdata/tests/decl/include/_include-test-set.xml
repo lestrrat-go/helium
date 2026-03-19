@@ -1,0 +1,343 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="include">
+   <description>Tests include</description>
+   
+   <environment name="include-01">
+      <source role=".">
+         <content><![CDATA[<root-tag><one-tag>Text of one-tag</one-tag><two-tag>Text of two-tag</two-tag></root-tag>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="include-02">
+      <source role=".">
+         <content><![CDATA[<doc>This text should be output</doc>]]></content>
+      </source>
+   </environment>
+      
+   <environment name="include-07">
+      <source role="." file="include-07.xml"/>
+   </environment>
+   
+
+   <test-case name="include-0101">
+      <description/>
+      <keywords>xsl:import xsl:include</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-10-16" change="changed result assertion"/>
+      <modified by="Michael Kay" on="2014-11-14" change="made this a serialization test"/>
+      <modified by="Michael Kay" on="2017-10-10" change="added serialization dependency"/>
+      <modified by="Michael Kay" on="2020-02-17" change="alternative result if default HTML version is 5"/>
+      <environment ref="include-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="serialization"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0101.xsl"/>
+         <stylesheet file="include-0101a.xsl" role="secondary"/>
+         <stylesheet file="include-0101b.xsl" role="secondary"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+        <any-of>
+          <assert-serialization><![CDATA[<body changed="8 Feb 2002" var="E">Text of one-tagText of two-tag<br></body>]]></assert-serialization>
+          <assert-serialization><![CDATA[<!DOCTYPE HTML><body changed="8 Feb 2002" var="E">Text of one-tagText of two-tag<br></body>]]></assert-serialization>
+        </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="include-0102">
+      <description>Test including an embedded stylesheet module</description>
+      <keywords>embedded-stylesheet _IMPROVE:missing-dependency-embedded xsl:include</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="include-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0102.xsl"/>
+         <stylesheet file="include-0102a.xml" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>found it</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="include-0103">
+      <description>Test base URI of an embedded stylesheet module</description>
+      <keywords>embedded-stylesheet _IMPROVE:missing-dependency-embedded xsl:include</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="include-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0103.xsl"/>
+         <stylesheet file="include-0103a.xml" role="secondary"/>
+         <stylesheet file="x/include-0103b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>found it</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="include-0104">
+      <description>
+      	test that xsl:apply-imports considers template rules imported into a stylesheet module 
+      	that includes the module containing the current template rule
+      </description>
+      <keywords>xsl:apply-imports xsl:import xsl:include</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="include-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0104.xsl"/>
+         <stylesheet file="xinc20a.xsl" role="secondary"/>
+         <stylesheet file="xinc20b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<from-xinc20b><from-xinc20a/></from-xinc20b>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="include-0105">
+      <description>test that overriding a global variable works</description>
+      <keywords>xsl:import xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="include-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0105.xsl"/>
+         <stylesheet file="include-0105a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>OK</one><two>OK</two></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="include-0201">
+      <description>test that xsl:apply-imports invokes the built-in rule when there is no overridden template rule (bug Saxon 6.0.1/011)</description>
+      <keywords>xsl:apply-imports buildin-template-rules</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="include-02"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>This text should be output</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="include-0202">
+      <description>test xsl:apply-imports with parameters (XSLT 2.0 feature)</description>
+      <keywords>xsl:apply-imports xsl:with-param xsl:import</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="include-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0202.xsl"/>
+         <stylesheet file="include-0202a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><in magic="81"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="include-0301">
+      <description>Test more that one call of xsl:apply-imports from the same template See Saxon bug 6.2.2/019</description>
+      <keywords>xsl:import xsl:apply-imports</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0301.xsl"/>
+         <stylesheet file="include-0301a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<bat><baz id="1"><foo/></baz><baz id="2"><foo/></baz><baz id="3"><foo/></baz></bat>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="include-0401">
+      <description>Test inclusion of a simplified stylesheet</description>
+      <keywords>xsl:include xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0401.xsl"/>
+         <stylesheet file="include-0401a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><in>Hi there!</in></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="include-0501">
+      <description/>
+      <keywords>xsl:import xsl:include xsl:param</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0501.xsl"/>
+         <stylesheet file="include-0501a.xsl" role="secondary"/>
+         <stylesheet file="include-0501b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><p>First param: aaa, as defined in first.xsl</p><p>Second param: ZZZ, as defined in second.xsl</p></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="include-0601">
+      <description/>
+      <keywords>xsl:import xsl:apply-imports</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<greeting>Hello world.</greeting>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0601.xsl"/>
+         <stylesheet file="include-0601a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<html><head><title>Greeting</title></head><body><p>Words of greeting:<br/><b><i><u>!Hello world.!</u></i></b></p></body></html>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="include-0701">
+      <description>Test for xsl:include.</description>
+      <keywords>xsl:include multiple-includes</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="include-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0701.xsl"/>
+         <stylesheet file="include-0701b.xsl" role="secondary"/>
+         <stylesheet file="include-0701c.xsl" role="secondary"/>
+         <stylesheet file="include-0701d.xsl" role="secondary"/>
+         <stylesheet file="include-0701e.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml file="include-0701.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="include-0702a">
+      <description>Test for xsl:include.</description>
+      <keywords>xsl:include multiple-includes</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="include-07"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="recover"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0701.xsl"/>
+         <stylesheet file="include-0701b.xsl" role="secondary"/>
+         <stylesheet file="include-0701c.xsl" role="secondary"/>
+         <stylesheet file="include-0701d.xsl" role="secondary"/>
+         <stylesheet file="include-0701e.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml file="include-0702c.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="include-0702b">
+      <description>Test for xsl:include.</description>
+      <keywords>xsl:include multiple-includes</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="include-07"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="error"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0701.xsl"/>
+         <stylesheet file="include-0701b.xsl" role="secondary"/>
+         <stylesheet file="include-0701c.xsl" role="secondary"/>
+         <stylesheet file="include-0701d.xsl" role="secondary"/>
+         <stylesheet file="include-0701e.xsl" role="secondary"/>
+      </test>
+      <result>
+         <error code="XTRE0540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="include-0702c">
+      <description>Test for xsl:include.</description>
+      <keywords>xsl:include multiple-includes</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="include-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0701.xsl"/>
+         <stylesheet file="include-0701b.xsl" role="secondary"/>
+         <stylesheet file="include-0701c.xsl" role="secondary"/>
+         <stylesheet file="include-0701d.xsl" role="secondary"/>
+         <stylesheet file="include-0701e.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml file="include-0702c.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="include-0801">
+      <description/>
+      <keywords>xsl:import multiple-imports xsl:apply-imports</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+        <source role="." file="include-08.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="include-0801.xsl"/>
+         <stylesheet file="include-0701b.xsl" role="secondary"/>
+         <stylesheet file="include-0701c.xsl" role="secondary"/>
+         <stylesheet file="include-0701d.xsl" role="secondary"/>
+         <stylesheet file="include-0701e.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml file="include-0801.out"/>
+      </result>
+   </test-case>
+</test-set>

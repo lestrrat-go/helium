@@ -1,0 +1,1039 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="expand-text">
+   <description>Tests the XSLT 3.0 expand-text attribute and content value templates</description>
+
+   <test-case name="cvt-001">
+      <description>Simple test of content value templates</description>
+      <keywords>expand-text-attribute xsl:stylesheet variable-reference lre</keywords>
+      <created by="Michael Kay" on="2013-01-25"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "Goodbye Mars!"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-002">
+      <description>No expansion if expand-text = "no"</description>
+      <keywords>expand-text-attribute xsl:stylesheet variable-reference lre</keywords>
+      <created by="Michael Kay" on="2013-01-25"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "{$Hello} {$World}!"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-003">
+      <description>Expansion enabled at element level</description>
+      <keywords>xsl:stylesheet expand-text-attribute lre xsl:expand-text-attribute expand-override variable-reference</keywords>
+      <created by="Michael Kay" on="2013-01-25"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "Goodbye Mars!"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-004">
+      <description>Expansion enabled at template level</description>
+      <keywords>xsl:stylesheet expand-text-attribute expand-override lre variable-reference</keywords>
+      <created by="Michael Kay" on="2013-01-25"/>      
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "Goodbye Mars!"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-005">
+      <description>Atomization</description>
+      <keywords>xsl:stylesheet expand-override variable-reference xsl:template lre</keywords>
+      <created by="Michael Kay" on="2013-01-25"/>
+      <modified by="Debbie Lockett" on="2014-08-05" change="use expand-text='true' and 'false'"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+          <assert>/out = " !"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-006">
+      <description>Space separation</description>
+      <keywords>xsl:stylesheet expand-override expand-text-attribute xsl:template numeric-literals lre</keywords>
+      <created by="Michael Kay" on="2013-01-25"/>
+      <modified by="Debbie Lockett" on="2014-08-05" change="use expand-text='1' and '0'"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "1 2 3 45 6"</assert>         
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-007">
+      <description>Use in xsl:attribute</description>
+      <keywords>expand-text-attribute xsl:template xsl:stylesheet xsl:attribute numeric-literals</keywords>
+      <created by="Michael Kay" on="2013-01-25"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/@a = "1 2 3 45 6"</assert>
+            <assert>/out/@b = "1 2 3 45 6"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-008">
+      <description>expand-text is not an AVT</description>
+      <keywords>XTSE0020 expand-text-attribute xsl:template wrong-attribute-value</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-008.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-009">
+      <description>expand-text must be yes or no</description>
+      <keywords>XTSE0020 wrong-attribute-value expand-text-attribute xsl:template xsl:stylesheet</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <modified by="Debbie Lockett" on="2014-08-05" change="expand-text must be yes|no|true|false|1|0, e.g. not TRUE"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-010">
+      <description>expand-text must be yes or no</description>
+      <keywords>expand-text-attribute xsl:stylesheet xsl:template wrong-attribute-value</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <modified by="Debbie Lockett" on="2014-08-05" change="expand-text must be yes|no|true|false|1|0, e.g. not empty"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-010.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-011">
+      <description>variables declared in a preceding sibling are in scope</description>
+      <keywords>expand-text-attribute xsl:template variable-reference scope</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-011.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '2'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-012">
+      <description>variables declared in a preceding uncle are in scope</description>
+      <keywords>lre expand-text-attribute variable-reference xsl:template</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-012.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '2'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-013">
+      <description>No elements allowed within curlies</description>
+      <keywords>XTSE0350 XPST0003 invalid-expression expand-text-attribute xsl:template lre</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-013.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+           <error code="XTSE0350"/>
+           <error code="XPST0003"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-014">
+      <description>Nested expression containing curlies</description>
+      <keywords>expand-text-attribute xsl:template variable-reference nested-curlies lre</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <modified by="Michael Kay" on="2016-04-06" change="add HOF dependency"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-014.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '4'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-015">
+      <description>Nested expression ending in a right curly</description>
+      <keywords>xsl:template expand-text-attribute lre nested-curlies</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <modified by="Michael Kay" on="2016-12-16" change="allow statically-detected type error - bug 30016"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-015.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = '4'</assert>
+            <error code="FOTY0013"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-016">
+      <description>Nested expression ending in a right curly: now allowed under resolution of bug 20874</description>
+      <keywords>bug-20874 expand-text-attribute xsl:template nested-curlies lre</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <modified by="Michael Kay" on="2016-12-16" change="allow statically-detected type error - bug 30016"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-016.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = '4'</assert>
+            <error code="FOTY0013"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-017">
+      <description>CVT not recognized in xsl:text</description>
+      <keywords>expand-text-attribute xsl:template xsl:text lre</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <modified by="Michael Kay" on="2014-08-22" change="See bug 26525"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-017.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '4'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-018">
+      <description>CVT not recognized in xsl:text, but expand-text not rejected</description>
+      <keywords>xsl:expand-text-attribute lre xsl:text</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <modified by="Michael Kay" on="2014-08-22" change="See bug 26525"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-018.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '4'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-019">
+      <description>expand-text=yes rejected on xsl:text</description>
+      <keywords>expand-text-attribute xsl:text lre</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <modified by="Michael Kay" on="2014-08-22" change="See bug 26525"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-019.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '4'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-020">
+      <description>expand-text=no not rejected on xsl:text</description>
+      <keywords>expand-text-attribute xsl:text lre</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-020.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '{2+2}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-021">
+      <description>doubled braces for escaping</description>
+      <keywords>xsl:expand-text-attribute lre escaped-curlies</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-021.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '{2+2}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-022">
+      <description>doubled braces with expand-text="no"</description>
+      <keywords>lre expand-text-attribute escaped-curlies</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-022.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '{{2+2}}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-023">
+      <description>closing brace inside a comment</description>
+      <keywords>lre expand-text-attribute xpath-comments</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-023.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'The Lord of the Rings'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-024">
+      <description>closing brace inside a string literal</description>
+      <keywords>lre xsl:expand-text-attribute nested-curlies</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-024.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "{The value of a}"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-025">
+      <description>Use typed value not string value</description>
+      <keywords>xsl:expand-text-attribute typed-value variable-reference lre</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-025.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "23"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-026">
+      <description>Base uri in static context for CVT expression</description>
+      <keywords>lre xsl:template expand-text-attribute static-context fn:static-base-uri xml:base-attribute</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-026.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "http://www.example.com/cvt"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-027">
+      <description>Namespaces in static context for CVT expression</description>
+      <keywords>static-context expand-text-attribute namespace-resolution variable-reference EQName</keywords>
+      <created by="Michael Kay" on="2013-02-05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-027.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "London"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-028">
+      <description>Call to current() in CVT expression</description>
+      <keywords>dynamic-context expand-text-attribute xsl:template fn:current xsl:for-each</keywords>
+      <created by="Michael Kay" on="2013-09-22"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-028.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/n[1] = ""</assert>
+            <assert>/out/n[2] = ""</assert>
+            <assert>/out/n[3] = "3"</assert>
+            <assert>empty(/out/n[4])</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-029">
+      <description>TVT as result of function</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Michael Kay" on="2014-10-04"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-029.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out = "3"</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-030">
+      <description>TVT as result of function: must be a text node</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Michael Kay" on="2015-07-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-030.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out = "true"</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-031">
+      <description>TVTs enabled for an empty xsl:text element (Saxon bug from Patrik Stellmann)</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Michael Kay" on="2015-07-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-031.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/a = ""</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-032">
+      <description>TVTs enabled but not used within xsl:attribute (Saxon bug from John Lumley)</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Michael Kay" on="2015-10-06"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-032.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<foo xpath-default-namespace="http://www.w3.org/2000/svg"/>]]></assert-xml>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-033">
+      <description>TVTs containing empty expressions (bug 29226)</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Michael Kay" on="2015-10-30"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-033.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out><a/><b/><c/><d>xyz</d></out>]]></assert-xml>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-034">
+      <description>No whitespace separator expected (see http://stackoverflow.com/questions/35967703/xslt-expand-text-yes-causes-extra-whitespace-in-the-output)</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Michael Kay" on="2016-03-13"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-034.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "AB"</assert>
+      </result>
+   </test-case>
+      
+   <test-case name="cvt-035a">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-035a.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo-1foo-3foo-5foo-7foo-9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-035b">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-035b.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo- 1foo- 3foo- 5foo- 7foo- 9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-035c">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-035c.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo- 1foo- 3foo- 5foo- 7foo- 9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-036a">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-036a.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo-1foo-3foo-5foo-7foo-9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-036b">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-036b.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo- 1foo- 3foo- 5foo- 7foo- 9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-036c">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-036c.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo- 1foo- 3foo- 5foo- 7foo- 9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-037a">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-037a.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo-1foo-3foo-5foo-7foo-9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-037b">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-037b.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo- 1foo- 3foo- 5foo- 7foo- 9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-037c">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-037c.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo- 1foo- 3foo- 5foo- 7foo- 9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-038a">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-038a.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo-1foo-3foo-5foo-7foo-9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-038b">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-038b.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo- 1foo- 3foo- 5foo- 7foo- 9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-038c">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-038c.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo- 1foo- 3foo- 5foo- 7foo- 9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-039a">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-039a.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo-1foo-3foo-5foo-7foo-9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-039b">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-039b.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo- 1foo- 3foo- 5foo- 7foo- 9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-039c">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-039c.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo- 1foo- 3foo- 5foo- 7foo- 9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-040a">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-040a.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo-1foo-3foo-5foo-7foo-9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-040b">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-040b.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "foo- 1foo- 3foo- 5foo- 7foo- 9"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-040c">
+      <description>Simple test comparing and combining influence of expand-text inside xsl:choose or xsl:if, based on reported bug of Exselt</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Abel Braaksma" on="2016-06-20"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-040c.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "{'foo-', position()}{'foo-', position()}{'foo-', position()}{'foo-', position()}{'foo-', position()}"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="cvt-041">
+      <description>Nested expression ending in a right curly</description>
+      <keywords>xsl:template expand-text-attribute lre nested-curlies</keywords>
+      <created by="Michael Kay" on="2016-11-19"/>
+      <modified by="Michael Kay" on="2017-02-27" change="create well-formed doc for test driver convenience"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="XPath_3.1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-041.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '1 2 3'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-042">
+      <description>Content value template in xsl:variable (Saxon bug 3748)</description>
+      <keywords>expand-text-attribute</keywords>
+      <created by="Michael Kay" on="2018-04-17"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-042.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>starts-with(/out/time/@now, 'Time now: 20')</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-043">
+      <description>TVT expression spanning a comment</description>
+      <created by="Michael Kay" on="2018-11-30"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-043.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'The Lord of the Invisible Rings'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-044">
+      <description>TVT expression spanning a processing instruction</description>
+      <created by="Michael Kay" on="2018-11-30"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-044.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'The Lord of the Invisible Rings'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-045">
+      <description>Backticks should not cause a problem (Saxon bug)</description>
+      <keywords>expand-text-attribute xsl:stylesheet variable-reference lre</keywords>
+      <created by="Michael Kay" on="2019-05-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-045.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "`Goodbye Mars!`"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-046">
+      <description>expand-text="yes" on an included stylesheet module</description>
+      <keywords>expand-text-attribute xsl:stylesheet variable-reference lre</keywords>
+      <created by="Michael Kay" on="2020-09-17"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-046.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "Goodbye Mars!"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-047">
+      <description>expand-text="no" on an included stylesheet module</description>
+      <keywords>expand-text-attribute xsl:stylesheet variable-reference lre</keywords>
+      <created by="Michael Kay" on="2020-09-17"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-047.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "{$Hello} {$World}!"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-048">
+      <description>CVT variable references in included module referring to declaration in main module</description>
+      <keywords>expand-text-attribute xsl:stylesheet variable-reference lre</keywords>
+      <created by="Michael Kay" on="2021-01-29"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-048.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "Hello World!"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="cvt-049">
+      <description>No expand-text declaration on an imported stylesheet module, with expand-text="yes" on parent</description>
+      <keywords>expand-text-attribute xsl:stylesheet variable-reference lre</keywords>
+      <created by="Debbie Lockett" on="2021-07-27"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-049.xsl"/>
+         <stylesheet file="cvt-049a.xsl" role="secondary"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "{$Hello} {$World}!"</assert>
+      </result>
+   </test-case>
+ 
+   <test-case name="cvt-050">
+      <description>CVT expression split by an XML comment</description>
+      <created by="Michael Kay" on="2023-06-08"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="cvt-050.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "((5))"</assert>
+      </result>
+   </test-case>
+
+
+
+ 
+</test-set>

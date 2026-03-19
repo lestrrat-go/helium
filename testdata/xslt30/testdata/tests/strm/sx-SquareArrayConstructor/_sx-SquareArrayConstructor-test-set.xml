@@ -1,0 +1,766 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sx-SquareArrayConstructor">
+   <description>square-array constructor expression function with streaming</description>
+   
+   <environment name="sx-square-array-A">
+     <stylesheet file="sx-square-array-A.xsl"/>
+   </environment>
+   
+   <environment name="sx-square-array-B">
+     <stylesheet file="sx-square-array-B.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+      <feature value="XPath_3.1"/>
+   </dependencies>
+   
+   <test-case name="sx-square-array-001">
+      <description>Streaming square-array expression - grounded operand</description>
+      <keywords>striding-then-grounded leading-lone-slash PathExpr fn:data ParenthesizedExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47 A B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-002">
+      <description>Streaming square-array expression - grounded operand</description>
+      <keywords>leading-lone-slash striding-then-grounded fn:copy-of PathExpr ParenthesizedExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE><a>A</a><b>B</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-003">
+      <description>Streaming square-array expression - grounded atomic operand</description>
+      <keywords>striding-then-grounded leading-lone-slash fn:tokenize ContextItemExpr PathExpr SimpleMapExpr ParenthesizedExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert>/out = "8.3 5.7 1.1 A B 1.0 5.2 7.8 A B 6.8 4.2 0.8 A B 7.8 5.2 0.9 A B 22.5 18.0 3.5 A B 7.8 5.0 0.9 A B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-010">
+      <description>Streaming square-array expression - striding operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding leading-lone-slash PathExpr fn:count</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "2"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-011">
+      <description>Streaming square-array expression - striding operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding leading-lone-slash PathExpr fn:sum</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "87.37"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-012">
+      <description>Streaming square-array expression - striding operand, transmission usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding motionless-predicate fn:position PathExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>/out = "6.58 4.95 16.47 B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-013">
+      <description>Streaming square-array expression - striding operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47 12 23"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-square-array-014">
+      <description>Streaming square-array expression - striding operand, focus-controlled usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT><a>A</a><b>B</b></out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-square-array-015">
+      <description>Streaming square-array expression - striding operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding PathExpr AdditiveExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47 12 23 "</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-square-array-016">
+      <description>Streaming square-array expression - striding operand, focus-controlled usage</description>
+      <keywords>ParenthesizedExpr mixed-posture xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT><a>A</a><b>B</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-017">
+      <description>Streaming square-array expression - striding operand, focus-setting usage for inspection action</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "true false true true true true false false true true true false false"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-018">
+      <description>Streaming square-array expression - striding operand, apply-templates usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-019">
+      <description>Streaming square-array expression - striding operand, apply-templates to array</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-019"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-020">
+      <description>Streaming square-array expression - crawling operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture xsl:copy-of fn:count crawling PathExpr leading-double-slash</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "2"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-021">
+      <description>Streaming square-array expression - crawling operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "2"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-022">
+      <description>Streaming square-array expression - crawling operand, transmission usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and Prejudice Jane Austen Modern Library"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-023">
+      <description>Streaming square-array expression - crawling operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47 12 23"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-030">
+      <description>Streaming square-array expression - climbing operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST BOOKS ITEM a b"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-031">
+      <description>Streaming square-array expression - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST BOOKS ITEM ITEM ITEM ITEM ITEM ITEM a b"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-square-array-032">
+      <description>Streaming square-array expression - climbing operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP|A|B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-033">
+      <description>Streaming square-array expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P|P|P|H|P|A|B"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-square-array-034">
+      <description>Streaming square-array expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P|P|P|H|P|A|B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-035">
+      <description>Streaming square-array expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP|P|P|P|H|P|A|B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-036">
+      <description>Streaming square-array expression - two potentially consuming operands (bug 27668)</description>
+      <keywords>ParenthesizedExpr mixed-posture crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2015-01-15"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-036"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/v[1] = 'P Paperback'</assert>
+           <assert>/out/v[2] = 'MMP Mass-market Paperback'</assert>
+           <assert>/out/v[3] = 'H Hard Cover'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-040">
+      <description>Streaming square-array expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-040"/>
+      </test>
+      <result>
+         <assert>deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-041">
+      <description>Streaming square-array expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-041"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))</assert>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (4.95, 6.58, 4.95, 4.95, 16.47, 16.47, 18.90))</assert>          
+         </any-of>        
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-042">
+      <description>Streaming square-array expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-042"/>
+      </test>
+      <result>
+         <assert>/out = "18.90 4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-043">
+      <description>Streaming square-array expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-A"/>
+      <test>
+         <initial-template name="r-043"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "18.90 4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+            <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47 18.90"</assert>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="sx-square-array-101">
+      <description>square-array expression (streaming arg 2) - grounded operand</description>
+      <keywords>striding-then-grounded leading-lone-slash PathExpr fn:data ParenthesizedExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert>/out = "A B 4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-102">
+      <description>square-array expression (streaming arg 2) - grounded operand</description>
+      <keywords>leading-lone-slash striding-then-grounded fn:copy-of PathExpr ParenthesizedExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>A</a><b>B</b><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-103">
+      <description>square-array expression (streaming arg 2) - grounded atomic operand</description>
+      <keywords>striding-then-grounded leading-lone-slash fn:tokenize ContextItemExpr PathExpr SimpleMapExpr ParenthesizedExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert>/out = "A B 8.3 5.7 1.1 A B 1.0 5.2 7.8 A B 6.8 4.2 0.8 A B 7.8 5.2 0.9 A B 22.5 18.0 3.5 A B 7.8 5.0 0.9"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-110">
+      <description>square-array expression (streaming arg 2) - striding operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding leading-lone-slash PathExpr fn:count</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "2"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-111">
+      <description>square-array expression (streaming arg 2) - striding operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding leading-lone-slash PathExpr fn:sum</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "87.37"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-112">
+      <description>square-array expression (streaming arg 2) - striding operand, transmission usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding motionless-predicate fn:position PathExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>/out = "B 6.58 4.95 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-113">
+      <description>square-array expression (streaming arg 2) - striding operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "12 23 5.95 7.58 5.95 5.95 17.47 17.47"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-square-array-114">
+      <description>square-array expression (streaming arg 2) - striding operand, focus-controlled usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>A</a><b>B</b><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-square-array-115">
+      <description>square-array expression (streaming arg 2) - striding operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding PathExpr AdditiveExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "12 23 5.95 7.58 5.95 5.95 17.47 17.47 "</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-square-array-116">
+      <description>square-array expression (streaming arg 2) - striding operand, focus-controlled usage</description>
+      <keywords>ParenthesizedExpr mixed-posture xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>A</a><b>B</b><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-117">
+      <description>square-array expression (streaming arg 2) - striding operand, focus-setting usage for inspection action</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "false false true false true true true true false false true true true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-118">
+      <description>square-array expression (streaming arg 2) - striding operand, apply-templates usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-120">
+      <description>square-array expression (streaming arg 2) - crawling operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture xsl:copy-of fn:count crawling PathExpr leading-double-slash</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "2"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-121">
+      <description>square-array expression (streaming arg 2) - crawling operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "2"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-122">
+      <description>square-array expression (streaming arg 2) - crawling operand, transmission usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>A</a><b>B</b>Pride and Prejudice</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-123">
+      <description>square-array expression (streaming arg 2) - crawling operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12 23 5.95 7.58 5.95 5.95 17.47 17.47</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-130">
+      <description>square-array expression (streaming arg 2) - climbing operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <assert>/out = "a b BOOKLIST BOOKS ITEM"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-131">
+      <description>square-array expression (streaming arg 2) - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "a b BOOKLIST BOOKS ITEM ITEM ITEM ITEM ITEM ITEM"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-square-array-132">
+      <description>square-array expression (streaming arg 2) - climbing operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = "A|B|MHK|MMP"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-133">
+      <description>square-array expression (streaming arg 2) - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "A|B|MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-square-array-134">
+      <description>square-array expression (streaming arg 2) - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>/out = "A|B|MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-135">
+      <description>square-array expression (streaming arg 2) - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "A|B|MHK|MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>  
+
+   <test-case name="sx-square-array-136">
+      <description>Streaming square-array expression - two potentially consuming operands (bug 27668)</description>
+      <keywords>ParenthesizedExpr mixed-posture crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-036"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/v[1] = 'Paperback P'</assert>
+           <assert>/out/v[2] = 'Mass-market Paperback MMP'</assert>
+           <assert>/out/v[3] = 'Hard Cover H'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-140">
+      <description>Streaming square-array expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-040"/>
+      </test>
+      <result>
+         <assert>deep-equal(/out/PRICE/xs:decimal(.), (4.95, 6.58, 4.95, 4.95, 16.47, 16.47, 18.90))</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-141">
+      <description>Streaming square-array expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-041"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))</assert>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (4.95, 6.58, 4.95, 4.95, 16.47, 16.47, 18.90))</assert>          
+         </any-of>        
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-142">
+      <description>Streaming square-array expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-042"/>
+      </test>
+      <result>
+         <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47 18.90"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-143">
+      <description>Streaming square-array expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <environment ref="sx-square-array-B"/>
+      <test>
+         <initial-template name="r-043"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "18.90 4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+            <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47 18.90"</assert>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-square-array-201">
+      <description>Mixed-posture square-array expression, crawlilng and grounded - not streamable</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-12-19"/>
+      <test>
+         <stylesheet file="sx-square-array-201.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+</test-set>

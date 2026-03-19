@@ -1,0 +1,604 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+   xmlns:xs="http://www.w3.org/2001/XMLSchema" name="character-map">
+
+   <description>Tests the xsl:character-map declaration</description>
+
+   <environment name="charmap001">
+      <source role=".">
+         <content><![CDATA[<doc><a value="abcde">vwxyz</a></doc>]]></content>
+      </source>
+   </environment>
+   
+   <dependencies>
+      <feature value="serialization" satisfied="true"/>
+   </dependencies>
+
+   <test-case name="character-map-001">
+      <description>test simple use of a character map</description>
+      <keywords>single-character-map xml-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-001.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>value=['"]ab\[C\]de['"]</serialization-matches>
+            <serialization-matches>vw\[X\]yz</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-002">
+      <description>test a composite character map</description>
+      <keywords>composite-character-map xml-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-002.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>value=['"]ab\[C\]de['"]</serialization-matches>
+            <serialization-matches>vwx\[Y\]z</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-003">
+      <description>test a composite character map containing duplicate characters</description>
+      <keywords>composite-character-map conflict-resolution xml-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-003.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>value=['"]ab\{C\}de['"]</serialization-matches>
+            <serialization-matches>vwx\{Y\}z</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-004">
+      <description>test xsl:output referencing two character maps. Use forwards
+         references</description>
+      <keywords>multiple-character-maps conflict-resolution xml-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-004.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>value=['"]ab\[C\]de['"]</serialization-matches>
+            <serialization-matches>vwx\{Y\}z</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-005">
+      <description>test multiple xsl:outputs referencing character maps.</description>
+      <keywords>multiple-character-maps conflict-resolution xml-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-005.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>value=['"]\[A\]b\{C\}de['"]</serialization-matches>
+            <serialization-matches>vwx\{Y\}z</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-006">
+      <description>test generation of markup using character maps.</description>
+      <keywords>single-character-map xml-markup-generation xml-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-006.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>value=['"]abcde['"]</serialization-matches>
+            <serialization-matches>&lt;jjj&gt;wxy&lt;/jjj&gt;</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-007">
+      <description>test use of high Unicode characters in character maps.</description>
+      <keywords>unicode encoding-attribute iso-8859-1 single-character-map
+         xml-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-007.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches>\[\[\[#####\]\]\]</serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-008">
+      <description>test character maps in a namespace</description>
+      <keywords>qname-resolution composite-character-map xml-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-008.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>value=['"]\[A\]\[B\]cde['"]</serialization-matches>
+            <serialization-matches>vwxyz</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-009">
+      <description> Test character maps with HTML output method, specifically the interaction of
+         HTML URI escaping with character maps. See resolution of CR Bug 2459. </description>
+      <keywords>html-uri-escaping single-character-map html-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-009.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>href=['"]z-linkage\.html['"]</serialization-matches>
+            <serialization-matches>&gt;A \[Z\] linkage</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-010">
+      <description>test use of a character map in attribute values</description>
+      <keywords>single-character-map attribute-nodes illegal-xml-generation
+         xml-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-010.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>att1=['"]normal['"]</serialization-matches>
+            <serialization-matches>att2=['"]&amp;amp;\[&lt;\]&amp;amp;\[&gt;\]&amp;amp;['"]</serialization-matches>
+            <serialization-matches>att3=['"](&amp;#100000;|&amp;#x186[aA]0;)['"]</serialization-matches>
+            <serialization-matches>att4=['"]He said "quote", I think['"]</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-011">
+      <description>test character maps with a default namespace</description>
+      <keywords>iso-8859-1 single-character-map namespace-resolution xml-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-011.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches>&lt;x&gt;b&lt;/x&gt;</serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-012">
+      <description>test character maps with method="text"</description>
+      <keywords>text-output-method single-character-map</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-012.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches>^b$</serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-013">
+      <description>tests generation of special characters in replacement string with HTML output
+         method (both text and attribute nodes)</description>
+      <keywords>iso-8859-1 illegal-xml-generation single-character-map html-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-013.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>&lt;body&gt;value='&lt;%= "id" \+ idValue %&gt;'</serialization-matches>
+            <serialization-matches>&lt;setProperty value=['"]&lt;%= "id" \+ idValue %&gt;['"]</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-014">
+      <description>tests generation of special characters in replacement string with text output
+         method (both text and attribute nodes)</description>
+      <keywords>iso-8859-1 single-character-map text-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-014.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches>\[\{\{=\}\}\]</serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-015">
+      <description>tests use of a character map in xsl:result-document (no href
+         attribute)</description>
+      <keywords>single-character-map iso-8859-1 xsl:result-document</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-015.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches>\[\{\{=\}\}\]</serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-016">
+      <description>tests use of a character map in xsl:result-document combined with one on
+         xsl:output, including a conflict</description>
+      <keywords>xsl:result-document multiple-character-maps conflict-resolution
+         xml-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-016.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches>\[\{\{#\}\}\]</serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-017">
+      <description>test simple use of a character map with XHTML output method</description>
+      <keywords>single-character-map xhtml-output-method _WRONG:output-method-incorrect</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-017.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>content=["']te\[X\]t/html; \[C\]harset=UTF-8['"]</serialization-matches>
+            <serialization-matches>The qui\[C\]k brown fo\[X\] jumped over the lazy dog</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-018">
+      <description>tests use of a character map in xsl:result-document combined with one on
+         xsl:output, including a conflict. Same as charmap018, but with a forwards
+         reference</description>
+      <keywords>multiple-character-maps conflict-resolution xml-output-method
+         xsl:result-document</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-018.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches>\[\{\{#\}\}\]</serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-019">
+      <description>test unresolved reference from xsl:output to character map.</description>
+      <keywords>multiple-character-maps XTSE1590 xml-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-019.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <error code="XTSE1590"/>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-020">
+      <description>test unresolved reference from xsl:character-map to another character
+         map.</description>
+      <keywords>XTSE1590 xml-output-method multiple-character-maps</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-020.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <error code="XTSE1590"/>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-021">
+      <description>test circular reference from xsl:character-map to another character
+         map.</description>
+      <keywords>XTSE1600 conflict-resolution circular-reference xml-output-method
+         multiple-character-maps</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-021.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <error code="XTSE1600"/>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-022">
+      <description>test multiple xsl:character-maps with same name.</description>
+      <keywords>conflict-resolution xml-output-method multiple-character-maps</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-022.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <error code="XTSE1580"/>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-023">
+      <description/>
+      <keywords>single-character-map xml-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<root>Hello &lt; &gt; World</root>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-023.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>Hello &amp;lt; GT World</serialization-matches>
+            <serialization-matches>att=['"]&amp;lt;GT&amp;lt;GT['"]</serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="character-map-024">
+      <description>test character maps with text output method</description>
+      <keywords>single-character-map text-output-method</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<x>&lt;z&gt;1+2&lt;/z&gt;</x>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-024.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches>&lt;z&gt;1plus2&lt;/z&gt;</serialization-matches>
+      </result>
+   </test-case>
+   
+   <test-case name="character-map-025">
+      <description>Test that characters produced by a character map are immune to Unicode normalization</description>
+      <keywords>single-character-map xml-output-method</keywords>
+      <created by="Michael Kay" on="2016-02-18"/>
+      <modified by="Debbie Lockett" on="2019-11-29" change="Use numeric character references in regex"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-025.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <any-of>
+            <!-- The first c-cedilla is in composed form as codepoint (231); the second is in decomposed form as (99, 807) -->
+            <serialization-matches>&lt;out>ab#&#231;#&#99;&#807;de&lt;/out></serialization-matches>
+            <serialization-matches>&lt;out>ab#&#231;#&#99;&#x327;de&lt;/out></serialization-matches>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="character-map-026">
+      <description>Test use of character maps with the adaptive output method</description>
+      <keywords>single-character-map adaptive-output-method</keywords>
+      <created by="Michael Kay" on="2019-04-02"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-026.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>           
+            <serialization-matches><![CDATA[<test>\\&apos;E4</test>]]></serialization-matches>
+            <serialization-matches><![CDATA["\\&apos;E4"]]></serialization-matches>
+            <serialization-matches><![CDATA[map\{"ä":"\\&apos;E4"\}]]></serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="character-map-027">
+      <description>Misplaced character map declaration</description>
+      <created by="Michael Kay after Dave Pawson" on="2019-11-22"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-027.xsl"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="character-map-028">
+      <description>Test that characters produced by a character map are immune to Unicode normalization</description>
+      <keywords>single-character-map xml-output-method</keywords>
+      <created by="Debbie Lockett" on="2019-11-29"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-028.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches>&lt;out att=['"]ab#&#231;#&#99;&#807;de['"]>ab#&#231;#&#99;&#807;de&lt;/out></serialization-matches>
+      </result>
+   </test-case>
+   
+   <test-case name="character-map-901">
+      <description>Error - "character" attribute misspelt "char" (Saxon bug 5570)</description>
+      <keywords>single-character-map xml-output-method</keywords>
+      <created by="Michael Kay" on="2022-06-19"/>
+      <environment ref="charmap001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="character-map-901.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0010"/>
+            <error code="XTSE0090"/>
+         </any-of>
+      </result>
+   </test-case>
+</test-set>

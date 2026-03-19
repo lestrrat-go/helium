@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="docbook">
+   
+   <description>Tests using the docbook stylesheets</description>
+ 
+   <test-case name="docbook-001">
+      <description>Transform a docbook article to XHTML</description>
+      <created by="Michael Kay" on="2018-08-18"/>
+      <modified by="Debbie Lockett" on="2018-08-20" change="add backwards compatibility dependency"/>
+      <environment>
+         <source role="." file="prague2016mhk.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="docbook-xsl-1.79.1/xhtml5/docbook.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/Q{http://www.w3.org/1999/xhtml}html</assert>
+            <assert>count(//*) = 249</assert>
+            <assert>count(//@*) = 212</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="docbook-002">
+      <description>Transform a docbook article to XSL-FO</description>
+      <created by="Michael Kay" on="2018-08-18"/>
+      <modified by="Debbie Lockett" on="2018-08-20" change="add backwards compatibility dependency"/>
+      <environment>
+         <source role="." file="prague2016mhk.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="docbook-xsl-1.79.1/fo/docbook.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/Q{http://www.w3.org/1999/XSL/Format}root</assert>
+            <assert>count(//*) = 619</assert>
+            <assert>count(//@*) = 1717</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="docbook-003">
+      <description>Extract part of a document using xsl:source-document with an xml:id-based fragment identifier (streamed)</description>
+      <created by="Michael Kay" on="2021-12-19"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="docbook-003.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/Q{http://docbook.org/ns/docbook}section/@xml:id="V1.79.1_Tools"</assert>
+            <assert>/Q{http://docbook.org/ns/docbook}section/*:title = "Tools"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="docbook-004">
+      <description>Extract part of a document using xsl:source-document with an xml:id-based fragment identifier (non-streamed)</description>
+      <created by="Michael Kay" on="2021-12-19"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="docbook-004.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/Q{http://docbook.org/ns/docbook}section/@xml:id="V1.79.1_Tools"</assert>
+            <assert>/Q{http://docbook.org/ns/docbook}section/*:title = "Tools"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+
+</test-set>

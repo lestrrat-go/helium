@@ -1,0 +1,657 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="lre">
+   <description>Tests lre</description>
+   
+   <environment name="lre03">
+      <source role=".">
+         <content><![CDATA[<doc>DocValue</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="lre05">
+      <source role=".">
+         <content><![CDATA[<docs><doc1/><doc2/><doc3/></docs>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="lre10">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="lre14">
+      <source role=".">
+         <content><![CDATA[<docs><doc/><a>X</a><a>Y</a><a>Z</a></docs>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="lre-001">
+      <description>Simplest test for creation of a LRE</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-002">
+      <description>Create literal result element with constant attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out test="0"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-003">
+      <description>
+      	Test exclude-result-prefixes as an attribute on an LRE. 
+      	The created element node will also have a copy of the namespace nodes that were present 
+      	on the element node in the stylesheet tree with the exception of any namespace node whose 
+      	string-value is the XSLT namespace URI, a namespace URI declared as an extension namespace, 
+      	or a namespace URI designated as an excluded namespace. 
+      	(Can't exclude namespaces that are used, however.) 
+      	The default namespace is used, and so can't be excluded.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns="http://www.lotus.com/" xmlns:bdd="http://buster.com" english="to leave"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-004">
+      <description>
+      	The designation of a namespace as an excluded namespace is effective within the subtree of the stylesheet 
+      	rooted at the element bearing the exclude-result-prefixes or xsl:exclude-result-prefixes attribute.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="lre-004.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="lre-005">
+      <description>xsl:exclude-result-prefixes should only work to omit namespace declarations that are not actually used.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:ljh="http://buster.com" xmlns:jad="http://administrator.com"
+     x="by the corner"><jad:output1/><jad:output2><jad:output2a/></jad:output2
+     ><ljh:output1/><ljh:output2><ljh:output2a/></ljh:output2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-006">
+      <description>
+         Show that exclude-result-prefixes is scoped to just it's LRE. 
+         The designation of a namespace as an excluded namespace is effective within the subtree of the stylesheet 
+         rooted at the element bearing the exclude-result-prefixes or xsl:exclude-result-prefixes attribute. 
+         A subtree rooted at an xsl:stylesheet element does not include any stylesheets imported or 
+         included by children of that xsl:stylesheet element. The ped namespace is excluded from 
+         main and foo, but not from the sub-elements that got placed in main by other templates. 
+         In fact, it has to be re-declared for each of those sub-elements.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre05"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<main><foo/><sub-element-in-main xmlns:ped="http://tester.com"
+            /><sub-element-in-import xmlns:ped="http://tester.com"/><sub-element-in-include xmlns:ped="http://tester.com"
+            /></main>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-007">
+      <description>
+      	Tests that the value of an attribute of a LRE is interpreted as a attribute value template, 
+      	which can contain expressions within curly braces({}).
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="lre-007.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out a="A1" b="B22" c="3" d="B22" e="C33" f="All Done"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-008">
+      <description>The name attribute of xsl:element is interpreted as an attribute value template.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="lre-008.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><Out1/><Out2/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-009">
+      <description>Ensure that names are preserved, case and all.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out AtTrib-0.01="Mix-d.Char5">Text-A<Sub-Elem2.0/>teXt.B</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-010">
+      <description>
+      	Show that attributes from extension namespaces cause inclusion of the namespace node. 
+      	The created element node will also have a copy of the namespace nodes that were present 
+      	on the element node in the stylesheet tree with the exception of any namespace node whose 
+      	string-value is the XSLT namespace URI, a namespace URI declared as an extension namespace, 
+      	or a namespace URI designated as an excluded namespace.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:ext="http://somebody.elses.extension" ext:size="big" english="to leave"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-011">
+      <description>Try to put out text without any tags.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-011.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <assert-serialization method="text" file="lre-011.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="lre-012">
+      <description>Purpose: Try to put out value of a variable as an LRE. Get "$var" literally.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>$var</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-013">
+      <description>xsl:exclude-result-prefixes should only work to omit namespace declarations that are not actually used.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<sits xmlns:ljh="http://buster.com" x="little jack horner"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-014">
+      <description>xsl:exclude-result-prefixes should only work to omit namespace declarations that are not actually used.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<minding xmlns:ped="http://tester.com" x="his peas and queues"><jad:output1 xmlns:jad="http://administrator.com"
+            /><jad:output2 xmlns:jad="http://administrator.com"><jad:output2a/></jad:output2><ljh:output1 xmlns:ljh="http://buster.com"
+            /><ljh:output2 xmlns:ljh="http://buster.com"><ljh:output2a/></ljh:output2></minding>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-015">
+      <description>
+      	Show that the namespace node for an extension namespace is automatically excluded. 
+      	The created element node will also have a copy of the namespace nodes that were present 
+      	on the element node in the stylesheet tree with the exception of any namespace node whose 
+      	string-value is the XSLT namespace URI, a namespace URI declared as an extension namespace, 
+      	or a namespace URI designated as an excluded namespace.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:ped="http://tester.com" english="to leave"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-016">
+      <description>
+      	Exclude namespace node for an extension namespace via local declaration. 
+      	The created element node will also have a copy of the namespace nodes that were present 
+      	on the element node in the stylesheet tree with the exception of any namespace node whose 
+      	string-value is the XSLT namespace URI, a namespace URI declared as an extension namespace, 
+      	or a namespace URI designated as an excluded namespace.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:ped="http://tester.com" english="to leave"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-017">
+      <description>
+      	Test exclusion of #default, stylesheet level. 
+      	The created element node will also have a copy of the namespace nodes that were present 
+      	on the element node in the stylesheet tree with the exception of any namespace node whose 
+      	string-value is the XSLT namespace URI, a namespace URI declared as an extension namespace, 
+      	or a namespace URI designated as an excluded namespace. 
+      	(Can't exclude namespaces that are used, however.)
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ped:out xmlns:ped="http://tester.com" ped:english="to leave"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-018">
+      <description>
+      	Test exclusion of #default as an attribute on an LRE. 
+      	The created element node will also have a copy of the namespace nodes that were present 
+      	on the element node in the stylesheet tree with the exception of any namespace node whose 
+      	string-value is the XSLT namespace URI, a namespace URI declared as an extension namespace, 
+      	or a namespace URI designated as an excluded namespace. 
+      	(Can't exclude namespaces that are used, however.)
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<bdd:out xmlns:bdd="http://buster.com" bdd:english="to leave"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-019">
+      <description>Various test cases for XSLT 3.0 xsl:on-empty attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-12-22" change="new syntax in spec"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a><lre>12</lre></a><b><lre><x/></lre></b><c/><d/><e/><f/><g/><p/><q/><r/><s/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-020">
+      <description>
+      	Show that attributes from XSLT namespace are automatically excluded. 
+      	The created element node will also have a copy of the namespace nodes that were present 
+      	on the element node in the stylesheet tree with the exception of any namespace node whose 
+      	string-value is the XSLT namespace URI, a namespace URI declared as an extension namespace, 
+      	or a namespace URI designated as an excluded namespace. 
+      	MHK comment: Saxon disallows this. I can't actually see anything in the XSLT 1.0 
+      	specification that bans it. It's banned in 2.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-020.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0805"/>
+      </result>
+   </test-case>
+
+   <test-case name="lre-021">
+      <description>Testing the xsl:transform element and its attributes. 
+      english attribute and #default,ped,bdd namespace nodes are all that should be output. (#default is used.) 
+      xsl:if must be assumed to be a directive to the processor, so it could raise an error.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-021.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0805"/>
+      </result>
+   </test-case>
+
+   <test-case name="lre-022">
+      <description>Test error if required element name is null. Test modified by MHK to make it a dynamic error</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-022.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0820"/>
+      </result>
+   </test-case>
+
+   <test-case name="lre-023">
+      <description>Test for-each inside xsl:element</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="lre14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><all>XYZ</all></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="lre-024">
+      <description>Test use of leading underscore in names.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<docs><a href="http://www.ped.com">Out1</a></docs>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root xmlns:_ped="http://www.ped.com">
+<_an_elem xmlns="http://www.ped.com"/>
+<_ped:_an_elem/></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="lre-025">
+      <description>Test type error when writing a map as the content of an element.</description>
+      <created by="Michael Kay" on="2018-02-20"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-025.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0450"/>
+      </result>
+   </test-case>
+   
+   <test-case name="lre-026">
+      <description>Test type error when writing a function item as the content of an element.</description>
+      <created by="Michael Kay" on="2018-02-20"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-026.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0450"/>
+      </result>
+   </test-case>
+   
+   <test-case name="lre-027">
+      <description>Test that exclude-result-prefixes is cumulative.</description>
+      <created by="Michael Kay" on="2018-12-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-027.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/namespace::four="http://four.com"</assert>
+            <assert>empty(/out/namespace::one)</assert>
+            <assert>empty(/out/namespace::two)</assert>
+            <assert>empty(/out/namespace::three)</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="lre-028">
+      <description>Test that exclude-result-prefixes applies to URIs not to prefixes.</description>
+      <created by="Michael Kay" on="2018-12-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-028.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/namespace::one="http://eins.com"</assert>
+            <assert>/out/namespace::four="http://vier.com"</assert>
+            <assert>/out/namespace::quatre="http://four.com"</assert>
+            <assert>empty(/out/namespace::two)</assert>
+            <assert>empty(/out/namespace::three)</assert>
+            <assert>empty(/out/namespace::un)</assert>
+            <assert>empty(/out/namespace::deux)</assert>
+            <assert>empty(/out/namespace::trois)</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="lre-104">
+      <description>LRE with on-empty.</description>
+      <created by="Michael Kay" on="2013-07-30"/>
+      <modified by="Michael Kay" on="2014-12-22" change="new syntax in spec"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one><name><e/></name></one><two/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="lre-105">
+      <description>LRE with on-empty, producing an element</description>
+      <created by="Michael Kay" on="2013-07-30"/>
+      <modified by="Michael Kay" on="2014-12-22" change="new syntax in spec"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one><name><e/></name></one><two><jaq/></two></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="lre-106">
+      <description>LRE with on-empty, with intervening document node</description>
+      <created by="Michael Kay" on="2013-07-30"/>
+      <modified by="Michael Kay" on="2014-12-22" change="new syntax in spec"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one><name><e/></name></one><two><jaq/></two></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="lre-107">
+      <description>LRE with on-empty, with intervening empty text node</description>
+      <created by="Michael Kay" on="2013-07-30"/>
+      <modified by="Michael Kay" on="2014-12-22" change="new syntax in spec"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one><name><e/></name></one><two><jaq/></two></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="lre-108">
+      <description>LRE with on-empty, value is an atomic type (now allowed)</description>
+      <created by="Michael Kay" on="2013-07-30"/>
+      <modified by="Abel Braaksma" on="2013-12-09" change="Corrected error code from XTTE3310 (specific to xsl:element) into XTTE3300 (specific to LRE)"/>
+      <modified by="Michael Kay" on="2014-12-22" change="new syntax in spec"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one><name><e/></name></one><two>ues</two></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="lre-109">
+      <description>LRE with on-empty, value is two elements (now allowed)</description>
+      <created by="Michael Kay" on="2013-07-30"/>
+      <modified by="Abel Braaksma" on="2013-12-09" change="Corrected error code from XTTE3310 (specific to xsl:element) into XTTE3300 (specific to LRE)"/>
+      <modified by="Michael Kay" on="2014-12-22" change="new syntax in spec"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-109.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one><name><e/></name></one><two><hat>tie</hat><jaq>ues</jaq></two></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="lre-110">
+      <description>No spurious error when local name of LRE matches an XSLT element name. Saxon bug 4921</description>
+      <created by="Michael Kay" on="2021-03-01"/>
+      <environment ref="lre10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="lre-110.xsl"/>
+      </test>
+      <result>
+         <assert>/*:source-document</assert>
+      </result>
+   </test-case>
+
+</test-set>

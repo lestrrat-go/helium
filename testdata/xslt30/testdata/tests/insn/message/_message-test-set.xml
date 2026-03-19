@@ -1,0 +1,902 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="message">
+   <description>Tests message</description>
+   <environment name="message-01">
+      <source role=".">
+         <content><![CDATA[<docs>
+  <a>X</a>
+</docs>]]></content>
+      </source>
+   </environment>
+   <environment name="message-02">
+      <source role=".">
+         <content><![CDATA[<docs/>]]></content>
+      </source>
+   </environment>
+   <environment name="message-03">
+      <source role="." file="message-03.xml"/>
+      <resource file="sample-plain.txt"
+                uri="sample-plain.txt"
+                media-type="text/plain"/>
+      <source file="errorMessage.xml" uri="errorMessage.xml"/>
+   </environment>
+   <environment name="message-04">
+      <source role="." file="message-04.xml"/>
+   </environment>
+
+   <test-case name="message-0001">
+      <description>
+         Output a message that cannot be serialized - specifically, a free-standing attribute node. 
+         Under erratum E20 for XSLT 2.0, this is a recoverable error - the processor may fail or may report an error. 
+         This test shows both paths.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2018-09-02" change="See bug 30283. Stylesheet changed and test split into 2.0/3.0 versions"/>
+      <modified by="Michael Kay" on="2020-10-01" change="This version of the test should be XSLT 2.0 only"/>     
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <error code="XTDE0420"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="message-0001a">
+      <description>
+         Output a message that cannot be serialized - specifically, a free-standing attribute node. 
+         XSLT 3.0 says that the transformation does not fail (though the output is left unspecified)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2018-09-02" change="See bug 30283. Stylesheet changed and test split into 2.0/3.0 versions"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="message-0002">
+      <description>Check that default error code is XTMM9000</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTMM9000"/>
+      </result>
+   </test-case>
+
+   <test-case name="message-0003">
+      <description>Use new error-code attribute in XSLT 3.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="Q{http://www.example.com/error}my-error-code"/>
+      </result>
+   </test-case>
+
+   <test-case name="message-0004">
+      <description>Use new error-code attribute in XSLT 3.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="Q{http://www.example.com/error}my-error-code"/>
+      </result>
+   </test-case>
+
+   <test-case name="message-0005">
+      <description>Use new error-code attribute in XSLT 3.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="Q{http://www.example.com/error}my-error-code"/>
+      </result>
+   </test-case>
+
+   <test-case name="message-0006">
+      <description>Use new error-code attribute in XSLT 3.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="Q{http://www.example.com/error}my-error-code"/>
+      </result>
+   </test-case>
+   
+   <test-case name="message-0007">
+      <description>Test terminate="true" attribute on xsl:message element.</description>
+      <created by="Debbie Lockett" on="2014-08-08"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTMM9000"/>
+      </result>
+   </test-case>
+   
+   <test-case name="message-0008">
+      <description>Test terminate=" 1 " attribute on xsl:message element.</description>
+      <created by="Debbie Lockett" on="2014-08-08"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0008.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTMM9000"/>
+      </result>
+   </test-case>
+   
+   <test-case name="message-0009">
+      <description>xsl:message with user-defined error code (as a lexical QName in an AVT)</description>
+      <created by="Michael Kay" on="2015-09-13"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="Q{http://example.com/err}XXXX8888"/>
+      </result>
+   </test-case>
+   
+   <test-case name="message-0010">
+      <description>xsl:message with user-defined error code (as a URI-Qualified Name in an AVT)</description>
+      <created by="Michael Kay" on="2015-09-13"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0010.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="Q{http://example.com/err}XXXX8888"/>
+      </result>
+   </test-case>
+
+   <test-case name="message-0011">
+      <description>xsl:message nested within xsl:message nested within xsl:result-document</description>
+      <created by="Michael Kay" on="2018-11-02"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0011.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>true()</assert> <!-- We're only trying to check that it doesn't crash or deadlock -->
+      </result>
+   </test-case>
+   
+   <test-case name="message-0101">
+      <description>Test case that uses attribute value template for 'terminate' attribute of an xsl:message instruction, the value of the AVT which is the value of a parameter evalues to 'no'.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0101.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out><not-terminated/></out>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>Terminate attribute has a value of: no</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="message-0102">
+      <description>Test case that uses attribute value template for 'terminate' attribute of an xsl:message instruction, the value of the AVT which is the value of a parameter evaluates to 'false'.</description>
+      <created by="Debbie Lockett" on="2014-08-08"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0102.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out><not-terminated/></out>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>Terminate attribute has a value of: false</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="message-0103">
+      <description>Test case that uses attribute value template for 'terminate' attribute of an xsl:message instruction, the value of the AVT which is the value of a parameter evaluates to '0'.</description>
+      <created by="Debbie Lockett" on="2014-08-08"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0103.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out><not-terminated/></out>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>Terminate attribute has a value of:  0</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0201">
+      <description>Tests using xsl:message instruction inside xsl:element instructions.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0201.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out><E/></out>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>My funny element</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0202">
+      <description>Tests calling a function in the select attribute of an xsl:message instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="message-02"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0202.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-xml><![CDATA[<a>This is an error message.</a>]]></assert-xml>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0301">
+      <description>Test case that uses attribute value template for 'terminate' attribute of an xsl:message instruction, the value of the AVT is evaluated from the source document.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0301.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>Terminate attribute has a value of: no</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0302">
+      <description>Test case to verify that it is allowed to have both select attribute and a sequence constructor for an xsl:message instruction. The result of evaluating them are concatenated to form a single sequence.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0302.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>Please note that This message is produced from a source document </assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0303">
+      <description>Test case that uses a tunnel parameter to set the value of a select attribute in an xsl:message instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0303.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>Terminate attribute has a value of: no</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0304">
+      <description>Test case to verify that in an xsl:messsage instruction Zero-length text nodes within the result sequence are removed.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0304.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>Error Message:a||b||c|d|e</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0305">
+      <description>Test case to verify that adjacent strings/text nodes that are copied into one string become the content of the xsl:message.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0305.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>Error Message:This is an error</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0306">
+      <description>Tests casting different types to xs:string in an xsl:message instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0306.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml file="message-0306.out"/>
+            <assert-message>
+               <assert-string-value>0</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>-0</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>INF</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>23</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>-100</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>my:var</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>PT1M39.999S</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>-PT1H40M</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>text</assert-string-value>
+            </assert-message>
+            <assert-message>
+               <assert-string-value>www.myuri.mine</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0307">
+      <description>Test case that uses for expression in the select value of an xsl:message instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0307.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>yes yes yes</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0308">
+      <description>Test case that uses if expression in the select value of an xsl:message instruction to decide what message should be generated.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0308.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>72</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0309">
+      <description>Test case that uses Quantified expression (Some) in the select value of an xsl:message instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0309.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>Error message: terminate=yes</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0310">
+      <description>Test case that uses Quantified expression (every) in the select value of an xsl:message instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0310.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>Error message: terminate=no</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0311">
+      <description>Tests using xsl:message instruction inside xsl:attribute instructions.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0311.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out><E attr="attrValue"/></out>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>My funny attribute</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0312">
+      <description>Tests using xsl:document instruction inside an xsl:message.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2022-03-18" change="Avoid assert-xml on non-well-formed XML content"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0312.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <all-of>
+                  <assert>/smart = 'Smart element'</assert>
+                  <assert>/dummy = 'dummy element'</assert>
+               </all-of>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0313">
+      <description>
+      	Test case that uses unparsed-text() in the select attribute of an xsl:message instruction 
+      	(The message text is retrieved from a text file).
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0313.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>This is plain ASCII text without special characters.</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0314">
+      <description>
+      	Test case that uses doc() in the select attribute of an xsl:message instruction 
+      	(The message text is retrieved from an xml file).
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0314.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>GoodBye</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0315">
+      <description>Tests using xsl:next-match inside an xsl:message instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0315.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>Text in match=foo</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0316">
+      <description>Test terminate value other than yes | no.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0316.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="message-0317">
+      <description>Test error-code attribute.</description>
+      <created by="Michael Kay" on="2017-02-04"/>
+      <environment ref="message-03"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0317.xsl"/>
+      </test>
+      <result>
+         <error code="Q{}UIOP9876"/>
+      </result>
+   </test-case>
+
+   <test-case name="message-0401">
+      <description>Tests using xsl:for-each inside an xsl:message instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0401.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>1:ab * 2:cd * 3:ef * 4:gh * 5:ij * </assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0402">
+      <description>Tests using xsl:message which contains characters not in the standard ASCII range.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-02" change="Avoid assert-xml for non-document results"/>
+      <environment ref="message-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0402.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value>äb Äb ç € æ ð Ë Ñ ß Þ Ø Û</assert-string-value>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="message-0403">
+      <description>Tests using xsl:for-each-group inside an xsl:message instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="message-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0403.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-xml><![CDATA[<msg><grp>1:ab</grp><grp>2:cd</grp><grp>3:ef</grp><grp>4:gh</grp><grp>5:ij</grp></msg>]]></assert-xml>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="message-0404">
+      <description>Tests dynamic error evaluating content of xsl:message instruction.</description>
+      <created by="Michael Kay" on="2018-03-28"/>
+      <modified by="Michael Kay" on="2018-09-02" change="Bug 30283. Make this an XSLT 3.0 test. The XSLT 3.0 spec is clear that the transformation must not fail."/>
+      <environment ref="message-04"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0404.xsl"/>
+      </test>
+      <result>
+         <assert>/out</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="message-0405">
+      <description>Tests dynamic error evaluating error-code of xsl:message instruction.</description>
+      <created by="Michael Kay" on="2018-03-28"/>
+      <environment ref="message-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0405.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <!-- Outcome is not well-defined by the spec, but I think with terminate=no, the error can be ignored -->
+            <assert>/out</assert>
+            <error code="FOAR0001"/>
+         </any-of>        
+      </result>
+   </test-case>
+   
+   <test-case name="message-0406">
+      <description>Tests error-code of xsl:message instruction not being a valid QName - revert to XTMM9000</description>
+      <created by="Michael Kay" on="2018-03-28"/>
+      <environment ref="message-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0406.xsl"/>
+      </test>
+      <result>
+         <error code="XTMM9000"/>
+      </result>
+   </test-case>
+   
+   <test-case name="message-0407">
+      <description>xsl:message outputs an array</description>
+      <created by="Michael Kay" on="2018-09-02"/>
+      <environment ref="message-04"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="XPath_3.1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0407.xsl"/>
+      </test>
+      <result>
+         <assert>/out</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="message-0408">
+      <description>xsl:message outputs a map. The transformation succeeds, but the message content is undefined.</description>
+      <created by="Michael Kay" on="2018-09-02"/>
+      <environment ref="message-04"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0408.xsl"/>
+      </test>
+      <result>
+         <assert>/out</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="message-0409">
+      <description>xsl:message outputs a function item. The transformation succeeds, but the message content is undefined.</description>
+      <created by="Michael Kay" on="2018-09-02"/>
+      <environment ref="message-04"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0409.xsl"/>
+      </test>
+      <result>
+         <assert>/out</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="message-0410">
+    <description>xsl:message outputs a comment node</description>
+    <created by="Michael Kay" on="2020-03-03"/>
+    <environment ref="message-04"/>
+    <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="XPath_3.1"/>
+    </dependencies>
+    <test>
+      <stylesheet file="message-0410.xsl"/>
+    </test>
+    <result>
+      <assert-message>
+        <assert>/comment() = 'Chicken legs'</assert>
+      </assert-message>
+    </result>
+  </test-case>
+   
+   <test-case name="message-0501">
+      <description>xsl:message terminate=yes: the error can be caught, and the message content is available in the xsl:catch as $err:value.</description>
+      <created by="Michael Kay" on="2019-11-06"/>
+      <modified by="Michael Kay" on="2025-09-22" change="displayed value of $err:code may include namespace prefix"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="message-0501.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/err/code = "XTMM9000" or ends-with(/err/code, ":XTMM9000")</assert>
+            <assert>exists(/err/description)</assert>
+            <assert>/err/value/test = "Take me to your leader"</assert>
+            <assert>/err/value/test/comment() = "REALLY"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   
+</test-set>

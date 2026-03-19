@@ -1,0 +1,2210 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns:xsl="http://www.w3.org/1999/XSL/Transform" 
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="date">
+   <description>Tests date</description>
+   <environment name="date002">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="date-001">
+      <description>XPath 2.0:  with Z timezone. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2000-01-01T12:00:00Z</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-002">
+      <description>XPath 2.0:  with +hh:mm timezone. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2000-02-29T12:00:00+02:30</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-003">
+      <description>XPath 2.0:  with -hh:mm timezone. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2000-01-01T12:00:00-02:30</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-004">
+      <description>XPath 2.0:  with no timezone. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2000-01-01T12:00:00.006</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-005">
+      <description>XPath 2.0:  with milliseconds and timezone. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2000-01-01T12:00:00.1+05:00</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-006">
+      <description>XPath 2.0: test equality between dates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-007">
+      <description>XPath 2.0: test inequality between dates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-008">
+      <description>XPath 2.0: test inequality between dates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-009">
+      <description>XPath 2.0: test inequality between dates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-010">
+      <description>XPath 2.0: test equality between dates without timezones.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-011">
+      <description>XPath 2.0: test equality between dates without timezones.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-012">
+      <description>XPath 2.0: test equality between dates with and without timezones. we currently assume that an absent timezone means UTC</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-013">
+      <description>XPath 2.0: test less-than between dates with and without timezones. we currently assume that an absent timezone means UTC</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-014">
+      <description>XPath 2.0: test less-than between dates with and without timezones. we currently assume that an absent timezone means UTC</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-015">
+      <description>XPath 2.0: test less-than between dates with timezones. we currently assume that an absent timezone means UTC</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-016">
+      <description>XPath 2.0: test less-than between dates with timezones. we currently assume that an absent timezone means UTC</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-017">
+      <description>XPath 2.0: test less-than between dates without timezones. we currently assume that an absent timezone means UTC</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-018">
+      <description>XPath 2.0: test whether a specific date is past or future. we currently assume that an absent timezone means UTC</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<A><out>true</out><out>false</out></A>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-019">
+      <description>XPath 2.0: test sorting of dateTimes with high >9999 year in date</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-10-21" change="Bug 27118, change dependency because test contains >9999 year component for xs:dateTime"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values satisfied="true" value="support year above 9999"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-019.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-019a">
+      <description>(Bug 27216) XPath 2.0: test sorting of dateTimes *without* high >9999 year values</description>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-019a.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-019a.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-020">
+      <description>XPath 2.0: test that current date/time doesn't change throughout a transformation waste some time</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<A>true</A>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-021">
+      <description>XPath 2.0: current-date() function. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-022">
+      <description>XPath 2.0: current-time() function. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-023">
+      <description>XPath 2.0: time constructor with Z timezone. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12:00:00Z</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-024">
+      <description>XPath 2.0: time constructor with +hh:mm timezone. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12:00:00+02:30</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-025">
+      <description>XPath 2.0: time constructor with -hh:mm timezone. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12:00:00-02:30</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-026">
+      <description>XPath 2.0: time constructor with no timezone. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12:00:00.006</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-027">
+      <description>XPath 2.0: time constructor with milliseconds and timezone. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12:00:00.1+05:00</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-028">
+      <description>XPath 2.0: date constructor with Z timezone. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2000-02-29Z</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-029">
+      <description>XPath 2.0: date constructor with positive and negative timezones. Also implicitly tests date to string conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>2000-01-01+02:30</a><a>2000-04-30-02:30</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-030">
+      <description>XPath 2.0: equality and inequality between dates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><true>true</true><false>false</false><true>true</true><false>false</false><true>true</true><false>false</false><true>true</true><false>false</false></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-031">
+      <description>XPath 2.0: ordering relationships between dates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-031.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><true>true</true><false>false</false><true>true</true><false>false</false><true>true</true><false>false</false></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-032">
+      <description>XPath 2.0: test sorting of dates</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-032.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-032.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-033">
+      <description>XPath 2.0: test equality between times.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-034">
+      <description>XPath 2.0: test inequality between times.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-034.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-035">
+      <description>XPath 2.0: test inequality between times.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-036">
+      <description>XPath 2.0: test inequality between times.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-037">
+      <description>XPath 2.0: test inequality between times with date wraparound.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-038">
+      <description>XPath 2.0: test equality between times without timezones.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-039">
+      <description>XPath 2.0: test equality between times without timezones.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-039.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-040">
+      <description>XPath 2.0: test less-than between times in same timezone.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-040.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-041">
+      <description>XPath 2.0: test less-than between times with different timezones.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-041.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out compare1="13:12:00Z" compare2="14:13:00+02:00">false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-042">
+      <description>XPath 2.0: test less-than between times with and without timezones. we currently assume that an absent timezone means UTC</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-042.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-043">
+      <description>XPath 2.0: test less-than between times with date wraparound. (The answer, surprisingly, is "false", because of conversion to GMT)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-043.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<false>true</false>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-044">
+      <description>XPath 2.0: test sorting on times.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-044.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ok/><ok/><ok/><ok/><ok/><ok/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-045">
+      <description>XPath 2.0: test component extraction on dateTime with timezone.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-045.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<c y="2002" M="6" d="15" h="12" m="27" s="30.012" tz="PT3H"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-046">
+      <description>XPath 2.0: test component extraction on dateTime without a timezone.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-046.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<c y="2002" M="6" d="15" h="12" m="27" s="30.012" tz=""/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-047">
+      <description>XPath 2.0: test component extraction on date with a timezone.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-047.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<c y="2002" M="6" d="15" tz="PT5H"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-048">
+      <description>XPath 2.0: test component extraction on date without a timezone.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-048.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<c y="2002" M="6" d="15" tz=""/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-049">
+      <description>XPath 2.0: test component extraction on time with timezone.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-049.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<c h="12" m="27" s="30.012" tz="PT3H"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-050">
+      <description>XPath 2.0: test creation and display of durations.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-050.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-050.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-051">
+      <description>XPath 2.0: test equality of durations.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-051.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-051.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-052">
+      <description>XPath 2.0: test extraction of components of a duration.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-052.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<d><e y="1" M="2"/>;
+        <e y="-1" M="-2"/>;
+        <e d="3" h="4" m="5" s="6.7"/>;
+        <e d="-3" h="-4" m="-5" s="-6.7"/>;
+        </d>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-053">
+      <description>Test sorting of durations (which isn't allowed).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-053.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE1030"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-054">
+      <description>XPath 2.0: test yearMonthDuration.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-054.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<d><z>P1M</z><y>P1M</y><z>P11M</z><y>P11M</y><z>P1Y</z><y>P1Y</y><z>P1Y5M</z><y>P1Y5M</y><z>P1Y6M</z><y>P1Y6M</y></d>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-055">
+      <description>XPath 2.0: test dayTimeDuration.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-055.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-055.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-056">
+      <description>XPath 2.0: test addition of two dayTimeDurations.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-056.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-056.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-057">
+      <description>XPath 2.0: test addition of two yearMonthDurations.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-057.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-057.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-058">
+      <description>XPath 2.0: test subtraction of two dayTimeDurations.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-058.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-058.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-059">
+      <description>XPath 2.0: test subtraction of two yearMonthDurations.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-059.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-059.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-060">
+      <description>XPath 2.0: test multiplying and dividing yearMonthDuration by a number</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-060.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-060.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-061">
+      <description>XPath 2.0: test multiplying and dividing dayTimeDuration by a number</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-061.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-061.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-062">
+      <description>XPath 2.0: test min() and max() on durations</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-062.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<d>-PT1M40S;
+        P2DT12H;        
+    </d>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-063">
+      <description>XPath 2.0: test min/max of dateTimes with high >9999 year in date</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-10-21" change="Bug 27118, change dependency because test contains >9999 year component for xs:dateTime"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values satisfied="true" value="support year above 9999"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-063.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<A>1995-12-23T13:29:00.2+03:00;
+        10000-12-23T13:13:00.2+03:00;        
+    </A>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-063a">
+      <description>(Bug 27216) XPath 2.0: test min/max of dateTimes *without* high >9999 year in date</description>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-063a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<A>1995-12-23T13:29:00.2+03:00;
+        9999-12-23T13:13:00.2+03:00;        
+    </A>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-064">
+      <description>XSLT 2.0: test English a.m / p.m formatting</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2012-12-11" change="improved the results normalization, see bugs 20170 and 20339"/>
+      <modified by="Michael Kay" on="2013-01-31" change="improved the results normalization, see bug 20170"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-064.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-064.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-065">
+      <description>XSLT 2.0: basic test of gHorribleKludge types</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-065.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-065.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-066">
+      <description>XSLT 2.0: test date to gHorribleKludge conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-066.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><v>2000</v><v>2000-02</v><v>--02</v><v>--02-29</v><v>---29</v></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-067">
+      <description>XSLT 2.0: test dateTime to gHorribleKludge conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-067.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><v>2000+02:00</v><v>2000-02+02:00</v><v>--02+02:00</v><v>--02-29+02:00</v><v>---29+02:00</v></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-068">
+      <description>XSLT 2.0: test equality matching on gHorribleKludge types</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-068.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-068.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-069">
+      <description>XSLT 2.0: test date +/- duration</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-069.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-069.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-070">
+      <description>XSLT 2.0: test dateTime +/- duration</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-070.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-070.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-071">
+      <description>XSLT 2.0: test time +/- duration</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-071.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>04:12:00.3Z</a><a>20:11:59.7Z</a><b>20:11:59.7Z</b><b>04:12:00.3Z</b><a>04:12:00.3Z</a><a>20:11:59.7Z</a></out>]]></assert-xml></result>
+   </test-case>
+
+   <test-case name="date-072">
+      <description>XSLT 2.0: test date|Time - date|Time</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-072.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>-P365DT19H4M</a><a>P29D</a><a>PT44.7S</a><a>-PT44.7S</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-073">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-073.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>P1286879846DT13H1M30.125S</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-074">
+      <description>xs:date constructor with xsl:value-of and negative year</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-10-31" change="Bug 27216, add dependency for negative year values"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-074.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a xmlns:xs="http://www.w3.org/2001/XMLSchema">-0055-01-12</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-074a">
+      <description>xs:date constructor with xsl:value-of and high >9999 year</description>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support year above 9999" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-074a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a xmlns:xs="http://www.w3.org/2001/XMLSchema">195778-01-12</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-075">
+      <description>xs:dateTime constructor with xsl:value-of and negative year</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-10-31" change="Bug 27216, add dependency for negative year values"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-075.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a xmlns:xs="http://www.w3.org/2001/XMLSchema">-0055-01-12T12:15:15</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-075a">
+      <description>xs:dateTime constructor with xsl:value-of and high >9999 year</description>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support year above 9999" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-075a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a xmlns:xs="http://www.w3.org/2001/XMLSchema">195778-01-12T12:15:15</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-076">
+      <description>xs:gYear and xs:gYearMonth constructor with xsl:value-of and negative year</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-10-31" change="Bug 27216, add dependency for negative year values"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-076.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<x xmlns:xs="http://www.w3.org/2001/XMLSchema"><a>-0055</a><b>-9876-06</b></x>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-076a">
+      <description>xs:gYear and xs:gYearMonth constructor with xsl:value-of and >9999 year</description>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support year above 9999" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-076a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<x xmlns:xs="http://www.w3.org/2001/XMLSchema"><a>195778</a><b>195778-06</b></x>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-077">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-077.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<x xmlns:xs="http://www.w3.org/2001/XMLSchema"><a>2004-02-02T00:00:00</a><b>2004-02-02T00:00:00+05:00</b></x>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-078">
+      <description>date subtraction and division of durations</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-078.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-078.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-079">
+      <description>division of yearMonthDurations</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-079.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><x>24</x><x>-132</x><x>0.0025</x></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-080">
+      <description>XSLT 2.0: test sum() over dayTimeDurations</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-080.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>P2DT10M</a><a>P2DT10M</a><a>PT0S</a><a/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-081">
+      <description>XSLT 2.0: test sum() over yearMonthDurations</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-081.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>P2Y5M</a><a>P2Y5M</a><a>P0M</a><a/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-082">
+      <description>XSLT 2.0: test avg() over dayTimeDurations</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-082.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>PT16H3M20S</a><a>PT16H3M20S</a><a/><a/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-083">
+      <description>XSLT 2.0: test avg() over yearMonthDurations</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-083.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>P10M</a><a>P10M</a><a/><a/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-084">
+      <description>XSLT 2.0: test dateTime() constructor</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-084.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-084.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-085">
+      <description>Test subtraction of durations (Priscilla Walmsley bug)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-085.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>-PT4.1S</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-086">
+      <description>Test subtraction of times with/without timezone</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-086.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>false</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-087">
+      <description>test that a time of 24:00:00 is allowed</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-087.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>1996-04-15T00:00:00</a><a>00:00:00+05:00</a><a>false</a><a>true</a><a>2002</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-088">
+      <description>test casting dates to GDay and friends</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-088.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-088.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-089">
+      <description>test casting dates to GDay and friends; with timezones</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-089.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-089.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-090">
+      <description>test handling of midnight</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-090.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-090.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-091">
+      <description>test casting xs:duration to string</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022" />
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-091.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="date-091.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-092">
+      <description>test extraction of seconds component of xs:duration</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-092.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<d>15</d>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-093">
+      <description>XSLT 2.0: test dateTime() constructor: date and time in different timezone</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="date002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-093.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0008"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-094a">
+      <description>test xs:date() constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="false" value="support year zero"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''0000-09-05'')'"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="FODT0001"/>
+            <error code="FORG0001"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="date-094b">
+      <description>test xs:date() constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="false" value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''-0001-09-05'')'"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-094c">
+      <description>test xs:date() constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="false" value="support year above 9999"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''10000-09-05'')'"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-094d">
+      <description>test xs:date() constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="false" value="support year above 9999"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''99887766-09-05'')'"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-094e">
+      <description>
+          test xs:date() constructor with invalid date or time range 
+          (this specific test assumes that the year value above 2^32+1 is not supported by any processor
+      </description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="true" value="support year above 9999"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''4294967297-01-02'')'"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-094f">
+      <description>
+          test xs:date() constructor with invalid date or time range 
+          (this specific test assumes that the year value above -2^32+1 is not supported by any processor
+      </description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="true" value="support year above 9999"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''-4294967297-01-02'')'"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-094g">
+      <description>test xs:date() constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''1999-01-32'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-094h">
+      <description>test xs:date() constructor with invalid date or time range (100 is not a leap year)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''0100-02-29'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="date-094i">
+      <description>test xs:date() constructor with invalid date or time range (8100 is not a leap year)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''8100-02-29'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="date-094j">
+      <description>test xs:date() constructor with invalid date or time range (200 is not a leap year)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <modified by="Abel Braaksma" on="2015-03-30" change="Bug 27458, 400 is a leap year, changed to 200"></modified>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''0200-02-29'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+      
+   <test-case name="date-094k">
+      <description>test xs:date() constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''1999-13-29'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+      
+   <test-case name="date-094l">
+      <description>test xs:date() constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''1999-12-32'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="date-094m">
+      <description>test xs:date() constructor with valid date range for negative dates (-400 is a leap year)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="true" value="support negative year"/>
+         <year_component_values satisfied="true" value="support year zero"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''-0400-02-29'')'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-0400-02-29</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="date-094n">
+      <description>test xs:date() constructor with valid zero-year date (0000 is a leap year in ISO-8601)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="true" value="support year zero"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''0000-02-29'')'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0000-02-29</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="date-094o">
+      <description>test xs:date() constructor with valid zero-year date (-0000 negate sign is not maintained)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="true" value="support year zero"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''-0000-01-30'')'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0000-01-30</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="date-094p">
+      <description>test xs:date() constructor with valid date range (400 is a leap year)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''0400-02-29'')'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0400-02-29</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-094q">
+      <description>test xs:date() constructor with invalid date range (200 is not a leap year)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <modified by="Abel Braaksma" on="2015-03-30" change="Bug 27336, 400 is not a leap year, changed to 200" />
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-094.xsl"/>
+         <param name="test-case" static="yes" select="'xs:date(''0200-02-29'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+
+   <!-- xd:dateTime -->
+   <test-case name="date-095a">
+      <description>test xs:dateTime constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="false" value="support year zero"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''0000-09-05T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="FODT0001"/>
+            <error code="FORG0001"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="date-095b">
+      <description>test xs:dateTime constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="false" value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''-0001-09-05T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-095c">
+      <description>test xs:dateTime constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="false" value="support year above 9999"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''10000-09-05T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-095d">
+      <description>test xs:dateTime constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="false" value="support year above 9999"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''99887766-09-05T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-095e">
+      <description>
+          test xs:dateTime constructor with invalid date or time range 
+          (this specific test assumes that the year value above 2^32+1 is not supported by any processor)
+      </description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="true" value="support year above 9999"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''4294967297-01-02T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-095f">
+      <description>
+          test xs:dateTime constructor with invalid date or time range 
+          (this specific test assumes that the year value above -2^32+1 is not supported by any processor)
+      </description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="true" value="support year above 9999"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''-4294967297-01-02T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-095g">
+      <description>test xs:dateTime constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''1999-01-32T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="date-095h">
+      <description>test xs:dateTime constructor with invalid date or time range (100 is a leap year)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''0100-02-29T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="date-095i">
+      <description>test xs:dateTime constructor with invalid date or time range (8100 is not a leap year)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''8100-02-29T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="date-095j">
+      <description>test xs:dateTime constructor with invalid date or time range (100 is not a leap year)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''0100-02-29T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+      
+   <test-case name="date-095k">
+      <description>test xs:dateTime constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''1999-13-29T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+      
+   <test-case name="date-095l">
+      <description>test xs:dateTime constructor with invalid date or time range</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''1999-12-32T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="date-095m">
+      <description>test xs:dateTime constructor with valid date range for negative dates (-400 is a leap year)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="true" value="support negative year"/>
+         <year_component_values satisfied="true" value="support year zero"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''-0400-02-29T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-0400-02-29T02:23:12.987</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="date-095n">
+      <description>test xs:dateTime constructor with valid zero-year date (0000 is a leap year in ISO-8601)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="true" value="support year zero"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''0000-02-29T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0000-02-29T02:23:12.987</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="date-095o">
+      <description>test xs:dateTime constructor with valid zero-year date (-0000 negate sign is not maintained)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <year_component_values satisfied="true" value="support year zero"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''-0000-01-30T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0000-01-30T02:23:12.987</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="date-095p">
+      <description>test xs:dateTime constructor with valid date range (400 is a leap year)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''0400-02-29T02:23:12.987'')'"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0400-02-29T02:23:12.987</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="date-095q">
+      <description>test xs:dateTime constructor with invalid date-time range (minute facet)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''1996-02-29T02:63:12.987'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="date-095r">
+      <description>test xs:dateTime constructor with invalid date-time range (hour facet)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''1996-02-29T24:23:12.987'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="date-095s">
+      <description>test xs:dateTime constructor with invalid date-time range (second facet)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''1996-02-29T02:23:74.987'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="date-095t">
+      <description>test xs:dateTime constructor with invalid date-time range (second facet, leap second)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''1996-02-29T02:23:60'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="date-095u">
+      <description>test xs:dateTime constructor with invalid date-time range (timezone facet, hour)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''1996-02-29T02:23:60+15:00'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="date-095v">
+      <description>test xs:dateTime constructor with invalid date-time range (timezone facet, minute)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''1996-02-29T02:23:60+12:60'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="date-095w">
+      <description>test xs:dateTime constructor with invalid date-time range (timezone facet, minute)</description>
+      <created by="Abel Braaksma" on="2014-10-21"/>
+      <modified by="Michael Kay" on="2014-11-15" change="depends on XSLT 3.0 (static params)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="date-095.xsl"/>
+         <param name="test-case" static="yes" select="'xs:dateTime(''1996-02-29T02:23:60+14:01'')'"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+
+
+</test-set>

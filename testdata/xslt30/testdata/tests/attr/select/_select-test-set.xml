@@ -1,0 +1,3128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="select">
+  <description>Tests select</description>
+  <environment name="select-01">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>
+  <a><b attr="test"/></a>
+  <c>
+    <d>
+      <e/>
+    </d>
+  </c>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-02">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>
+  <foo>a</foo>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-03">
+    <source role="." file="select-03.xml"/>
+  </environment>
+  <environment name="select-04">
+    <source role="." file="select-04.xml"/>
+  </environment>
+  <environment name="select-05">
+    <source role=".">
+      <content><![CDATA[<document-element>
+  <inside>
+    <way-inside/>
+  </inside>
+</document-element>]]></content>
+    </source>
+  </environment>
+  <environment name="select-06">
+    <source role="." file="select-06.xml"/>
+  </environment>
+  <environment name="select-07">
+    <source role=".">
+      <content><![CDATA[<doc>
+  <inner>content</inner>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-08">
+    <source role="." file="select-08.xml"/>
+  </environment>
+  <environment name="select-09">
+    <source role="." file="select-09.xml"/>
+  </environment>
+  <environment name="select-10">
+    <source role="." file="select-10.xml"/>
+  </environment>
+  <environment name="select-11">
+    <source role="." file="select-11.xml"/>
+  </environment>
+  <environment name="select-12">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>
+  <child>bad1
+    <sub>bad2</sub>
+  </child>
+  <c>bad3
+    <sub>bad4</sub>
+  </c>
+  <sub>OK
+    <nogo>bad5</nogo>
+  </sub>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-13">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>bad0
+  <!-- Good -->
+  <comment>bad1
+    <sub>bad2</sub>
+  </comment>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-14">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>bad0
+  <string-length>ThisIsBad
+    <sub>ThisIsWorse</sub>
+  </string-length>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-15">
+    <source role=".">
+      <content><![CDATA[<doc att1="at1" att2="at2" att3="at3"><num1>1<num2><num3/></num2></num1></doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-16">
+    <source role=".">
+      <content><![CDATA[<doc xmlns:test="http://www.test.org/Transform" att1="at1" att2="at2" att3="at3"><test:num1>1<test:num2><test:num3/></test:num2></test:num1></doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-17">
+    <source role=".">
+      <content><![CDATA[<doc att1="at1" att2="at2" att3="at3">
+<num1>1<num2><num3/></num2></num1>
+<num4><num6/></num4>
+<num5/>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-18">
+    <source role=".">
+      <content><![CDATA[<doc att1="at1" att2="at2" att3="at3">
+<num1>1.,.,<num2>23<num3/></num2></num1>
+<num4><num5/></num4>
+<num6>213<num7>2211</num7></num6>
+<num8>132</num8>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-19">
+    <source role="." file="select-19.xml"/>
+  </environment>
+  <environment name="select-20">
+    <source role=".">
+      <content><![CDATA[<doc att1="at1" att2="at2" att3="at3"><num1>1<num2><num3/></num2></num1></doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-21">
+    <source role=".">
+      <content><![CDATA[<doc xmlns:test="http://www.test.org/Transform" att1="at1" att2="at2" att3="at3"><test:num1>1<test:num2>2<test:num3>3</test:num3></test:num2></test:num1></doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-22">
+    <source role=".">
+      <content><![CDATA[ 
+<doc attribute="attr_val"><?pi PI_data?><?anotherpi another_PI_data?><!--This is the 1st comment-->text-in-doc<aaa>elem_aaa_value</aaa></doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-23">
+    <source role=".">
+      <content><![CDATA[<doc/>]]></content>
+    </source>
+  </environment>
+  <environment name="select-24">
+    <source role=".">
+      <content><![CDATA[<doc>
+<a><b>Absolute</b></a><a type="known"><b>disaster</b></a><a><b>in</b></a><a><b>the</b></a><a type="known"><b>world</b></a>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-25">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>
+  <div>9</div>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-26">
+    <source role=".">
+      <content><![CDATA[ 
+<doc div="20" div-5="12">
+  <div>9</div>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-27">
+    <source role=".">
+      <content><![CDATA[ 
+<doc div="20">
+  <div>9</div>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-28">
+    <source role=".">
+      <content><![CDATA[ 
+<doc div="20">
+  <div>9</div>
+  <attribute>-5</attribute>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-29">
+    <source role=".">
+      <content><![CDATA[ 
+<doc div="20">
+  <div>9</div>
+  <attribute>8</attribute>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-30">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>
+  <a>x<div>7</div></a>
+  <a>y<div>9</div></a>
+  <a>z<div>5</div></a>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-31">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>
+  <a s="v"><b>7</b><c>3</c></a>
+  <a s="w"><b>7</b><c>9</c></a>
+  <a s="x"><b>9</b><c>2</c></a>
+  <a s="y"><b>9</b><c>9</c></a>
+  <a s="z"><b>2</b><c>0</c></a>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-32">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>
+  <div>14</div>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-33">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>
+  <div>0</div>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-34">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>
+  <div>4</div>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-35">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>
+  <div>6</div>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-36">
+    <source role=".">
+      <content><![CDATA[<doc>
+  <sub1>
+    <child1>child1</child1>
+  </sub1>
+  <sub2>
+    <child2>child2</child2>
+  </sub2>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-37">
+    <source role=".">
+      <content><![CDATA[<doc>
+  <sub1 pos="1">
+    <child1>descendant number 1</child1>
+  </sub1>
+  <sub2 pos="2">
+    <child1>descendant number 2</child1>
+  </sub2>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-38">
+    <source role="." file="select-38.xml"/>
+  </environment>
+  <environment name="select-39">
+    <source role="." file="select-39.xml"/>
+  </environment>
+  <environment name="select-40">
+    <source role=".">
+      <content><![CDATA[<doc>
+  <sub1 pos="1">
+    <child1>child number 1</child1>
+  </sub1>
+  <sub2 pos="2">
+    <child2>child number 2</child2>
+  </sub2>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-41">
+    <source role=".">
+      <content><![CDATA[<doc attr1="attribute 1 " attr2="attribute 2">
+  <sub1>
+    <child1>descendant number 1</child1>
+  </sub1>
+  <sub2>
+    <child2>descendant number 2</child2>
+  </sub2>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-42">
+    <source role="." file="select-42.xml"/>
+  </environment>
+  <environment name="select-43">
+    <source role=".">
+      <content><![CDATA[<doc>
+  <child1>child number 1</child1>
+  <child2>child number 2</child2>
+  <child3>Selection of this child is an error.</child3>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-44">
+    <source role=".">
+      <content><![CDATA[<doc>
+  <sub1>
+    <child1>preceding sibling number 1</child1>
+    <child2>current node</child2>
+    <child3>following sibling number 3</child3>
+  </sub1>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-45">
+    <source role="." file="select-45.xml"/>
+  </environment>
+  <environment name="select-46">
+    <source role="." file="select-46.xml"/>
+  </environment>
+  <environment name="select-47">
+    <source role="." file="select-47.xml"/>
+  </environment>
+  <environment name="select-48">
+    <source role="." file="select-48.xml"/>
+  </environment>
+  <environment name="select-49">
+    <source role="." file="select-49.xml"/>
+  </environment>
+  <environment name="select-50">
+    <source role="." file="select-50.xml"/>
+  </environment>
+  <environment name="select-51">
+    <source role=".">
+      <content><![CDATA[<doc>
+  <sub1>
+    <child1>self content number 1</child1>
+  </sub1>
+  <sub2>
+    <child2>self content number 2</child2>
+  </sub2>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-52">
+    <source role=".">
+      <content><![CDATA[<doc>
+  <child1>1</child1>
+  <child2>2</child2>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-53">
+    <source role=".">
+      <content><![CDATA[<doc>
+  <child1>1</child1>
+  <child2>2A</child2>
+  <child2>2B</child2>
+  <child3>3A</child3>
+  <child3>3B</child3>
+  <child4>4</child4>
+  <child5>5</child5>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-54">
+    <source role="." file="select-54.xml"/>
+  </environment>
+  <environment name="select-55">
+    <source role=".">
+      <content><![CDATA[<doc>
+  <child1>Text for variable</child1>
+  <child2>Text for location Path</child2>
+  <child3>Selection of this child is an error.</child3>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-56">
+    <source role=".">
+      <content><![CDATA[<document-element>
+  <inside/>
+</document-element>]]></content>
+    </source>
+  </environment>
+  <environment name="select-57">
+    <source role=".">
+      <content><![CDATA[<document-element>
+  <chooser>that</chooser>
+  <inside flag="okay" xx="indifferent">wrong</inside>
+</document-element>]]></content>
+    </source>
+  </environment>
+  <environment name="select-58">
+    <source role="." file="select-58.xml"/>
+  </environment>
+  <environment name="select-59">
+    <source role="." file="select-59.xml"/>
+  </environment>
+  <environment name="select-60">
+    <source role=".">
+      <content><![CDATA[<doc>
+  <sub1>
+    <child1>child1</child1>
+  </sub1>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-61">
+    <source role="." file="select-61.xml"/>
+  </environment>
+  <environment name="select-62">
+    <source role="." file="select-62.xml"/>
+  </environment>
+  <environment name="select-63">
+    <source role=".">
+      <content><![CDATA[ 
+<!-- First comment -->
+<doc>
+  <!-- Front comment -->
+  <inner/>
+  <!-- Back comment -->
+</doc>
+<!-- Last comment -->]]></content>
+    </source>
+  </environment>
+  <environment name="select-64">
+    <source role=".">
+      <content><![CDATA[ 
+<Q level="0">bad0
+  <Q level="1">bad1
+    <Q level="2">bad2</Q>
+  </Q>
+</Q>]]></content>
+    </source>
+  </environment>
+  <environment name="select-65">
+    <source role=".">
+      <content><![CDATA[<page>
+   <contents>
+      <avail>
+         <hotel>
+            <location city="Seattle" state="WA"/>
+         </hotel>
+      </avail>
+   </contents>
+</page>]]></content>
+    </source>
+  </environment>
+  <environment name="select-66">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>
+  <foo name="x"/>
+  <foo name="y"/>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-67">
+    <source role=".">
+      <content><![CDATA[ 
+<doc>
+  <foo name="x">alpha</foo>
+  <foo name="y">omega</foo>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-68">
+    <source role="." file="select-68.xml"/>
+  </environment>
+  <environment name="select-69">
+    <source role=".">
+      <content><![CDATA[<para>
+  <font color='red'>Hello</font>
+  <font color='green'>There</font>
+  <font color='blue'>World</font>
+</para>]]></content>
+    </source>
+  </environment>
+  <environment name="select-70">
+    <source role=".">
+      <content><![CDATA[<doc>1<a>in-a</a>2<!-- upper comment -->
+  <b>3<bb>4<bbb>5</bbb>6</bb>7</b>
+  <!-- lower comment -->8<c>in-c</c>9
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-71">
+    <source role=".">
+      <content><![CDATA[<doc x="on-doc">
+  <a x="on-a">in-a</a>
+  <b x="on-b">
+    <bb NO="on-bb">
+      <bbb x="on-bbb"/>
+    </bb>
+  </b>
+  <c x="on-c">in-c</c>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-72">
+    <source role=".">
+      <content><![CDATA[<doc d="on-doc">
+  <a aa="on-a">in-a</a>
+  <b x="on-b">
+    <bb y="on-bb">
+      <bbb z="on-bbb"/>
+    </bb>
+  </b>
+  <c cc="on-c">in-c</c>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-73">
+    <source role=".">
+      <content><![CDATA[<doc>
+  <mark/>
+  <ch>ch1</ch>
+  <ch>ch2</ch>
+  <ch>ch3</ch>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-74">
+    <source role=".">
+      <content><![CDATA[<doc>
+  <m/>
+  <n>ok</n>
+</doc>]]></content>
+    </source>
+  </environment>
+  <environment name="select-75">
+    <source role=".">
+      <content><![CDATA[ 
+<doc><inner1/><inner1/></doc>]]></content>
+    </source>
+  </environment>
+
+  <test-case name="select-0101">
+    <description>Test for absolute path selection.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-01"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0101.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>test</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-0102">
+    <description>Test for select that comes up empty.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-01"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0102.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out/>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-0201">
+    <description>Test of current() function - just select it.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-02"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0201.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+  a
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-0202">
+    <description>Show that current() produces a node-set.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-02"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0202.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+  a
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-0301">
+    <description>Test for select in for-each and current().</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-03"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0301.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><item type="x">c</item> <item type="y">d</item> </out>]]></assert-xml>
+    </result>
+  </test-case>
+  
+  <test-case name="select-0302">
+    <description>Test for variable reference in the middle of a path expression. Saxon bug 4640.</description>
+    <created by="Michael Kay" on="2020-07-24"/>
+    <environment ref="select-03"/>
+    <dependencies>
+      <spec value="XSLT30+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0302.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>exists(/out/yes/bananas)</assert>
+        <assert>empty(/out/no/bananas)</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="select-0401">
+    <description>Purpose: Test of unions, returned in document order.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2020-04-21"
+      change="make expected results independent of attribute order"/>
+    <environment ref="select-04"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0401.xsl"/>
+    </test>
+    <result>
+      <assert-xml file="select-0401.out"/>
+    </result>
+  </test-case>
+
+  <test-case name="select-0501">
+    <description>Test for selecting parent nodes.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-05"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0501.xsl"/>
+    </test>
+    <result>
+      <assert-xml file="select-0501.out"/>
+    </result>
+  </test-case>
+
+  <test-case name="select-0601">
+    <description>Test nesting of for-each.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-06"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0601.xsl"/>
+    </test>
+    <result>
+      <assert-xml file="select-0601.out"/>
+    </result>
+  </test-case>
+
+  <test-case name="select-0701">
+    <description>Try to put out computed text without any tags.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+    <environment ref="select-07"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+      <feature value="serialization" satisfied="true"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0701.xsl"/>
+      <output serialize="yes"/>
+    </test>
+    <result>
+      <assert-serialization method="text" file="select07.out"/>
+    </result>
+  </test-case>
+
+  <test-case name="select-0801">
+    <description>Purpose: Test assignment of a node-set to a parameter, then use in select.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-08"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0801.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>Got a foo node;Got some other node;
+Got some other node;
+Got a wiz node;Got a foo node;</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-0802">
+    <description>Test assignment of a node-set to a local parameter, then use in select.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-08"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0802.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>Got a foo node;Got some other node;
+Got some other node;
+Got a wiz node;Got a foo node;</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-0901">
+    <description>Test for-each with select expression in a global variable.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-09"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0901.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>Felix,Sylvester,TopCat,</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-0902">
+    <description>Test for-each with select expression in a local variable.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-09"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-0902.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>Anne,Elissa,</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1001">
+    <description>Test that for-each doesn't care about current node Collect a node-set, outside any template</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-10"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1001.xsl"/>
+    </test>
+    <result>
+      <assert-xml file="select-1001.out"/>
+    </result>
+  </test-case>
+
+  <test-case name="select-1101">
+    <description>Purpose: Node-set union using mixed axes</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-11"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1101.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>preceding sibling number 1
+following sibling number 3
+cousin 3
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1201">
+    <description>NCName followed by :: must be recognized as an AxisName.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-12"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1201.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>OK
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1202">
+    <description>NCName followed by :: must be recognized as an AxisName, even if there is intervening whitespace.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-12"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1202.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>OK
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1301">
+    <description>NCName followed by ( must be recognized as a NodeType or FunctionName.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-13"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1301.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><!-- Good --></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1302">
+    <description>NCName followed by ( must be recognized as a NodeType or FunctionName, even if there is intervening whitespace.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-13"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1302.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><!-- Good --></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1401">
+    <description>NCName followed by ( must be recognized as a NodeType or FunctionName.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-14"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1401.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>36</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1402">
+    <description>NCName followed by ( must be recognized as a NodeType or FunctionName, even if there is intervening whitespace.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-14"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1402.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>36</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1501">
+    <description>Test of select in xsl:apply-templates with document-node() and predicate</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-15"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1501.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>doc</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1502">
+    <description>Test of select in xsl:apply-templates with attribute()</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <modified by="Michael Kay" on="2020-04-21"
+      change="make expected results independent of attribute order"/>
+    <environment ref="select-15"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1502.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>att1|att2|att3|</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1503">
+    <description>Test of select in xsl:apply-templates with element()</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-15"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1503.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>num1|num2|num3|</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1504">
+    <description>Test of select in xsl:apply-templates with element() and predicate index</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-15"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1504.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>num2|</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1601">
+    <description>Test of select in xsl:apply-templates with *:NCName</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-16"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1601.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>test:num1|test:num2|test:num3|test:num3|</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1602">
+    <description>Test of select in xsl:apply-templates with *:NCName, NCName:* and predicate index</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-16"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1602.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>test:num1|test:num2|</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1701">
+    <description>Test of select in xsl:apply-templates with complex pathExpr involving various node and name tests</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <modified by="Michael Kay" on="2020-04-23" change="make expected results independent of attribute order"/>
+    <environment ref="select-17"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1701.xsl"/>
+    </test>
+    <result>
+      <any-of>
+        <assert-xml><![CDATA[<out>att1|num4|num6|num5|att3|num4|num6|num5|</out>]]></assert-xml>
+        <assert-xml><![CDATA[<out>att3|num4|num6|num5|att1|num4|num6|num5|</out>]]></assert-xml>
+      </any-of>
+    </result>
+  </test-case>
+
+  <test-case name="select-1702">
+    <description>Test of select in xsl:apply-templates with variable reference and predicate</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-17"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1702.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>elem found: num2 | </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1703">
+    <description>Test of select in xsl:apply-templates with function call</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-17"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1703.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>num1 | num2 | num3 | num4 | num6 | num5 | </t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1704">
+    <description>Test of select in xsl:apply-templates with forExpr</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <modified by="Michael Kay" on="2016-05-06" change="removed unnecessary noise"/>
+    <environment ref="select-17"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1704.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>num1 | num2 | num3 | num4 | num6 | num5 | </t1><t2>num1 | num2 | num4 | </t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1705">
+    <description>Test of select in xsl:value-of with complex pathExpr involving various node and name tests</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-17"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1705.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>at1|at3</t1><t2>12|2|46</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1801">
+    <description>Test of select in xsl:apply-templates with QualifiedExpr</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-18"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1801.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>num6 | num8 | </t1><t2>num1 | num6 | num8 | </t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1802">
+    <description>Test of select in xsl:apply-templates with ifExpr with predicate index</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-18"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1802.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>num1 | num4 | num6 | num8 | </t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1803">
+    <description>Test of select in xsl:apply-templates with CastableExpr</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-18"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1803.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1/><t2>num6 | num8 | </t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1804">
+    <description>Test of select in xsl:apply-templates with intersectExceptExpr</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-18"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1804.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>num1|num4|num6|num8|</t1><t2>num2|num3|num5|num7|</t2><t3>num1|num2|num3|num4|num5|num6|num7|num8|</t3></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-1901">
+    <description>Test of select in xsl:apply-templates with current function</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-19"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-1901.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>num1 | num7 | </t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2001">
+    <description>Test of select in xsl:value-of with document-node()</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2001.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>1</t1><t2>1</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2002">
+    <description>Test of select in xsl:value-of with document-node() and predicate index</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2002.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>1</t1><t2>1</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2003">
+    <description>Test of select in xsl:value-of with attribute()</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <modified by="Michael Kay" on="2020-04-21"
+      change="make expected results independent of attribute order"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT30+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2003.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>at1|at2|at3</t1><t2>at1|at2|at3</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2004">
+    <description>Test of select in xsl:value-of with attribute() and predicate index</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2004.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>at2</t1><t2>at2</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2005">
+    <description>Test of select in xsl:value-of with element()</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2005.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>1|1||</t1><t2>1</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2006">
+    <description>Test of select in xsl:value-of with element() and predicate index</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2006.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>1</t1><t2>1</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2007">
+    <description>Test of select in xsl:value-of with sequence of nodes and atomic values and predicate</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2007.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>2005-10</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2008">
+    <description>Test of select in xsl:value-of with function call fn:concat</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2008.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>2005-10300000</t1><t2>num1300000</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2009">
+    <description>Test of select in xsl:value-of with toExpr</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2009.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>2</t1><t2>num11</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2010">
+    <description>Test of select in xsl:value-of with ForExpr</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2010.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>num2|num3</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2011">
+    <description>Test of select in xsl:value-of with QualifiedExpr</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2011.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>true</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2012">
+    <description>Test of select in xsl:value-of with ifExpr</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2012.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>doc</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2013">
+    <description>Test of select in xsl:value-of with nodeComp operator</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2013.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>true</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2014">
+    <description>Test of select in xsl:value-of with generalComp operator</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2014.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>true</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2015">
+    <description>Test of select in xsl:value-of with instanceOf and cast operator</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2015.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>false</t1><t2>true</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2016">
+    <description>Test of select in xsl:value-of with set operations: except and intersect</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2016.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>123|46|5</t1><t2>23|3|6</t2><t3>123|23|3|46|6|5</t3></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2017">
+    <description>Test of select in xsl:value-of with current function</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2017.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>num6</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2018">
+    <description>Test of select in xsl:value-of with empty sequence</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2018.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1/></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2019">
+    <description>Test of select in xsl:for-each with document-node()</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2019.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>1|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2020">
+    <description>Test of select in xsl:for-each with document-node() and predicate index</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2020.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>1|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2021">
+    <description>Test of select in xsl:for-each with attribute()</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <modified by="Michael Kay" on="2020-04-21"
+      change="make expected results independent of attribute order"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2021.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>at1|at2|at3|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2022">
+    <description>Test of select in xsl:for-each with attribute() and predicate index</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <modified by="Michael Kay" on="2020-04-21"
+      change="make expected results independent of attribute order"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2022.xsl"/>
+    </test>
+    <result>
+      <any-of>
+        <!-- allow various results, because attribute order is unpredictable-->
+        <assert>/out/t1 = 'at1|'</assert>
+        <assert>/out/t1 = 'at2|'</assert>
+        <assert>/out/t1 = 'at3|'</assert>
+      </any-of>
+    </result>
+  </test-case>
+
+  <test-case name="select-2023">
+    <description>Test of select in xsl:for-each with element()</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2023.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>doc|num1|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2024">
+    <description>Test of select in xsl:for-each with element() and predicate index</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2024.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>doc|num1|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2025">
+    <description>Test of select in xsl:for-each with complex pathExpr involving various node and name tests</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2025.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>att1|att3|</t1><t2>num1|num2|num4|</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2026">
+    <description>Test of select in xsl:for-each with sequence of atomic values and predicate</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2026.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>true|true|</t1><t2>2005-10|</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2027">
+    <description>Test of select in xsl:for-each with sequence of node and atomic values and predicate</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <modified by="Michael Kay" on="2020-04-21"
+      change="make expected results independent of attribute order"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT30+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2027.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>at1|at2|at3|true|2.343|2005-10|300000|</t1><t2>true|2.343|300000|</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2028">
+    <description>Test of select in xsl:for-each with function call: fn:reverse</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <modified by="Michael Kay" on="2020-04-21"
+      change="make expected results independent of attribute order"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT30+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2028.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>300000|2005-10|2.343|true|at3|at2|at1|</t1><t2>300000|2.343|true|</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2029">
+    <description>Test of select in xsl:for-each with rangeExpr</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2029.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>5|6|7|8|9|10|</t1><t2>8|9|10|</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2030">
+    <description>Test of select in xsl:for-each with ForExpr</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2030.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>num2|num3|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2031">
+    <description>Test of select in xsl:for-each with QualifiedExpr</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2031.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>true|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2032">
+    <description>Test of select in xsl:for-each with ifExpr</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2032.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>doc|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2033">
+    <description>Test of select in xsl:for-each with nodeComp operator</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2033.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>true|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2034">
+    <description>Test of select in xsl:for-each with valueComp operator</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2034.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>true|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2035">
+    <description>Test of select in xsl:for-each with generalComp operator</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2035.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>true|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2036">
+    <description>Test of select in xsl:for-each with instanceOf and cast operator</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2036.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>false|</t1><t2>true|</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2037">
+    <description>Test of select in xsl:for-each with set operations</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2037.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>123|46|5|</t1><t2>23|3|6|</t2><t3>123|23|3|46|6|5|</t3></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2038">
+    <description>Test of select in xsl:for-each with current function</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2038.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>num6|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2039">
+    <description>Test of select in xsl:for-each with empty sequence</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-20"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2039.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1/></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2101">
+    <description>Test of select in xsl:value-of with *:NCName and NCName:*</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-21"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2101.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>123|3</t1><t2>123|23|3</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2102">
+    <description>Test of select in xsl:value-of with *:NCName, NCName:* and predicate index</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-21"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2102.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>123</t1><t2>123|23</t2></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2103">
+    <description>Test of select in xsl:for-each with *:NCName and NCName:*</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-21"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2103.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>test:num1|test:num2|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2104">
+    <description>Test of select in xsl:for-each with *:NCName , NCName:* and predicate index</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-21"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2104.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>test:num1|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2201">
+    <description>Test of select in xsl:apply-templates with processing-instruction(NCName)</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-22"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2201.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>pi|</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2202">
+    <description>Test of select in xsl:apply-templates with processing-instruction(NCName) with predicate</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-22"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2202.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>PI_data</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2203">
+    <description>Test of select in xsl:for-each with processing-instruction(NCName)</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-22"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2203.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><t1>pi|</t1></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2301">
+    <description>Test of select in xsl:value-of for simple content construction</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-23"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2301.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+<a>t1a 1 3 t2t3 4 5</a>
+<b>t1a|1|3|t2t3|4|5</b>
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2302">
+    <description>Test of select in xsl:for-each when context item is atomic type</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-23"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2302.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>20|</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2303">
+    <description>Test case to verify that in an xsl:value-of instruction zero-length text nodes in the sequence are discarded.</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-23"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2303.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>a||b||c|d|e</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2304">
+    <description>Test case to verify that in an xsl:value-of instruction adjacent text nodes in the sequence are merged into a single text node.</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-23"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2304.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+<a>Oldest History</a>
+<b>Youngst kid</b>
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2305">
+    <description>Test case to verify that the strings within the resulting sequence are concatenated, with a (zero-length) separator inserted between successive strings.</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-23"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2305.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+<a>abcd</a>
+<b>1234</b>
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2401">
+    <description>Test case to verify that the sequence in an xsl:value-of instruction is atomized.</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-24"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2401.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+<a>Absolute disaster in the world</a>
+<b>Absolute disaster in the world</b>
+<b>Absolutedisasterintheworld</b>
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2402">
+    <description>Test case to verify that the sequence in an xsl:value-of instruction is atomized.</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-24"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2402.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+<a>Absolute_disaster_in_the_world</a>
+<b>Absolute disaster in the world</b>
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2501">
+    <description>NCName as first item must not be treated as an operator</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-25"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2501.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2502">
+    <description>* as first item must not be treated as an operator</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-25"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2502.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2503">
+    <description>* after ( must not be treated as operator, but * after ) is, and being tokenized means following * is not (because it follows an operator)</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-25"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2503.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>45</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2504">
+    <description>NCName after operator must not be treated as operator</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-25"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2504.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>7</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2505">
+    <description>* after (ambiguous) operator must not be treated as operator</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-25"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2505.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>16</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2506">
+    <description>* after (named) operator must not be treated as operator</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-25"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2506.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2601">
+    <description>NCName after @ must not be treated as an operator</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-26"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2601.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>15</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2602">
+    <description>NCName after @ must not be treated as an operator; space after is questionable.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-26"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2602.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>15</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2603">
+    <description>NCName after @ must not be treated as an operator; lack of spaces around hyphen makes it part of name.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-26"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2603.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2701">
+    <description>* after @ must be treated as all attributes</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-27"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2701.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>15</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2801">
+    <description>NCName after :: must be treated as part of path</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-28"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2801.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>20</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2802">
+    <description>NCName after :: must be treated as part of path</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-28"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2802.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>20</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-2901">
+    <description>NCName after ( must not be treated as operator</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-29"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-2901.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>40</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3001">
+    <description>NCName after [ must not be treated as operator</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-30"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3001.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>y9</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3101">
+    <description>* after [ must not be treated as operator</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-31"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3101.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>wxy</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3201">
+    <description>name after ) must be treated as operator</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-32"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3201.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>5</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3301">
+    <description>name after literal should be treated as operator</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-33"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+      <feature value="backwards_compatibility"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3301.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3401">
+    <description>name after * should not be treated as operator</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-34"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+      <feature value="backwards_compatibility"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3401.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>24</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3501">
+    <description>. after operator should be treated as path</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-35"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3501.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+  30
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3502">
+    <description>* after operator should be treated as path</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-35"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3502.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>11</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3601">
+    <description>Purpose: NodeSet union using two absolute location paths </description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-36"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3601.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+child1
+    child2
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3602">
+    <description>Purpose: NodeSet union using absolute and relative location paths Expression002 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-36"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3602.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+child1
+    child2
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3603">
+    <description>Purpose: NodeSet union using two relative location paths Expression020 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-36"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3603.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+child1
+    child2
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3701">
+    <description>Purpose: NodeSet union using the ancestor axis Expression003 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-37"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3701.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3801">
+    <description>Purpose: NodeSet union using the ancestor-or-self axis Heavily modified from Expression004 in NIST suite 8 different ones</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-38"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3801.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>1,1,1sub,2.5,3,3,4sub,</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3901">
+    <description>Purpose: test union operator using two paths with predicates. Expression005 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-39"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3901.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+Carmelo Montanez
+    Mary Brady
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-3902">
+    <description>Purpose: test union operator on two paths, each with complex predicate. Expression008 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-39"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-3902.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+Carmelo Montanez
+    Mary Brady
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-4001">
+    <description>Purpose: NodeSet union using the child axis Expression007 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-40"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-4001.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-4101">
+    <description>Purpose: NodeSet union using the descendant axis Expression009 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-41"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-4101.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+descendant number 1
+    descendant number 2
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-4102">
+    <description>Purpose: NodeSet union using the descendant-or-self axis Expression010 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-41"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-4102.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+    descendant number 1
+  
+    descendant number 2
+  </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-4201">
+    <description>Purpose: test union operator using predicates testing element and attribute nodes. Expression011 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-42"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-4201.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+Carmelo Montanez
+    Mary Brady
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-4301">
+    <description>Purpose: test union operator where union yields empty set. Expression012 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-43"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-4301.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-4302">
+    <description>Purpose: test union operator using variables. Expression013 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-43"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-4302.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+child number 1
+    child number 2
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-4401">
+    <description>Purpose: NodeSet union using the following-sibling and preceding-sibling axes Expression013 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-44"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-4401.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+preceding sibling number 1
+    following sibling number 3
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-4501">
+    <description>Purpose: NodeSet union using a function that returns a node set (key) and an axis. Expression014 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-45"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-4501.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+book1
+    book3
+    book5
+    book9
+    book11
+    book13
+    book15
+    article 1
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-4601">
+    <description>Purpose: NodeSet union using a function that returns a node set (key) as each term. Expression015 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-46"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-4601.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+book2
+    book4
+    book6
+    book8
+    book10
+    book12
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-4701">
+    <description>Purpose: test union operator at different nesting levels (same element) Expression016 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-47"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-4701.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+Carmelo Montanez
+    David Marston
+    Mary Brady
+    Lynne Rosenthal
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-4801">
+    <description>Purpose: test union operator at different nesting levels (different elements) Expression017 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-48"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-4801.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+Carmelo Montanez
+    David Marston
+    Mary Brady
+    Five
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-4901">
+    <description>Purpose: test union operator where one of the members is empty Expression018 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-49"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-4901.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+David Marston
+    Mary Brady
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-5001">
+    <description>Purpose: test union operator using overlapping node-sets. Results should always be output in doc order regardless of order of select attribute. (original) </description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-50"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-5001.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+EFGJKNOP,
+EFGJKNOP,
+EFGJKNOP,
+EFGJKNOP,
+EFGJKNOP,
+EFGJKNOP,
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-5101">
+    <description>Purpose: NodeSet union using the self axis Expression021 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-51"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-5101.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+self content number 1
+    self content number 2
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-5201">
+    <description>Purpose: union of two absolute (//) paths Expression022 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-52"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-5201.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-5301">
+    <description>Purpose: test union operator used three times in an expression Expression023 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-53"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-5301.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>2A2B45</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-5401">
+    <description>Purpose: test union operator using a variable and a function. Expression024 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-54"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-5401.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+article 1
+    book14
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-5501">
+    <description>Purpose: test union operator using a variable and an axis. Expression025 in NIST suite</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-55"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-5501.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+Text for variable
+    Text for location Path
+    </out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-5601">
+    <description>Test that document('') refers to this stylesheet, and exploit that fact to choose a template dynamically. Idea from Mike Kay.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-56"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-5601.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>We are inside.
+  xsl:template
+  We are generic.
+  inside
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-5701">
+    <description>
+         Test that document('') refers to this stylesheet, and exploit that fact to have data file select which 
+         template to use. Priorities added by MHK to suppress warnings.
+      </description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-57"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-5701.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>That template.
+  We got inside.
+  okay</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-5801">
+    <description>Test whether null string as attribute value causes selection problem.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-58"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-5801.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+  1-butternut|light|
+  2-|extreme|
+  3-butternut||
+  4-sport||heavy|
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-5901">
+    <description>Purpose: Test union operator using overlapping node-sets. Results should always be output in doc order regardless of order of select attribute. </description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-59"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-5901.xsl"/>
+    </test>
+    <result>
+      <assert-xml file="select-5901.out"/>
+    </result>
+  </test-case>
+
+  <test-case name="select-6001">
+    <description>Purpose: NodeSet union using two copies of same node, and variables 
+      This could be used to establish that the variable is of the node-set type, as opposed to string or one-node RTF, 
+      where the count would go up.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-60"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-6001.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+Count of node-set: 1
+Count of union: 1</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-6101">
+    <description>Test that entity does not cause splitting of one text node into many. With this output encoding, should get one byte of xE9 for the &amp;eacute</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Abel Braaksma" on="2015-03-23"
+      change="The test tests the serialization of entities, changed it to use the new assert-serialization (and fixed line-ends, hope Hg treats them well)"/>
+    <modified by="Abel Braaksma" on="2018-01-18" change="Include encoding"/>
+    <environment ref="select-61"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+      <feature value="serialization" satisfied="true"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-6101.xsl"/>
+    </test>
+    <result>
+      <assert-serialization file="select-6101.out" encoding="ISO-8859-1"/>
+    </result>
+  </test-case>
+
+  <test-case name="select-6201">
+    <description>Section: 8 Repetition Purpose: Test for-each example from XSLT spec.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+    <modified by="Michael Kay" on="2019-12-06" change="Drop serialization requirement"/>
+    <environment ref="select-62"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-6201.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/html/body/table/tbody/tr[1][th='William'][td[1]='pc10'][td[2]='pc20']</assert>
+        <assert>/html/body/table/tbody/tr[2][th='Harry'][td[1]='pc21'][td[2]='pc22']</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="select-6301">
+    <description>Ensure that select='/' gets what it should.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-63"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-6301.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+Comment found: Front comment 
+Comment found: Back comment 
+...Back to top...
+Comment found: First comment 
+Comment found: Last comment 
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-6401">
+    <description>Try /{name} to match the document element.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-64"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-6401.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>0</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-6501">
+    <description>Try to select a non-existent attribute out of a node-set variable</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-65"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-6501.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>calling...</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-6601">
+    <description>Simple test of current() in for-each.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-66"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-6601.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+<match>x = x</match>
+<match>y = y</match></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-6701">
+    <description>Simple test of current() in apply-templates. the doc node stringification of doc node</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-67"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-6701.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+<content from="x" size="1">alpha omega</content>
+<content from="y" size="1">alpha omega</content></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-6801">
+    <description>Try a positional predicate on descendants of a node-set variable Collect a node-set, outside any template</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-68"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-6801.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>Found the tag...
+item3,subsubitem-early,subitem1,
+Found the tag...
+item3,subsubitem-early,subitem1,
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-6901">
+    <description>Try absolute path when current node is in middle of tree</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-69"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-6901.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><rel>
+  Hello
+  There
+  World
+</rel><abs>
+  Hello
+  There
+  World
+</abs></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-7001">
+    <description>Test //* to get all elements</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-70"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-7001.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><list>doc|a|b|bb|bbb|c|</list></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-7101">
+    <description>Test //@x to get all attributes of a certain name</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-71"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-7101.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><list>
+Node doc has on-doc in @x
+Node a has on-a in @x
+Node b has on-b in @x
+Node bbb has on-bbb in @x
+Node c has on-c in @x</list></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-7201">
+    <description>Test //@* to get all attributes in the tree</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-72"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-7201.xsl"/>
+    </test>
+    <result>
+      <assert-xml file="select-7201.out"/>
+    </result>
+  </test-case>
+
+  <test-case name="select-7301">
+    <description>Test current() by itself in a predicate. Both of the following should select the same thing.</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-73"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+      <feature value="backwards_compatibility"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-7301.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+<in>ch1</in>
+<in>ch1</in>
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-7401">
+    <description>Purpose: Test that current() returns a node-set suitable for count(). 
+      Elaboration: There was a bug, masked by current()/sub-node</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="select-74"/>
+    <dependencies>
+      <spec value="XSLT10+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-7401.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>
+<apply>1</apply>
+<for1>1</for1>
+<for2>ok</for2>
+</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="select-7501">
+    <description>Tests xsl:for-each with missing the REQURED select attribute.</description>
+    <created by="Michael Kay" on="2012-10-30"/>
+    <environment ref="select-75"/>
+    <dependencies>
+      <spec value="XSLT20+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-7501.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE0010"/>
+    </result>
+  </test-case>
+
+  <test-case name="select-7502a">
+    <description>Test omission of the both the select and sequence constructor in xsl:value-of instruction</description>
+    <created by="O'Neil Delpratt" on="2012-11-07"/>
+    <environment ref="select-75"/>
+    <dependencies>
+      <spec value="XSLT20"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-7502.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE0870"/>
+    </result>
+  </test-case>
+
+  <test-case name="select-7502b">
+    <description>Test omission of the both the select and sequence constructor in xsl:value-of instruction</description>
+    <created by="O'Neil Delpratt" on="2012-11-07"/>
+    <environment ref="select-75"/>
+    <dependencies>
+      <spec value="XSLT30+"/>
+    </dependencies>
+    <test>
+      <stylesheet file="select-7502.xsl"/>
+    </test>
+    <result>
+      <assert>/out[not(node())]</assert>
+    </result>
+  </test-case>
+</test-set>

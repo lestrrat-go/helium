@@ -1,0 +1,137 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="su-filter">
+   <description>Streamable stylesheet functions: category "filter"</description>
+   
+   <environment name="su-filter-A">
+      <stylesheet file="su-filter-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="su-filter-001">
+      <description>Call an arity-1 stylesheet function</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-filter-A"/>
+      <test>
+         <initial-template name="t-001"/>
+      </test>
+      <result>
+         <assert>/out = "MMP P P P H P"</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-filter-002">
+      <description>Call an filter function with further downward selection</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-filter-A"/>
+      <test>
+         <initial-template name="t-002"/>
+      </test>
+      <result>
+         <assert>/out = "6.1 11.2 7.7 10.9 390 9.0"</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-filter-003">
+      <description>Call an arity-2 filter stylesheet function</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-filter-A"/>
+      <test>
+         <initial-template name="t-003"/>
+      </test>
+      <result>
+         <assert>/out = "MMP P P P H P"</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-filter-004">
+      <description>Call an arity-2 filter stylesheet function</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-filter-A"/>
+      <test>
+         <initial-template name="t-004"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-filter-101">
+      <description>Call a stylesheet function referencing an overridden variable</description>
+      <created by="Michael Kay" on="2017-06-25"/>
+      <test>
+         <package file="su-filter-101a.xsl" role="secondary"/>
+         <package file="su-filter-101.xsl" role="principal"/>       
+      </test>
+      <result>
+         <assert>/out = "The Big Over Easy"</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-filter-102">
+      <description>Call a stylesheet function referencing an overridden function</description>
+      <created by="Michael Kay" on="2017-06-25"/>
+      <test>
+         <package file="su-filter-101a.xsl" role="secondary"/>
+         <package file="su-filter-102.xsl" role="principal"/>       
+      </test>
+      <result>
+         <assert>/out = "Wuthering Heights Tess of the d'Urbervilles Jude the Obscure The Big Over Easy The Eyre Affair"</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-filter-901">
+      <description>Invalid filter function - consumes the streamed input</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <test>
+         <stylesheet file="su-filter-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-filter-902">
+      <description>Invalid filter function - first arg accepts a sequence</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <test>
+         <stylesheet file="su-filter-902.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-filter-903">
+      <description>Invalid filter function - returns streamed nodes</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <test>
+         <stylesheet file="su-filter-903.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-filter-904">
+      <description>Invalid filter function - accepts streamed node in second argument</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <test>
+         <stylesheet file="su-filter-904.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+   
+ 
+
+
+</test-set>

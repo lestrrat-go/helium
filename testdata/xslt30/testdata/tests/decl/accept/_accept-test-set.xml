@@ -1,0 +1,723 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="accept">
+   <description>Tests xsl:accept in XSLT 3.0</description>
+   
+   <environment name="accept-A">
+      <package file="accept-A.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/accept-A" package-version="1.0.0"/>
+   </environment>
+   
+   <environment name="accept-B">
+      <package file="accept-A.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/accept-A" package-version="1.0.0"/>
+      <package file="accept-B.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/accept-B" package-version="1.0.0"/>
+   </environment>
+   
+   <environment name="accept-C">
+      <package file="accept-C.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/accept-C" package-version="1.0.0"/>
+      <!-- Modified MHK 2020-02-06 to specify the arity on exposed function: draft erratum E36 -->
+   </environment>
+
+   <dependencies>
+      <spec value="XSLT30+"/>
+   </dependencies>
+
+   <test-case name="accept-001">
+      <description>Syntax variations of xsl:accept</description>
+      <created by="Michael Kay" on="2015-08-28"/>
+      <modified by="Michael Kay" on="2015-11-01" change="make template accept-A/main private to avoid conflict"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398) (accept-001a for original)"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-001.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a1 A="A" B="B"/><a2 A="0"/><v1>1</v1><v2>2</v2></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-001a">
+      <description>Error case XTDE0040, initial template must be explicitly public under xsl:package</description>
+      <created by="Abel Braaksma" on="2019-02-19"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-001a.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE0040" />
+      </result>
+   </test-case>
+   
+   <test-case name="accept-002">
+      <description>xsl:accept - reduce visibility to private</description>
+      <created by="Michael Kay" on="2015-08-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-002.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a1 A="A" B="B"/><a2 A="0"/><v1>1</v1><v2>2</v2></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-003">
+      <description>xsl:accept - reduce visibility to hidden</description>
+      <created by="Michael Kay" on="2015-08-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-003.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0710"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-004">
+      <description>xsl:accept - error - specific reference to abstract component</description>
+      <created by="Michael Kay" on="2015-08-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-004.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3030"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-005">
+      <description>xsl:accept - make all components except one hidden</description>
+      <created by="Michael Kay" on="2015-08-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-005.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><v1>1</v1></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-006">
+      <description>xsl:accept - make all components except one hidden</description>
+      <created by="Michael Kay" on="2015-08-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-006.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPST0008"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-007">
+      <description>xsl:accept - make all components hidden, trumped by override</description>
+      <created by="Michael Kay" on="2015-08-28"/>
+      <modified by="Abel Braaksma" on="2016-11-03" change="Expecting error because of illegal override, fixes bug 29448"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-007.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3060"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-007a">
+      <description>Variant of the original accept-007, without error</description>
+      <created by="Abel Braaksma" on="2016-11-03"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-007a.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><v2>2</v2></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-008">
+      <description>xsl:accept with component="*"</description>
+      <created by="Michael Kay" on="2016-04-14"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-008.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a1 A="A" B="B"/><a2 A="0"/><v1>1</v1><v2>2</v2></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-009">
+      <description>xsl:accept conflict resolution: last wildcard with same priority wins</description>
+      <created by="Michael Kay" on="2017-07-10"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-009.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out foo="2"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-010">
+      <description>xsl:accept conflict resolution: higher priority wins</description>
+      <created by="Michael Kay" on="2017-07-10"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-010.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out foo="2"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-011">
+      <description>xsl:accept: cannot accept final component as public</description>
+      <created by="Michael Kay" on="2017-07-10"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <modified by="Michael Kay" on="2023-03-05" change="Remove unintended error, missing arity on function name"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-011.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3040"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-012">
+      <description>xsl:accept: cannot accept private component as public</description>
+      <created by="Michael Kay" on="2017-07-10"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <modified by="Michael Kay" on="2023-03-05" change="Remove unintended error, missing arity on function name"/>
+      <environment ref="accept-A"/>
+      <test>
+         <package file="accept-012.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3040"/>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="accept-020">
+      <description>xsl:accept - conflict between two used packages in the absence of xsl:accept</description>
+      <created by="Michael Kay" on="2015-08-28"/>
+      <modified by="Michael Kay" on="2015-10-14" change="correct expected results"/>
+      <modified by="Michael Kay" on="2015-11-21" change="correct expected error code"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-B"/>
+      <test>
+         <package file="accept-020.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3050"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-021">
+      <description>xsl:accept - resolve conflict between two used packages using xsl:accept</description>
+      <created by="Michael Kay" on="2015-08-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-B"/>
+      <test>
+         <package file="accept-021.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><v2>2</v2></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-022">
+      <description>xsl:accept - resolve conflict between two used packages using bulk xsl:accept</description>
+      <created by="Michael Kay" on="2015-08-28"/>
+      <modified by="Michael Kay" on="2015-10-14" change="correct expected results"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-B"/>
+      <test>
+         <package file="accept-022.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><v2>22</v2></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-023">
+      <description>xsl:accept - can't use xsl:accept component="*" with a specific name (must be a wildcard). See bug 29478.</description>
+      <created by="Michael Kay" on="2016-04-15"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-B"/>
+      <test>
+         <package file="accept-023.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3032"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-040">
+      <description>xsl:accept - OK to have a hidden function that isn't called, even if the original function is abstract</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <modified by="Michael Kay" on="2020-02-06" change="Erratum E36 means we have to give an explicit arity for a named function"/> 
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-040.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out a="22">22</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-041a">
+      <description>xsl:accept - OK to have a static reference to a hidden function if the original is abstract</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <modified by="Michael Kay" on="2020-02-06" change="Erratum E36 means we have to give an explicit arity for a named function"/> 
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-041.xsl" role="principal"/>
+         <param name="go" select="false()"/>
+         <initial-template name="main"/>        
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out a="22">22</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-041b">
+      <description>xsl:accept - cannot call a hidden function if the original is abstract</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-041.xsl" role="principal"/>
+         <param name="go" select="true()"/>
+         <initial-template name="main"/>      
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-041c">
+      <description>xsl:accept - must override an abstract function</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Michael Kay" on="2017-07-11" change="change error condition: see bug 30142"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-041.xsl" role="principal"/>
+         <param name="accept" select="false()" static="yes"/>
+         <param name="go" select="true()"/>
+         <initial-template name="main"/>    
+      </test>
+      <result>
+         <error code="XTDE3052"/> 
+      </result>
+   </test-case>
+   
+   <test-case name="accept-042">
+      <description>xsl:accept - OK to have an abstract variable that isn't referenced</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-042.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out a="22">1</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-043a">
+      <description>xsl:accept - OK to have a static reference to an abstract variable that isn't evaluated</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-043.xsl" role="principal"/>
+         <param name="go" select="false()"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out a="22">22</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-043b">
+      <description>xsl:accept - cannot evaluate an abstract variable</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-043.xsl" role="principal"/>
+         <param name="go" select="true()"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-043c">
+      <description>xsl:accept - must override an abstract variable</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Michael Kay" on="2017-07-11" change="change error condition: see bug 30142"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-043.xsl" role="principal"/>
+         <param name="accept" select="false()" static="yes"/>
+         <param name="go" select="true()"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>  
+      </result>
+   </test-case>
+   
+   <test-case name="accept-044">
+      <description>xsl:accept - OK to have an abstract named template that isn't referenced</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-044.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out a="22">622</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-045a">
+      <description>xsl:accept - OK to have a static reference to an abstract named template that isn't evaluated</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-045.xsl" role="principal"/>
+         <param name="go" select="false()"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out a="22">6</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-045b">
+      <description>xsl:accept - cannot evaluate an abstract named template</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-045.xsl" role="principal"/>
+         <param name="go" select="true()"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-045c">
+      <description>xsl:accept - must override an abstract named template</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Michael Kay" on="2017-07-11" change="change error condition: see bug 30142"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-045.xsl" role="principal"/>
+         <param name="accept" select="false()" static="yes"/>
+         <param name="go" select="true()"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/> 
+      </result>
+   </test-case>
+   
+   <test-case name="accept-046">
+      <description>xsl:accept - OK to have an abstract attribute set that isn't referenced</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-046.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-047a">
+      <description>xsl:accept - OK to have a static reference to an abstract attribute set that isn't evaluated</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-047.xsl" role="principal"/>
+         <param name="go" select="false()"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-047b">
+      <description>xsl:accept - cannot evaluate an abstract attribute set</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-047.xsl" role="principal"/>
+         <param name="go" select="true()"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-047c">
+      <description>xsl:accept - must override an abstract attribute set</description>
+      <created by="Michael Kay" on="2015-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make main public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="accept-C"/>
+      <test>
+         <package file="accept-047.xsl" role="principal"/>
+         <param name="accept" select="false()" static="yes"/>
+         <param name="go" select="true()"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-901">
+      <description>Error, simple test, accept xsl:initial-template, specifically hidden abstract component (function) is OK, but raises XTDE3052</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-901.xsl" role="principal"/>
+         <package file="accept-901-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-901" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-902">
+      <description>Error, simple test, accept xsl:initial-template, implicitly hidden abstract component (function) is OK, but raises XTDE3052</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-902.xsl" role="principal"/>
+         <package file="accept-901-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-901" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-903">
+      <description>Error, simple test, accept xsl:initial-template, accidentally hidden abstract component (function) is OK, but raises XTDE3052</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-903.xsl" role="principal"/>
+         <package file="accept-901-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-901" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-904">
+      <description>Error, simple test non-executable package, wildcard accepted abstract component (function) is NOK, raises statically XTSE3080</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-904.xsl" role="principal"/>
+         <package file="accept-901-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-901" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTSE3080"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-905">
+      <description>Error, simple test, accept xsl:initial-template, specifically hidden abstract component (template) is OK, but raises XTDE3052</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-905.xsl" role="principal"/>
+         <package file="accept-905-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-905" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-906">
+      <description>Error, simple test, accept xsl:initial-template, implicitly hidden abstract component (template) is OK, but raises XTDE3052</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-906.xsl" role="principal"/>
+         <package file="accept-905-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-905" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-907">
+      <description>Error, simple test, accept xsl:initial-template, accidentally hidden abstract component (template) is OK, but raises XTDE3052</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-907.xsl" role="principal"/>
+         <package file="accept-905-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-905" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-908">
+      <description>Error, simple test non-executable package, wildcard accepted abstract component (template) is NOK, raises statically XTSE3080</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-908.xsl" role="principal"/>
+         <package file="accept-905-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-905" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTSE3080"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-909">
+      <description>Error, simple test, accept xsl:initial-template, specifically hidden abstract component (template) is OK, but raises XTDE3052</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-909.xsl" role="principal"/>
+         <package file="accept-909-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-909" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-910">
+      <description>Error, simple test, accept xsl:initial-template, implicitly hidden abstract component (template) is OK, but raises XTDE3052</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-910.xsl" role="principal"/>
+         <package file="accept-909-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-909" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-911">
+      <description>Error, simple test, accept xsl:initial-template, accidentally hidden abstract component (template) is OK, but raises XTDE3052</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-911.xsl" role="principal"/>
+         <package file="accept-909-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-909" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-912">
+      <description>Error, simple test non-executable package, wildcard accepted abstract component (template) is NOK, raises statically XTSE3080</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-912.xsl" role="principal"/>
+         <package file="accept-909-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-909" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTSE3080"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-913">
+      <description>Error, simple test template xsl:initial-template must be public, raises XTDE0040 (not XTDE3052)</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-913.xsl" role="principal"/>
+         <package file="accept-913-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-913" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTDE0040"/>
+      </result>
+   </test-case>
+
+    <test-case name="accept-914">
+      <description>Error, simple test non-executable package with xsl:initial-template, raises XTSE3080 (not XTDE0040)</description>
+      <created by="Abel Braaksma" on="2019-02-18"/>
+      <test>
+         <package file="accept-914.xsl" role="principal"/>
+         <package file="accept-914-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-914" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTSE3080"/>
+      </result>
+   </test-case>
+
+   <test-case name="accept-915">
+      <description>Error, cannot use special token #unnamed to refer to the always private-to-a-package unnamed mode (like expose-015)</description>
+      <created by="Abel Braaksma" on="2019-02-02"/>
+      <test>
+         <package file="accept-915.xsl" role="principal"/>
+         <package file="accept-915-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-915" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accept-916">
+      <description>Should be an error, the same function appears both in xsl:accept and xsl:override</description>
+      <created by="Michael Kay after Max Toro" on="2019-10-02"/>
+      <modified by="Michael Kay" on="2023-03-05" change="Remove unintended error, missing arity on function name"/>
+      <test>
+         <package file="accept-916.xsl" role="principal"/>
+         <package file="accept-916-package.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/package-915" package-version="1.0.0"/>
+      </test>
+      <result>
+         <error code="XTSE3051"/>
+      </result>
+   </test-case>
+   
+
+   
+</test-set>

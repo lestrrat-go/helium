@@ -1,0 +1,475 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+   xmlns:xs="http://www.w3.org/2001/XMLSchema" name="su-absorbing">
+   <description>Streamable stylesheet functions: category "absorbing"</description>
+
+   <environment name="su-absorbing-A">
+      <stylesheet file="su-absorbing-A.xsl"/>
+   </environment>
+
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+
+   <test-case name="su-absorbing-001">
+      <description>Call an arity-1 stylesheet function - single node</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-001"/>
+      </test>
+      <result>
+         <assert>/out = "11 11 11 11 11 11"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-002">
+      <description>Call an arity-1 stylesheet function - sequence of nodes, processed using "!"</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-002"/>
+      </test>
+      <result>
+         <assert>/out = "66"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-003">
+      <description>Call an arity-1 stylesheet function - single node</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-003"/>
+      </test>
+      <result>
+         <assert>/out = "11 11 11 11 11 11"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-004">
+      <description>Call an arity-1 stylesheet function - sequence of nodes, processed using "/"</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-004"/>
+      </test>
+      <result>
+         <assert>/out = "66"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-005">
+      <description>Recursive absorbing function</description>
+      <created by="Michael Kay" on="2016-06-28"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-005"/>
+      </test>
+      <result>
+         <assert>/out =  "12 12 12 12 12 12"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-006">
+      <description>Recursive absorbing function with grounded input</description>
+      <created by="Michael Kay" on="2016-06-28"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-006"/>
+      </test>
+      <result>
+         <assert>/out = "12 12 12 12 12 12"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-007">
+      <description>Two references to the variable allowed if you're careful</description>
+      <created by="Michael Kay" on="2016-06-28"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-007"/>
+      </test>
+      <result>
+         <assert>/out = "#ITEM?true #ITEM?true #ITEM?true #ITEM?true #ITEM?true #ITEM?true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-008">
+      <description>Invoke streamable template from streamable function</description>
+      <created by="Michael Kay" on="2016-06-28"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-008"/>
+      </test>
+      <result>
+         <assert>/out/data = "4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-009">
+      <description>Recursive absorbing function</description>
+      <created by="Michael Kay" on="2016-06-30"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-009"/>
+      </test>
+      <result>
+         <assert>/out =  "11 11 11 11 11 11"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-010">
+      <description>Recursive absorbing function using has-children()</description>
+      <created by="Michael Kay" on="2016-06-30"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-010"/>
+      </test>
+      <result>
+         <assert>/out =  "11 11 11 11 11 11"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-011">
+      <description>Call absorbing function supplying an empty sequence</description>
+      <created by="Michael Kay" on="2016-06-30"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-011"/>
+      </test>
+      <result>
+         <assert>/out =  "0"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-012">
+      <description>Call singleton absorbing function supplying an empty sequence</description>
+      <created by="Michael Kay" on="2016-06-30"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-012"/>
+      </test>
+      <result>
+         <assert>/out =  "0"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-013">
+      <description>Call absorbing function supplying a grounded consuming argument</description>
+      <created by="Michael Kay" on="2016-06-30"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-013"/>
+      </test>
+      <result>
+         <assert>/out =  "66"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-014">
+      <description>Call singleton absorbing function supplying a grounded consuming argument</description>
+      <created by="Michael Kay" on="2016-06-30"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-014"/>
+      </test>
+      <result>
+         <assert>/out =  "0 0 0 0 0 0"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-015">
+      <description>Call absorbing function from absorbing function</description>
+      <created by="Michael Kay" on="2016-07-02"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-015"/>
+      </test>
+      <result>
+         <assert>/out =  "19 17 25 16 17 15"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-016">
+      <description>Call absorbing function from streamable template</description>
+      <created by="Michael Kay" on="2016-07-02"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-016"/>
+      </test>
+      <result>
+         <assert>/out =  "19 17 25 16 17 15"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-017">
+      <description>Call absorbing function with text nodes</description>
+      <created by="Michael Kay" on="2016-07-02"/>
+      <environment ref="su-absorbing-A"/>
+      <test>
+         <initial-template name="t-017"/>
+      </test>
+      <result>
+         <assert>/out =  "19 17 25 16 17 15"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-201">
+      <description>Absorbing function - (Saxon crash during streamability analysis - Saxon bug 3253)</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-13"/>
+      <environment>
+         <source file="su-absorbing-201.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="su-absorbing-201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<html><head><title>Test</title></head
+            ><body><section><h1>Heading 1.1</h1><p>Paragraph 1.1.1</p><p>Paragraph 1.1.2</p
+            ><section><h2>Heading 2.1</h2><p>Paragraph 2.1.1</p><section
+            ><h3>Heading 3.1</h3></section></section
+            ><section><h2>Heading 2.2</h2><p>Paragraph 2.2.1</p></section
+            ></section><section><h1>Heading 1.2</h1><p>Paragraph 1.2.1</p><section
+            ><h2>Heading 2.3</h2><p>Paragraph 2.3.1</p></section></section></body></html>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-202">
+      <description>Absorbing function - (Saxon NPE - Saxon bug 3325)</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-29"/>
+      <environment>
+         <source file="su-absorbing-202.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="su-absorbing-202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Items Title="Title" Icon="Icon" Description="Description"><Item Value="01" Name="Agriculture"
+            ><Item Value="011" Name="Horticulture and Fruit Growing"><Item Value="0111" Name="Plant Nurseries"
+            ><Item Value="011101" Name="Bulb Propagating"/></Item><Item Value="0112" Name="Cut Flower and Flower Seed Growing"
+            ><Item Value="011201" Name="Display Foliage Growing"/></Item></Item></Item></Items>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-203">
+      <description>Absorbing function - (Saxon incorrect type checking - Saxon bug 3325)</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-29"/>
+      <environment>
+         <source file="su-absorbing-202.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="su-absorbing-203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Items Title="Title" Icon="Icon" Description="Description"><Item Value="01" Name="Agriculture"
+            ><Item Value="011" Name="Horticulture and Fruit Growing"><Item Value="0111" Name="Plant Nurseries"
+            ><Item Value="011101" Name="Bulb Propagating"/></Item><Item Value="0112" Name="Cut Flower and Flower Seed Growing"
+            ><Item Value="011201" Name="Display Foliage Growing"/></Item></Item></Item></Items>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-204">
+      <description>Absorbing function - (Saxon bug 4453)</description>
+      <created by="Michael Kay after Martin Honnen" on="2020-02-04"/>
+      <test>
+         <stylesheet file="su-absorbing-204.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><in x="a" y="a1"/><in x="b" y="b1"/><in x="b" y="b2"/><in x="b" y="b3"/><in x="c" y="c1"/><in x="c" y="c2"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-205">
+      <description>
+         Recursive absorbing function .
+         See https://saxonica.plan.io/issues/4561
+         See https://github.com/w3c/qtspecs/issues/15
+         Analysis suggests there's a rule missing in the spec: multiple references
+         to the streaming parameter, or references within a higher-order operand, should not be allowed.
+      </description>
+      <created by="Michael Kay after Martin Honnen" on="2020-09-14"/>
+      <environment>
+         <source file="su-absorbing-205.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="su-absorbing-205.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="su-absorbing-301">
+      <description>Positional grouping, Saxon bug 5035</description>
+      <created by="Michael Kay after Martin Honnen" on="2021-07-22"/>
+      <environment>
+         <source role="." streaming="true" file="su-absorbing-301.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="su-absorbing-301.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/root/chunk) = 8</assert>
+            <assert>count(/root/chunk/item) = 23</assert>
+            <assert>count(/root/chunk[1]/item) = 3</assert>
+            <assert>count(/root/chunk[8]/item) = 2</assert>
+            <assert>/root/chunk[1]/item[1] = 'item 01'</assert>
+            <assert>/root/chunk[8]/item[1] = 'item 22'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-901">
+      <description>Invalid absorbing function - not grounded</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <test>
+         <stylesheet file="su-absorbing-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-902">
+      <description>Invalid absorbing function - body not consuming (but see bug 29712)</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <modified by="Michael Kay" on="2016-07-10" change="non-consuming body now allowed (bug 29712)"/>
+      <test>
+         <stylesheet file="su-absorbing-902.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out =  "MMP P P P H P"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-903">
+      <description>Invalid absorbing function call - argument is crawling</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <test>
+         <stylesheet file="su-absorbing-903.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-904">
+      <description>Invalid absorbing function call - supplies streamed node in second argument</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <test>
+         <stylesheet file="su-absorbing-904.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-905">
+      <description>Invalid absorbing function - two downward selections</description>
+      <created by="Michael Kay" on="2016-06-28"/>
+      <test>
+         <stylesheet file="su-absorbing-905.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-906">
+      <description>Invalid absorbing function - consuming reference in a loop</description>
+      <created by="Michael Kay" on="2016-06-28"/>
+      <test>
+         <stylesheet file="su-absorbing-906.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-907">
+      <description>Invalid absorbing function - function body must be consuming (But see bug 29712)</description>
+      <created by="Michael Kay" on="2016-06-28"/>
+      <modified by="Michael Kay" on="2016-07-10" change="non-consuming body now allowed (bug 29712)"/>
+      <test>
+         <stylesheet file="su-absorbing-907.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>starts-with(/out, "TITLE AUTHOR PUBLISHER PUB-DATE LANGUAGE PRICE QUANTITY ISBN PAGES DIMENSIONS WEIGHT TITLE AUTHOR PUBLISHER ")</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-908">
+      <description>Invalid absorbing function - two consuming references to the variable</description>
+      <created by="Michael Kay" on="2016-06-28"/>
+      <test>
+         <stylesheet file="su-absorbing-908.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-909">
+      <description>has-children() is not deemed consuming. (But see bug 29712)</description>
+      <created by="Michael Kay" on="2016-06-28"/>
+      <modified by="Michael Kay" on="2017-02-20" change="non-consuming body now allowed"/>
+      <test>
+         <stylesheet file="su-absorbing-909.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "true true true true true true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-910">
+      <description>Streamable absorbing function fails with dynamic error</description>
+      <created by="Michael Kay" on="2016-07-01"/>
+      <test>
+         <stylesheet file="su-absorbing-910.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FOAR0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-911">
+      <description>Streamable absorbing function fails with dynamic error</description>
+      <created by="Michael Kay" on="2016-07-01"/>
+      <test>
+         <stylesheet file="su-absorbing-911.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'divide-by-zero'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="su-absorbing-912">
+      <description>The path() function is not streamable</description>
+      <created by="Michael Kay" on="2016-07-01"/>
+      <test>
+         <stylesheet file="su-absorbing-912.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+
+
+
+</test-set>

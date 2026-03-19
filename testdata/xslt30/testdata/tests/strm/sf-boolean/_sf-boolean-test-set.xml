@@ -1,0 +1,501 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-boolean">
+
+  <description>boolean() function with streaming. </description>
+  <keywords>streaming streamability-analysis boolean</keywords>
+
+  <environment name="sf-boolean-A">
+    <stylesheet file="sf-boolean-001.xsl"/>
+  </environment>
+
+  <dependencies>
+    <spec value="XSLT30+"/>
+    <feature value="streaming"/>
+  </dependencies>
+
+  <test-case name="sf-boolean-001">
+    <description>Test of xsl:stream instruction with boolean(): whether descendant nodes exist</description>
+    <keywords>boolean crawling</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <stylesheet file="sf-boolean-001.xsl"/>
+      <initial-template name="c-001"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-002">
+    <description>Test of xsl:stream instruction with boolean(), filtered with motionless predicate</description>
+    <keywords>fn:boolean ContextItemExpr motionless-predicate RelativePathExpr</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-002"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-003">
+    <description>Test of xsl:stream instruction with boolean(), applied to ancestor nodes</description>
+    <keywords>boolean climbing motionless-predicate bang-operator</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-003"/>
+    </test>
+    <result>
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-004">
+    <description>Test of xsl:stream instruction with boolean(), applied to grounded consuming items</description>
+    <keywords>boolean grounded bang-operator</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-004"/>
+    </test>
+    <result>
+      <error code="FORG0006"/>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-005">
+    <description>Test of xsl:stream instruction with boolean(), applied to attributes of ancestor nodes</description>
+    <keywords>boolean climbing attribute-axis bang-operator</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-005"/>
+    </test>
+    <result>
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-006">
+    <description>Test of xsl:stream instruction with boolean(), applied to namespaces of ancestor nodes</description>
+    <keywords>boolean climbing namespace-axis bang-operator</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-006"/>
+    </test>
+    <result>
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-007">
+    <description>boolean() with empty downwards selection</description>
+    <keywords>boolean striding empty-sequence</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-007"/>
+    </test>
+    <result>
+      <assert>/out = "false"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-008">
+    <description>boolean() with empty downwards selection</description>
+    <keywords>boolean striding empty-sequence numeric-predicate</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-008"/>
+    </test>
+    <result>
+      <assert>/out = "false"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-009">
+    <description>boolean() with a crawling (striding | striding =&gt; crawling) union</description>
+    <keywords>boolean crawling unionexpr</keywords>
+    <link section-number="19.8.8"/>
+    <link section-number="19.8.7.4"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <modified by="Abel Braaksma" on="2014-07-06" change="fixed description, expr is crawling"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-009"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-010">
+    <description>boolean() with a crawling union</description>
+    <keywords>boolean crawling unionexpr</keywords>
+    <link section-number="19.8.8"/>
+    <link section-number="19.8.7.4"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-010"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-011">
+    <description>simple motionless boolean()</description>
+    <keywords>boolean xsl:if striding motionless</keywords>
+    <link section-number="19.8.8"/>
+    <link section-number="19.8.4.21"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-011"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-012">
+    <description>boolean() filtered grounded sequence</description>
+    <keywords>boolean remove crawling grounded childless-node</keywords>
+    <link section-number="19.8.8"/>
+    <link section-number="19.8.8.15"/>
+    <link section-number="19.8.7.6"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-012"/>
+    </test>
+    <result>
+      <error code="FORG0006"/>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-013">
+    <description>boolean() filtered crawling sequence</description>
+    <keywords>boolean remove root striding</keywords>
+    <link section-number="19.8.8"/>
+    <link section-number="19.8.8.15"/>
+    <link section-number="19.8.7.6"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-013"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-014">
+    <description>boolean() with twice-filtered crawling sequence</description>
+    <keywords>boolean remove root striding motionless-predicate</keywords>
+    <link section-number="19.8.8"/>
+    <link section-number="19.8.8.15"/>
+    <link section-number="19.8.7.6"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-014"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-015">
+    <description>boolean() applied to a non-existent element</description>
+    <keywords>boolean striding empty-sequence</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-015"/>
+    </test>
+    <result>
+      <assert>/out = "false"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-016">
+    <description>boolean() applied to an existent attribute (can exit early)</description>
+    <keywords>boolean climbing attribute-axis</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-016"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-017">
+    <description>boolean() and a boolean filter</description>
+    <keywords>boolean striding motionless-predicate</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-017"/>
+    </test>
+    <result>
+      <assert>/out = "false"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-018">
+    <description>boolean() and both a positional and a boolean filter</description>
+    <keywords>boolean position striding motionless-predicate</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-018"/>
+    </test>
+    <result>
+      <assert>/out = "false"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-100">
+    <description>boolean() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>boolean mixed-posture striding grounded</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-100"/>
+    </test>
+    <result>
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-101">
+    <description>boolean() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>boolean mixed-posture striding grounded</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-101"/>
+    </test>
+    <result>
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-102">
+    <description>boolean() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>boolean mixed-posture striding grounded</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-102"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-103">
+    <description>boolean() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>boolean mixed-posture striding grounded</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-103"/>
+    </test>
+    <result>
+      <error code="FORG0006"/>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-104">
+    <description>boolean() on a sequence containing a single xs:anyURI</description>
+    <keywords>boolean base-uri striding grounded</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2014-01-06"/>
+    <modified by="Abel Braaksma" on="2014-07-06"
+      change="removed unused variable that was irrelevant to the test"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-104"/>
+    </test>
+    <result>
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-105">
+    <description>boolean() on a sequence containing a single xs:date</description>
+    <keywords>boolean mixed-posture striding grounded empty-sequence numerical-predicate FORG0006</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2014-01-06"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-105"/>
+    </test>
+    <result>
+      <error code="FORG0006"/>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-106">
+    <description>boolean() on a sequence containing a single xs:date; error is caught</description>
+    <keywords>boolean xsl:try mixed-posture striding numerical-predicate FORG0006</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2014-01-06"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-106"/>
+    </test>
+    <result>
+      <assert>/out = "caught"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-107">
+    <description>test that streaming resumes OK after a caught error</description>
+    <keywords>boolean xsl:try xsl:for-each striding FORG0006</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2014-01-06"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-107"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>every $b in /out/t satisfies $b = ('true', 'false', 'invalid')</assert>
+        <assert>count(/out/t) = 100000</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-114">
+    <description>boolean() applied to grounded element nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-114"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-115">
+    <description>boolean() applied to grounded text nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-115"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-116">
+    <description>boolean() applied to grounded attribute nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-116"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-117">
+    <description>boolean() applied to constructed attribute nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-117"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-118">
+    <description>boolean() applied to constructed element nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-118"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-119">
+    <description>boolean() applied to constructed text nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-119"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-120">
+    <description>boolean() applied to sequence starting with an atomic value and followed by a node</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <environment ref="sf-boolean-A"/>
+    <test>
+      <initial-template name="c-120"/>
+    </test>
+    <result>
+      <error code="FORG0006"/>
+    </result>
+  </test-case>
+
+  <test-case name="sf-boolean-901">
+    <description>Test of xsl:stream instruction with boolean(), filtered with non-motionless predicate.</description>
+    <keywords>boolean non-motionless-predicate XTSE3430</keywords>
+    <link section-number="19.8.8"/>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <test>
+      <stylesheet file="sf-boolean-901.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XTSE3430"/>
+    </result>
+  </test-case>
+</test-set>

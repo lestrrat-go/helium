@@ -1,0 +1,665 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="format-date">
+   <description>Tests format-date</description>
+
+   <test-case name="format-date-001">
+      <description>XSLT 2.0: test format-date: basic numeric formats</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-002">
+      <description>XSLT 2.0: test format-time: basic numeric formats</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>every $t in //tr satisfies $t/@a eq $t/@x</assert> 
+      </result>
+   </test-case>
+   
+   <test-case name="format-date-002a">
+      <description>XSLT 2.0: test format-time: basic numeric formats</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-09-19" change="Rounding rules for fractional seconds change in XPath 3.1"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-002a.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>every $t in //tr satisfies $t/@a eq $t/@x</assert> 
+      </result>
+   </test-case>
+
+   <test-case name="format-date-003">
+      <description>XSLT 2.0: test format-dateTime: basic numeric formats</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>every $t in //tr satisfies $t/@a eq $t/@x</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="format-date-003a">
+      <description>XSLT 2.0: test format-dateTime: basic numeric formats</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-09-19" change="Rounding rules for fractional seconds change in XPath 3.1"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-003a.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>every $t in //tr satisfies $t/@a eq $t/@x</assert>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-004">
+      <description>XSLT 2.0: test format-dateTime: 12-hour clock</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-004.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-005">
+      <description>XSLT 2.0: test format-date: upper-case roman numerals for the year</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-005.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-006">
+      <description>XSLT 2.0: test format-date: lower-case roman numerals for the year</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2013-10-14" change="add whitespace to expected result to make up min width = 4"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-006.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-007">
+      <description>XSLT 2.0: test format-date: numeric formatting using Thai digits</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-007.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-008">
+      <description>XSLT 2.0: test format-date: numeric formatting using Osmanya (non-BMP) digits</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-008.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-008.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-009">
+      <description>XSLT 2.0: test format-date: ISO week numbers</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <supported_calendars_in_date_formatting_functions value="ISO"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-009.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-010">
+      <description>XSLT 2.0: test format-date: ISO day number within week</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <supported_calendars_in_date_formatting_functions value="ISO"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-010.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-010.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-011">
+      <description>XSLT 2.0: test format-date: ISO week number within month</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <supported_calendars_in_date_formatting_functions value="ISO"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-011.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-011.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-012">
+      <description>XSLT 2.0: test format-time: a,b,c... numbering sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-012.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-012.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-013">
+      <description>XSLT 2.0: test format-dateTime: width specifiers</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-013.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>every $t in //t satisfies $t/@a eq $t</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="format-date-013a">
+      <description>XSLT 2.0: test format-dateTime: width specifiers</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-09-19" change="Rounding rules for fractional seconds change in XPath 3.1"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-013a.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>every $t in //t satisfies $t/@a eq $t</assert>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-014">
+      <description>XSLT 2.0: test format-dateTime: timezone in +hh:mm format</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-014.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-014.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-015">
+      <description>XSLT 2.0: test format-dateTime: timezone in GMT+xx format</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-015.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-015.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-016">
+      <description>XSLT 2.0: test format-dateTime: timezone in GMT+xx format. See Errata E24, E29</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-016.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-016.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-017">
+      <description>XSLT 2.0: test format-dateTime: timezone in GMT+xx format. See Errata E24, E29</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2019-12-09" change="See discussion in stylesheet comments"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-017.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-017.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-018">
+      <description>XSLT 2.0: test format-dateTime: timezone in GMT+xx format. See Errata E24, E29</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-018.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="format-date-018.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-019">
+      <description>XSLT 2.0: test format-date: Error XTDE1340 incorrect picture string</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-019.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+         <error code="XTDE1340"/>
+            <error code="FOFD1340"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-020">
+      <description>XSLT 2.0: test format-date: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-020.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-021">
+      <description>XSLT 2.0: test format-date: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-021.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-022">
+      <description>XSLT 2.0: test format-date: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-022.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-023">
+      <description>XSLT 2.0: test format-date: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-023.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-024">
+      <description>XSLT 2.0: test format-date: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-024.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-025">
+      <description>XSLT 2.0: test format-date: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-025.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-026">
+      <description>XSLT 2.0: test format-time: Error XTDE1340 incorrect picture string</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-026.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1340"/>
+            <error code="FOFD1340"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-027">
+      <description>XSLT 2.0: test format-time: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-027.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-028">
+      <description>XSLT 2.0: test format-time: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-028.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-029">
+      <description>XSLT 2.0: test format-time: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-029.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-030">
+      <description>XSLT 2.0: test format-time: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-030.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-031">
+      <description>XSLT 2.0: test format-time: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-031.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-032">
+      <description>XSLT 2.0: test format-time: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-032.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-033">
+      <description>XSLT 2.0: test format-time: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-033.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-034">
+      <description>XSLT 2.0: test format-time: Error XTDE1350 component in picture string not available in value</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-034.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1350"/>
+            <error code="FOFD1350"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="format-date-035">
+      <description>XSLT 2.0: test format-dateTime: Error XTDE1340 incorrect picture string</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-035.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1340"/>
+            <error code="FOFD1340"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="format-date-036">
+      <description>XSLT 2.0: test format-dateTime: Trivial strings with no date components </description>
+      <created by="Michael Kay" on="2016-02-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-036.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "  [QQQ]"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="format-date-037">
+      <description>Default namespace for calendar attribute: Saxon bug 4168</description>
+      <created by="Michael Kay after Christian Roth" on="2019-03-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-date-037.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>not(contains(/*:out, "[Calendar:"))</assert>
+      </result>
+   </test-case>
+</test-set>

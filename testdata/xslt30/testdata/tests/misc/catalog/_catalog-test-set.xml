@@ -1,0 +1,308 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+   xmlns:xs="http://www.w3.org/2001/XMLSchema" name="catalog">
+
+   <description>Tests that the test catalog is valid</description>
+
+   <environment name="catalog001">
+      <source role="." file="../../../catalog.xml" validation="strict"/>
+      <!-- Note: secondary source documents not listed. The list would only get out of date... -->
+      <schema role="source-reference" file="../../../admin/catalog-schema.xsd" xsd-version="1.0"/>
+      <schema role="secondary" file="../../../admin/xml.xsd" xsd-version="1.0"/>
+   </environment>
+   
+   <environment name="catalog002">
+      <!-- Non-schema-aware environment -->
+      <source role="." file="../../../catalog.xml"/>
+   </environment>
+
+   <environment name="catalog005">
+      <source role="." file="../../../catalog.xml" validation="strict"/>
+      <!-- Note: secondary source documents not listed. The list would only get out of date... -->
+      <schema role="source-reference" file="../../../admin/catalog-schema.xsd" xsd-version="1.1"/>
+      <schema role="secondary" file="../../../admin/xml.xsd" xsd-version="1.1"/>
+      <schema role="secondary" file="XMLSchema.xsd" xsd-version="1.1"/>
+      <schema role="source-reference" file="schema-for-xslt30.xsd" xsd-version="1.1"/>
+   </environment>
+
+   <environment name="catalog010">
+      <source role="." file="../../../catalog.xml"/>
+   </environment>
+
+   <test-case name="catalog-001">
+      <description>Test that the test catalog is valid with respect to its schema</description>
+      <keywords>catalog-self-test schema-validity xsl:import-schema</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2019-03-10" change="Bug #30414: remove global schema-aware flag, mark this test locally as schema-aware" />
+      <environment ref="catalog001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-001.xsl"/>
+      </test>
+      <result>
+         <assert>/ok[not(*)]</assert>
+      </result>
+   </test-case>
+
+   <test-case name="catalog-002">
+      <description>Test set names in the master catalog must match those in the test sets
+         themselves</description>
+      <keywords>catalog-self-test master-catalog</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2019-03-10" change="Bug #30414: remove global schema-aware flag, this test does not require schema-aware" />
+      <modified by="Micahel Kay" on="2019-04-10" change="Use a non-schema-aware environment"/>
+      <environment ref="catalog002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-002.xsl"/>
+      </test>
+      <result>
+         <assert>not(/ok/mismatch)</assert>
+      </result>
+   </test-case>
+
+   <test-case name="catalog-003">
+      <description>Test case names must be unique</description>
+      <keywords>catalog-self-test unique-testcase-names</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2019-03-10" change="Bug #30414: remove global schema-aware flag, this test does not require schema-aware" />
+      <modified by="Micahel Kay" on="2019-04-10" change="Use a non-schema-aware environment"/>
+      <environment ref="catalog002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-003.xsl"/>
+      </test>
+      <result>
+         <assert>not(/out/duplicate)</assert>
+      </result>
+   </test-case>
+
+   <test-case name="catalog-004">
+      <description>assert-xml must not be used where a test requests indent="yes"</description>
+      <keywords>catalog-self-test assert-xml-usage-check</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2012-12-11" change="add dependency on XML 1.1, see bug 20344"/>
+      <modified by="Abel Braaksma" on="2019-03-10" change="Bug #30414: remove global schema-aware flag, this test does not require schema-aware" />
+      <modified by="Micahel Kay" on="2019-04-10" change="Use a non-schema-aware environment"/>
+      <environment ref="catalog002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="XML_1.1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-004.xsl"/>
+      </test>
+      <result>
+         <assert>not(/out/indenting)</assert>
+      </result>
+   </test-case>
+
+   <test-case name="catalog-005">
+      <description>Test that all non-error stylesheets are valid against the schema for
+         stylesheets</description>
+      <keywords>catalog-self-test tests-stylesheet-schema-validity xsl:import-schema</keywords>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <modified by="Abel Braaksma" on="2019-03-10" change="Bug #30414: removed global schema-aware flag, local flag stays, this test requires schema-aware" />
+      <modified by="Michael Kay" on="2021-06-14" change="Add XML 1.1 dependency"/>
+      <environment ref="catalog005"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+         <feature value="XML_1.1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-005.xsl"/>
+         <param name="supports_xml1.1" static="yes" select="true()"/>
+      </test>
+      <result>
+         <!--<assert>not(/out/invalid)</assert>-->
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="catalog-005b">
+      <description>Variant of catalog-005 for processors that don't support XML 1.1</description>
+      <created by="Michael Kay" on="2021-06-14"/>
+      <environment ref="catalog005"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+         <feature value="XML_1.1" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-005.xsl"/>
+         <param name="supports_xml1.1" static="yes" select="false()"/>
+      </test>
+      <result>
+         <!--<assert>not(/out/invalid)</assert>-->
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="catalog-006">
+      <description>Test that all XSLT element names in non-error stylesheets satisfy
+         element-available()</description>
+      <keywords>catalog-self-test element-available</keywords>
+      <created by="Michael Kay" on="2015-06-30"/>
+      <modified by="Abel Braaksma" on="2019-03-10" change="Bug #30414: removed global and local schema-aware flag, test does not require schema-aware feature" />
+      <modified by="Michael Kay" on="2019-04-10" change="Use a non-schema-aware environment"/>
+      <modified by="Michael Kay" on="2021-06-14" change="Add XML 1.1 dependency"/>
+      <modified by="Michael Kay" on="2022-07-26" 
+         change="Allow for element-available('xsl:import-schema')=false if processor is not schema-aware"/>
+      <environment ref="catalog002"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="XML_1.1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-006.xsl"/>
+         <param name="supports_xml1.1" static="yes" select="true()"/>
+      </test>
+      <result>
+         <assert>not(/out/unavailable)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="catalog-006b">
+      <description>Variant of catalog-006 for processors with no XML 1.1 support</description>
+      <created by="Michael Kay" on="2021-06-14"/>
+      <modified by="Michael Kay" on="2022-07-26" 
+         change="Allow for element-available('xsl:import-schema')=false if processor is not schema-aware"/>
+      <environment ref="catalog002"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="XML_1.1" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-006.xsl"/>
+         <param name="supports_xml1.1" static="yes" select="false()"/>
+      </test>
+      <result>
+         <assert>not(/out/unavailable)</assert>
+      </result>
+   </test-case>
+
+   <test-case name="catalog-007">
+      <description>Test that all element/attribute pairs permitted by the schema actually appear in
+         non-error stylesheets</description>
+      <keywords>catalog-self-test element-available</keywords>
+      <created by="Michael Kay" on="2015-09-07"/>
+      <modified by="Abel Braaksma" on="2019-03-10" change="Bug #30414: removed global and local schema-aware flag (test can be run with schema-for-xslt30.scm which is pre-generated by Saxon, but test itself requires no schema-aware feature)" />
+      <!-- Note: source files not listed -->
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-007.xsl"/>
+         <initial-template name="showAbsentPairs"/>
+      </test>
+      <result>
+         <assert>/out/absent = ''</assert>
+      </result>
+   </test-case>
+
+   <test-case name="catalog-008">
+      <description>Find discrepancies between element/attribute pairs permitted by the schema and
+         those permitted by the element syntax proformas</description>
+      <keywords>catalog-self-test element-available</keywords>
+      <created by="Michael Kay" on="2015-09-07"/>
+      <modified by="Abel Braaksma" on="2019-03-10" change="Bug #30414: global schema-aware flag removed, test does not require schema-aware feature" />
+      <!-- Note: source files not listed -->
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-008.xsl"/>
+         <initial-template name="showDifferences"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/absentFromSchema = ''</assert>
+            <assert>/out/absentFromSyntax = ''</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="catalog-009">
+      <description>Validate all examples in the spec</description>
+      <created by="Michael Kay" on="2015-09-07"/>
+      <modified by="Abel Braaksma" on="2019-03-10" change="Bug #30414: remove global schema-aware flag, leave local flag, test requires schema-aware feature" />
+      <!-- Note: source files not listed -->
+      <environment ref="catalog005"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>empty(/out/error)</assert>
+      </result>
+   </test-case>
+
+   <test-case name="catalog-010">
+      <description>Test that all non-error stylesheets are valid against the RelaxNG schema for
+         stylesheets</description>
+      <keywords>catalog-self-test tests-stylesheet-schema-validity relaxng rng</keywords>
+      <created by="Charles Foster" on="2016-08-25"/>
+      <modified by="Michael Kay" on="2016-09-27" change="Add dependencies; use static base URI; add match='/'"/>
+      <modified by="Charles Foster" on="2017-01-26" change="Do not try to validate XML 1.1 files."/>
+      <modified by="Abel Braaksma" on="2019-03-10" change="Bug #30414: remove global schema-aware flag, this test does not require schema-aware" />
+      <environment ref="catalog010"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <extension-function value="Q{http://relaxng.org/ns/structure/1.0}schema-report#1"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-010.xsl"/>
+      </test>
+      <result>
+         <assert>not(/out/invalid)</assert>
+      </result>
+   </test-case>
+   
+   <!--<test-case name="catalog-011">
+      <description>Gather statistics on the number of test cases</description>
+      <created by="Michael Kay" on="2017-01-13"/>
+      <environment ref="catalog001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>-->
+   
+   <test-case name="catalog-012">
+      <description>A stylesheet using version="1.0" must have a dependency on backwards_compatibility</description>
+      <keywords>catalog-self-test assert-xml-usage-check</keywords>
+      <created by="Michael Kay" on="2017-04-29"/>
+      <modified by="Abel Braaksma" on="2019-03-10" change="Bug #30414: remove global schema-aware flag, this test does not require schema-aware" />
+      <modified by="Michael Kay" on="2019-06-28" change="Switch to using non-schema-aware test environment" />
+      <environment ref="catalog002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="XML_1.1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="catalog-012.xsl"/>
+      </test>
+      <result>
+         <assert>not(/out/backwards)</assert>
+      </result>
+   </test-case>
+
+</test-set>

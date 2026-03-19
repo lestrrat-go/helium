@@ -1,0 +1,580 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="construct-node">
+   
+   <description>Tests instructions that create text, comment, processing-instruction etc nodes</description>
+   
+   <environment name="constr01">
+      <source role="." file="constr01.xml"/>
+   </environment>
+   <environment name="nodeconstruct001">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="nodeconstruct003">
+      <source role=".">
+         <content><![CDATA[<doc>In the world of XSLT, nothing is taken as granted.</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="nodeconstruct004">
+      <source role="." file="nodeconstruct004.xml"/>
+   </environment>
+   <environment name="nodeconstruct006">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<book>b1</book>
+	<book>b2</book>
+	<book>b3</book>
+	<book>b4</book>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="nodeconstruct023">
+      <source role=".">
+         <content><![CDATA[<doc>
+<ch type="unknown"> my document
+</ch>
+<!-- This document has a valuable comment!! -->
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="construct-node-001">
+      <description>Test "constructor functions"</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="constr01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><true>true</true></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-002">
+      <description>Test "constructor functions"</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="constr01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><true>true</true><true>true</true><true>true</true><true>true</true></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-003">
+      <description>Test "constructor functions"</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="constr01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><true>true</true></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-004">
+      <description>Test "constructor functions"</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="constr01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><true>true</true><true>true</true><true>true</true></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-005">
+      <description>Test "constructor functions"</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="constr01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><true>true</true><true>true</true><true>true</true></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-006">
+      <description>Test case that uses some of the String functions to create the text node.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+What**a**great**test**case**...
+TIME
+once
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-007">
+      <description>Test case to verify that in the generated comment node, the processor inserts a space after any occurrence of hypen that is followed by another hyphen or that ends the comment.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><!-- Testing the double - - -->
+<!-- Testing the single - -->
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-008">
+      <description>Test case to verify that any consecutive sequence of strings within the result sequence is converted to a single text node, whose string value contains the content of each of the strings in turn, with a single space (#x20) used as a separator between successive strings. Test case uses a sequence of literal text in the select attribute of an xsl:value-of instruction with a deafult separator.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Level1 Level2 level3 level4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-009">
+      <description>Test case to verify that zero-length text nodes are removed when they appear in a sequence that is used to form the content of a node.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Level 1Level 2level 3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-010">
+      <description>Test case that uses xsl:value-of to create text node while the value of the new text node is defined by the sequence constructor rather than the select attribute. Test case uses Literal text in the sequence constructor of an xsl:value-of instruction with a default separator.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> What happens if there is no select attribute?</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-011">
+      <description>Test case that uses the separator attribute on an xsl:value-of to separate adjacent items in the result sequence.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1_2_3_4_5 2*_*3*_*4*_*5*_*6</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-012">
+      <description>Test of the default separator (Single space if using select or zero-length string when the content is specified using sequence constructor) on an xsl:value of for creating text nodes.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12345 2 3 4 5 6</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-013">
+      <description>Test case to verify that separators are never inserted between adjacent text nodes.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1*2*3*4*aababcabcd*5*6*7</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-014">
+      <description>Test case that uses xsl:comment to create two comment nodes.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><!--Inside select attribute--><!--Inside the sequence constructor--></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-015">
+      <description>Test case that uses xsl:processing-instruction to create two processing-instruction nodes.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><?pi_1 Inside select attribute?><?pi_2 Inside the sequence constructor?></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-016">
+      <description>Test case that uses xsl:call-template inside an xsl:value-of, the called template itself uses xsl:value of.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>myVar</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-017">
+      <description>Test case to verify that when there are double hyphens in a comment, a space is inserted after the first hyphen.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><!--- -Valid comment- - --></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-018">
+      <description>Test case using xsl:value-of to verify that Zero-length text nodes within the result sequence are removed.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+Old--est-att--rib-ute
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-019">
+      <description>Test case to verify that Zero-length text nodes within the xsl:processing-instruction are removed.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<?pro Old**est*att**rib*ute?>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-020">
+      <description>Test case to verify that Zero-length text nodes within the xsl:comment are removed.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<!--Old**est*att**rib*ute-->
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-021">
+      <description>Test case to verify that the leading whitespace from the string value of a PI are striped.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<?pi_1 Inside select attribute.?>
+<?pi_2 Inside the sequence constructor.?>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-022">
+      <description>Test case to verify that If the result of evaluating the content of the xsl:processing-instruction contains the string ?&gt;, this string is modified by inserting a space between the ? and &gt; characters.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><?pi_1 What if we have ? >?><?pi_2 What if we have ? >?></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-023">
+      <description>Test case that uses xsl:value of to create text nodes by casting the value of variables, the variable is of type integer.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>global var10</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-024">
+      <description>Test of instructions inside xsl:text</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-024.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-025">
+      <description>Test case that uses xsl:apply-templates inside an xsl:comment instruction to convert the source tree content into an output comment.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct003"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><!--In the world of XSLT, nothing is taken as granted.--></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-026">
+      <description>Test case that uses processing-instruction() node test in the match attribute of a template and use the content of the processing instructions as the value of new elements.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct004"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="construct-node-026.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-027">
+      <description>Test case to verify that there is only one text node created for the literal text.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<x>1</x>
+<y>1</y>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-028">
+      <description>Test case to verify that for an xsl:comment instruction the text nodes specified in the sequence constructor are concatenated with no separator.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct006"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><!--b1b2b3b4--></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-029">
+      <description>Test case to verify that if the select attribute is present for an xsl:comment instruction the strings specified as its value are concatenated with a single space between adjacent strings.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct006"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><!--b1 b2 b3 b4--><!--a1  a2 a3--></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-030">
+      <description>Test case using xsl:value-of inside and xsl:comment instruction to specify separator for comment text.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct006"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><!--b1**b2**b3**b4--><!--b1b2b3b4--></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-031">
+      <description>Test case to verify that the sequence is atomized inside xsl:value-of instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct023"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-031.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+ my document
+*** This document has a valuable comment!! ***1.2345679***P20DT3H
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-032">
+      <description>Test case to verify that the sequence is atomized inside xsl:comment instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct023"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-032.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<!-- my document
+  This document has a valuable comment!!  1.2345679 P20DT3H-->
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="construct-node-033">
+      <description>Test case to verify that the sequence is atomized inside xsl:processing-instruction instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="nodeconstruct023"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<?pro  my document
+  This document has a valuable comment!!  1.2345679 P20DT3H?>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="construct-node-034">
+      <description>XSLT 3.0 allows an empty xsl:value-of instruction with no content</description>
+      <created by="Michael Kay" on="2015-08-26"/>
+      <environment ref="nodeconstruct023"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="construct-node-034.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out count="1" length="0" is-text="true"/>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

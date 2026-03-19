@@ -1,0 +1,453 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="context-item">
+   <description>Tests xsl:context-item</description>
+   <environment name="context-item-A">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+   </dependencies>
+
+   
+   <test-case name="context-item-001">
+      <description>Test xsl:context-item with required type satisfied</description>
+      <created by="Michael Kay" on="2014-10-09"/>    
+      <test>
+         <stylesheet file="context-item-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "1 2 3 4 5"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-002">
+      <description>
+         Test xsl:context-item with required type not satisfied
+         Also use comments in the as attribute - test for bug 29814
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <modified by="Michael Kay" on="2016-09-30" change="Add comments to item-type attribute - test for bug 29814"/>
+      <test>
+         <stylesheet file="context-item-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTTE0590"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-003">
+      <description>
+         Test xsl:context-item with required type satisfied.        
+         Also use comments in the as attribute - test for bug 29814
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <modified by="Michael Kay" on="2016-09-30" change="Add comments to item-type attribute - test for bug 29814"/>
+      <environment ref="context-item-A"/>    
+      <test>
+         <stylesheet file="context-item-003.xsl"/>
+      </test>
+      <result>
+         <assert>/out/doc = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-004">
+      <description>Test xsl:context-item with required type not satisfied</description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <environment ref="context-item-A"/>    
+      <test>
+         <stylesheet file="context-item-004.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0590"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-005">
+      <description>
+        Test xsl:context-item with required type not satisfied.
+        No atomization occurs.
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <environment ref="context-item-A"/>    
+      <test>
+         <stylesheet file="context-item-005.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0590"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-006">
+      <description>
+        Test xsl:context-item with required context item, but none is supplied.
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <test>
+         <stylesheet file="context-item-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTTE3090"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-007">
+      <description>
+        Test xsl:context-item with legal whitespace.
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <test>
+         <stylesheet file="context-item-007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>normalize-space(/out) = "4 5 6 7 8"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-008">
+      <description>
+        Test xsl:context-item with use = optional
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <test>
+         <stylesheet file="context-item-008.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "1 2 3 4 5 6"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-009">
+      <description>
+        Test xsl:context-item with use = optional defaulted
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <test>
+         <stylesheet file="context-item-009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "1 2 3 4 5 6"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-010">
+      <description>
+        Test xsl:context-item with use = absent plus a required type. 
+        Spec unclear see bug 27014.
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <modified by="Michael Kay" on="2015-01-26" change="keyword change: prohibited -> absent"/>
+      <modified by="Michael Kay" on="2015-07-29" change="change expected result in response to decision on bug 27014"/>
+      <modified by="Abel Braaksma" on="2019-02-27" change="Change expected error from XTSE3089 to XTSE3088 (the former is for xsl:global-context-item)" />
+      <test>
+         <stylesheet file="context-item-010.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3088"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-011">
+      <description>
+        Test xsl:context-item with use = absent; supplied context item is ignored. 
+        Not an error.
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <modified by="Michael Kay" on="2015-01-26" change="keyword change: prohibited -> absent"/>
+      <test>
+         <stylesheet file="context-item-011.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "6 6 6 6 6"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-012">
+      <description>
+        Test xsl:context-item on initial template (OK). 
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <environment ref="context-item-A"/>
+      <test>
+         <stylesheet file="context-item-012.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out/doc = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-013">
+      <description>
+        Test xsl:context-item on initial template (wrong type). 
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <environment ref="context-item-A"/>
+      <test>
+         <stylesheet file="context-item-013.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTTE0590"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-014">
+      <description>
+        Test xsl:context-item on initial template (not supplied). 
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <test>
+         <stylesheet file="context-item-014.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTTE3090"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-015">
+      <description>
+        Test xsl:context-item with apply-templates (OK). 
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <environment ref="context-item-A"/>
+      <test>
+         <stylesheet file="context-item-015.xsl"/>
+      </test>
+      <result>
+         <assert>/out/doc = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-016">
+      <description>
+        Test xsl:context-item with apply-templates use="absent". 
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <modified by="Michael Kay" on="2015-01-26" change="keyword change: prohibited -> absent"/>
+      <modified by="Michael Kay" on="2015-10-16" change="static error: If the containing xsl:template element has no name attribute then the only permitted value is 'required'."/>
+      <environment ref="context-item-A"/>
+      <test>
+         <stylesheet file="context-item-016.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-017">
+      <description>
+        Test xsl:context-item with next-match use="absent". 
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <modified by="Michael Kay" on="2015-01-26" change="keyword change: prohibited -> absent"/>
+      <modified by="Michael Kay" on="2015-10-16" change="add a template name so use='absent' becomes legal"/>     
+      <environment ref="context-item-A"/>
+      <test>
+         <stylesheet file="context-item-017.xsl"/>
+      </test>
+      <result>
+         <error code="XPDY0002"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-018">
+      <description>
+        Test xsl:context-item with next-match use="absent". OK (context item not used) 
+      </description>
+      <created by="Michael Kay" on="2014-10-09"/>
+      <modified by="Michael Kay" on="2015-01-26" change="keyword change: prohibited -> absent"/>
+      <modified by="Michael Kay" on="2015-10-16" change="add a template name so use='absent' becomes legal"/>     
+      <environment ref="context-item-A"/>
+      <test>
+         <stylesheet file="context-item-018.xsl"/>
+      </test>
+      <result>
+         <assert>/out/in/doc = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-019">
+      <description>
+         Test xsl:context-item with xml:space="preserve"
+      </description>
+      <created by="Michael Kay" on="2017-11-02"/>  
+      <environment ref="context-item-A"/>
+      <test>
+         <stylesheet file="context-item-019.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "  " (:2 spaces only:)</assert>
+      </result>
+   </test-case>
+  
+   
+   <test-case name="context-item-901">
+      <description>Occurrence indicator not allowed in xsl:context-item/@as</description>
+      <created by="Michael Kay" on="2014-10-09"/>    
+      <test>
+         <stylesheet file="context-item-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-902">
+      <description>Unknown type in xsl:context-item/@as</description>
+      <created by="Michael Kay" on="2014-10-09"/> 
+      <modified by="Michael Kay" on="2018-09-25" change="allow a more specific error code"/>
+      <test>
+         <stylesheet file="context-item-902.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0020"/>
+            <error code="XPST0051"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-903">
+      <description>Unknown type in xsl:context-item/@as</description>
+      <created by="Michael Kay" on="2014-10-09"/>    
+      <modified by="Michael Kay" on="2018-09-25" change="allow a more specific error code"/>
+      <test>
+         <stylesheet file="context-item-903.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0020"/>
+            <error code="XPST0008"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-904">
+      <description>Invalid value in xsl:context-item/@use</description>
+      <created by="Michael Kay" on="2014-10-09"/>    
+      <test>
+         <stylesheet file="context-item-904.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-905">
+      <description>Misplaced xsl:context-item</description>
+      <created by="Michael Kay" on="2014-10-09"/>    
+      <test>
+         <stylesheet file="context-item-905.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-906">
+      <description>Misplaced xsl:context-item</description>
+      <created by="Michael Kay" on="2014-10-09"/>    
+      <test>
+         <stylesheet file="context-item-906.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-907">
+      <description>Misplaced xsl:context-item</description>
+      <created by="Michael Kay" on="2014-10-09"/>    
+      <test>
+         <stylesheet file="context-item-907.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-908">
+      <description>Misplaced xsl:context-item</description>
+      <created by="Michael Kay" on="2014-10-09"/>    
+      <test>
+         <stylesheet file="context-item-908.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-909">
+      <description>Duplicated xsl:context-item</description>
+      <created by="Michael Kay" on="2014-10-09"/>    
+      <test>
+         <stylesheet file="context-item-909.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-910">
+      <description>xsl:context-item/@select is not allowed</description>
+      <created by="Michael Kay" on="2014-10-09"/>    
+      <test>
+         <stylesheet file="context-item-910.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-911">
+      <description>xsl:context-item specifying a more precise type than the match pattern; type error detectable statically</description>
+      <created by="Michael Kay" on="2018-05-11"/>    
+      <test>
+         <stylesheet file="context-item-911.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPTY0019"/>
+      </result>
+   </test-case>
+   
+   <test-case name="context-item-912">
+      <description>xsl:context-item inconsistent with the match pattern; type error detectable statically</description>
+      <created by="Michael Kay" on="2018-05-11"/>    
+      <modified by="Abel Braaksma" on="2019-02-27" change="The type-error raised as a result of xsl:context-item should be XTTE0590, corrected accordingly"></modified>
+      <test>
+         <stylesheet file="context-item-912.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTTE0590"/>
+      </result>
+   </test-case>
+
+
+</test-set>   

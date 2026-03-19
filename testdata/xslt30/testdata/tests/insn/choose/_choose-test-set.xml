@@ -1,0 +1,980 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="choose">
+   <description>Tests xsl:if and xsl:choose</description>
+   <environment name="choose-01">
+      <source role="." file="choose-01.xml"/>
+   </environment>
+   <environment name="choose-02">
+      <source role="." file="choose-02.xml"/>
+   </environment>
+   <environment name="choose-03">
+      <source role="." file="choose-03.xml"/>
+   </environment>
+   <environment name="choose-04">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <foo/>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="choose-05">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="choose-06">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="choose-07">
+      <source role=".">
+         <content><![CDATA[ 
+<letters>
+  <letter>a</letter>
+  <letter>b</letter>
+  <letter>c</letter>
+  <letter>b</letter>
+  <letter>h</letter>
+</letters>]]></content>
+      </source>
+   </environment>
+   <environment name="choose-08">
+      <source role="." file="choose-08.xml"/>
+   </environment>
+   <environment name="choose-09">
+      <source role="." file="choose-09.xml"/>
+   </environment>
+   <environment name="choose-10">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <foo>5</foo>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="choose-11">
+      <source role=".">
+         <content><![CDATA[ 
+<letters>
+  <letter>a</letter>
+  <letter>b</letter>
+  <letter>c</letter>
+  <letter>f</letter>
+  <letter>h</letter>
+</letters>]]></content>
+      </source>
+   </environment>
+   <environment name="choose-12">
+      <source role="." file="choose-12.xml"/>
+   </environment>
+   <environment name="choose-13">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <foo>
+    <test/>
+  </foo>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="choose-14">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <composer name="mozart"/>
+  <composer name="beethoven"/>
+  <composer name="elgar"/>
+  <composer name="schubert"/>
+  <composer name="bach"/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="choose-15">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<elem xmlns="http://example.com/ns1" />
+	<elem xmlns="http://example.com/ns2" />
+	<elem/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="choose-16">
+      <source role=".">
+         <content><![CDATA[<doc>
+<a>0</a>
+<b>0</b>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="choose-17">
+      <source role=".">
+         <content><![CDATA[<doc>foobar</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="choose-18">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="choose-19">
+      <source role="." file="choose-19.xml"/>
+   </environment>
+
+   <test-case name="choose-0101">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+Male: John
+Female: Jane
+Who knows?: Hermaphrodite
+Who knows?: Prince</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0102">
+      <description>tests a Saxon 8.3 bug in optimization of empty choose branches</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><male/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0103">
+      <description>type checking of empty choose branches</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0104">
+      <description>type checking of empty choose branches</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0104.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0505"/>
+      </result>
+   </test-case>
+   
+   <test-case name="choose-0105">
+      <description>Potential optimization (in Saxon, to a switch). Saxon bug 3261</description>
+      <created by="Michael Kay" on="2015-06-12"/>
+      <environment ref="choose-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0105.xsl"/>
+      </test>
+      <result>
+         <assert>/out/*:circle[@r="0" and @cx="10" and @cy="20"]</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="choose-0106">
+      <description>Same comparison done repeatedly with different namespace contexts</description>
+      <created by="Michael Kay" on="2018-07-31"/>
+      <environment ref="choose-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0106.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'Three'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="choose-0107">
+      <description>Same comparison done repeatedly with different default collations</description>
+      <created by="Michael Kay" on="2018-07-31"/>
+      <environment ref="choose-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0107.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'Two'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0201">
+      <description>Wben test occurs with attribute node, with no matches and is missing otherwise clause. No expected output.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-02"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="choose-0202">
+      <description>Comparison of untyped atomic to integer. Saxon optimization bug 4738</description>
+      <created by="Michael Kay" on="2020-09-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<message><client><merchant-limit due-limit="0.0000" days-limit="5" block-strategy="A"/></client></message>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0301">
+      <description>Test for "when" happens on nonexsisent attribute node. No errors or output expected.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0401">
+      <description>Test xsl:when by itself, success.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0402">
+      <description>Test two xsl:when's without xsl:otherwise, one succeeding.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0403">
+      <description>Test when by with xsl:otherwise, fail on when.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0403.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0404">
+      <description>Test when by with xsl:otherwise, success on when.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0404.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0501">
+      <description>Test two xsl:when's without xsl:otherwise, both failing.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-05"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0502">
+      <description>Test when by itself, fail.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-05"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0502.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0601">
+      <description>Purpose: Test xsl:if with simplistic boolean expression.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>number string</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0602">
+      <description>Test xsl:if with test expression that converts to boolean true.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0602.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>StringConstant</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0603">
+      <description>Purpose: Test xsl:if with equality of result tree fragments.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0603.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Success1Success2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0604">
+      <description>DataManipulation001 in NIST suite Purpose: Test xsl:if inside xsl:when. Also (MHK) tests xml:space on xsl:choose</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0604.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+        
+          Test executed successfully.
+        
+      </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0605">
+      <description>DataManipulation008 in NIST suite Purpose: Test a function (round) in the test attribute.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0605.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0606">
+      <description>Test case in which the operand of the test attribute is a singleton value of type xs:string, xs:untypedAtomic, fn:boolean returns false if the operand value has zero length; otherwise it returns true.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0606.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>v1 value </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0607">
+      <description>Test case in which the operand of the test attribute in an xsl:if instruction is a sequences of node, zero-length strings and numeric zeroes in one instance and a sequence of a node and two boolean values, in another case.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0607.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<a>v1 value </a>
+<b>v2 value</b>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0608">
+      <description>Test case in which the test attribute of an xsl:if instruction is a sequence of nodes and atomic values.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0608.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>text</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0609">
+      <description>Test case to verify that the test attribute of an xsl:if instruction results to 'false' where the operand is an empty sequence.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0609.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0701">
+      <description>Test xsl:if with test involving current node value.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Found b  Found b  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0702">
+      <description>Test xsl:if with boolean function and test of current node.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0702.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>not_b not_b not_b </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0801">
+      <description>Purpose: Test xsl:if with test of subelement value.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-08"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Harry, he is 45 years old.
+Tom, he is 30 years old.
+Dick, he is 40 years old.
+Paulette, she is 38 years old.
+Peter, he is 34 years old.
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-0901">
+      <description>Purpose: Test of compound conditions within xsl:if.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-09"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+
+
+John Smith
+Joe Smith
+
+
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1001">
+      <description>Test that only the content of the first matching xsl:when is instantiated.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1101">
+      <description>Test that xsl:if can be nested.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Found b!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1201">
+      <description>Test that xsl:choose can be nested. When on a C, look ahead When on a D, look ahead</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>TREE: *A+B+B+C-B+C+D|*A+B+C:C:C+D+E-*A+B+C+D:D+E-D+E-C:C+D-C-B+</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="choose-1202">
+      <description>An optimizable xsl:choose</description>
+      <created by="Michael Kay" on="2015-11-05"/>
+      <environment ref="choose-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1202.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "*A*B*B*C*B*C*D*A*B*C*C*C*D*E*A*B*C*D*D*E*D*E*C*C*D*C*B*"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="choose-1203">
+      <description>An optimizable xsl:choose</description>
+      <created by="Michael Kay" on="2015-11-05"/>
+      <environment ref="choose-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1203.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "**HTH*HXH*H*H*H*H*HXHXH*H*H*H*H*H*H*H*H*H*H*HXH*H*HXHTH"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="choose-1204">
+      <description>An optimizable xsl:choose using case-blind collation</description>
+      <created by="Michael Kay" on="2015-11-05"/>
+      <environment ref="choose-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1204.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "*A*B*B*C*B*C*D*A*B*C*C*C*D*E*A*B*C*D*D*E*D*E*C*C*D*C*B*"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1301">
+      <description>Purpose: Test two xsl:when elements using a variable in the test.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Found the first one.</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1401">
+      <description>DataManipulation002 in NIST suite Purpose: Test xsl:if inside xsl:otherwise.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="choose-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully.</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1501">
+      <description>Test case that uses the standard attribute xpath-default-namespace on an xsl:if instruction and the test is a path expression.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-15"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>11</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1502">
+      <description>Test case that uses the standard attribute xpath-default-namespace on an xsl:choose instruction and the test is a path expression.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-15"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1502.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>10</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1601">
+      <description>Test case in which the operand of the test attribute is a singleton value of any numeric type or derived from a numeric type, fn:boolean returns false if the operand value is NaN or is numerically equal to zero; otherwise it returns true.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>v2 value</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1701">
+      <description>Test case that uses if expression in the test attribute of an xsl:if and xsl:when instructions.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1702">
+      <description>Test case that uses if expression in the test attribute of an xsl:when instructions.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1702.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1703">
+      <description>Test case in which the operand of the test attribute of an xsl:when instruction is a singleton value of type xs:untypedAtomic, fn:boolean returns false if the operand value has zero length; otherwise it returns true.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1703.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>v1 value </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1704">
+      <description>Test case in which the operand of the test attribute of an xsl:when instruction is a singleton value of type xs:string, fn:boolean returns false if the operand value has zero length; otherwise it returns true.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1704.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>value in otherwise</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1705">
+      <description>Test case in which the operand of the test attribute of an xsl:when instruction is a singleton value of type xs:string, fn:boolean returns false if the operand value has zero length; otherwise it returns true.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1705.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<a>v1 value </a>
+<b>v2 value</b>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1706">
+      <description>Test case in which the operand of the test attribute in an xsl:when instruction is a singleton value of any numeric type or derived from a numeric type, fn:boolean returns false if the operand value is NaN or is numerically equal to zero; otherwise it returns true.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1706.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>v2 value</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1801">
+      <description>Test case where the xsl:if instruction does not contain the required test attribute.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1801.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1802">
+      <description>Test case where the xsl:when instruction is missing the required test attribute.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1802.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1803">
+      <description>Test case in which xsl:otherwise comes before xsl:when instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1803.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1804">
+      <description>Test case in which there are two xsl:otherwise for an xsl:choose instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1804.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1901">
+      <description>Test "if" - true branch</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1902">
+      <description>Test "if" - false branch</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1902.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1903">
+      <description>Test "if" - true branch; false branch must not be evaluated</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1903.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1904">
+      <description>Test "if" - false branch; true branch must not be evaluated</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1904.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="choose-1905">
+      <description>Test "if" - true branch contains an if</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="choose-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="choose-1905.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true-false</out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

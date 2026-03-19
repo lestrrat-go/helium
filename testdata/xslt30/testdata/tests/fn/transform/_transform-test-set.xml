@@ -1,0 +1,149 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="transform">
+   <description>Tests transform() function in XSLT 3.0 (requires XPath 3.1)</description>
+   
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="XPath_3.1"/>
+      <feature value="higher_order_functions"/>
+   </dependencies>
+
+   <test-case name="transform-001">
+      <description>Returns error, module is not available (non-existent file)</description>
+      <created by="Michael Kay" on="2018-04-18"/>           
+      <test>
+         <stylesheet file="transform-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FOXT0002"/>
+      </result>
+   </test-case>
+   
+   <test-case name="transform-002">
+      <description>Simple successful transformation</description>
+      <created by="Michael Kay" on="2018-04-18"/>           
+      <test>
+         <stylesheet file="transform-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out/in = 59</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="transform-003">
+      <description>fn:transform() returns a function which is then called in the calling stylesheet</description>
+      <created by="Michael Kay" on="2018-04-18"/>           
+      <test>
+         <stylesheet file="transform-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 3.142</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="transform-004">
+      <description>fn:transform() in a static expression returns a function</description>
+      <created by="Michael Kay" on="2018-04-18"/>           
+      <test>
+         <stylesheet file="transform-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 42</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="transform-005">
+      <description>fn:transform() invoking a named package</description>
+      <created by="Michael Kay" on="2018-04-25"/>
+      <modified by="Michael Kay" on="2019-03-06" change="make entry point (of dynamic stylesheet) public"/>
+      <environment>
+         <package file="transform-005a.xsl" role="secondary" uri="http://transform-005a/" package-version="1.0.2"/>
+      </environment>
+      <test>
+         <stylesheet file="transform-005.xsl"/>
+         <initial-template name="main"/>        
+      </test>
+      <result>
+         <assert>/out/in</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="transform-006">
+      <description>fn:transform() selecting a named package by version range</description>
+      <created by="Michael Kay" on="2018-04-25"/>
+      <modified by="Michael Kay" on="2019-03-06" change="make entry point (of dynamic stylesheet) public"/>
+      <environment>
+         <package file="transform-006a.xsl" role="secondary" uri="http://transform-006a/" package-version="1.0.5"/>
+         <package file="transform-006b.xsl" role="secondary" uri="http://transform-006a/" package-version="2.0"/>
+      </environment>
+      <test>
+         <stylesheet file="transform-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out/in = '1.0.5'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="transform-007">
+      <description>fn:transform() calling a named template that is private</description>
+      <created by="Michael Kay" on="2019-03-06"/>
+      <environment>
+         <package file="transform-006a.xsl" role="secondary" uri="http://transform-006a/" package-version="1.0.5"/>
+         <package file="transform-006b.xsl" role="secondary" uri="http://transform-006a/" package-version="2.0"/>
+      </environment>
+      <test>
+         <stylesheet file="transform-007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE0040"/>
+      </result>
+   </test-case>
+   
+   <test-case name="transform-008">
+      <description>fn:transform() calling a transformation that executes xsl:result-document</description>
+      <created by="Michael Kay" on="2020-11-22"/>
+      <test>
+         <stylesheet file="transform-008.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/result/primary/a = '892'</assert>
+            <assert>/result/secondary/out = '479'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="transform-009">
+      <description>fn:transform() calling a transformation that executes xsl:result-document (Saxon bug 4959)</description>
+      <created by="Michael Kay" on="2021-04-03"/>
+      <modified by="Michael Kay" on="2025-09-22" change="order of results (items in a map) can vary"/>
+      <environment>
+         <source role="." file="transform-001.xsl"/> <!-- Any source document will do -->
+      </environment>
+      <test>
+         <stylesheet file="transform-009.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-serialization><![CDATA[<?xml version="1.0" encoding="UTF-8"?><principal>main output</principal>]]></assert-serialization>
+            <assert-result-document uri="secondary-outputs.xml">
+               <any-of>
+                  <assert-serialization><![CDATA[<secondary-outputs>text doc <secondary2>xml doc</secondary2></secondary-outputs>]]></assert-serialization>
+                  <assert-serialization><![CDATA[<secondary-outputs><secondary2>xml doc</secondary2> text doc</secondary-outputs>]]></assert-serialization>
+               </any-of>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+   
+
+
+</test-set>

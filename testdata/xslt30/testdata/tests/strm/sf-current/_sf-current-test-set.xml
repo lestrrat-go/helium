@@ -1,0 +1,172 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-current">
+   <description>current() function with streaming</description>
+   
+   <environment name="sf-current-A">
+     <stylesheet file="sf-current-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-current-001">
+      <description>Test of xsl:stream instruction with current()</description>
+      <created by="Michael Kay" on="2015-07-09"/>
+      <environment ref="sf-current-A"/>
+      <test>
+         <initial-template name="c-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE
+         ><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER
+         ><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE
+         ><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY
+         ><ISBN>0679601686</ISBN><PAGES>352</PAGES
+         ><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT
+         ></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-current-002">
+      <description>Test of xsl:stream instruction with current()</description>
+      <created by="Michael Kay" on="2015-07-09"/>
+      <environment ref="sf-current-A"/>
+      <test>
+         <initial-template name="c-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE
+         ><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER
+         ><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE
+         ><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY
+         ><ISBN>0679601686</ISBN><PAGES>352</PAGES
+         ><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT
+         ></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-current-003">
+      <description>Test of xsl:stream instruction with current()</description>
+      <created by="Michael Kay" on="2015-07-09"/>
+      <environment ref="sf-current-A"/>
+      <test>
+         <initial-template name="c-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ITEM CAT="MMP"><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR
+         ><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE
+         ><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES
+         ><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></ITEM></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-current-004">
+      <description>Test of xsl:stream instruction with current()</description>
+      <created by="Michael Kay" on="2015-07-09"/>
+      <environment ref="sf-current-A"/>
+      <test>
+         <initial-template name="c-004"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-current-005">
+      <description>Test of xsl:stream instruction with current()</description>
+      <created by="Michael Kay" on="2015-07-09"/>
+      <environment ref="sf-current-A"/>
+      <test>
+         <initial-template name="c-005"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>20 21</a><a>20 21</a><a>20 21</a><a>20 21</a><a>20 21</a><b>78</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-current-006">
+      <description>Test of xsl:stream instruction with current()</description>
+      <created by="Michael Kay" on="2015-07-09"/>
+      <environment ref="sf-current-A"/>
+      <test>
+         <initial-template name="c-006"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ITEM ITEM ITEM ITEM ITEM ITEM</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-current-100">
+      <description>Use of current() in motionless match patterns</description>
+      <created by="Michael Kay" on="2016-02-14"/>
+      <test>
+         <stylesheet file="sf-current-100.xsl"/>
+      </test>
+      <result>
+         <assert>not(//ITEM[@CAT="H"]/AUTHOR)</assert>
+      </result>
+   </test-case>
+
+ 
+   <test-case name="sf-current-901">
+      <description>Test of xsl:stream instruction current(), not streamable.</description>
+      <created by="Michael Kay" on="2015-07-09"/>
+      <test>
+         <stylesheet file="sf-current-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-current-902">
+      <description>Non-motionless use of current() in a pattern, not streamable.</description>
+      <created by="Michael Kay" on="2016-02-14"/>
+      <test>
+         <stylesheet file="sf-current-902.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+   <test-case name="sf-current-903">
+      <description>Non-motionless use of current() in a pattern, not streamable.</description>
+      <created by="Michael Kay" on="2016-02-14"/>
+      <test>
+         <stylesheet file="sf-current-903.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+   <test-case name="sf-current-904">
+      <description>Non-motionless use of current() in a pattern, not streamable.</description>
+      <created by="Michael Kay" on="2016-02-14"/>
+      <test>
+         <stylesheet file="sf-current-904.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-current-905">
+      <description>Non-motionless use of current() in a pattern, not streamable.</description>
+      <created by="Michael Kay" on="2016-02-14"/>
+      <test>
+         <stylesheet file="sf-current-905.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>   
+</test-set>

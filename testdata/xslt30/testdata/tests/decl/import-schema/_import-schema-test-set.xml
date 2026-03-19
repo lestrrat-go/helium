@@ -1,0 +1,3773 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="import-schema">
+   <description>Tests import-schema</description>
+   
+   <environment name="import-schema-e01">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <schema role="stylesheet-import" file="schema068.xsd" xsd-version="1.0"/>
+      <schema role="stylesheet-import" file="schema076.xsd" xsd-version="1.0"/>
+   </environment>
+     
+   <environment name="import-schema-e02">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <schema role="stylesheet-import" file="schema002.xsd" xsd-version="1.0"/>
+      <schema role="stylesheet-import" file="testSchemaInline.xsd" xsd-version="1.0"/>
+   </environment>  
+     
+   <environment name="import-schema-e03">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+     
+   <environment name="import-schema-e04">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <schema role="stylesheet-import"
+              file="schema002.xsd"
+              xsd-version="1.0"/>
+      <schema role="stylesheet-import"
+              file="schema004.xsd"
+              xsd-version="1.0"/>
+   </environment>
+   
+   <environment name="import-schema-e05">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <schema role="stylesheet-import" file="schema075.xsd" xsd-version="1.0"/>
+   </environment>
+     
+   <environment name="import-schema-e06">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <schema role="stylesheet-import" file="dir/schema091a.xsd" xsd-version="1.0"/>
+   </environment>
+     
+   <environment name="import-schema-e07">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <schema role="stylesheet-import" file="schema071.xsd" xsd-version="1.0"/>
+   </environment>
+     
+   <environment name="import-schema-e08">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <schema role="stylesheet-import" file="schema030.xsd" xsd-version="1.0"/>
+   </environment>
+   
+   <environment name="import-schema-e09">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <schema role="stylesheet-import" file="schema066.xsd" xsd-version="1.0"/>
+      <schema role="secondary" file="schema066a.xsd" xsd-version="1.0"/>
+   </environment>
+   
+   <environment name="import-schema-e10">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <schema role="stylesheet-import" file="schema067.xsd" xsd-version="1.0"/>
+      <schema role="secondary" file="schema067a.xsd" xsd-version="1.0"/>
+   </environment>
+   
+   <environment name="import-schema-e11">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <schema role="stylesheet-import" file="schema070.xsd" xsd-version="1.0"/>
+   </environment>
+     
+   <environment name="import-schema-e12">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <schema role="stylesheet-import" file="schema076.xsd" xsd-version="1.0"/>
+   </environment>
+   
+   <test-case name="import-schema-001">
+      <description>Test annotating an ID attribute in a temporary tree.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><e4 id="A004"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-002">
+      <description>Test "instance of attribute of type T".</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><string>A001 A002</string><integer>3</integer><date>2002-10-20</date></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-003">
+      <description>Test "instance of element(*,T)".</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><string>A001 A002</string><integer>3</integer><date>2002-10-20</date></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-004">
+      <description>Test xsl:type on literal result elements.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><string>A001 A002</string><integer>3</integer><date>2002-10-20</date></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-005">
+      <description>Test that type information is lost with validation="strip".</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><e4 id="A004"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-006">
+      <description>Test that type information is lost with type-information attribute omitted.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><e4 id="A004"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-007">
+      <description>Test validation on xsl:result-document.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<e xmlns:xs="http://www.w3.org/2001/XMLSchema"><e1>A001</e1><e2>A002</e2><e3>003</e3><e4>2002-10-20</e4></e>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-008">
+      <description>Test data() applied to typed attribute nodes.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-008.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/id[@test="true"][@value="A001"]</assert>
+            <assert>/out/string[@test="true"][@value="A002"]</assert>
+            <assert>/out/integer[@test="true"][@value="3"]</assert>
+            <assert>/out/date[@test="true"][@value="2002-10-20"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-009">
+      <description>Test data() applied to typed element nodes.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-009.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/id[@test="true"][@value="A001"]</assert>
+            <assert>/out/string[@test="true"][@value="A002"]</assert>
+            <assert>/out/integer[@test="true"][@value="3"]</assert>
+            <assert>/out/date[@test="true"][@value="2002-10-20"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-010">
+      <description>Test data() applied to a text node.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><text test="false" value="003"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-011">
+      <description>Test validation="preserve" on xsl:copy-of.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><text test="true" value="3"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-012">
+      <description>Test validation="strip" on xsl:copy-of.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><text test="false" value="003"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-013">
+      <description>Test validation="preserve" on xsl:result-document. this is done by capturing the result document as input to another instance of the stylesheet</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<e><e1><id>A001</id></e1><e2><id>A002</id></e2><e3><id>003</id></e3><e4><id>2002-10-20</id></e4></e>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-014">
+      <description>Test declaring a variable with type "element/attribute(*, X)".</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" val="A001 A002"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-015">
+      <description>Test validation="strip" on xsl:copy-of.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><text test="false" value="003"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-016">
+      <description>Test use of attribute(*,T) in a path expression.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-017">
+      <description>Test use of attribute(@*,*) in a path expression.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><e1 id="A001"/><e2 id="A002"/><e8 id="93"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-018">
+      <description>Test use of attribute(*,xs:anyAtomicType) in a path expression (to match untyped atomic nodes).</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1 id="A001"/><e2 id="A002"/><e8 id="93"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-019">
+      <description>Test use of attribute(*,T) in a pattern.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>A001A00293</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-020">
+      <description>Test use of a built-in list type: NMTOKENS.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>red,green,blue</a><b>true</b><c>true</c></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-021">
+      <description>Test use of castable with user-defined types.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-021.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>string-join(/out/hatsize/*, ';') = "true;true;true;false;false"</assert>
+            <assert>string-join(/out/bighatsize/*, ';') = "false;true;true;false;false"</assert>
+            <assert>string-join(/out/shoesize/*, ';') = "true;true;true;false;false"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-022">
+      <description>Test use of castable with user-defined date types.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-022.xsl"/>
+      </test>
+      <result>
+         <assert>string-join(/out/hatsize/*, ';') = "true;false;true;false;false"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-023">
+      <description>Test use of castable with user-defined pattern facet.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-023.xsl"/>
+      </test>
+      <result>
+         <assert>string-join(/out/hatsize/*, ';') = "true;true;false;false;false"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-024">
+      <description>Test "cast as" and "instance of" with user-defined atomic types.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-024.xsl"/>
+      </test>
+      <result>
+         <assert>string-join(/out/hatsize/*, ';') = "true;true;true;false;false"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-025">
+      <description>Test "cast as" and "instance of" with user-defined atomic types.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-025.xsl"/>
+      </test>
+      <result>
+         <assert>string-join(/out/hatsize/*, ';') = "true;true;true;true;false;false"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-026">
+      <description>Test creating an attribute node with a user-defined atomic type.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><hatsize>3,2</hatsize></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-027">
+      <description>Test creating an element node with a user-defined atomic type.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><hatsize>3,2</hatsize></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-028">
+      <description>Test creating an element node with a user-defined atomic type, using literal result elements.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><hatsize>3,2</hatsize></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-029">
+      <description>Test use of a used-defined list type: xsl:QNames</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>red,green,hat:blue,hat:pink</a><b>true</b><c>true</c><d>true</d></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-030">
+      <description>Test use of a used-defined list type: xsl:QNames</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>red,green,hat:blue,hat:pink</a><b>true</b><c>true</c><d>true</d></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-031">
+      <description>Test use of a used-defined enumeration type</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-031.xsl"/>
+      </test>
+      <result>
+         <assert>string-join(/out/*, ';') = "true;true;true;true;false"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-032">
+      <description>Test use of facets controlling string length</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-032.xsl"/>
+      </test>
+      <result>
+         <assert>string-join(/out/*, ';') = "false;true;false;false;true;true;false"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-033">
+      <description>Test use of facets controlling length of lists</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-033.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1]/@list = "1 2 3 4 5 6 7 8 9 10"</assert>
+            <assert>/out/a[2]/@list = "21 22 23 24 25 26 27 28 29 30"</assert>
+            <assert>/out/a[3]/@list = "1 2 3 4 5"</assert>
+            <assert>/out/a[4]/@list = "21 22 23 24 25 26 27 28"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-034">
+      <description>Test use of facets controlling length of lists (with a different schema from previous test)</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-034.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1]/@list = "1 2 3 4 5 6 7 8 9 10"</assert>
+            <assert>/out/a[2]/@list = "21 22 23 24 25 26 27 28 29 30"</assert>
+            <assert>/out/a[3]/@list = "1 2 3 4 5"</assert>
+            <assert>/out/a[4]/@list = "21 22 23 24 25 26 27 28"</assert>
+         </all-of>
+      </result>   
+   </test-case>
+
+   <test-case name="import-schema-035">
+      <description>Test use of union type</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a list="xml"/><a list="html"/><a list="10"/><a list="20"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-036">
+      <description>Test use of union type with named types as the union members</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a list="xml"/><a list="html"/><a list="10"/><a list="20"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-037">
+      <description>Test use of a list type whose members are a union type</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a list="xml text"/><a list="html 15 xml"/><a list="10 20 html"/><a list="20"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-038">
+      <description>Test use type attribute on xsl:copy, with both element and attribute nodes</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a att="html 15 xml"><e>xml text</e>text</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-039">
+      <description>Test use type attribute on literal result element, with a simple type</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-039.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>xml</a><a>html</a><a>text</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-040">
+      <description>Test a (rather simple) complex type</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-040.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:enu="http://schema050.uri/">
+            <assert>string-join(/enu:out/z[1]/*/local-name(), ';') = "a;f"</assert>
+            <assert>string-join(/enu:out/z[2]/*/local-name(), ';') = "a;b;f"</assert>
+            <assert>string-join(/enu:out/z[3]/*/local-name(), ';') = "a;b;b;f"</assert>
+            <assert>string-join(/enu:out/z[4]/*/local-name(), ';') = "a;f;f;f;f;f"</assert>
+            <assert>string-join(/enu:out/z[5]/*/local-name(), ';') = "a;b;f;f"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-041">
+      <description>Test a (rather simple) complex type involving a choice</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-041.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:enu="http://schema051.uri/">
+            <assert>string-join(/enu:out/z[1]/*/local-name(), ';') = "p"</assert>
+            <assert>string-join(/enu:out/z[2]/*/local-name(), ';') = "q"</assert>
+            <assert>string-join(/enu:out/z[3]/*/local-name(), ';') = "r"</assert>
+            <assert>string-join(/enu:out/z[4]/*/local-name(), ';') = ""</assert>
+            <assert>string-join(/enu:out/z[5]/*/local-name(), ';') = "p;p;p"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-042">
+      <description>Test a complex type involving a repeatable choice</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-042.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:enu="http://schema052.uri/">
+            <assert>string-join(/enu:out/z[1]/*/local-name(), ';') = "p"</assert>
+            <assert>string-join(/enu:out/z[2]/*/local-name(), ';') = "q"</assert>
+            <assert>string-join(/enu:out/z[3]/*/local-name(), ';') = "r"</assert>
+            <assert>string-join(/enu:out/z[4]/*/local-name(), ';') = "p;p;q;p;r;q"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-043">
+      <description>Test a complex type involving an ##other wildcard</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-043.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:enu="http://schema053.uri/">
+            <assert>string-join(/enu:out/z[1]/*/local-name(), ';') = "p"</assert>
+            <assert>string-join(/enu:out/z[2]/*/local-name(), ';') = "q"</assert>
+            <assert>string-join(/enu:out/z[3]/*/local-name(), ';') = "r"</assert>
+            <assert>string-join(/enu:out/z[4]/*/local-name(), ';') = "strange"</assert>
+            <assert>string-join(/enu:out/z[5]/*/local-name(), ';') = "p;p;q;strange;p;r;q"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-044">
+      <description>Test a complex type involving an ##other wildcard</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-044.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:enu="http://schema054.uri/">
+            <assert>string-join(/enu:out/z[1]/*/name(), ';') = "enu:p"</assert>
+            <assert>string-join(/enu:out/z[2]/*/name(), ';') = "enu:q"</assert>
+            <assert>string-join(/enu:out/z[3]/*/name(), ';') = "enu:r"</assert>
+            <assert>string-join(/enu:out/z[4]/*/name(), ';') = "carrot:strange"</assert>
+            <assert>string-join(/enu:out/z[5]/*/name(), ';') = "enu:p;enu:p;enu:q;banana:strange;enu:p;enu:r;enu:q"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-045">
+      <description>Test a complex type involving a ##targetNamespace wildcard</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-045.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:enu="http://schema055.uri/">
+            <assert>string-join(/enu:out/z[1]/*/local-name(), ';') = "p;v;x;m"</assert>
+            <assert>string-join(/enu:out/z[2]/*/local-name(), ';') = "p;p;q;p;r;q;fred"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-046">
+      <description>Test a complex type involving an xs:group</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-046.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<enu:out xmlns:enu="http://schema056.uri/"><z><enu:j/><enu:k/></z><z><fred/></z></enu:out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-047">
+      <description>Test a complex type involving an xs:group</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-047.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:enu="http://schema057.uri/">
+            <assert>string-join(/enu:out/z[1]/*/local-name(), ';') = "j;c"</assert>
+            <assert>string-join(/enu:out/z[2]/*/local-name(), ';') = "k;c"</assert>
+            <assert>string-join(/enu:out/z[3]/*/local-name(), ';') = "k;c"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-048">
+      <description>Test a complex type involving attributes</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-048.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:enu="http://schema058.uri/">
+            <assert>string-join(/enu:out/z[1][@price="23.70"][@discount="0.01"][@rebate="0.01"][@cost="20.01"]/*/local-name(), ';') = "j;c"</assert>
+            <assert>string-join(/enu:out/z[2][@rebate="0.01"][@discount="0.01"][@cost="20.01"]/*/local-name(), ';') = "k;c"</assert>
+            <assert>string-join(/enu:out/z[3][@rebate="0.01"][@discount="0.01"][@cost="20.01"]/*/local-name(), ';') = "k;c"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-049">
+      <description>Test a complex type with empty content model</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-049.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<enu:out xmlns:enu="http://schema059.uri/"><z cost="23.45"/></enu:out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-050">
+      <description>Test a complex type with empty content model</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-050.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<enu:out xmlns:enu="http://schema060.uri/"><z cost="23.45">4</z></enu:out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-051">
+      <description>Test validation="strict", including nested validation of child elements and substitution groups</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-051.xsl"/>
+      </test>
+      <result>
+         <!-- Sad, I think I really was 52 when I wrote that test... -->
+         <assert-xml><![CDATA[<address xmlns="http://schema061.uri/" zip="rg4"><person><first>Michael</first><middle>H</middle><surname>Kay</surname></person><age>52</age></address>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-052">
+      <description>Test type annotations on validated elements with complex type</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-052.xsl"/>
+      </test>
+      <result>
+         <assert>string-join(/*/*/substring(.,1,1), ';') = "t;t;t;t;t;t;t;f;f;f;f;f;f;f"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-053">
+      <description>Test validation of dynamically constructed elements</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-053.xsl"/>
+      </test>
+      <result>
+         <assert>string-join(/*/*/substring(.,1,1), ';') = "t;t;t;t;t;t;t;f;f;f;f;f;f;f"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-054">
+      <description>Test validation when using xsl:copy</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-054.xsl"/>
+      </test>
+      <result>
+         <assert>string-join(/*/*/substring(.,1,1), ';') = "t;t;t;t;t;t;t;f;f;f;f;f;f;f"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-055">
+      <description>Test document-node(element(x,y)) node tests</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-055.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns="http://schema061.uri/"><t>true</t><t>true</t><t>true</t><f>false</f><apply>yes</apply><apply>no</apply></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-056">
+      <description>Test use of a schema that includes another schema. This schema also mixes qualified and unqualified attribute forms</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-056.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<address xmlns="http://schema066.uri/" xmlns:a="http://schema066.uri/" zip="rg4" a:color="red blue"
+            ><person><first>Michael</first><middle>H</middle><last>Kay</last></person><age>52</age></address>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-057">
+      <description>Test use of a schema that imports another schema. This schema also mixes qualified and unqualified attribute forms</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-057.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<address xmlns:a="http://schema067.uri/" xmlns="http://schema067.uri/" zip="rg4" a:color="red blue"
+            ><person><first>Michael</first><middle>H</middle><last>Kay</last></person><age>52</age></address>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-058">
+      <description>Test use xs:all validation</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-058.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:o="http://schema068.uri/">
+            <assert>deep-equal(/*/o:person[1]/*/local-name(), ("first", "middle", "last"))</assert>
+            <assert>deep-equal(/*/o:person[1]/*/string(), ("Michael", "H", "Kay"))</assert>
+            <assert>deep-equal(/*/o:person[2]/*/local-name(), ("first", "surname"))</assert>
+            <assert>deep-equal(/*/o:person[2]/*/string(), ("Penny", "Whelan"))</assert>
+            <assert>deep-equal(/*/o:person[3]/*/local-name(), ("last", "first", "middle"))</assert>
+            <assert>deep-equal(/*/o:person[3]/*/string(), ("Kay", "Michael", "H"))</assert>
+            <assert>deep-equal(/*/o:person[4]/*/local-name(), ("last", "first"))</assert>
+            <assert>deep-equal(/*/o:person[4]/*/string(), ("Kay", "Michael"))</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-059">
+      <description>Test validation of a final result tree</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-059.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:o="http://schema068.uri/">
+            <assert>deep-equal(/*/o:person[1][@id='p1']/*/local-name(), ("first", "middle", "last"))</assert>
+            <assert>deep-equal(/*/o:person[1]/*/string(), ("Michael", "H", "Kay"))</assert>
+            <assert>deep-equal(/*/o:person[2][@id='p2']/*/local-name(), ("first", "surname"))</assert>
+            <assert>deep-equal(/*/o:person[2]/*/string(), ("Penny", "Whelan"))</assert>
+            <assert>deep-equal(/*/o:person[3][@id='p3']/*/local-name(), ("last", "first", "middle"))</assert>
+            <assert>deep-equal(/*/o:person[3]/*/string(), ("Kay", "Michael", "H"))</assert>
+            <assert>deep-equal(/*/o:person[4][not(@id)]/*/local-name(), ("last", "first"))</assert>
+            <assert>deep-equal(/*/o:person[4]/*/string(), ("Kay", "Michael"))</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-060">
+      <description>Test validation of attributes</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-060.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<s:out xmlns:s="http://schema070.uri/" s:dob="1951-10-11" s:tob="05:15:00" pling="05:15:00"
+       plong="05:15:00" plang="05:15:00"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-061">
+      <description>Test validation on xsl:document instruction</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-061.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:o="http://schema068.uri/">
+            <assert>deep-equal(/*/o:person[1][@id='p1']/*/local-name(), ("first", "middle", "last"))</assert>
+            <assert>deep-equal(/*/o:person[1]/*/string(), ("Michael", "H", "Kay"))</assert>
+            <assert>deep-equal(/*/o:person[2][@id='p2']/*/local-name(), ("first", "surname"))</assert>
+            <assert>deep-equal(/*/o:person[2]/*/string(), ("Penny", "Whelan"))</assert>
+            <assert>deep-equal(/*/o:person[3][@id='p3']/*/local-name(), ("last", "first", "middle"))</assert>
+            <assert>deep-equal(/*/o:person[3]/*/string(), ("Kay", "Michael", "H"))</assert>
+            <assert>deep-equal(/*/o:person[4][not(@id)]/*/local-name(), ("last", "first"))</assert>
+            <assert>deep-equal(/*/o:person[4]/*/string(), ("Kay", "Michael"))</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-062">
+      <description>Test template rules matching on content type</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-062.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns="http://schema068.uri/"><decimal><a>23</a></decimal><date><a>2004-10-03</a></date
+            ><decimal><a>12</a></decimal><decimal><b>12</b></decimal></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-063">
+      <description>Test validation against xs:anyType</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-063.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><tree pot="black" kettle="white"
+            ><a>23</a><a>2004-10-03</a><a>12</a><b>12</b><x><y xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+            xsi:type="xs:integer">9999</y></x></tree></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-064">
+      <description>Show that xsi:type does not cause validation merely by its presence</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-064.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<y xmlns:xs="http://www.w3.org/2001/XMLSchema"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:type="xs:integer">zzz</y>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-065">
+      <description>Test constructor for an xs:NOTATION subtype</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-065.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:z="http://mhk015.uri/"><n>z:en</n></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-066">
+      <description>Test that string-length() and normalize-space with no arguments use the string value not the typed value</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-066.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:z="http://schema076.uri/" xmlns:xs="http://www.w3.org/2001/XMLSchema"
+            ><l>23</l><s>1.000 2.000 3.000 4.000</s></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-067">
+      <description>Test that string-length() with no arguments uses the string value not the typed value</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-067.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:z="http://schema076.uri/" xmlns:xs="http://www.w3.org/2001/XMLSchema"
+            ><l>23</l><s>1.000 2.000 3.000 4.000</s></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-068">
+      <description>Type-checking of constructed elements involving substitution groups</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-068.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:z="http://schema061.uri/"
+            ><z:person><z:first>Michael</z:first><z:middle>H</z:middle><z:surname>Kay</z:surname></z:person></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-069">
+      <description>Type-checking of path expressions against a schema</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-069.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:z="http://schema061.uri/"
+            ><h2>Michael H Kay</h2><p>First name: Michael</p><p>Father's first name: Leslie</p></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-070">
+      <description>Test use of an inline schema</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-070.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:z="http://schema080.uri/" do="yes"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-071">
+      <description>Test use of an inline schema with an xs:include</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-071.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:z="http://schema081.uri/" xmlns:xs="http://www.w3.org/2001/XMLSchema" do="white"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-072">
+      <description>Test validation on xsl:document instruction using the type attribute</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-072.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:o="http://schema068.uri/">
+            <assert>deep-equal(/*/o:person[1][@id='p1']/*/local-name(), ("first", "middle", "last"))</assert>
+            <assert>deep-equal(/*/o:person[1]/*/string(), ("Michael", "H", "Kay"))</assert>
+            <assert>deep-equal(/*/o:person[2][@id='p2']/*/local-name(), ("first", "surname"))</assert>
+            <assert>deep-equal(/*/o:person[2]/*/string(), ("Penny", "Whelan"))</assert>
+            <assert>deep-equal(/*/o:person[3][@id='p3']/*/local-name(), ("last", "first", "middle"))</assert>
+            <assert>deep-equal(/*/o:person[3]/*/string(), ("Kay", "Michael", "H"))</assert>
+            <assert>deep-equal(/*/o:person[4][not(@id)]/*/local-name(), ("last", "first"))</assert>
+            <assert>deep-equal(/*/o:person[4]/*/string(), ("Kay", "Michael"))</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-073">
+      <description>Test validation on xsl:result-document instruction using the type attribute</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-073.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:o="http://schema068.uri/">
+            <assert>deep-equal(/*/o:person[1][@id='p1']/*/local-name(), ("first", "middle", "last"))</assert>
+            <assert>deep-equal(/*/o:person[1]/*/string(), ("Michael", "H", "Kay"))</assert>
+            <assert>deep-equal(/*/o:person[2][@id='p2']/*/local-name(), ("first", "surname"))</assert>
+            <assert>deep-equal(/*/o:person[2]/*/string(), ("Penny", "Whelan"))</assert>
+            <assert>deep-equal(/*/o:person[3][@id='p3']/*/local-name(), ("last", "first", "middle"))</assert>
+            <assert>deep-equal(/*/o:person[3]/*/string(), ("Kay", "Michael", "H"))</assert>
+            <assert>deep-equal(/*/o:person[4][not(@id)]/*/local-name(), ("last", "first"))</assert>
+            <assert>deep-equal(/*/o:person[4]/*/string(), ("Kay", "Michael"))</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-074">
+      <description>Test validation at document level with xsl:copy-of instruction using the type attribute</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-074.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:o="http://schema068.uri/">
+            <assert>deep-equal(/*/o:person[1][@id='p1']/*/local-name(), ("first", "middle", "last"))</assert>
+            <assert>deep-equal(/*/o:person[1]/*/string(), ("Michael", "H", "Kay"))</assert>
+            <assert>deep-equal(/*/o:person[2][@id='p2']/*/local-name(), ("first", "surname"))</assert>
+            <assert>deep-equal(/*/o:person[2]/*/string(), ("Penny", "Whelan"))</assert>
+            <assert>deep-equal(/*/o:person[3][@id='p3']/*/local-name(), ("last", "first", "middle"))</assert>
+            <assert>deep-equal(/*/o:person[3]/*/string(), ("Kay", "Michael", "H"))</assert>
+            <assert>deep-equal(/*/o:person[4][not(@id)]/*/local-name(), ("last", "first"))</assert>
+            <assert>deep-equal(/*/o:person[4]/*/string(), ("Kay", "Michael"))</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-075">
+      <description>Test validation at document level with xsl:copy instruction using the type attribute</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-075.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:o="http://schema068.uri/">
+            <assert>deep-equal(/*/o:person[1][@id='p1']/*/local-name(), ("first", "middle", "last"))</assert>
+            <assert>deep-equal(/*/o:person[1]/*/string(), ("Michael", "H", "Kay"))</assert>
+            <assert>deep-equal(/*/o:person[2][@id='p2']/*/local-name(), ("first", "surname"))</assert>
+            <assert>deep-equal(/*/o:person[2]/*/string(), ("Penny", "Whelan"))</assert>
+            <assert>deep-equal(/*/o:person[3][@id='p3']/*/local-name(), ("last", "first", "middle"))</assert>
+            <assert>deep-equal(/*/o:person[3]/*/string(), ("Kay", "Michael", "H"))</assert>
+            <assert>deep-equal(/*/o:person[4][not(@id)]/*/local-name(), ("last", "first"))</assert>
+            <assert>deep-equal(/*/o:person[4]/*/string(), ("Kay", "Michael"))</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-076">
+      <description>Distinguish XS_ANY_TYPE from XDT_UNTYPED</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-076.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/*/*[1][@is-untyped="true"][@is-anyType="true"]</assert>
+            <assert>/*/*[2][@is-untyped="true"][@is-anyType="true"]</assert>
+            <assert>/*/*[3][@is-untyped="false"][@is-anyType="true"]</assert>
+            <assert>/*/*[4][@is-untyped="true"][@is-anyType="true"]</assert>
+            <assert>/*/*[5][@is-untyped="false"][@is-anyType="true"]</assert>
+            <assert>/*/*[6][@is-untyped="false"][@is-anyType="true"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-077">
+      <description>Test that a subtype of xs:ID is recognized</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-077.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ans xmlns="http://schema087.uri/"><person code="ghjk"><first>Penny</first><surname>Whelan</surname></person></ans>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-078">
+      <description>Test that elements of type xs:ID are recognized</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-078.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ans><person><code>ghjk</code><first>Penny</first><surname>Whelan</surname></person></ans>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-079">
+      <description>Test that a subtype of xs:ID is recognized for element nodes</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-079.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ans xmlns="http://schema089.uri/"><person><code>gh<!--1234-->jk</code
+            ><first>Penny</first><surname>Whelan</surname></person></ans>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-080">
+      <description>Test "as" attributes on templates: simulate bug reported by Alan Painter</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-080.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<person xmlns="http://schema061.uri/"><first>Michael</first><middle>H</middle
+            ><surname>Kay</surname></person>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-081">
+      <description>Test use of base URI in an inline schema</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-081.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<t:money xmlns:t="http://schema091.uri/" validation="strict">23.50</t:money>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-082">
+      <description>Test use of facets controlling length of lists should fail</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-082.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-083">
+      <description>Test use of facets controlling length of lists should fail</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-083.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-084">
+      <description>Test use of facets controlling length of lists should fail</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-084.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-085">
+      <description>Test validation error with union type</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-085.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-086">
+      <description>Test validation error with union type</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-086.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-087">
+      <description>Test use type attribute on xsl:copy, with both element and attribute nodes; error when copying an attribute and validating against a complex type. See spec bug 13001.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-087.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1535"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-088">
+      <description>Test use type attribute on xsl:copy-of, with both element and attribute nodes; error when copying an attribute and validating against a complex type. See spec bug 13001.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-088.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1535"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-089">
+      <description>Test a (rather simple) complex type</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-089.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-090">
+      <description>Test a (rather simple) complex type</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-090.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-091">
+      <description>Test a (rather simple) complex type</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-091.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-092">
+      <description>Test a (rather simple) complex type involving a choice</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-092.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-093">
+      <description>Test a (rather simple) complex type involving a choice</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-093.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-094">
+      <description>Test a (rather simple) complex type involving a choice</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-094.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-095">
+      <description>Test a complex type involving a repeatable choice</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-095.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-096">
+      <description>Test a complex type involving a repeatable choice</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-096.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-097">
+      <description>Test a complex type involving an ##other wildcard</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-097.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-098">
+      <description>Test a complex type involving an ##other wildcard</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-098.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-099">
+      <description>Test a complex type involving an ##target wildcard</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-099.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-100">
+      <description>Test a complex type involving an xs:group</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-100.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-101">
+      <description>Test a complex type involving an xs:group</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-101.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-102">
+      <description>Test a complex type involving attributes</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-102.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-103">
+      <description>Test a complex type involving attributes</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-103.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-104">
+      <description>Test a complex type with empty content model</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-104.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-105">
+      <description>Test a complex type with empty content model</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-105.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-106">
+      <description>Test a complex type with empty content model</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-106.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-107">
+      <description>Test validation="strict", including nested validation of child elements error: missing attribute zip</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-107.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-108">
+      <description>Test validation="strict", including nested validation of child elements error: age is non-numeric</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-108.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-109">
+      <description>Test validation="strict", including nested validation of child elements error: middle name repeated</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-109.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-110">
+      <description>Test validation="strict", including nested validation of child elements error: last name repeated</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-110.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-111">
+      <description>Test validation="strict", including nested validation of child elements error: middle initial too long</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-111.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-112">
+      <description>Test validation="strict", including nested validation of child elements error: no last name</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-112.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-113">
+      <description>Test validation="strict", including nested validation of child elements error: age is non-numeric: static validation via a conditional reports a type error if validated statically, but not if done dynamically with default param value</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-113.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-114">
+      <description>Test validation="strict", including nested validation of child elements error: age is non-numeric: static validation via a for-each reports a type error if validated statically, but not if done dynamically with default param value</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-114.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-115">
+      <description>Test use xs:all validation</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-115.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-116">
+      <description>Test use xs:all validation</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-116.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-117">
+      <description>Test use xs:all validation</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-117.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-118">
+      <description>Test validation of a final result tree ERROR: non-unique id value</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <modified by="Michael Kay, Saxonica" on="2018-09-26" change="correct expected error code"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-118.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-119">
+      <description>Test validation of a final result tree ERROR: disallowed attribute</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-119.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-120">
+      <description>Test validation of uniqueness constraints when doing validation at element level. See erratum E12. Note: this is a "should" rather than a "must", so implementations may legitimately fail to report this error. ERROR: non-unique id value</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-120.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-121">
+      <description>Test validation of attributes</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-121.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-122">
+      <description>Test validation of attributes</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-122.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1515"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-123">
+      <description>Test validation of QName-valued elements and attributes This is now an error (XTTE1545)</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-123.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1545"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-124">
+      <description>Test validation of QName-valued elements and attributes</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-124.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1545"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-125">
+      <description>Test validation of QName-valued elements and attributes</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-125.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1545"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-126">
+      <description>error condition: element has two QName valued attributes using the same prefix to refer to different URIs</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-126.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1545"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-127">
+      <description>Test namespace fixup of QName-valued attributes. Now an error: parentless attributes of type QName no longer allowed</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-127.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1545"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-128">
+      <description>Test that a validated document must have a single element child</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-128.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1550"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-129">
+      <description>Test that a validated document must have a single element child</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-129.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1550"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-130">
+      <description>Test that a validated document must not have top-level text</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-130.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1550"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-131">
+      <description>Test that a validated document must not have top-level text</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-131.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1550"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-132">
+      <description>Test constructor for an xs:NOTATION subtype</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-132.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-133">
+      <description>Test that string-length(.) fails if typed value isn't a string</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-133.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-134">
+      <description>Test that normalize-space(.) fails if typed value isn't a string</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-134.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-135">
+      <description>Type-checking of constructed elements involving substitution groups fails because the output elements are not validated, therefore are untyped</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-135.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0505"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-136">
+      <description>Type-checking of constructed elements involving substitution groups</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-136.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1512"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-137">
+      <description>Type-checking of constructed elements involving substitution groups</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-137.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-138">
+      <description>Type-checking of constructed elements involving substitution groups</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-138.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0505"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-139">
+      <description>Static type-checking of content of simple-valued elements</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-139.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-140">
+      <description>Static type-checking of content of simple-valued elements</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-140.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-141">
+      <description>Static type-checking of content of simple-valued elements</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-141.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-142">
+      <description>Static type-checking of content of simple-valued elements</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-142.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-143">
+      <description>Static type-checking of content of simple-valued elements</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-143.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-144">
+      <description>Static type-checking of content of simple-valued elements</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-144.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-145">
+      <description>Static type-checking of content of simple-valued elements</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-145.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-146">
+      <description>Static type-checking of content of simple-valued elements</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-146.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-147">
+      <description>Static type-checking of content of simple-valued elements</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-147.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-148">
+      <description>Type-checking of path expressions against a schema. Note: this test contains a path expression that selects nothing. A schema-aware processor may report a warning about this condition, but it is not an error.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-148.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:z="http://schema061.uri/"
+            ><h2>H Kay</h2><p>First name: Michael</p><p>Father's first name: Leslie</p></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-149">
+      <description>Type-checking of path expressions against a schema. Note: this test contains a path expression that selects nothing. A schema-aware processor may report a warning about this condition, but it is not an error.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-149.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:z="http://schema061.uri/"
+            ><h2>Michael H Kay</h2><p>First name: Michael</p><p>Father's first name: </p></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-150">
+      <description>Type-checking of path expressions against a schema. Note: this test contains a path expression that selects nothing. A schema-aware processor may report a warning about this condition, but it is not an error.</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-150.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:z="http://schema061.uri/" xmlns:xs="http://www.w3.org/2001/XMLSchema"
+            ><h2>Michael H Kay</h2><p>First name: Michael</p><p>Father's first name: </p></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-151">
+      <description>Type-checking of arithmetic expressions against a schema</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-151.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-152">
+      <description>Type-checking of function calls against a schema</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-152.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-153">
+      <description>Test validation failure with an inline schema</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-153.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-154">
+      <description>Test conflicting namespace error with an inline schema</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-154.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0215"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-155">
+      <description>Test invalid inline schema</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-155.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0220"/>
+            <error code="XTSE1520"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-156">
+      <description>Test invalid inline schema</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-156.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0010"/>
+            <error code="XTSE0220"/>
+            <error code="XTSE1520"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-157">
+      <description>Test invalid inline schema (import-schema can only have one child)</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <modified by="Debbie Lockett, Saxonica" on="2016-02-16" change="Correct error code: see bug 29302"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-157.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-158">
+      <description>Test validation failure on xsl:document instruction using the type attribute wrong</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-158.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-159">
+      <description>Test validation failure on xsl:document instruction using the type attribute so is a comment wrong</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-159.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1550"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-160">
+      <description>Test validation failure on xsl:document instruction using the type attribute</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-160.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1550"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-161">
+      <description>Test validation failure on xsl:result-document instruction using the type attribute wrong</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-161.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-162">
+      <description>Test validation error at document level with xsl:copy-of instruction using the type attribute</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-162.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-163">
+      <description>Test validation at document level with xsl:copy instruction using the type attribute</description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-163.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-164">
+      <description>
+         Test that a namespaced attribute with a schema-defined default value is properly inserted into 
+         the source document, with a namespace declaration if necessary. Note, the rules here are clearly 
+         defined in XSD 1.1 (see 3.4.5.1 Attribute Default Value, namespace fixup). 
+         But they are not clearly defined in XSD 1.0.
+      </description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <modified by="Michael Kay" on="2015-03-20" change="See bug 20726"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><e/><e xmlns:p="http://some.other.namespace/"/><e xmlns:q="http://p.com/"/></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <feature value="XSD_1.1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-164.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/doc/att[1][@local="foo"][@ns="http://p.com/"][@prefixed="true"][@declared="true"][@name="p:foo"]</assert>
+            <assert>/doc/att[2][@local="foo"][@ns="http://p.com/"][@prefixed="true"][@declared="true"][not(@name)]</assert>
+            <assert>/doc/att[3][@local="foo"][@ns="http://p.com/"][@prefixed="true"][@declared="true"][@name="q:foo"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-165">
+      <description>
+      	Test that generating an invalid attribute can cause failure of the transformation even if the 
+      	attribute is not actually written to the result tree, because of the presence of another 
+      	attribute with the same name (erratum E10)
+      </description>
+      <created by="Michael Kay, Saxonica" on="2012-11-09"/>
+      <environment ref="import-schema-e11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-165.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml><![CDATA[<s:out xmlns:s="http://schema070.uri/"
+       validation="strict"
+       s:tob="05:15:00"
+       pling="05:15:00"
+       plong="05:15:00"
+       plang="05:15:00"
+       s:dob="1951-10-11"/>]]></assert-xml>
+            <error code="XTTE1510"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-166">
+      <description>Simple test of xsl:import-schema with @namespace and @schema-location.Verify that top-level element and attribute declarations and defined types that are in @namespace are available for use in the stylesheet.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-166.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/type="8006"</assert>
+            <assert>/out/elem/text()[1] = "true * true * "</assert>
+            <assert xmlns:foo="http://ns.example.com/sch002">/out/elem/foo:complexTest[@foo:type="333"][subject="math"][size="50"]</assert>
+            <assert>/out/attrib = "true * 444"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-167">
+      <description>Test where a schema is imported in an imported stylesheet but datatypes are used in the primary stylesheet.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-167.xsl"/>
+         <stylesheet file="import-schema-171a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/type="8006"</assert>
+            <assert>/out/elem/text()[1] = "true * true * "</assert>
+            <assert xmlns:foo="http://ns.example.com/sch002">/out/elem/foo:complexTest[@foo:type="333"][subject="math"][size="50"]</assert>
+            <assert>/out/attrib = "true * 444"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-168">
+      <description>Test where a schema is imported in the primary stylesheet but datatypes are used in an imported stylesheet.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-168.xsl" role="principal" />
+         <stylesheet file="import-schema-168a.xsl" role="secondary" />
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/type="8006"</assert>
+            <assert>/out/elem/text()[1] = "true * true * "</assert>
+            <assert xmlns:sch002="http://ns.example.com/sch002">/out/elem/sch002:complexTest[@sch002:type="333"][subject="math"][size="50"]</assert>
+            <assert>/out/attrib = "true * 444"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-169">
+      <description>Test where a schema is imported in the primary stylesheet but datatypes are used in an included stylesheet.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-169.xsl" role="principal"/>
+         <stylesheet file="import-schema-168a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/type="8006"</assert>
+            <assert>/out/elem/text()[1] = "true * true * "</assert>
+            <assert xmlns:sch002="http://ns.example.com/sch002">/out/elem/sch002:complexTest[@sch002:type="333"][subject="math"][size="50"]</assert>
+            <assert>/out/attrib = "true * 444"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-170">
+      <description>
+      	Test where a schema is imported in the primary stylesheet but datatypes are used in a stylesheet 
+      	that is imported by an included stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-170.xsl"/>
+         <stylesheet file="import-schema-170a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/type="8006"</assert>
+            <assert>/out/elem/text()[1] = "true * true * "</assert>
+            <assert xmlns:sch002="http://ns.example.com/sch002">/out/elem/sch002:complexTest[@sch002:type="333"][subject="math"][size="50"]</assert>
+            <assert>/out/attrib = "true * 444"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-171">
+      <description>Test where a schema is imported in an included stylesheet but datatypes are used in the primary stylesheet.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-171.xsl" role="principal"/>
+         <stylesheet file="import-schema-171a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/type="8006"</assert>
+            <assert>/out/elem/text()[1] = "true * true * "</assert>
+            <assert xmlns:foo="http://ns.example.com/sch002">/out/elem/foo:complexTest[@foo:type="333"][subject="math"][size="50"]</assert>
+            <assert>/out/attrib = "true * 444"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-172">
+      <description>
+         Test where a schema is imported in an imported stylesheet of an included stylesheet 
+         but datatypes are used in the primary stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-172.xsl"/>
+         <stylesheet file="import-schema-171a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/type="8006"</assert>
+            <assert>/out/elem/text()[1] = "true * true * "</assert>
+            <assert xmlns:foo="http://ns.example.com/sch002">/out/elem/foo:complexTest[@foo:type="333"][subject="math"][size="50"]</assert>
+            <assert>/out/attrib = "true * 444"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-173">
+      <description>
+         Test for importing one and the same schema several times.
+         Whichever comes second should be ignored, no error should be raised for component conflicts.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-173.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/type="8006"</assert>
+            <assert>/out/elem/text()[1] = "true * true * "</assert>
+            <assert xmlns:foo="http://ns.example.com/sch002">/out/elem/foo:complexTest[@foo:type="333"][subject="math"][size="50"]</assert>
+            <assert>/out/attrib = "true * 444"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-174">
+      <description>
+         Test where the same schema is imported in both the primary and the included stylesheet. 
+         Whichever comes second should be ignored, no error should be raised for component conflicts. 
+         Datatypes are used in the primary stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-174.xsl" role="principal"/>
+         <stylesheet file="import-schema-174a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/type="8006"</assert>
+            <assert>/out/elem/text()[1] = "true * true * "</assert>
+            <assert xmlns:foo="http://ns.example.com/sch002">/out/elem/foo:complexTest[@foo:type="333"][subject="math"][size="50"]</assert>
+            <assert>/out/attrib = "true * 444"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-175">
+      <description>
+         Test of xsl:import-schema with @namespace and @schema-location importing a more complex schema.
+         Verify that top-level element and attribute declarations and defined types that are in @namespace 
+         are available for use in the stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="import-schema-175.xml" validation="strict"/>
+         <schema role="source-reference" file="schema004.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-175.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><E1>true</E1><E2>true</E2><E3>true</E3><A1>true</A1><A2>true</A2><A3>true</A3></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-176">
+      <description>
+         Test with xsl:import-schema without @namespace to show that top-level element and attribute declarations 
+         and defined types that are in no namespace are available for use in the stylesheet.@schema-location is present.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+         <schema role="stylesheet-import"
+            file="schema176a.xsd"
+            xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-176.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/type = "2.1001"</assert>
+            <assert>/out/elem/text()[1] = "true * true"</assert>
+            <assert>/out/elem/doc-inline/de5-decimal-fractionDigits-totalDigits-inline = "1122334.4556"</assert>
+            <assert>/out/attr = "true * true * 123.456"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+
+   <test-case name="import-schema-177">
+      <description>
+         Test for importing two different schemas with the same @namespace but different import precedence. 
+         Cases tested: 
+         - elements, attributes or types with the same names but different properties exist in the two schemas 
+         - elements, attributes or types with different names exist in the two schemas.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <!-- See Bug 20732 -->
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+         <schema role="stylesheet-import" file="schema002.xsd" xsd-version="1.0"/>
+         <schema role="secondary" file="schema177a.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-177.xsl"/>
+         <stylesheet file="import-schema-177a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/type="8006"</assert>
+            <assert>/out/elem/text()[1] = "true * true * "</assert>
+            <assert xmlns:foo="http://ns.example.com/sch002">/out/elem/foo:complexTest[@foo:type="333"][subject="math"][size="50"]</assert>
+            <assert>/out/attrib = "true * 444"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-178">
+      <description>
+         Test with xsl:import-schema where no schema is found for the namespace specified. 
+         No components are used from this namespace.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-178.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>test</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-179">
+      <description>
+         Simple test of inline schema for a user defined simple type that is used as the type of a variable in the stylesheet. 
+         Example from Spec.
+      </description>
+      <created by="(spec authors)" on="2012-11-09"/>
+      <environment ref="import-schema-e03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-179.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>trueyes</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-180">
+      <description>Test with xsl:import-schema without @namespace which contains an xs:schema element with @targetNamespace. Verify that elements defined in the targetNamespace from the imported schema are available for use in the stylesheet.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-180.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/type="8006"</assert>
+            <assert>/out/elem/text()[1] = "true * true * "</assert>
+            <assert xmlns:foo="http://ns.example.com/sch002/025">/out/elem/foo:complexTest[@foo:type="333"][subject="math"][size="50"]</assert>
+            <assert>/out/attrib = "true * 444"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-181">
+      <description>Test with xsl:import-schema without @namespace which contains an xs:schema element without @targetNamespace. Verify that elements in no namespace from the imported schema are available for use in the stylesheet.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-181.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/type = "2.1001"</assert>
+            <assert>/out/elem/text()[1] = "true * true"</assert>
+            <assert>/out/elem/doc-inline/de5-decimal-fractionDigits-totalDigits-inline = "1122334.4556"</assert>
+            <assert>/out/attr = "true * true * 123.456"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-182">
+      <description>Test with typical purchase order schema with simple and complex types.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-182.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-183">
+      <description>Test of xsl:import-schema without attributes and with empty content. Do not use any non-built-in data types to prevent error since GrammarPool is empty by default.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-183.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>test</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-184">
+      <description>Test with xsl:import-schema where @namespace is present but @schema-location is omitted. Do not use any non-built-in data types to prevent error since GrammarPool is empty by default.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-184.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>test</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <environment name="import-schema-185">
+      <schema role="stylesheet-import" file="schema002.xsd" xsd-version="1.0"/>
+      <schema role="stylesheet-import" file="schema004.xsd" xsd-version="1.0"/>
+      <schema role="stylesheet-import" file="schema185.xsd" xsd-version="1.0"/>
+      <stylesheet file="import-schema-185.xsl"/>
+   </environment>
+
+   <test-case name="import-schema-185a">
+      <description>Test for importing several schemas with different @namespace and @schema-location. No xs:schema content.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-185"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="S1"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<S1>true * true * <a:complexTest xmlns:a="http://ns.example.com/sch002" a:type="333"><subject>math</subject><size>50</size></a:complexTest></S1>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="import-schema-185b">
+      <description>Test for importing several schemas with different @namespace and @schema-location. No xs:schema content.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-185"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="S2"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<S2>true * true * <description xmlns:b="http://ns.example.com/sch004">Mr <name>Peter</name> has brown hair</description></S2>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="import-schema-185c">
+      <description>Test for importing several schemas with different @namespace and @schema-location. No xs:schema content.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-185"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="S3"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<S3>true * true * <c:myYear xmlns:c="http://ns.example.com/sch185">2006</c:myYear></S3>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-186">
+      <description>
+         Test where two different schemas with different namespaces are imported, one in the primary 
+         and one in the imported stylesheet. Show that datatypes from both schemas can be used in both stylesheets.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-186.xsl"/>
+         <stylesheet file="import-schema-186a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <all-of>
+            <assert xmlns:a="http://ns.example.com/sch002">
+               /out/primary1[text()[1] = "true * true * "][a:complexTest[@a:type="333"][subject="math"][size="50"]]
+            </assert>
+            <assert xmlns:b="http://ns.example.com/sch004">
+               /out/primary2[text()[1] = "true * true * "][description = "Mr Peter has brown hair"][description/name = "Peter"]
+            </assert>
+            <assert xmlns:one="http://ns.example.com/sch002">
+               /out/imported1[text()[1] = "true * true * "][one:complexTest[@one:type="333"][subject="math"][size="50"]]
+            </assert>
+            <assert xmlns:two="http://ns.example.com/sch004">
+               /out/imported2[text()[1] = "true * true * "][description = "Mr Peter has brown hair"][description/name = "Peter"]
+            </assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-187">
+      <description>
+         Test where two different schemas are imported, one in the primary and one in the included stylesheet. 
+         Show that datatypes from both schemas can be used in both stylesheets.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-schema-e04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-187.xsl"/>
+         <stylesheet file="import-schema-186a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <all-of>
+            <assert xmlns:a="http://ns.example.com/sch002">
+               /out/primary1[text()[1] = "true * true * "][a:complexTest[@a:type="333"][subject="math"][size="50"]]
+            </assert>
+            <assert xmlns:b="http://ns.example.com/sch004">
+               /out/primary2[text()[1] = "true * true * "][description = "Mr Peter has brown hair"][description/name = "Peter"]
+            </assert>
+            <assert xmlns:one="http://ns.example.com/sch002">
+               /out/imported1[text()[1] = "true * true * "][one:complexTest[@one:type="333"][subject="math"][size="50"]]
+            </assert>
+            <assert xmlns:two="http://ns.example.com/sch004">
+               /out/imported2[text()[1] = "true * true * "][description = "Mr Peter has brown hair"][description/name = "Peter"]
+            </assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-188">
+      <description>Test with inline schema importing another schema. The imported declarations are not used in the stylesheet.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+         <schema role="secondary" file="msimult1-1.xsd" xsd-version="1.0"/>
+         <schema role="secondary" file="msimult1-2.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-188.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetruehello</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-189">
+      <description>Test to show that importing a schema implicitly imports other schemas that are referenced from that schema using xs:include.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc></doc>]]></content>
+         </source>
+         <schema role="stylesheet-import" file="schema189.xsd" xsd-version="1.0"/>
+         <schema role="secondary" file="schema189a.xsd" xsd-version="1.0"/>
+         <schema role="secondary" file="schema189b.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-189.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrueelem1 elem2 elem3 elem4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-190">
+      <description>
+      	Test to show that importing a schema implicitly imports other schemas that are referenced from that 
+      	schema using xs:redefine.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+         <schema role="stylesheet-import" file="schema190a.xsd" xsd-version="1.0"/>
+         <schema role="secondary" file="schema189a.xsd" xsd-version="1.0"/>
+         <schema role="secondary" file="schema189b.xsd" xsd-version="1.0"/>
+         <schema role="secondary" file="schema190b.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-190.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue1 -1 elem3 elem4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-schema-191">
+      <description>
+            Test that an error is raised if the processor is set to Basic Processor and the 
+            stylesheet includes an xsl:import-schema.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+         <schema role="stylesheet-import"
+            file="schema002.xsd"
+            xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-191.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1650"/>
+      </result>
+   </test-case>
+   
+   <test-case name="import-schema-192">
+      <description>Test union argument to a function</description>
+      <created by="Michael Kay" on="2014-04-13"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-192.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>12:00:00</a><b>true</b><c>true</c><d>12:00</d><e>2008-11-14</e></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="import-schema-193">
+      <description>Test union argument to a function</description>
+      <created by="Michael Kay" on="2014-05-04"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-193.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "9.087"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="import-schema-194">
+      <description>Test validation on xsl:result-document using default-validation at xsl:template level.</description>
+      <created by="Michael Kay, Saxonica" on="2017-04-18"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-194.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<e xmlns:xs="http://www.w3.org/2001/XMLSchema"><e1>A001</e1><e2>A002</e2><e3>003</e3><e4>2002-10-20</e4></e>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="import-schema-195">
+      <description>Test validation on xsl:result-document using xsl:default-validation at LRE level.</description>
+      <created by="Michael Kay, Saxonica" on="2017-04-18"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-195.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<e xmlns:xs="http://www.w3.org/2001/XMLSchema"><e1>A001</e1><e2>A002</e2><e3>003</e3><e4>2002-10-20</e4></e>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="import-schema-196">
+      <description>Test validation on temporary tree using xsl:default-validation=strip at LRE level.</description>
+      <created by="Michael Kay, Saxonica" on="2017-04-18"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-196.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><string/><integer/><date/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="import-schema-197">
+      <description>Test validation on temporary tree using xsl:default-validation=preserve at LRE level.</description>
+      <created by="Michael Kay, Saxonica" on="2017-04-18"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-197.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><string>A001 A002</string><integer>3</integer><date>2002-10-20</date></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="import-schema-198">
+      <description>Test validation on temporary tree using default-validation=strip at xsl:sequence level.</description>
+      <created by="Michael Kay, Saxonica" on="2017-04-18"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-198.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><string/><integer/><date/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="import-schema-199">
+      <description>Test validation on temporary tree using default-validation=preserve at xsl:sequence level.</description>
+      <created by="Michael Kay, Saxonica" on="2017-04-18"/>
+      <environment ref="import-schema-e01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-199.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema"><string>A001 A002</string><integer>3</integer><date>2002-10-20</date></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="import-schema-200">
+      <description>Error case, namespace does not match.</description>
+      <created by="Michael Kay, Saxonica" on="2018-10-01"/>
+      <environment ref="import-schema-e05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-200.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0220"/>  
+      </result>
+   </test-case>
+   
+   <test-case name="import-schema-201">
+      <description>Error case, namespace does not match.</description>
+      <created by="Michael Kay, Saxonica" on="2018-10-01"/>
+      <environment ref="import-schema-e05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-201.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0220"/>  
+      </result>
+   </test-case>
+  
+  <test-case name="import-schema-202">
+    <description>Saxon bug 4446: incorrect inferences about descendant axis in the presence of wildcards</description>
+    <created by="Michael Kay after Frank Steimke" on="2020-02-04"/>
+    <environment>
+      <source file="import-schema-202.xml" validation="strict" role="."/>
+      <schema file="import-schema-202.xsd"/>
+    </environment>
+    <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="schema_aware"/>
+    </dependencies>
+    <test>
+      <stylesheet file="import-schema-202.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>count(//*:sequence[@number-of-parents = '3']) = 4</assert>
+        <assert>count(//*:sequence/*:base) = 12</assert>
+      </all-of> 
+    </result>
+  </test-case>
+   
+   <test-case name="import-schema-203">
+      <description>Saxon bug 6151: import-schema refers to schema document with wrong target namespace</description>
+      <created by="Michael Kay" on="2023-08-06"/>
+      <environment>
+         <source file="import-schema-202.xml"/>
+         <!-- No schema declared, deliberately to avoid pre-loading -->
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-schema-203.xsl"/>
+      </test>
+      <result>
+         <error code="XXXX9999"/>
+      </result>
+   </test-case>
+</test-set>

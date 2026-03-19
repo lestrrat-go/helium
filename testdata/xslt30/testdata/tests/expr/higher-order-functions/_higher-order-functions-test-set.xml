@@ -1,0 +1,1007 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="higher-order-functions">
+   <description>Tests higher-order-functions</description>
+   <environment name="hof-300">
+      <source role="." file="hof-300.xml"/>
+   </environment>
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="higher_order_functions"/>
+   </dependencies>
+
+   <test-case name="higher-order-functions-001">
+      <description>named function reference, user-defined function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-01-29" change="inhibit optimization"/>
+      <test>
+         <stylesheet file="higher-order-functions-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-002">
+      <description>named function reference, user-defined function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-01-29" change="inhibit optimization"/>
+      <test>
+         <stylesheet file="higher-order-functions-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">42</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-003">
+      <description>named function reference, imported user-defined function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-01-29" change="inhibit optimization"/>
+      <test>
+         <stylesheet file="higher-order-functions-003.xsl"/>
+         <stylesheet file="higher-order-functions-001.xsl" role="secondary"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">5</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-004">
+      <description>named function reference, system function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-01-29" change="inhibit optimization"/>
+      <test>
+         <stylesheet file="higher-order-functions-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-005">
+      <description>named function reference, system function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">abcdefgh</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-006">
+      <description>named function reference, constructor function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-01-29" change="inhibit optimization"/>
+      <test>
+         <stylesheet file="higher-order-functions-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">2008-01-31</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-007">
+      <description>named function reference, constructor function, user-defined type</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-10" change="Added schema_aware dependency"/>
+      <modified by="Michael Kay" on="2015-01-29" change="inhibit optimization"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="higher-order-functions-007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">xyz987</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-008">
+      <description>sequenceType 'function(*)'</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-01-29" change="inhibit optimization"/>
+      <test>
+         <stylesheet file="higher-order-functions-008.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-009">
+      <description>sequenceType 'function(x) as z'</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-01-29" change="inhibit optimization"/>
+      <test>
+         <stylesheet file="higher-order-functions-009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">5</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-010">
+      <description>sequenceType 'function(x, y) as z'</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-01-29" change="inhibit optimization"/>
+      <test>
+         <stylesheet file="higher-order-functions-010.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">7</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-011">
+      <description>selecting from a sequence of functions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-011.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">7</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-012">
+      <description>function returning a function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-012.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">MIKE mike</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-013">
+      <description>function returning a function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-013.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">MIKE mike</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-014">
+      <description>function expecting a function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-014.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">MIKE mike</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-015">
+      <description>function expecting a function, full signature</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-015.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">MIKE mike</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-016">
+      <description>function expecting a function, caller supplies local function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-016.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">zvxr</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-017">
+      <description>function expecting a function, caller supplies local function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-017.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">zvxr</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-018">
+      <description>function expecting a function, caller supplies inline function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-018.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">wbua</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-019">
+      <description>function expecting a function, caller supplies inline function; needs function coercion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-019.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">wbua</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-020">
+      <description>name and arity of user-defined function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-020.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">scramble http://local/ 2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-021">
+      <description>name and arity of a system-defined function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-021.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">function-name http://www.w3.org/2005/xpath-functions 1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-022">
+      <description>name and arity of a constructor function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-022.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">dateTime http://www.w3.org/2001/XMLSchema 1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-023">
+      <description>name and arity of a concat function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-023.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">concat http://www.w3.org/2005/xpath-functions 123456</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-024">
+      <description>name and arity of a concat function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-024.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/"><a loc="" uri="" arity="1" eloc="true" euri="true"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-025">
+      <description>curry a system function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-025.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">true false true false true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-026">
+      <description>return an inline function from a user-defined function. Uses function coercion.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-026.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">A|nice|cup|of|tea</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-027">
+      <description>return an inline function that uses variables from a user-defined function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-027.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">A|NICE|CUP|OF|TEA</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-028">
+      <description>return an inline function that uses global variables.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-028.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">A|NICE|CUP|OF|TEA</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-029">
+      <description>return an inline function that uses local function parameters.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-029.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">A|NICE|CUP|OF|TEA</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-030">
+      <description>parenthesized expression in dynamic function call.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-030.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">MIKE</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-031">
+      <description>context item is a function item.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-031.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">upper-case</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-032">
+      <description>instance-of tests on user-defined function, varying the argument types - all true</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-032.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">true true false false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-033">
+      <description>instance-of tests on user-defined function, varying the argument types - all false</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-033.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">true false false false false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-034">
+      <description>instance-of tests on user-defined function, varying the result types</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2013-04-05" change="See bug 21595"/>
+      <test>
+         <stylesheet file="higher-order-functions-034.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">false false true true true false false false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-035">
+      <description>Pass a sequence of functions that require coercion in different ways</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-035.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">MICHAEL KAY~michael kay~Michail Kay~Michael</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-036">
+      <description>Return a sequence of functions that require coercion in different ways</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-036.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">MICHAEL KAY~michael kay~Michail Kay~Michael</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-037">
+      <description>Implicit atomization works for various kinds of functions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-037.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">MICHAEL KAY~'michael kay'~Michail Kay~Michael</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-038">
+      <description>UntypedAtomic conversion works for various kinds of functions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-038.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">123.456~123~124.456~123.46</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-039">
+      <description>numeric promotion works for various kinds of functions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-039.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">123.456~123~124.456~123.46</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-040">
+      <description>partial-apply supplying a function parameter</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-040.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">13</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-041">
+      <description>Return an inline function that uses inner and outer local variables</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-041.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="higher-order-functions-041.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-042">
+      <description>Nested inline functions referencing grandfather local variables</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-042.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="higher-order-functions-042.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-043">
+      <description>Forwards reference to a literal function item</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-043.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">6</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-044">
+      <description>true#0 and false#0 as function items</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-044.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">false true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-045">
+      <description>Partial application of a literal function item</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-045.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">the</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-046">
+      <description>Partial application of a literal function item</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-046.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-047">
+      <description>Repeated partial application of a function item</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-047.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:local="http://local/">[*]</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-048">
+      <description>named function reference, unknown user-defined function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-048.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPST0017"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-049">
+      <description>named function reference, unknown user-defined function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-049.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPST0017"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-050">
+      <description>named function reference, unknown function concat#1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-050.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPST0017"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-051">
+      <description>named function reference, unknown function concat#1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-051.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPST0017"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-052">
+      <description>apply string() to a function item</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-052.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FOTY0014"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-053">
+      <description>apply data() to a function item</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-053.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FOTY0013"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-054">
+      <description>apply deep-equal() to a function item</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-054.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FOTY0015"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-055">
+      <description>atomize a function item</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-03-30" change="correct expected error code. Note bug 27610."/>
+      <test>
+         <stylesheet file="higher-order-functions-055.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FOTY0013"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-056">
+      <description>atomize a function item</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-03-30" change="correct expected error code. Note bug 27610."/>
+      <test>
+         <stylesheet file="higher-order-functions-056.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FOTY0013"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-057">
+      <description>In SequenceType syntax, Result type required if argument type given</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-057.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPST0003"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-058">
+      <description>Heterogeneous sequence on rhs of "/"</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-03-30" change="See bug 28369"/>
+      <test>
+         <stylesheet file="higher-order-functions-058.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPTY0018"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-059">
+      <description>Pass a sequence of functions that cannot be coerced to the required type</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2015-03-29" change="Fix bug 24048, should raise XTTE0790"/>
+      <modified by="Michael Kay" on="2017-02-21" change="Fix bug 28379, should raise XPTY0004"/>
+      <test>
+         <stylesheet file="higher-order-functions-059.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-060">
+      <description>
+         Pass a sequence of functions that can be coerced to the required type (same arity) 
+         but have wrong return type. Allows both XPTY0004 (if the param uses late binding after
+         coercion and the error in the coercion wrapper is not detected during coercion) or
+         XTTE0790 (if the wrong return type, xs:integer but xs:string expected, is found during
+         coercion but prior to function evaluation in the stylesheet function body)
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2015-03-29" change="
+         Fix bug 24048, change function body to actually call function items to force evaluation, 
+         allow both XPTY0004 (late evaluation) and XTTE0790 (early detection of wrong return type during coercion)"/>
+      <modified by="Michael Kay" on="2017-02-21" change="Error XTTE0790 no longer exists (bug 28379)"/>
+      <test>
+         <stylesheet file="higher-order-functions-060.xsl"/>
+      </test>
+      <result>
+            <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-061">
+      <description>
+         Pass a sequence of functions that can be coerced to the required type (same arity) 
+         but have wrong argument type. Allows both XPTY0004 (if the param uses late binding after
+         coercion and the error in the coercion wrapper is not detected during coercion) or
+         XTTE0790 (if the wrong return type, xs:integer but xs:string expected, is found during
+         coercion but prior to function evaluation in the stylesheet function body)
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2015-03-29" change="
+         Fix bug 24048, change function body to actually call function items to force evaluation, 
+         allow both XPTY0004 (late evaluation) and XTTE0790 (early detection of wrong return type during coercion)"/>
+      <modified by="Michael Kay" on="2017-02-21" change="Error XTTE0790 no longer exists (bug 28379)"/>
+      <test>
+         <stylesheet file="higher-order-functions-061.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-062">
+      <description>partial-apply, argument number out of range</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-062.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPST0017"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-063">
+      <description>partial-apply, argument number out of range</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-063.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-064">
+      <description>partial-apply, argument invalid for target function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="higher-order-functions-064.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-065">
+      <description>
+         Partial apply
+         Pass a function item that can be coerced to the required type (same arity) but has wrong 
+         argument type and return type. Allows both XPTY0004 (if the param uses late binding after
+         coercion and the error in the coercion wrapper is not detected during coercion) or
+         XTTE0790 (if the wrong return type, xs:integer but xs:string expected, is found during
+         coercion but prior to function evaluation in the stylesheet function body)
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-10" change="Removed redundant right parentheses"/>
+      <modified by="Abel Braaksma" on="2015-03-29" change="
+         Fix bug 24048, allow both XPTY0004 (late evaluation) and XTTE0790 (early detection 
+         of wrong return and argument type (xs:string vs xs:double) during coercion)"/>
+      <modified by="Michael Kay" on="2017-02-21" change="Error XTTE0790 no longer exists (bug 28379)"/>
+      <test>
+         <stylesheet file="higher-order-functions-065.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-066">
+      <description>failure in numeric promotion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2015-03-29" change="Bug 28364, undeclared namespace prefix in test (fn:floor) and variable bound to non-existing function"/>
+      <test>
+         <stylesheet file="higher-order-functions-066.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="higher-order-functions-067">
+      <description>Originated as a Saxon bug report from jakub@maly.cz, dated Feb 2012</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="hof-300"/>
+      <test>
+         <stylesheet file="higher-order-functions-067.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="higher-order-functions-067.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="higher-order-functions-068">
+      <description>
+         Nested inline functions with closures.
+         Originated as a Saxon bug report from Abel Braaksma, dated Feb 2013
+         Note: see bug 21597.
+      </description>
+      <created by="Abel Braaksma" on="2013-02-06"/>
+      <modified by="Abel Braaksma" on="2016-11-05" change="11th fib number is 89, not 55, fixed expected result, see reopened bug 21597"/>
+      <test>
+         <stylesheet file="higher-order-functions-068.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '89'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="higher-order-functions-069">
+      <description>
+         Apply-templates to function items
+      </description>
+      <created by="Michael Kay" on="2013-02-07"/>
+      <modified by="Michael Kay" on="2013-02-07" change="correct test metadata"/>
+      <modified by="Abel Braaksma" on="2015-03-29" change="Bug 28365, test was dependent on implementation defined namespace prefix"/>
+      <test>
+         <stylesheet file="higher-order-functions-069.xsl"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/f[1][@name='round' and @arity='1']</assert>
+           <assert>/out/f[2][@name='squared' and @arity='1']</assert>
+           <assert>/out/f[3][@name='' and @arity='1']</assert>
+           <assert>/out/f[4][@name='' and @arity='1']</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="higher-order-functions-070">
+      <description>
+         Global variable cannot refer to itself, even if it makes sense. A variable is not in scope of itself.
+      </description>
+      <created by="Michael Kay" on="2013-02-07"/>
+      <modified by="Abel Braaksma" on="2015-03-29" change="Bug 28367 and 28366 (fixed invalid sequence type for 28367, but 28366 is reverted, not a bug"/>
+      <environment ref="hof-300"/>
+      <test>
+         <stylesheet file="higher-order-functions-070.xsl"/>
+      </test>
+      <result>
+         <error code="XPST0008"/>
+      </result>
+   </test-case>
+   
+   <test-case name="higher-order-functions-071">
+      <description>
+         Inline function with closure referencing XSLT template parameters (Saxon bug 2523)
+      </description>
+      <created by="Michael Kay" on="2015-12-04"/>
+      <test>
+         <stylesheet file="higher-order-functions-071.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '{"a":44,"b":46,"c":48,"d":50,"e":52,"f":54}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="higher-order-functions-072">
+      <description>
+         Return a function with a closure referencing XSLT template parameters; nested inline functions (Saxon bug 2527)
+      </description>
+      <created by="Michael Kay" on="2015-12-04"/>
+      <test>
+         <stylesheet file="higher-order-functions-072.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '{"a":44,"b":46,"c":48,"d":50,"e":52,"f":54}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="higher-order-functions-073">
+      <description>
+         Use higher order functions in a static variable initializer
+      </description>
+      <created by="Michael Kay" on="2017-10-04"/>
+      <test>
+         <stylesheet file="higher-order-functions-073.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '10 x 2017'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="higher-order-functions-074">
+      <description>
+         Use higher order functions in a static variable initializer
+      </description>
+      <created by="Michael Kay" on="2018-04-24"/>
+      <test>
+         <stylesheet file="higher-order-functions-074.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '18 iv 1924'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="higher-order-functions-075">
+      <description>
+         Function inlining (Saxon bug 2321)
+      </description>
+      <created by="Debbie Lockett" on="2019-03-14"/>
+      <modified by="Michael Kay" on="2021-08-20" change="Reformatted for legibility"/>
+      <test>
+         <stylesheet file="higher-order-functions-075.xsl"/>
+         <initial-template name="ex1"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-string-value>1234</assert-string-value>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="higher-order-functions-076">
+      <description>
+         Use with fn:fold-left (Saxon bug 4686)
+      </description>
+      <created by="Michael Kay" on="2020-09-16"/>
+      <environment>
+         <source file="hof-076.xml" role="."/>
+      </environment>
+      <test>
+         <stylesheet file="higher-order-functions-076.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/root/paragraph[1]/b[.='Nulla facilisi']</assert>
+            <assert>/root/paragraph[2]/i[.='Nulla facilisi']</assert>
+         </all-of>
+      </result>
+   </test-case>
+</test-set>
+
+

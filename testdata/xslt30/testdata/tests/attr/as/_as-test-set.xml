@@ -1,0 +1,4256 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="as">
+   <description>Tests as</description>
+
+   <environment name="as-01">
+      <source role="." validation="skip">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <source file="simple.xml" uri="simple.xml" validation="skip"/>
+      <schema role="stylesheet-import" file="variousTypesSchemaAs.xsd"/>
+   </environment>
+   
+   <environment name="as-01b">
+      <source role="." validation="skip">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <source file="simple.xml" uri="simple.xml" validation="skip"/>
+   </environment>
+   
+   <environment name="as-03">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<item attr="red">hello</item>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="as-04">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<item attr1="red" attr2="blue" attr3="green">hello</item>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="as-07">
+      <source role=".">
+         <content><![CDATA[<doc>
+<item-list>
+<item1>5.4321E-1001</item1>
+<item2>http://www.mytypetest.org</item2>
+</item-list>
+</doc>]]></content>
+      </source>
+   </environment>  
+   
+   <environment name="as-08a">
+      <source role="." file="as-08a.xml"/>
+   </environment>
+   
+   <environment name="as-08b">
+      <source role="." file="as-08b.xml"/>
+   </environment>
+   
+   <environment name="as-12">
+      <source role=".">
+         <content><![CDATA[<doc> 
+<?Process fun?>
+<item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
+<item1 xmlns="http://test.default.org">namespaced</item1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="as-13">
+      <source role=".">
+         <content><![CDATA[<doc> 
+<?Process fun?>
+<item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
+<item>namespaced</item>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="as-14">
+      <source role=".">
+         <content><![CDATA[<doc attrib="green"> 
+<?Process fun?>
+<item attrib="red" xmlns:a="http://www.a.org"><!--I am a comment-->hello</item>
+<item1 attrib="blue">namespaced</item1>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="as-16">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="as-17">
+      <source role="." file="as-17.xml" validation="strict"/>
+      <schema role="source-reference" file="builtinTypeSchemaAs.xsd"/>
+   </environment>
+   <environment name="as-18">
+      <source role="." file="as-18.xml" validation="strict"/>
+      <source file="as-18.xml" uri="as-18.xml" validation="strict"/>
+      <schema role="source-reference" file="variousTypesSchemaAs.xsd"/>
+   </environment>
+   <environment name="as-19">
+      <source role="." file="as-19.xml"/>
+   </environment>
+   <environment name="as-20">
+      <source role="." file="as-20.xml"/>
+      <schema role="stylesheet-import" file="variousTypesSchemaAs.xsd"/>
+   </environment>
+   
+   <environment name="as-26">
+      <source role="." file="as-26.xml" validation="strict"/>
+      <schema role="source-reference" file="builtinTypeSchemaAs.xsd"/>
+   </environment>
+   
+   <environment name="as-28">
+      <source role="." validation="strict">
+         <content><![CDATA[<elem-Name xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="builtinTypeSchemaAs.xsd">
+a:_underscore_
+</elem-Name>]]></content>
+      </source>
+      <schema role="source-reference" file="builtinTypeSchemaAs.xsd"/>
+   </environment>
+   <environment name="as-29">
+      <source role="." file="as-29.xml" uri="as-29.xml" validation="strict"/>
+      <schema role="source-reference" file="builtinTypeSchemaAs.xsd"/>
+   </environment>
+   <environment name="as-30">
+      <source role="." file="as-30.xml" validation="strict"/>
+      <schema role="source-reference" file="list-unionSchemaAs.xsd"/>
+   </environment>
+   <environment name="as-31">
+      <source role="." file="as-31.xml" validation="strict"/>
+      <schema role="source-reference" file="list-unionSchemaAs.xsd"/>
+      <stylesheet file="as-3102.xsl"/>
+   </environment>
+   <environment name="as-32">
+      <source role="." file="as-32.xml" validation="strict"/>
+      <source file="as-32b.xml" uri="as-32b.xml"/>
+      <schema file="subgroupTypeSchemaAs.xsd"/>
+   </environment>
+   
+   <environment name="as-35">
+      <source role="." file="as-35.xml" validation="strict"/>
+      <schema role="source-reference" file="variousTypesSchemaAs.xsd"/>
+   </environment>
+   
+
+   <test-case name="as-0101">
+      <description>Test with global xsl:variable and @as=empty-sequence(). Value for @select are () and empty sequence obtained at run time.</description>
+      <keywords>instance-of empty-sequence xs:string SequenceType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0101.xsl"/>
+      </test>
+      <result>
+         <assert>/out="truetruefalsefalse"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0102">
+      <description>
+         Test with xsl:template and @as=empty-sequence(), the sequence constructor contains a sequence of an 
+         explicitly constructed built-in atomic types with empty sequence as an argument.
+         Types constructed are: xs:string, xs:boolean, xs:double, xs:dayTimeDuration, xs:date
+      </description>
+      <keywords>empty-sequence SequenceType xs:string xs:double xs:boolean xs:dayTimeDuration xs:date</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0103">
+      <description>
+         Test with xsl:function and @as=empty-sequence(). Use xsl:sequence with @select=() inside the sequence constructor.</description>
+      <keywords>empty-sequence xsl:function SequenceType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0104">
+      <description>
+         Test with local xsl:param and @as=empty-sequence(). 
+         The values for @select are () and empty sequence obtained at run time.
+      </description>
+      <keywords>empty-sequence instance-of xs:string SequenceType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0104.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truetruefalsefalse"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0105">
+      <description>
+         Test of global xsl:variable with text inside the sequence constructor and @as="xs:untypedAtomic". 
+         Verify that the resulting variable type is xs:untypedAtomic.
+      </description>
+      <keywords>xs:untypedAtomic text-conversion AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0105.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0106">
+      <description>
+         Show that any explicitly constructed built-in atomic type can go in @select when @as="xs:anyAtomicType". 
+         Effective global variable type is both xs:anyAtomicType and the actual type used in @select.
+      </description>
+      <keywords>xs:anyAtomicType buildin-datatypes conversion AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Abel Braaksma" on="2014-10-31" change="Bug 27216, adding high/low year dependencies"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year" satisfied="true"/>
+         <year_component_values value="support year above 9999" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0106a.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0106a">
+      <description>
+         Bug 27216
+         Variant of as-0106, without support for negative or high years, throws error
+         Show that any explicitly constructed built-in atomic type can go in @select when @as="xs:anyAtomicType". 
+         Effective global variable type is both xs:anyAtomicType and the actual type used in @select.
+      </description>
+      <keywords>xs:anyAtomicType buildin-datatypes conversion AtomicOrUnionType</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year" satisfied="false"/>
+         <year_component_values value="support year above 9999" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0106a.xsl"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="as-0106b">
+      <description>
+         Bug 27216
+         Variant of as-0106, without dependencies
+         Show that any explicitly constructed built-in atomic type can go in @select when @as="xs:anyAtomicType". 
+         Effective global variable type is both xs:anyAtomicType and the actual type used in @select.
+      </description>
+      <keywords>xs:anyAtomicType buildin-datatypes conversion AtomicOrUnionType</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0106b.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "truetrue"</assert>         
+      </result>
+   </test-case>
+   
+   <test-case name="as-0107">
+      <description>
+         Test of two xsl:templates, one returns a sequence of several explicitly constructed different 
+         built-in types and the other returns an empty sequence, both have @as="xs:anyAtomicType*".
+      </description>
+      <keywords>xs:anyAtomicType mixed-sequence conversion empty-sequence AtomicOrUnionType OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0107.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "P1Y2M3DT10H30M23S 2000-01-16T00:00:00Z 2005 0"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0108">
+      <description>
+         Test with xsl:template which returns a sequence of several explicitly constructed different 
+         built-in types and @as="xs:anyAtomicType+".
+      </description>
+      <keywords>xs:anyAtomicType conversion AtomicOrUnionType OccurrenceIndicator mixed-sequence</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0108.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "P1Y2M3DT10H30M23S 2000-01-16T00:00:00Z 2005 0"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0109">
+      <description>
+         Test of two xsl:templates with @as="xs:anyAtomicType?", one returns a singleton sequence, the other an empty sequence.
+      </description>
+      <keywords>xs:anyAtomicType sequence AtomicOrUnionType OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0109.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "P1Y2M3DT10H30M23S"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0110">
+      <description>
+         Test with global xsl:variable where value in @select is explicitly constructed and of the same type as the built-in
+         atomic type in @as. Types tested are: all built-in primitive types, xs:integer, xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>buildin-types conversion-to-self AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Abel Braaksma" on="2014-10-31" change="Bug 27216, adding high/low year dependencies"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year" satisfied="true"/>
+         <year_component_values value="support year above 9999" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0110a.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0110a">
+      <description>
+         Bug 27216
+         Variant: as previous test, but with negative dependencies, throws static error
+         Test with global xsl:variable where value in @select is explicitly constructed and of the same type as the built-in 
+         atomic type in @as. Types tested are: all built-in primitive types, xs:integer, xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>buildin-types conversion-to-self AtomicOrUnionType</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support year above 9999" satisfied="false"/>
+         <year_component_values value="support negative year" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0110a.xsl"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="as-0110b">
+      <description>
+         Bug 27216
+         Variant: as previous test, but without dependencies
+         Test with global xsl:variable where value in @select is explicitly constructed and of the same type as the built-in 
+         atomic type in @as. Types tested are: all built-in primitive types, xs:integer, xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>buildin-types conversion-to-self AtomicOrUnionType</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0110b.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0111">
+      <description>
+         Test with global xsl:variable without @select, where sequence constructor contains a typed value of the same
+         type as specified in @as. Values for @as tested: all built-in primitive types, xs:integer, xs:dayTimeDuration, 
+         xs:yearMonthDuration
+      </description>
+      <keywords>buildin-types conversion-to-self instance-of AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Abel Braaksma" on="2014-10-31" change="Bug 27216, adding high/low year dependencies"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support year above 9999" satisfied="true"/>
+         <year_component_values value="support negative year" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0111a.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="as-0111a">
+      <description>
+         Bug 27216
+         Variant of previous test, with inverted dependencies, should throw overflow error
+         Test with global xsl:variable without @select, where sequence constructor contains a typed value of the same
+         type as specified in @as. Values for @as tested: all built-in primitive types, xs:integer, xs:dayTimeDuration, 
+         xs:yearMonthDuration
+      </description>
+      <keywords>buildin-types conversion-to-self instance-of AtomicOrUnionType</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support year above 9999" satisfied="false"/>
+         <year_component_values value="support negative year" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0111a.xsl"/>
+      </test>
+      <result>
+         <error code="FODT0001" />
+      </result>
+   </test-case>
+   
+   <test-case name="as-0111b">
+      <description>
+         Bug 27216
+         Variant of previous test, with negative dependencies
+         Test with global xsl:variable without @select, where sequence constructor contains a typed value of the same
+         type as specified in @as. Values for @as tested: all built-in primitive types, xs:integer, xs:dayTimeDuration, 
+         xs:yearMonthDuration
+      </description>
+      <keywords>buildin-types conversion-to-self instance-of AtomicOrUnionType</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0111b.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0112">
+      <description>
+         Test with xsl:template which returns an explicitly constructed built-in atomic type value and @as speficies 
+         the same type. Verify no typing error is raised. Value types tested: - all built-in primitive types, xs:integer, 
+         xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>buildin-types conversion-to-self xsl:value-of AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Abel Braaksma" on="2014-10-31" change="Bug 27216, adding high/low year dependencies"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support year above 9999" satisfied="true"/>
+         <year_component_values value="support negative year" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0112a.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/template1 = "P1Y2M3DT10H30M23S"</assert>
+            <assert>/out/template2 = "-P1Y23DT59.123S"</assert>
+            <assert>/out/template3 = "2000-01-16T00:00:00Z"</assert>
+            <assert>/out/template4 = "-1999-05-31T13:20:00+14:00"</assert>
+            <assert>/out/template5 = "13:20:00-05:00"</assert>
+            <assert>/out/template6 = "00:00:00"</assert>
+            <assert>/out/template7 = "-0012-12-03-05:00"</assert>
+            <assert>/out/template8 = "1999-05-31"</assert>
+            <assert>/out/template9 = "21999-05+14:00"</assert>
+            <assert>/out/template10 = "1999-05"</assert>
+            <assert>/out/template11 = "-0012-05:00"</assert>
+            <assert>/out/template12 = "2005"</assert>
+            <assert>/out/template13 = "--05-31"</assert>
+            <assert>/out/template14 = "--05-31+14:00"</assert>
+            <assert>/out/template15 = "---31+14:00"</assert>
+            <assert>/out/template16 = "---31Z"</assert>
+            <assert>/out/template17 = "--05+14:00"</assert>
+            <assert>/out/template18 = "--05"</assert>
+            <assert>/out/template19 = "true"</assert>
+            <assert>/out/template20 = "PM24"</assert>
+            <assert>/out/template21 = "07FF"</assert>
+            <assert>/out/template22 = "INF"</assert>
+            <assert>/out/template23 = "-0.00175"</assert>
+            <assert>/out/template24 = "-3.4201"</assert>
+            <assert>/out/template25 = "7.8899"</assert>
+            <assert>/out/template26 = "0"</assert>
+            <assert>/out/template27 = "0"</assert>
+            <assert>/out/template28 = "0"</assert>
+            <assert>/out/template29 = "INF"</assert>
+            <assert>/out/template30 = "43"</assert>
+            <assert>/out/template31 = "-300"</assert>
+            <assert>/out/template32 = "http://www.mytypetest.org"</assert>
+            <assert>/out/template34 = "PT1M39.999S"</assert>
+            <assert>/out/template35 = "-PT1H40M"</assert>
+            <assert>/out/template36 = "P1Y2M"</assert>
+            <assert>/out/template37 = "-P1Y9M"</assert>
+            <assert>/out/template38 = "hello"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-0112a">
+      <description>
+         Bug 27216
+         Variant of previous test with inverted dependencies, should throw overflow error.
+         Test with xsl:template which returns an explicitly constructed built-in atomic type value and @as speficies 
+         the same type. Verify no typing error is raised. Value types tested: - all built-in primitive types, xs:integer, 
+         xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>buildin-types conversion-to-self xsl:value-of AtomicOrUnionType</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support year above 9999" satisfied="false"/>
+         <year_component_values value="support negative year" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0112a.xsl"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="as-0112b">
+      <description>
+         Bug 27216
+         Variant of previous test without dependencies on high/low year values
+         Test with xsl:template which returns an explicitly constructed built-in atomic type value and @as speficies 
+         the same type. Verify no typing error is raised. Value types tested: - all built-in primitive types, xs:integer, 
+         xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>buildin-types conversion-to-self xsl:value-of AtomicOrUnionType</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0112b.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/template1 = "P1Y2M3DT10H30M23S"</assert>
+            <assert>/out/template2 = "-P1Y23DT59.123S"</assert>
+            <assert>/out/template3 = "2000-01-16T00:00:00Z"</assert>
+            <assert>/out/template4 = "9999-05-31T13:20:00+14:00"</assert>
+            <assert>/out/template5 = "13:20:00-05:00"</assert>
+            <assert>/out/template6 = "00:00:00"</assert>
+            <assert>/out/template7 = "0012-12-03-05:00"</assert>
+            <assert>/out/template8 = "1999-05-31"</assert>
+            <assert>/out/template9 = "6999-05+14:00"</assert>
+            <assert>/out/template10 = "1999-05"</assert>
+            <assert>/out/template11 = "0012-05:00"</assert>
+            <assert>/out/template12 = "2005"</assert>
+            <assert>/out/template13 = "--05-31"</assert>
+            <assert>/out/template14 = "--05-31+14:00"</assert>
+            <assert>/out/template15 = "---31+14:00"</assert>
+            <assert>/out/template16 = "---31Z"</assert>
+            <assert>/out/template17 = "--05+14:00"</assert>
+            <assert>/out/template18 = "--05"</assert>
+            <assert>/out/template19 = "true"</assert>
+            <assert>/out/template20 = "PM24"</assert>
+            <assert>/out/template21 = "07FF"</assert>
+            <assert>/out/template22 = "INF"</assert>
+            <assert>/out/template23 = "-0.00175"</assert>
+            <assert>/out/template24 = "-3.4201"</assert>
+            <assert>/out/template25 = "7.8899"</assert>
+            <assert>/out/template26 = "0"</assert>
+            <assert>/out/template27 = "0"</assert>
+            <assert>/out/template28 = "0"</assert>
+            <assert>/out/template29 = "INF"</assert>
+            <assert>/out/template30 = "43"</assert>
+            <assert>/out/template31 = "-300"</assert>
+            <assert>/out/template32 = "http://www.mytypetest.org"</assert>
+            <assert>/out/template34 = "PT1M39.999S"</assert>
+            <assert>/out/template35 = "-PT1H40M"</assert>
+            <assert>/out/template36 = "P1Y2M"</assert>
+            <assert>/out/template37 = "-P1Y9M"</assert>
+            <assert>/out/template38 = "hello"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-0113">
+      <description>Test with xsl:function where where the value in the sequence constructor is explicitly constructed and of the same type as the built-in atomic type in @as. Types tested are: - xs:string, xs:double, xs:integer, xs:dayTimeDuration, xs:QName</description>
+      <keywords>buildin-types conversion-to-self xsl:function AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0113.xsl"/>
+      </test>
+      <result>
+         <assert>every $func in /out/* satisfies $func = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0114">
+      <description>Test type of global xsl:variable where @select contains an xs:float, xs:decimal or xs:integer, @as="xs:double".(type promotion)</description>
+      <keywords>type-promotion xs:float xs:double xs:decimal xs:integer AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <modified by="Michael Kay" on="2023-11-07" change="Use param rather than variable so things are more dynamic"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0114.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0115">
+      <description>Test type of global xsl:variable where @select contains an xs:decimal or xs:integer, @as="xs:float".(type promotion)</description>
+      <keywords>type-promotion xs:float xs:decimal xs:integer AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0115.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0116">
+      <description>Test type of global xsl:variable where @select contains an xs:anyURI, @as="xs:string".(type promotion)</description>
+      <keywords>type-promotion xs:anyUri xs:string AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0116.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0117">
+      <description>Test type of global xsl:variable where @select contains an xs:integer, @as="xs:decimal".(subtype substitution)</description>
+      <keywords>subtype-substitution xs:decimal xs:integer AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0117.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0118">
+      <description>Test type of global xsl:variable where @select contains an xs:dayTimeDuration or xs:yearMonthDuration, @as="xs:duration".(subtype substitution)</description>
+      <keywords>subtype-substitution xs:duration xs:dayTimeDuration xs:yearMonthDuration AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0118.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/var2 = "truetrue"</assert>
+            <assert>/out/var3 = "truetrue"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-0119">
+      <description>Test with an empty sequence obtained at run time in @select of global xsl:variable and @as is a built-in atomic type with occurence indicator (?). Verify the variable is of the type specified in @as.Values for @as tested: all built-in primitive types (except xs:QName), xs:integer, xs:dayTimeDuration, xs:yearMonthDuration</description>
+      <keywords>empty-sequence buildin-types AtomicOrUnionType OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0119.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "truefalse"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0120">
+      <description>Test with xsl:variable where the value in @select is (), the built-in primitive type in @as has occurence indicator (?). Values for @as tested: all built-in primitive types (except xs:QName), xs:integer, xs:dayTimeDuration, xs:yearMonthDuration</description>
+      <keywords>empty-sequence buildin-types AtomicOrUnionType OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0120.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "truefalse"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0121">
+      <description>Test with xsl:template which constructs the empty sequence () and @as is a built-in type use occurence indicator (?). Values for @as tested: all built-in primitive types (except xs:QName), xs:integer, xs:dayTimeDuration, xs:yearMonthDuration</description>
+      <keywords>empty-sequence buildin-types AtomicOrUnionType OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0121.xsl"/>
+      </test>
+      <result>
+         <assert>every $template in /out/* satisfies empty($template/child::node())</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0122">
+      <description>Test with xsl:function that constructs an xs:dayTimeDuration value as a child of LRE and has @as=xs:dayTimeDuration?. Verify the returned value if of type xs:dayTimeDuration?.</description>
+      <keywords>lre-promotion xs:dayTimeDuration AtomicOrUnionType OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0122.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0123">
+      <description>Test with an xs:anyURI value as a child of LRE in the sequence constructor of a global xsl:param and @as=xs:anyURI+. Verify the parameter is of type xs:anyURI+.</description>
+      <keywords>lre-promotion xs:anyURI AtomicOrUnionType OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0123.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0124">
+      <description>Test with a local xsl:param, where @select is an empty sequence obtained at run time and @as=xs:double*. Verify the parameter is of type xs:double*.</description>
+      <keywords>empty-sequence xs:double AtomicOrUnionType OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0124.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truefalse"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0125">
+      <description>Test type of global xsl:variable without @select and @as="document-node()". Sequence constructor contains an xsl:document instruction.</description>
+      <keywords>xsl:document DocumentTest</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0125.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0126">
+      <description>Test type of global xsl:variable without @select and @as="element()". Sequence constructor contains an xsl:element instruction or an LRE.</description>
+      <keywords>xsl:element ElementTest</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0126.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0127">
+      <description>Test type of result of xsl:function that has @as="element(QName, xs:untyped)" and sequence constructor contains xsl:element or an LRE.</description>
+      <keywords>lre xs:untyped ElementTest ElementName TypeName</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0127.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0128">
+      <description>Test type of result of xsl:function that has @as="attribute() and sequence constructor contains xsl:attribute.</description>
+      <keywords>xsl:attribute AttributeTest</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0128.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0129">
+      <description>Test with global xsl:variable that has @as=""document-node()?", no @select and sequence constructor is empty or has one xsl:document.</description>
+      <keywords>xsl:document DocumentTest OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Abel Braaksma" on="2013-12-10" change="Added dependency to XSLT20+ instead of schema_aware"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0129.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/e1 = "truefalse"</assert>
+            <assert>/out/e2 = "truetrue"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-0130">
+      <description>Test with xsl:template that has @as="element(QName)*" and returns the empty sequence, a sequence of xsl:element or LREs.</description>
+      <keywords>xsl:element ElementTest ElementName OccurrenceIndicator empty-sequence</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0130.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>empty(/out/e1/node())</assert>
+            <assert>/out/e2/elem[1] = "hi1"</assert>
+            <assert>/out/e2/elem[2] = "hi2"</assert>
+            <assert>/out/e2/elem[3] = "hi3"</assert>
+            <assert>/out/e3/*:item[1] = "1"</assert>
+            <assert>/out/e3/*:item[2] = "2"</assert>
+            <assert>/out/e3/*:item[3] = "3"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-0131">
+      <description>Test with xsl:template that has @as="element(*)+" and returns a sequence of xsl:element or LREs.</description>
+      <keywords>xsl:element ElementTest ElementNameOrWildcard OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0131.xsl"/>
+      </test>
+      <result>
+         <all-of>           
+            <assert>/out/e1/elem[1] = "hi1"</assert>
+            <assert>/out/e1/elem[2] = "hi2"</assert>
+            <assert>/out/e1/item[1] = "hi3"</assert>
+            <assert>/out/e2/*[1] = "1"</assert>
+            <assert>/out/e2/*[2] = "2"</assert>
+            <assert>/out/e2/*[3] = "3"</assert>
+            <assert>/out/e2/*[4] = "hello"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-0132">
+      <description>Test with xsl:template that has @as="element(*, xs:untyped)+" and returns a sequence of xsl:element or LREs.</description>
+      <keywords>xsl:element ElementTest ElementNameOrWildcard TypeName OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0132.xsl"/>
+      </test>
+      <result>
+         <all-of>           
+            <assert>/out/e1/elem[1] = "hi1"</assert>
+            <assert>/out/e1/elem[2] = "hi2"</assert>
+            <assert>/out/e1/item[1] = "hi3"</assert>
+            <assert>/out/e2/*[1] = "1"</assert>
+            <assert>/out/e2/*[2] = "2"</assert>
+            <assert>/out/e2/*[3] = "3"</assert>
+            <assert>/out/e2/*[4] = "hello"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-0133">
+      <description>Test with xsl:template that has @as="attribute(QName, xs:untypedAtomic)*" and returns the empty sequence or a sequence of xsl:attribute.</description>
+      <keywords>xsl:attribute empty-sequence AttributeTest AttributeName TypeName OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0133.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1/><e2 att="4"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0134">
+      <description>Test with xsl:template that has @as="attribute()?" and returns the empty sequence or an xsl:attribute.</description>
+      <keywords>xsl:attribute empty-sequence AttributeTest AttributeName TypeName OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0134.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1/><e2 att="1"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0135">
+      <description>Test with xsl:template that has @as="attribute(*, xs:untypedAtomic)?" and returns the empty sequence or an xsl:attribute.</description>
+      <keywords>xsl:attribute empty-sequence AttributeTest AttributeNameOrWildcard TypeName OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0135.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1/><e2 att="1"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0136">
+      <description>Test with xsl:function that has @as="document-node()*" and returns the empty sequence or a document node from fn:document().</description>
+      <keywords>xsl:function empty-sequence DocumentTest OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2012-12-11" change="changed argument to doc() function, see bug 20021"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0136.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><func1>truefalse</func1><func2>truetrue</func2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0137">
+      <description>Test with xsl:function that has @as="element()*" and returns: -an empty sequence, one xsl:element node, a sequence of xsl:element nodes</description>
+      <keywords>xsl:function empty-sequence ElementTest OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0137.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><func1>truefalse</func1><func2>truetrue</func2><func3>truefalse</func3></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0138">
+      <description>Test with xsl:function that has @as="attribute()?", and returns nothing or an xsl:attribute.</description>
+      <keywords>xsl:function empty-sequence AttributeTest OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0138.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><func1>truefalse</func1><func2>truetrue</func2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0139">
+      <description>Test type of global xsl:variable that has @as="item()?" and no @select, the sequence constructor contains one of: - nothing, LRE, xsl:value-of, xsl:element, xsl:attribute</description>
+      <keywords>xsl:variable ItemTest OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0139.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>true</e1><e2>true</e2><e3>true</e3><e4>true</e4><e5>true</e5></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0140">
+      <description>Test with xsl:template that has @as="item()" and the sequence constructor contains one of: - LRE, xsl:value-of, xsl:sequence with one item, xsl:element, xsl:document</description>
+      <keywords>xsl:template ItemTest</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0140.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1><i1>item</i1></e1><e2>my string</e2><e3>2</e3><e4><elem>hi1</elem></e4><e5><my:item xmlns:my="http://uri.test">1</my:item></e5></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0141">
+      <description>Test with xsl:function that has @as="item()*" and the sequence constructor contains one of: -nothing, LREs, xsl:value-of, xsl:sequence, sequence of xsl:element, xsl:document</description>
+      <keywords>xsl:function ItemTest OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0141.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/func1 = "truefalse"</assert>
+            <assert>/out/func2 = "truefalse"</assert>
+            <assert>/out/func3 = "truetrue"</assert>
+            <assert>/out/func4 = "truefalse"</assert>
+            <assert>/out/func5 = "truefalse"</assert>
+            <assert>/out/func6 = "truetrue"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-0142">
+      <description>Test with xsl:template which contains an explicitly constructed typed value and @as="xs:anyAtomicType". Types tested: - derived built-in atomic type, user-defined atomic type</description>
+      <keywords>xs:anyAtomicType AtomicOrUnionType xsl:template</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Add dependency on schema awareness"/>
+      <environment ref="as-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="built_in_derived_types"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0142.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><temp1>P1Y2M3DT10H30M23S</temp1><temp2>2005</temp2><temp3>1.0001</temp3><temp4>000-TM</temp4></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0143">
+      <description>Test with global xsl:variable without @select, where sequence constructor contains an explicitly constructed typed value of the same type as the built-in derived atomic type in @as. Verify the variable is of the type specified in @as.</description>
+      <keywords>xsl:variable buildin-datatypes AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="built_in_derived_types"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0143.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0144">
+      <description>Test of global xsl:variable with a sequence constructor of LREs and @as= built-in derived atomic type. Value of LRE is in the lexical space of the type in @as. Verify the variable is of the type specified in @as.</description>
+      <keywords>lre-promotion buildin-datatypes AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="built_in_derived_types"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0144.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "falsetrue"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="as-0144a">
+      <description>Test of global xsl:param with a sequence constructor of LREs and @as= built-in derived atomic type. Value of LRE is in the lexical space of the type in @as. Verify the variable is of the type specified in @as.</description>
+      <keywords>lre-promotion buildin-datatypes AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2016-01-29"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="built_in_derived_types"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0144a.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0145">
+      <description>Test of xsl:template with a sequence constructor of LREs and @as= built-in derived atomic type. Value of LRE is in the lexical space of the type in @as.</description>
+      <keywords>lre-promotion buildin-datatypes AtomicOrUnionType xsl:template</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="built_in_derived_types"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0145.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/temp1 = "like"</assert>
+            <assert>/out/temp2 = "two organizations"</assert>
+            <assert>/out/temp3 = "PT"</assert>
+            <assert>/out/temp4 = "a:_underscore_"</assert>
+            <assert>/out/temp5 = "vwxyz12"</assert>
+            <assert>/out/temp6 = "business-enforcement::link-chain.common"</assert>
+            <assert>/out/temp7 = "131072"</assert>
+            <assert>/out/temp8 = "-7632460"</assert>
+            <assert>/out/temp9 = "18446744"</assert>
+            <assert>/out/temp10 = "4444"</assert>
+            <assert>/out/temp11 = "-74146"</assert>
+            <assert>/out/temp12 = "-9223372"</assert>
+            <assert>/out/temp13 = "1844674"</assert>
+            <assert>/out/temp14 = "573231403"</assert>
+            <assert>/out/temp15 = "-32768"</assert>
+            <assert>/out/temp16 = "65535"</assert>
+            <assert>/out/temp17 = "-128"</assert>
+            <assert>/out/temp18 = "110"</assert>
+            <assert>/out/temp19 = "_a"</assert>
+            <assert>/out/temp20 = "_a"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-0146">
+      <description>Test with xsl:function where the value in the sequence constructor is explicitly constructed and is of the same type as the built-in derived atomic type in @as. Types tested are: -xs:nonPositiveInteger, xs:int, xs:long, xs:unsignedByte, xs:NMTOKEN, xs:ID. Verify the result of the function is of the type specified in @as.</description>
+      <keywords>xsl:function xs:long xs:int xs:unsignedByte xs:NMTOKEN xs:ID xs:nonPositiveInteger AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Use environment without schema"/>
+      <environment ref="as-01b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="built_in_derived_types"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0146.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><func1>true</func1><func2>true</func2><func3>true</func3><func4>true</func4><func5>true</func5><func6>true</func6></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0147">
+      <description>Test with global xsl:variable where value in @select is explicitly constructed and of the same type as the user-defined atomic type (derived by restriction) in @as. Verify the variable is of the type specified in @as.</description>
+      <keywords>user-defined-atomic-type AtomicOrUnionType xsl:import-schema</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2016-03-16" change="add dependency on schema awareness"/>
+      <environment ref="as-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="built_in_derived_types"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0147.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><var1>falsetrue</var1><var2>falsetrue</var2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0148">
+      <description>Test of global xsl:variable with a sequence constructor of LREs and @as= user-defined atomic type (derived by restriction). Value of LRE is in the lexical space of the type in @as. Verify the variable is of the type specified in @as.</description>
+      <keywords>xsl:import-schema lre-promotion user-defined-atomic-type AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2016-03-16" change="add dependency on schema awareness"/>
+      <environment ref="as-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="built_in_derived_types"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0148.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><var1>123-AB * falsetrue</var1><var2>0 * falsetrue</var2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0149">
+      <description>Test with xsl:function where the value in the sequence constructor is explicitly constructed and is of the same type as the user-defined atomic type (derived by restriction) in @as. Verify the result of the function is of the type specified in @as.</description>
+      <keywords>xsl:import-schema user-defined-atomic-type xsl:function AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Add dependency on schema awareness"/>
+      <environment ref="as-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="built_in_derived_types"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0149.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><func1>true</func1><func2>true</func2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0150">
+      <description>Test with xsl:function that returns an empty sequence and has @as=xs:NMTOKEN*. Verify the returned value if of type xs:NMTOKEN*.</description>
+      <keywords>xsl:function xs:NMTOKEN AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Debbie Lockett" on="2020-10-14" change="Add dependency on schema awareness"/>
+      <environment ref="as-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="built_in_derived_types"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0150.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><func1>truefalse</func1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0151">
+      <description>Test with xsl:template that has @as="document-node(element(QName, user-defined-list-type) +". The sequence constructor contains several xsl:document with a valid document elements.</description>
+      <keywords>xsl:document xsl:import-schema DocumentTest ElementTest TypeName</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0151.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><item>111-AB</item><item>999-AC</item></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="as-0152">
+      <description>Test promotion of function result to xs:double.</description>
+      <created by="Michael Kay" on="2023-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0152.xsl"/>
+      </test>
+      <result>
+         <assert>every $att in //@* satisfies $att = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0201">
+      <description>Test with tunnel xsl:with-param and @as=empty-sequence(). The values for @select are () and empty sequence obtained at run time.</description>
+      <keywords>empty-sequence xsl:with-param tunnel-parameter</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><item1><item2></item2></item1></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-0301">
+      <description>Test with global xsl:variable where the value of @select is an attribute obtained at run time, @as="xs:untypedAtomic". Verify that the resulting variable type is xs:untypedAtomic</description>
+      <keywords>AtomicOrUnionType xs:untypedAtomic xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0301.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0302">
+      <description>Test with global xsl:variable where the value of @select is an attribute obtained at run time or (), @as="xs:untypedAtomic?".</description>
+      <keywords>AtomicOrUnionType xs:untypedAtomic xsl:variable empty-sequence</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0302.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truetruetruefalse"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0303">
+      <description>Test with xsl:template with xsl:value-of on a literal string inside the sequence constructor and has @as=xs:untypedAtomic.</description>
+      <keywords>AtomicOrUnionType xsl:template xs:untypedAtomic AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0303.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "123"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0304">
+      <description>Test with global xsl:variable where of @select has a value obtained at run time, @as="xs:anyAtomicType". Verify that the resulting variable type is xs:anyAtomicType.</description>
+      <keywords>xs:anyAtomicType xsl:variable AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0304.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truetruetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0401">
+      <description>Test with global xsl:variable where the value of @select is a sequence of attributes obtained at run time or (), @as="xs:untypedAtomic*".</description>
+      <keywords>xs:untypedAtomic AtomicOrUnionType xsl:variable empty-sequence</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0401.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truefalsetruefalse"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0402">
+      <description>Test with global xsl:variable where the value of @select is a sequence of attributes obtained at run time, @as="xs:untypedAtomic+".</description>
+      <keywords>xs:untypedAtomic OccurrenceIndicator attribute-axis AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0402.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truefalse"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0501">
+      <description>
+         Test with global xsl:variable where @select has an xs:untypedAtomic value and @as is a built-in atomic type. 
+         Verify the variable is of the type specified in @as. Values for @as tested: all built-in primitive types,
+         xs:integer, xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>AtomicOrUnionType buildin-datatypes child-select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Abel Braaksma" on="2014-10-31" change="Bug 27216, add dependency on negative and high >9999 years"/>
+      <environment>
+         <source role="." file="as-05a.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year" satisfied="true"/>
+         <year_component_values value="support year above 9999" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0501.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0501a">
+      <description>
+         Bug 27216
+         Variant of previous test with inverted support for negative and >9999 years
+         Test with global xsl:variable where @select has an xs:untypedAtomic value and @as is a built-in atomic type. 
+         Verify the variable is of the type specified in @as. Values for @as tested: all built-in primitive types,
+         xs:integer, xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>AtomicOrUnionType buildin-datatypes child-select-expression</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <environment>
+         <source role="." file="as-05a.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year" satisfied="false"/>
+         <year_component_values value="support year above 9999" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0501.xsl"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="as-0501b">
+      <description>
+         Bug 27216
+         Variant of previous test without year-value dependencies
+         Test with global xsl:variable where @select has an xs:untypedAtomic value and @as is a built-in atomic type. 
+         Verify the variable is of the type specified in @as. Values for @as tested: all built-in primitive types,
+         xs:integer, xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>AtomicOrUnionType buildin-datatypes child-select-expression</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <environment>
+         <source role="." file="as-05b.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0501.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0601">
+      <description>Test with non-tunnel xsl:with-param where the value in @select is explicitly constructed and of the same type as the built-in atomic type in @as. Verify the parapmeter is of the type specified in @as.Types tested are: xs:string, xs:double, xs:integer, xs:dayTimeDuration, xs:QName</description>
+      <keywords>xsl:with-param xs:double xs:integer xs:QName xs:dayTimeDuration xs:string xsl:apply-templates AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="as-06.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0601.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/par1 = "0true"</assert>
+            <assert>/out/par2 = "0true"</assert>
+            <assert>/out/par3 = "INFtrue"</assert>
+            <assert>/out/par4 = "43true"</assert>
+            <assert>/out/par5 = "-300true"</assert>
+            <assert>/out/par6 = "my:localtrue"</assert>
+            <assert>/out/par7 = "PT1M39.999Strue"</assert>
+            <assert>/out/par8 = "-PT1H40Mtrue"</assert>
+            <assert>/out/par9 = "hellotrue"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-0701">
+      <description>Test with tunnel xsl:param where value in @select is xs:untypedAtomic obtained at run time and @as=xs:double.</description>
+      <keywords>tunnel-parameter xsl:apply-templates xsl:with-param AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0701.xsl"/>
+      </test>
+      <result>
+         <assert>/out/par1 = "0truetrue"</assert>         
+      </result>
+   </test-case>
+
+   <test-case name="as-0702">
+      <description>Test with tunnel xsl:with-param without @select, where the sequence constructor contains an xs:untypedAtomic obtained at run time and @as=xs:double.</description>
+      <keywords>AtomicOrUnionType xs:double xsl:with-param tunnel-parameter lre-promotion</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0702.xsl"/>
+      </test>
+      <result>
+         <assert>/out/par1 = "0true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0703">
+      <description>Test type of tunnel xsl:with-param that has @as="element(QName, xs:untyped?)" with: 
+         - @select selecting an element node from input file 
+         - no @select and sequence constructor has xsl:element 
+         - no @select and sequence constructor has an LRE
+      </description>
+      <keywords>ElementTest xs:untyped OccurrenceIndicator ElementName tunnel-parameter xsl:apply-templates</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0703.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/par1 = "http://www.mytypetest.orgtrue"</assert>
+            <assert>/out/par2 = "hellotrue"</assert>
+            <assert>/out/par3 = "my elementtrue"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-0801">
+      <description>
+         Test with a sequence of xs:untypedAtomic values in @select of a global xsl:variable and @as is a built-in atomic 
+         type with occurence indicator (*). Verify variable is of type specified in @as. Values for @as tested: all 
+         built-in primitive types (except xs:QName), xs:integer, xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>buildin-datatypes OccurrenceIndicator child-select-expression xsl:variable AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Abel Braaksma" on="2014-10-31" change="Bug 27216, add dependency on negative and high >9999 years"/>
+      <environment ref="as-08a"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year" satisfied="true"/>
+         <year_component_values value="support year above 9999" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0801.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "truefalse"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="as-0801a">
+      <description>
+         Bug 27216
+         Variant of previous test with inverted dependencies for year-values, should throw error
+         Test with a sequence of xs:untypedAtomic values in @select of a global xsl:variable and @as is a built-in atomic 
+         type with occurence indicator (*). Verify variable is of type specified in @as. Values for @as tested: all 
+         built-in primitive types (except xs:QName), xs:integer, xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>buildin-datatypes OccurrenceIndicator child-select-expression xsl:variable AtomicOrUnionType</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <environment ref="as-08a"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year" satisfied="false"/>
+         <year_component_values value="support year above 9999" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0801.xsl"/>
+      </test>
+      <result>
+         <error code="FODT0001" />
+      </result>
+   </test-case>
+   
+   <test-case name="as-0801b">
+      <description>
+         Bug 27216
+         Variant of previous test without year-value dependencies
+         Test with a sequence of xs:untypedAtomic values in @select of a global xsl:variable and @as is a built-in atomic 
+         type with occurence indicator (*). Verify variable is of type specified in @as. Values for @as tested: all 
+         built-in primitive types (except xs:QName), xs:integer, xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>buildin-datatypes OccurrenceIndicator child-select-expression xsl:variable AtomicOrUnionType</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <environment ref="as-08b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0801.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "truefalse"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-0802">
+      <description>
+         Test with xsl:template which contains a sequence of xs:untypedAtomic values and @as is a built-in type 
+         with occurrence indicator (+). Values for @as tested: -all built-in primitive types (except xs:QName), 
+         xs:integer, xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>buildin-datatypes OccurrenceIndicator child-select-expression xsl:sequence AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Abel Braaksma" on="2014-10-31" change="Bug 27216, add dependency on negative and high >9999 years"/>
+      <environment ref="as-08a"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year" satisfied="true"/>
+         <year_component_values value="support year above 9999" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0802.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/template1 = "P1Y2M3DT10H30M23S -P1Y23DT59.123S"</assert>
+            <assert>/out/template2 = "2000-01-16T00:00:00Z -1999-05-31T13:20:00+14:00"</assert>
+            <assert>/out/template3 = "13:20:00-05:00 00:00:00"</assert>
+            <assert>/out/template4 = "-0012-12-03-05:00 1999-05-31"</assert>
+            <assert>/out/template5 = "21999-05+14:00 1999-05"</assert>
+            <assert>/out/template6 = "-0012-05:00 2005"</assert>
+            <assert>/out/template7 = "--05-31 --05-31+14:00"</assert>
+            <assert>/out/template8 = "---31+14:00 ---31Z"</assert>
+            <assert>/out/template9 = "--05+14:00 --05"</assert>
+            <assert>/out/template10 = "true false"</assert>
+            <assert>/out/template11 = "PM24 1010"</assert>
+            <assert>/out/template12 = "07FF ABCD"</assert>
+            <assert>/out/template13 = "1.1234E30 -0.00175"</assert>
+            <assert>/out/template14 = "-3.4201 7.8899 0"</assert>
+            <assert>/out/template15 = "0 0 INF"</assert>
+            <assert>/out/template16 = "43 -300"</assert>
+            <assert>/out/template17 = "http://www.mytypetest.org http://www.hello.org#one"</assert>
+            <assert>/out/template18 = "PT1M39.999S -PT1H40M"</assert>
+            <assert>/out/template19 = "P1Y2M -P1Y9M"</assert>
+            <assert>/out/template20 = "hello one two three"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-0802a">
+      <description>
+         Bug 27216
+         Variant of previous test with inverted year-value dependencies, should throw error.
+         Test with xsl:template which contains a sequence of xs:untypedAtomic values and @as is a built-in type 
+         with occurrence indicator (+). Values for @as tested: -all built-in primitive types (except xs:QName), 
+         xs:integer, xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>buildin-datatypes OccurrenceIndicator child-select-expression xsl:sequence AtomicOrUnionType</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <environment ref="as-08a"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <year_component_values value="support negative year" satisfied="false"/>
+         <year_component_values value="support year above 9999" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0802.xsl"/>
+      </test>
+      <result>
+         <error code="FODT0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="as-0802b">
+      <description>
+         Bug 27216
+         Variant of previous test without dependencies.
+         Test with xsl:template which contains a sequence of xs:untypedAtomic values and @as is a built-in type 
+         with occurrence indicator (+). Values for @as tested: -all built-in primitive types (except xs:QName), 
+         xs:integer, xs:dayTimeDuration, xs:yearMonthDuration
+      </description>
+      <keywords>buildin-datatypes OccurrenceIndicator child-select-expression xsl:sequence AtomicOrUnionType</keywords>
+      <created by="Abel Braaksma" on="2014-10-31"/>
+      <environment ref="as-08b"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0802.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/template1 = "P1Y2M3DT10H30M23S -P1Y23DT59.123S"</assert>
+            <assert>/out/template2 = "2000-01-16T00:00:00Z 9999-05-31T13:20:00+14:00"</assert>
+            <assert>/out/template3 = "13:20:00-05:00 00:00:00"</assert>
+            <assert>/out/template4 = "0012-12-03-05:00 1999-05-31"</assert>
+            <assert>/out/template5 = "6999-05+14:00 1999-05"</assert>
+            <assert>/out/template6 = "0012-05:00 2005"</assert>
+            <assert>/out/template7 = "--05-31 --05-31+14:00"</assert>
+            <assert>/out/template8 = "---31+14:00 ---31Z"</assert>
+            <assert>/out/template9 = "--05+14:00 --05"</assert>
+            <assert>/out/template10 = "true false"</assert>
+            <assert>/out/template11 = "PM24 1010"</assert>
+            <assert>/out/template12 = "07FF ABCD"</assert>
+            <assert>/out/template13 = "1.1234E30 -0.00175"</assert>
+            <assert>/out/template14 = "-3.4201 7.8899 0"</assert>
+            <assert>/out/template15 = "0 0 INF"</assert>
+            <assert>/out/template16 = "43 -300"</assert>
+            <assert>/out/template17 = "http://www.mytypetest.org http://www.hello.org#one"</assert>
+            <assert>/out/template18 = "PT1M39.999S -PT1H40M"</assert>
+            <assert>/out/template19 = "P1Y2M -P1Y9M"</assert>
+            <assert>/out/template20 = "hello one two three"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-0901">
+      <description>Test with an xs:untypedAtomic value as a child of LRE in the sequence constructor of a local xsl:variable and @as=xs:dayTimeDuration*. Verify the variable is of type xs:dayTimeDuration*.</description>
+      <keywords>AtomicOrUnionType xs:dayTimeDuration OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="as-09.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-0901.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1001">
+      <description>Test with an xs:anyURI value as a child of LRE in the sequence constructor of a non-tunnel xsl:with-param and @as=xs:anyURI+. Verify the parameter is of type xs:anyURI+.</description>
+      <keywords>xsl:with-param OccurrenceIndicator AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><item-list><item>5.4321E-1001</item></item-list></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1001.xsl"/>
+      </test>
+      <result>
+         <assert>/out/par1 = "http://test.orgtruetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1101">
+      <description>Test with several xs:untypedAtomic values as children of LRE in the sequence constructor of a tunnel xsl:with-param and @as=xs:float*. Verify the parameter is of type xs:float*.</description>
+      <keywords>tunnel-parameter xsl:apply-templates OccurrenceIndicator xs:float AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><item-list><item1>5.4321E-1</item1><item1>-0.00175</item1><item1>INF</item1><item>hello</item></item-list></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1101.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/*[1][self::empty] = ""</assert>
+            <assert>/out/*[2][self::empty] = ""</assert>
+            <assert>/out/*[3][self::empty] = ""</assert>
+            <assert>/out/*[4][self::par1] = "0.54321 -0.00175 INFtruefalse"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-1201">
+      <description>Test type of global xsl:variable selecting any node from input file or temporary tree, @as="node()".</description>
+      <keywords>AnyKindTest all-node-kinds xsl:variable child-select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1201.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1202">
+      <description>Test type of global xsl:variable with @select selecting an element node from input file or temporary tree, @as="element(QName)".</description>
+      <keywords>ElementTest ElementName child-select-expression xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1202.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1203">
+      <description>Test type of global xsl:variable with @select selecting an element node from input file or temporary tree, @as="element(QName, xs:untyped?)".</description>
+      <keywords>ElementTest ElementName child-select-expression xsl:variable xs:untyped OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1203.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1204">
+      <description>Test type of global xsl:variable selecting an attribute node from input file or from a temporary tree, @as="attribute()".</description>
+      <keywords>AttributeTest xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1204.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1205">
+      <description>Test type of global xsl:variable selecting an attribute node from input file or from a temporary tree, @as="attribute(*)".</description>
+      <keywords>AttributeTest AttributeNameOrWildcard child-select-expression xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1205.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1206">
+      <description>Test type of global xsl:variable selecting an attribute node from input file or from a temporary tree, @as="attribute(QName, xs:untypedAtomic)".</description>
+      <keywords>AttributeTest AttributeNameOrWildcard xsl:variable AttributeName attribute-axis xs:untypedAtomic</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1206.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1207">
+      <description>
+         Test type of global xsl:variable selecting a comment node from input file or from a temporary tree, @as="comment()".
+         Also test that XPath comments are allowed in the sequence type (bug 29814)
+      </description>
+      <keywords>CommentTest xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2016-09-30" change="Use XPath comments in SequenceType, see bug 29814"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1207.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1208">
+      <description>Test type of global xsl:variable selecting a text node from input file or from a temporary tree, @as="text()".</description>
+      <keywords>TextTest xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1208.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1209">
+      <description>Test type of global xsl:variable selecting a processing instruction from input file or from a temporary tree, @as="processing-instruction()".</description>
+      <keywords>PITest xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1209.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1210">
+      <description>Test of several templates which contain document, element,attribute, comment, text or processing-instruction nodes and have @as="node()".</description>
+      <keywords>NodeTest all-node-kinds xsl:element xsl:attribute xsl:processing-instruction xsl:comment xsl:text</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1210.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/e1/item="hello"</assert>
+            <assert>/out/e2/item[@attrib="red"][comment()="I am a comment"]="hello"</assert>
+            <assert>/out/e3[@attrib="red"]</assert>
+            <assert>/out/e4[processing-instruction(Process) = "fun"]</assert>
+            <assert>/out/e5 = "hello"</assert>
+            <assert>/out/e6/comment() = "I am a comment"</assert>
+            <assert>/out/e21/e1 = "element"</assert>
+            <assert>/out/e31/@e1 = "attribute"</assert>
+            <assert>/out/e41/processing-instruction(e1) = "PI"</assert>
+            <assert>/out/e51 = "text"</assert>
+            <assert>/out/e61/comment() = "comment"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-1211">
+      <description>Test of xsl:template which contains an attribute node from input file or xsl:attribute and has @as="attribute(QName, xs:untypedAtomic)".</description>
+      <keywords>AttributeTest xs:untypedAtomic AttributeName AttributeNameOrWildcard xsl:template</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1211.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1 attrib="red"/><e2 e1="attribute"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1212">
+      <description>Test type of local xsl:param that has @as="element()" with: - @select selecting an element node from input file - no @select and sequence constructor has xsl:element - no @select and sequence constructor has an LRE</description>
+      <keywords>ElementTest lre xsl:element select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1212.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truetruetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1213">
+      <description>Test type of local xsl:param that has @as="attribute()" with: - @select selecting an attribute node from input file - no @select and sequence constructor has xsl:attribute</description>
+      <keywords>AttributeTest xsl:attribute attribute-axis select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1213.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1214">
+      <description>Test with global xsl:variable that has @as="node()+", no @select and sequence constructor contains: -one node, a sequence of nodes of mixed kinds, nodes from a temporary tree</description>
+      <keywords>AnyKindTest OccurrenceIndicator xsl:variable select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1214.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>truetrue</e1><e2>truefalse</e2><e3>truefalse</e3></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1215">
+      <description>Test with global xsl:variable that has @as=""element()*" and @select contains: - one element node, a sequence of element nodes from input file, an empty sequence obtained at run time, (), element nodes from a temporary tree.</description>
+      <keywords>ElementTest OccurrenceIndicator empty-sequence select-expression xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1215.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>truetrue</e1><e2>truefalse</e2><e3>truefalse</e3><e4>truefalse</e4><e5>truefalse</e5></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1216">
+      <description>Test with local xsl:param that has @as="element()+" and @select contains: -one element node, a sequence of element nodes from input file, element nodes from a temporary tree</description>
+      <keywords>ElementTest OccurrenceIndicator xsl:param select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1216.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>truetrue</e1><e2>truefalse</e2><e3>truefalse</e3></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1217">
+      <description>Test with tunnel xsl:with-param that has @as=""element()*" and @select contains: -one element node, a sequence of element nodes from input file, an empty sequence obtained at run time, (), element nodes from a temporary tree</description>
+      <keywords>tunnel-parameter ElementTest OccurrenceIndicator empty-sequence</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1217.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><par1>hellotrue</par1><par2>hello namespacedtrue</par2><par3>true</par3><par4>true</par4><par5>hello hellotrue</par5></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1218">
+      <description>Test type of global xsl:variable, @as="item()" and @select contains one of: -xs:untypedAtomic from input file, explicitly created built-in primitive type (xs:double), attribute() from input file, document-node() from input file, element from temporary tree, literal string</description>
+      <keywords>ItemTest select-expression xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1218.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1219">
+      <description>Test type of global xsl:variable that has @as="item()*" and no @select, the sequence constructor contains one of: -nothing, LREs, xsl:value-of, xsl:sequence, sequence of xsl:element, xsl:document</description>
+      <keywords>ItemTest OccurrenceIndicator lre xsl:element xsl:document</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1219.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1220">
+      <description>Test type of global xsl:variable, @as="item()+" and @select contains one of: - sequence of xs:untypedAtomic from input file, explicitly created built-in primitive type (xs:double), mixed sequence of explicitly created built-in primitive types, attribute() from input file, document-node() from input file, temporary tree, literal string</description>
+      <keywords>ItemTest OccurrenceIndicator mixed-sequence document-node mixed-sequence unspecified</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1220.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1221">
+      <description>Test type of local xsl:param that has @as="element()" with: - @select selecting an element node from input file - no @select and sequence constructor has xsl:element - no @select and sequence constructor has an LRE</description>
+      <keywords>ItemTest xsl:param select-expression unspecified</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1221.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1222">
+      <description>Test type of non-tunnel xsl:with-param, @as="item()*" and @select contains one of: -sequence of xs:untypedAtomic from input file, explicitly created built-in primitive type (xs:double), mixed sequence of explicitly created built-in primitive types, attribute() from input file, document-node() from input file, temporary tree, (), empty sequence obtained at run time, literal string</description>
+      <keywords>ItemTest xsl:with-param non-tunnel select-expression unspecified</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1222.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/par1/normalize-space() = "hello namespaced true"</assert>
+            <assert>/out/par2 = "INFtrue"</assert>
+            <assert>/out/par3 = "3 -300 my:local PT1M39.999Strue"</assert>
+            <assert>/out/par4 = "redtrue"</assert>
+            <assert>/out/par5/normalize-space() = "hello namespaced true"</assert>
+            <assert>/out/par6 = "hellotrue"</assert>
+            <assert>/out/par7 = "true"</assert>
+            <assert>/out/par8 = "true"</assert>
+            <assert>/out/par9 = "hellotrue"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-1301">
+      <description>Test with global xsl:variable that has @as="element(QName, xs:untyped)*" and its sequence constructor contains: - one element node, a sequence of element nodes from input file, an empty sequence obtained at run time, (), element nodes from a temporary tree.</description>
+      <keywords>ElementTest ElementName xs:untyped OccurrenceIndicator select-expression unspecified</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-13"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>truetrue</e1><e2>truefalse</e2><e3>truefalse</e3><e4>truefalse</e4><e5>truefalse</e5></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1302">
+      <description>Test with global xsl:variable that has @as="element(*, xs:untyped?)+" and @select contains a sequence of element nodes from input file.</description>
+      <keywords>ElementTest ElementNameOrWildcard xs:untyped OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-13"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1302.xsl"/>
+      </test>
+      <result>
+         <assert>/out/e1 = "truefalse"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1303">
+      <description>Test with global xsl:variable that has @as="document(element(*, xs:untyped?))+" and @select contains a sequence of document, or mixed nodes from input file.</description>
+      <keywords>DocumentTest ElementNameOrWildcard xs:untyped OccurrenceIndicator</keywords>
+      <created by="Abel Braaksma" on="2019-02-06"/>
+      <environment ref="as-13"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1303.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+            <e1>truetruetruetrue</e1>
+            <e2>truefalsetruefalse</e2>
+            <e3>truefalsefalsetrue</e3>
+            <e4>truefalsefalsetrue</e4>
+            <e5>truetruetruetrue</e5>
+            <e6>falsefalsefalsefalsetruefalsetruefalse</e6>
+         </out>]]>
+         </assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1304">
+      <description>Test with global xsl:variable that has @as="document(element(*, xs:untyped?))+" and @select contains a sequence of document, or mixed nodes from input file.</description>
+      <keywords>DocumentTest ElementNameOrWildcard xs:untyped OccurrenceIndicator</keywords>
+      <created by="Abel Braaksma" on="2019-02-06"/>
+      <environment ref="as-13"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1304.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+            <e1>falsetruetruefalse</e1>
+            <e2>falsetruetruefalse</e2>
+            <e3>falsefalsefalsefalse</e3>
+            <e4>falsetruetruefalse</e4>
+            <e5>falsefalsefalsefalse</e5>
+            <e6>falsetruetruefalse</e6>
+            <e7>falsetruetruefalse</e7>
+            <e8>truetruetruetrue</e8>
+         </out>]]>
+         </assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1401">
+      <description>Test with global xsl:variable that has @as="attribute()*" and @select contains: -one attribute node, a sequence of attribute nodes from input file, an empty sequence obtained at run time, (), attribute nodes from a temporary tree</description>
+      <keywords>AttributeTest OccurrenceIndicator attribute-axis empty-sequence xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>truetrue</e1><e2>truefalse</e2><e3>truefalse</e3><e4>truefalse</e4><e5>truefalse</e5></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1402">
+      <description>
+      	Test with global xsl:variable that has @as="attribute(QName, xs:untypedAtomic)+" and its sequence constructor contains: 
+      	-one attribute node, a sequence of attribute nodes from input file, attribute nodes from a temporary tree
+      </description>
+      <keywords>AttributeTest xs:untypedAtomic AttributeName attribute-axis xsl:attribute xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>truetrue</e1><e2>truefalse</e2><e3>truefalse</e3></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1403">
+      <description>
+      	Test with global xsl:variable that has @as="attribute()?" and @select contains: -one attribute node, 
+      	an empty sequence obtained at run time, (), an attribute node from a temporary tree
+      </description>
+      <keywords>AttributeTest OccurrenceIndicator attribute-axis empty-sequence xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1403.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>truetrue</e1><e2>truefalse</e2><e3>truefalse</e3><e4>truetrue</e4></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1404">
+      <description>Test with global xsl:variable that has @as="comment()?" and @select contains: -one comment node from input file, an empty sequence obtained at run time, (), a comment node from a temporary tree</description>
+      <keywords>CommentTest OccurrenceIndicator empty-sequence select-expression xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1404.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>truetrue</e1><e2>truefalse</e2><e3>truefalse</e3><e4>truefalse</e4></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1405">
+      <description>Test with global xsl:variable that has @as="text()+" and @select contains: -one text node from input file, a sequence of text nodes from input file, text nodes from a temporary tree</description>
+      <keywords>TextTest OccurrenceIndicator select-expression xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1405.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>truetrue</e1><e2>truefalse</e2><e3>truefalse</e3></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1501">
+      <description>
+         Test with global xsl:variable that has @as="processing-instruction()*" and @select contains: 
+         -one processing-instruction node from input file, 
+         a sequence of processing-instruction nodes from input file, 
+         an empty sequence obtained at run time, (), processing-instruction nodes from a temporary tree
+      </description>
+      <keywords>PITest OccurrenceIndicator select-expression xsl:variable empty-sequence</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="as-15.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>truetrue</e1><e2>truefalse</e2><e3>truefalse</e3><e4>truefalse</e4><e5>truefalse</e5></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1601">
+      <description>
+      	Test that an error is raised if @as is used in context where it is not permitted 
+      	(@as used on xsl:call-template instruction).</description>
+      <keywords>XTSE0090 xs:integer xsl:call-template AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1601.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+
+   <test-case name="as-1602">
+      <description>
+      	Test that an error is raised if in xsl:template @as=xs:double but the value in the sequence 
+      	constructor cannot be converted to xs:double.
+      </description>
+      <keywords>XTTE0505 xs:double xsl:template AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1602.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0505"/>
+      </result>
+   </test-case>
+
+   <test-case name="as-1701">
+      <description>
+      	Test with global xsl:variable where @select is a typed value obtained at run time and @as="xs:anyAtomicType".
+      	 Effective global variable type is both xs:anyAtomicType and the actual type used in @select. 
+      	 No Schema is imported. Types tested: -all primitive built-in types, xs:integer, all derived builtin types
+      </description>
+      <keywords>to-xs:anyAtomicType conversion buildin-datatypes select-expression xsl:variable AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1701.xsl"/>
+      </test>
+      <result>
+         <assert>every $v in /out/* satisfies $v = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1702">
+      <description>
+      	Test with global xsl:variable where @select a typed value the same in @as obtained at run time, @as is a 
+      	built-in derived atomic type. Verify the variable is of the type specified in @as.
+      </description>
+      <keywords>buildin-datatypes AtomicOrUnionType unspecified xs:untypedAtomic conversion-to-self</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1702.xsl"/>
+      </test>
+      <result>
+         <assert>every $v in /out/* satisfies $v = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1703">
+      <description>
+         Test of xsl:template with a sequence constructor of LREs and @as= built-in derived atomic type. 
+         Value of LRE is in the lexical space of the type in @as.
+      </description>
+      <keywords>lre-promotion buildin-datatypes AtomicOrUnionType unspecified</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1703.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/temp1 = "like,"</assert>
+            <assert>/out/temp2 = "two organizations"</assert>
+            <assert>/out/temp3 = "PT"</assert>
+            <assert>/out/temp4 = "a:_underscore_"</assert>
+            <assert>/out/temp5 = "vwxyz12"</assert>
+            <assert>/out/temp6 = "business-enforcement::link-chain.common"</assert>
+            <assert>/out/temp7 = "131072"</assert>
+            <assert>/out/temp8 = "-7632460"</assert>
+            <assert>/out/temp9 = "18446744"</assert>
+            <assert>/out/temp10 = "4444"</assert>
+            <assert>/out/temp11 = "-74146"</assert>
+            <assert>/out/temp12 = "-9223372"</assert>
+            <assert>/out/temp13 = "1844674"</assert>
+            <assert>/out/temp14 = "573231403"</assert>
+            <assert>/out/temp15 = "-32768"</assert>
+            <assert>/out/temp16 = "65535"</assert>
+            <assert>/out/temp17 = "-128"</assert>
+            <assert>/out/temp18 = "110"</assert>
+            <assert>/out/temp19 = "_ab"</assert>
+            <assert>/out/temp20 = "_ab"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-1704">
+      <description>
+         Test with local xsl:variable where @select has a typed value same as in @as, obtained at run time from 
+         element or attribute nodes, @as is abuilt-in derived atomic type. Verify the variable is of the type 
+         specified in @as. Types tested: -xs:nonPositiveInteger, xs:int, xs:long, xs:unsignedByte, xs:NMTOKEN, xs:ID
+      </description>
+      <keywords>select-expression xs:NMTOKEN xs:int xs:nonPositiveInteger xs:long xs:unsignedByte xs:ID xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1704.xsl"/>
+      </test>
+      <result>
+         <assert>every $v in /out/* satisfies $v = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1705">
+      <description>
+         Test with global xsl:param where @select is a typed value the same as in @as and obtained at run time, 
+         @as is a built-in derived atomic type. Verify the parameter is of the type specified in @as. 
+         Types tested: -xs:nonPositiveInteger, xs:int, xs:long, xs:unsignedByte, xs:NMTOKEN, xs:ID
+      </description>
+      <keywords>select-expression xs:NMTOKEN xs:int xs:nonPositiveInteger xs:long xs:unsignedByte xs:ID xsl:param xs:untypedAtomic AtomicOrUnionType conversion-to-self</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1705.xsl"/>
+      </test>
+      <result>
+         <assert>every $v in /out/* satisfies $v = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1706">
+      <description>
+         Test with global xsl:param without @select, where the sequence constructor contains a typed value, 
+         the same as in @as, obtained at run time and @as is a built-in derived atomic type. 
+         Verify the parameter is of the type specified in @as.Types tested: 
+         -xs:nonPositiveInteger, xs:int, xs:long, xs:unsignedByte, xs:NMTOKEN, xs:ID
+      </description>
+      <keywords>xsl:value-of xs:NMTOKEN xs:int xs:nonPositiveInteger xs:long xs:unsignedByte xs:ID xsl:param to-xs:untypedAtomic AtomicOrUnionType conversion-to-self</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1706.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1707">
+      <description>
+         Test with local xsl:param where @select is a typed value the same as in @as and 
+         obtained at run time, @as is a built-in derived atomic type. 
+         Verify the parameter is of the type specified in @as. Types tested: 
+         -xs:nonPositiveInteger, xs:int, xs:long, xs:unsignedByte, xs:NMTOKEN, xs:ID
+      </description>
+      <keywords>select-expression xs:NMTOKEN xs:int xs:nonPositiveInteger xs:long xs:unsignedByte xs:ID xsl:param to-xs:untypedAtomic AtomicOrUnionType conversion-to-self</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1707.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1708">
+      <description>Test with non-tunnel xsl:with-param where the value in @select is a typed value, the same as in @as, obtained at run time from element or attribute nodes, @as is a built-in derived atomic type. Verify the parameter is of the type specified in @as. Types tested: -xs:nonPositiveInteger, xs:int, xs:long, xs:unsignedByte, xs:NMTOKEN, xs:ID</description>
+      <keywords>select-expression xs:NMTOKEN xs:int xs:nonPositiveInteger xs:long xs:unsignedByte xs:ID xsl:param to-xs:untypedAtomic AtomicOrUnionType non-tunnel</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1708.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1709">
+      <description>Test type of global xsl:variable where @select contains built-in types derived by restriction from xs:decimal, @as="xs:double".(type promotion) Types tested: - xs:long, xs:nonNegativeInteger, xs:int, xs:byte</description>
+      <keywords>to-xs:double AtomicOrUnionType conversion-to-self conversion</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1709.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1710">
+      <description>Test type of global xsl:variable where @select contains built-in types derived by restriction from xs:decimal, @as="xs:float".(type promotion) Types tested: - xs:long, xs:nonNegativeInteger, xs:int, xs:byte</description>
+      <keywords>to-xs:float conversion buildin-datatypes AtomicOrUnionType xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1710.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1711">
+      <description>Test type of global xsl:variable where @select contains an xs:NMTOKEN, @as="xs:token".(subtype substitution)</description>
+      <keywords>to-xs:token AtomicOrUnionType xsl:variable xs:NMTOKEN</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1711.xsl"/>
+      </test>
+      <result>
+         <assert>/out/var1 = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1712">
+      <description>Test type of global xsl:variable where @select contains an xs:ID, @as="xs:normalizedString".(subtype substitution)</description>
+      <keywords>to-xs:normalizedString conversion xs:ID attribute-axis xsl:variable AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1712.xsl"/>
+      </test>
+      <result>
+         <assert>/out/var1 = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1713">
+      <description>Test with xsl:template that contains an xs:NMTOKEN, @as="xs:token".(subtype substitution)</description>
+      <keywords>to-xs:token xs:NMTOKEN select-expression xsl:template AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1713.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><temp1>business-enforcement::link-chain.common</temp1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1801">
+      <description>Test with global xsl:variable which holds a mixed sequence of derived built-in or user-defined atomic values or () and @as="xs:anyAtomicType*".</description>
+      <keywords>xsl:import-schema mixed-sequence xs:anyAtomicType OccurrenceIndicator user-defined-atomic-type AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1801.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "truefalse"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1802">
+      <description>Test with global xsl:variable and @as="xs:anyAtomicType?", @select is: -empty-sequence, built-in derived atomic type, user-defined atomic type derived by restriction</description>
+      <keywords>xs:anyAtomicType user-defined-atomic-type AtomicOrUnionType OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1802.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><var1>truefalse</var1><var2>truetrue</var2><var3>truetrue</var3></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1803">
+      <description>Test with xsl:template which returns a mixed sequence of derived built-in or user-defined atomic values and @as="xs:anyAtomicType+".</description>
+      <keywords>mixed-sequence xs:anyAtomicType OccurrenceIndicator AtomicOrUnionType user-defined-atomic-type xsl:import-schema</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1803.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><temp1>http://www.uri.com  *  -P1Y23DT59.123S  *  0  *  -7632460  *  hello</temp1><temp2>000-TM  *  1.0001  *  123-AB  *  1000</temp2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1804">
+      <description>Test with global xsl:variable where @select has a typed value obtained at run time from attribute nodes and of the same type as the user-defined atomic type (derived by restriction) in @as. Verify the variable is of the type specified in @as.</description>
+      <keywords>xsl:import-schema user-defined-atomic-type AtomicOrUnionType xs:untypedAtomic</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1804.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1805">
+      <description>Test with local xsl:param without @select, where sequence constructor contains a typed value obtained at run time from element or attribute nodes and is of the same type as the user-defined atomic type (derived by restriction) in @as. Verify the parameter is of the type specified in @as.</description>
+      <keywords>xsl:import-schema user-defined-atomic-type xs:untypedAtomic AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1805.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1806">
+      <description>Test type of global xsl:variable where @select contains user-defined types derived by restriction from xs:decimal or from xs:float, @as="xs:double".(type promotion)</description>
+      <keywords>xsl:import-schema user-defined-atomic-type xs:double AtomicOrUnionType type-promotion</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1806.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1807">
+      <description>Test type of global xsl:variable where @select contains user-defined types derived by restriction from xs:decimal, @as="xs:float".(type promotion)</description>
+      <keywords>xsl:import-schema xs:float type-promotion AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1807.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1808">
+      <description>Test type of xsl:functions that return user-defined types derived by restriction from xs:decimal or from xs:float, @as="xs:double".(type promotion)</description>
+      <keywords>xsl:import-schema user-defined-atomic-type xs:double type-promotion AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1808.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/func1 = "falsetrue"</assert>
+            <assert>/out/func2 = "falsetrue"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-1809">
+      <description>Test type of tunnel xsl:with-param where @select contains user-defined types derived by restriction from xs:decimal or from xs:float, @as="xs:double".(type promotion)</description>
+      <keywords>xsl:import-schema tunnel-parameter xs:double type-promotion AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1809.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><par1>1.0001falsetrue</par1><par2>-1falsetrue</par2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1810">
+      <description>Test type of global xsl:variable with @select selecting a typed attribute node from input file, @as="schema-attribute($QName)". Verify that the type annotation for the selected attribute is the same as the schema attribute declaration $QName and its name= $QName.</description>
+      <keywords>xsl:import-schema SchemaAttributeTest attribute-axis AttributeDeclaration</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1810.xsl"/>
+      </test>
+      <result>
+         <assert>/out/var1 = "truetruetruetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1811">
+      <description>
+         Test with xsl:template which returns a mixed sequence of derived built-in or user-defined atomic values 
+         and @as="xs:anyAtomicType+".
+      </description>
+      <keywords>ElementTest xsl:import-schema xsl:type lre ElementNameOrWildcard TypeName</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1811.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:my="http://www.example.com/ns/various">
+            <assert>/out/temp1/my:onlyAttributes[@my:colors="red blue green" and @specialPart="123-AB"]</assert>
+            <assert>/out/temp2[1]/my:complexUserElem[@age="75" and firstName="Hello" and familyName="There"]</assert>
+            <assert>/out/temp2[2]/my:complexMixedUserElem[@age="44" 
+               and normalize-space(description) = "Mr Peter has brown hair"
+               and normalize-space(company) = "He works at a Notorios company"
+               and description/name="Peter"
+               and company/name="Notorios"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-1812">
+      <description>Test of xsl:template with @as="schema-attribute($QName)". Sequence constructor contains an attribute from input file or an explicitly created xsl:attribute, with the same type or typed derived from the one for $QName.</description>
+      <keywords>xsl:import-schema SchemaAttributeTest AttributeNameOrWildcard strict-validation xsl:type</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1812.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:my="http://www.example.com/ns/various">
+            <assert>/out/temp1/@my:specialPart = "123-AB"</assert>
+            <assert>/out/temp2/@my:specialPart = "000-AB"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-1813">
+      <description>Test of xsl:template which contains an attribute node from input file, or explicitly created xsl:attribute and @as="attribute (QName, user-derived-simple-type)".Types tested: - user-defined atomic, list, union</description>
+      <keywords>xsl:import-schema AttributeTest AttributeName strict-validation TypeName xsl:type</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1813.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:my="http://www.example.com/ns/various">
+            <assert>/out/temp1/@my:specialPart = "123-AB"</assert>
+            <assert>/out/temp2/@my:listParts = "000-SS 000-RR"</assert>
+            <assert>/out/temp3/@my:union = "11111"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="as-1814">
+      <description>Variant of -1813 with computed attribute name</description>
+      <created by="Michael Kay" on="2022-07-06"/>
+      <environment ref="as-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1814.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:my="http://www.example.com/ns/various">
+            <assert>/out/temp1/@my:specialPart = "123-AB"</assert>
+            <assert>/out/temp2/@my:listParts = "000-SS 000-RR"</assert>
+            <assert>/out/temp3/@my:union = "11111"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+
+   <test-case name="as-1901">
+      <description>
+      	Test with global xsl:variable where @select has an xs:untypedAtomic value and @as ontained at run time, 
+      	@as is a built-in derived atomic type. Verify the variable is of the type specified in @as.
+      </description>
+      <keywords>conversion-to-self xsl:variable xs:untypedAtomic buildin-datatypes AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1702.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1902">
+      <description>Test with local xsl:variable where @select has an xs:untypedAtomic value and @as is a built-in derived atomic type. Verify the variable is of the type specified in @as. Types tested: -xs:nonPositiveInteger, xs:int, xs:long, xs:unsignedByte, xs:NMTOKEN, xs:ID</description>
+      <keywords>AtomicOrUnionType xsl:variable conversion-to-self xs:untypedAtomic xs:NMTOKEN xs:int xs:nonPositiveInteger xs:long xs:unsignedByte xs:ID</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1704.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1903">
+      <description>Test with global xsl:param where @select is xs:untypedAtomic and @as is a built-in derived atomic type. Verify the parameter is of the type specified in @as. Types tested: -xs:nonPositiveInteger, xs:int, xs:long, xs:unsignedByte, xs:NMTOKEN, xs:ID</description>
+      <keywords>AtomicOrUnionType xsl:param conversion-to-self xs:untypedAtomic xs:NMTOKEN xs:int xs:nonPositiveInteger xs:long xs:unsignedByte xs:ID</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1705.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1904">
+      <description>Test with global xsl:param without @select, where the sequence constructor contains xs:untypedAtomic value and @as is a built-in derived atomic type. Verify the parameter is of the type specified in @as.Types tested: -xs:nonPositiveInteger, xs:int, xs:long, xs:unsignedByte, xs:NMTOKEN, xs:ID</description>
+      <keywords>xsl:value-of AtomicOrUnionType xsl:param conversion-to-self xs:untypedAtomic xs:NMTOKEN xs:int xs:nonPositiveInteger xs:long xs:unsignedByte xs:ID</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1706.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1905">
+      <description>Test with local xsl:param where @select is xs:untypedAtomic and @as is a built-in derived atomic type. Verify the parameter is of the type specified in @as. Types tested: -xs:nonPositiveInteger, xs:int, xs:long, xs:unsignedByte, xs:NMTOKEN, xs:ID</description>
+      <keywords>AtomicOrUnionType xsl:param conversion-to-self xs:untypedAtomic xs:NMTOKEN xs:int xs:nonPositiveInteger xs:long xs:unsignedByte xs:ID</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1707.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1906">
+      <description>Test with non-tunnel xsl:with-param where the value in @select is xs:untypedAtomic value and @as is a built-in derived atomic type. Verify the parameter is of the type specified in @as. Types tested: -xs:nonPositiveInteger, xs:int, xs:long, xs:unsignedByte, xs:NMTOKEN, xs:ID</description>
+      <keywords>AtomicOrUnionType xsl:with-param non-tunnel conversion-to-self xs:untypedAtomic xs:NMTOKEN xs:int xs:nonPositiveInteger xs:long xs:unsignedByte xs:ID</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1708.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-1907">
+      <description>Test with tunnel xsl:param where value in @select is xs:untypedAtomic obtained at run time and @as=xs:token.</description>
+      <keywords>AtomicOrUnionType xs:token tunnel-parameter</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1907.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><par1>two organizationstrue</par1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-1908">
+      <description>Test with tunnel xsl:with-param without @select, where the sequence constructor contains an xs:untypedAtomic obtained at run time and @as=xs:token.</description>
+      <keywords>tunnel-parameter xs:token AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-1908.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><par1>two organizationstrue</par1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-2001">
+      <description>Test with xsl:template which contains an xs:untypedAtomic value obtained at run time and @as is a user-defined atomic type (derived by restriction). Verify no typing error is raised.</description>
+      <keywords>xsl:import-schema xs:untypedAtomic user-defined-atomic-type select-expression xsl:value-of AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-12-06" change="See Bug 20099"/>
+      <environment ref="as-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><temp1>000-TM</temp1><temp2>1.0001</temp2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-2002">
+      <description>Test with global xsl:variable with @select and @as is a user-defined atomic type with occurrence indicator (?). Verify the variable is of the type specified in @as. @select has: - an xs:untypedAtomic value, an empty-sequence</description>
+      <keywords>xsl:import-schema empty-sequence user-defined-atomic-type AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-12-06" change="See Bug 20099"/>
+      <environment ref="as-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><var1>truetrue</var1><var2>truefalse</var2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-2101">
+      <description>Test type of global xsl:variable where @select contains user-defined types derived by restriction from xs:anyURI, @as="xs:string".(type promotion)</description>
+      <keywords>xs:string xsl:import-schema user-defined-atomic-type xsl:variable select-expression AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="as-21.xml" validation="strict"/>
+         <schema role="source-reference" file="anyUriSchemaAs.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2101.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "falsetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-2201">
+      <description>Test type of global xsl:variable where @select contains a user-defined value derived by restriction from xs:integer, @as="xs:decimal".(subtype substitution)</description>
+      <keywords>xsl:import-schema xs:decimal AtomicOrUnionType user-defined-atomic-type select-expression xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="as-22.xml" validation="strict"/>
+         <schema role="source-reference" file="integerSchemaAs.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2201.xsl"/>
+      </test>
+      <result>
+         <assert>every $p in /out/* satisfies $p = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-2301">
+      <description>Test type of global xsl:variable where @select contains a user-defined value derived by restriction from xs:int, @as="xs:int".(subtype substitution)</description>
+      <keywords>xsl:import-schema xs:int user-defined-atomic-type xsl:variable AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-12-06" change="See Bug 20099"/>
+      <environment>
+         <source role="." file="as-23.xml" validation="strict"/>
+         <schema role="source-reference" file="integerSchemaAs.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><var1>truetrue</var1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-2401">
+      <description>Test type of global xsl:variable where @select contains a user-defined value derived by restriction from another user-defined type that is also specified in @as.(subtype substitution)</description>
+      <keywords>xsl:import-schema user-defined-atomic-type xsl:variable AtomicOrUnionType</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-12-06" change="See Bug 20099"/>
+      <environment>
+         <source role="." file="as-24.xml" validation="strict"/>
+         <schema role="source-reference" file="variousTypesSchemaAs.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><var1>truetrue</var1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-2501">
+      <description>Test with xsl:template that contains built-in types derived by restriction from xs:decimal, @as="xs:float".(type promotion) Types tested: - xs:long, xs:nonNegativeInteger, xs:int, xs:byte</description>
+      <keywords>AtomicOrUnionType xs:float xs:int xs:nonNegativeInteger xs:long xs:byte</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-12-06" change="See Bug 20099"/>
+      <environment>
+         <source role="." file="as-25.xml" validation="strict"/>
+         <schema role="source-reference" file="builtinTypeSchemaAs.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><temp1>131072</temp1><temp2>44444</temp2><temp3>-922337</temp3><temp4>-128</temp4></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-2601">
+      <description>Test with xsl:template which contains values (explicitly constructed or obtained at run time) of the same type as the built-in derived atomic type specified in @as, use occurrence indicator (*). Sequence constructor contains: - a sequence of typed values, a single typed value</description>
+      <keywords>AtomicOrUnionType OccurrenceIndicator xs:int xs:token xs:language xs:negativeInteger xs:byte xs:ID xsl:template</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-26"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2601.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/temp1 = "one two two organizations"</assert>
+            <assert>/out/temp2 = "PT"</assert>
+            <assert>/out/temp3 = "131072 2000"</assert>
+            <assert>/out/temp4 = "-2 -9999999 -74146"</assert>
+            <assert>/out/temp5 = "-128 127"</assert>
+            <assert>/out/temp6 = "_ab"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-2602">
+      <description>Test with a sequence of xs:token values obtained at run time in @select of a tunnel xsl:param and @as=xs:token+. Verify the parameter is of type xs:token+.</description>
+      <keywords>AtomicOrUnionType OccurrenceIndicator tunnel-parameter xs:token lre-promotion</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-26"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2602.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><par1>one two two organizations true</par1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-2701">
+      <description>Test with a sequence of xs:ID values obtained at run time in @select of a local xsl:variable and @as=xs:ID+. Verify the variable is of type xs:ID+.</description>
+      <keywords>AtomicOrUnionType OccurrenceIndicator xs:ID xsl:variable attribute-axis</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="as-27.xml" validation="strict"/>
+         <schema role="source-reference" file="builtinTypeSchemaAs.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>_ab c1 myid * falsetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-2801">
+      <description>Test type of global xsl:variable selecting a document node from input file, @as="document-node(element(QName, derived atomic type))". Verify that the document element is valid.</description>
+      <keywords>DocumentTest document-node xsl:variable ElementTest ElementName TypeName xs:Name</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-28"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2801.xsl"/>
+      </test>
+      <result>
+         <assert>/out/var1 = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-2802">
+      <description>Test type of global xsl:variable selecting a document node from input file, @as="document-node(schema-element(QName))". Verify that the document element is valid against the top level element declaration with name=QName.</description>
+      <keywords>DocumentTest document-node xsl:variable ElementTest ElementName</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-28"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2802.xsl"/>
+      </test>
+      <result>
+         <assert>/out/var1 = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-2803">
+      <description>Test of xsl:template which contains a document node from input file, @as="document-node(element(QName, built-in primitive/derived atomic type))". Verify that the document element is valid.</description>
+      <keywords>xsl:import-schema strict-validation DocumentTest ElementTest ElementName TypeName xs:Name</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-28"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2803.xsl"/>
+      </test>
+      <result>
+         <assert>exists(/)</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-2804">
+      <description>Test type of global xsl:variable with @as="document-node(element(QName, derived atomic type)) ?" and @select=().</description>
+      <keywords>empty-sequence DocumentTest ElementTest ElementName TypeName OccurrenceIndicator xsl:variable xs:Name</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-28"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2804.xsl"/>
+      </test>
+      <result>
+         <assert>/out/var1 = "truetruefalse"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-2901">
+      <description>Test type of global xsl:variable with @select selecting a typed element node from input file, @as="element(QName, built-in primitive/derived atomic type)".</description>
+      <keywords>xsl:variable ElementTest ElementName TypeName xs:NMTOKEN xs:anyURI</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-29"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><var1>true</var1><var2>true</var2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-2902">
+      <description>Test type of global xsl:variable without @select and @as="element(QName, built-in primitive/derived atomic type)". Sequence constructor contains a typed element from input file, or explicitly created xsl:element or LRE.</description>
+      <keywords>xsl:variable xsl:type xs:NMTOKEN xs:anyURI lre preserve-validation ElementTest ElementName TypeName</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-29"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2902.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><var1>true</var1><var2>true</var2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-2903">
+      <description>Test type of global xsl:variable with @select selecting a typed element node from input file, @as="schema-element($QName)". Verify that selected element is annotated as an instance of the type defined by the schema element declaration $QName and its name= $QName.</description>
+      <keywords>xsl:import-schema SchemaElementTest xs:anyURI xsl:variable select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-29"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2903.xsl"/>
+      </test>
+      <result>
+         <assert>/out/var1 = "truetruetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-2904">
+      <description>
+      	Test of xsl:template which contains a typed element node from input file, or 
+      	explicitly created xsl:element or LRE with xsl:type, 
+      	@as="element(QName, built-in primitive/derived atomic type)".
+      </description>
+      <keywords>ElementTest ElementName TypeName xs:anyURI xs:NMTOKEN strict-validation lre xsl:type</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-12-11" change="See Bug 20060"/>
+      <environment ref="as-29"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2904.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><temp1><elem-anyURI>http://www.example.org/ns/test</elem-anyURI></temp1><temp2><elem-NMTOKEN>business-enforcement::link-chain.common</elem-NMTOKEN></temp2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-2905">
+      <description>Test of xsl:template with @as="schema-element($QName)". Sequence constructor contains a typed element from input file, an explicitly created xsl:element or LRE, all with the same type or a type derived from the one for $QName.</description>
+      <keywords>SchemaElementTest xs:anyURI xsl:type select-expression lre xsl:element xsl:import-schema</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-29"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2905.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/temp1/elem-anyURI = "http://www.example.org/ns/test"</assert>
+            <assert>/out/temp2/elem-anyURI = "http://www.uri.com"</assert>
+            <assert>/out/temp3/elem-anyURI = "http://test1.org"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-2906">
+      <description>
+         Test type of result of xsl:function with @as="element(QName, built-in primitive/derived atomic type)". 
+         Sequence constructor copies a typed element from input file.
+      </description>
+      <keywords>ElementTest ElementName TypeName xs:anyURI strict-validation xs:NMTOKEN xsl:function xsl:import-schema</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2012-12-11" change="corrected filename used in doc() function: bug 20341"/>
+      <modified by="Tim Mills" on="2012-12-11" change="See Bug 20060"/>
+      <environment ref="as-29"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-2906.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/func1 = "true"</assert>
+            <assert>/out/func2 = "true"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-3001">
+      <description>
+      	Test type of global xsl:variable with @select selecting a typed element node from input file, 
+      	@as="element(QName, built-in primitive/derived atomic type)".
+      </description>
+      <keywords>xsl:import-schema user-defined-atomic-type ElementTest ElementName TypeName xs:NMTOKENS xsl:variable select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3001.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-3002">
+      <description>
+      	Test of xsl:template which contains a typed element node from input file, or explicitly created 
+      	xsl:element or LRE with xsl:type, @as="element(QName, user-defined-list-type)". Item types in the list are:
+       	- built-in primitive, built-in derived, user-defined atomic, union
+      </description>
+      <keywords>xsl:import-schema user-defined-atomic-type xs:NMTOKENS strict-validation xsl:type xsl:template</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3002.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:my="http://www.example.com/ns/union-list">
+            <assert>/out/temp1/my:list-builtin = "one two three"</assert>
+            <assert>/out/temp2/my:list-primitive = "2.2 4.00099 -0.1111 7"</assert>
+            <assert>/out/temp3/my:list-derived = "EN PT BG"</assert>
+            <assert>/out/temp4/my:list-user-defined = "000-AB 123-CD"</assert>
+            <assert>/out/temp5/my:list-union = "5 111-GG 188"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-3003">
+      <description>
+      	Test type of tunnel xsl:with-param with @select selecting a typed element node from input file, 
+      	@as="element(*, user-defined-list-type)". Item types in the list are: - built-in primitive, 
+      	built-in derived, user-defined atomic, union</description>
+      <keywords>xsl:import-schema ElementTest ElementNameOrWildcard TypeName xs:NMTOKENS tunnel-parameter select-expression user-defined-atomic-type</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-30"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3003.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-3101">
+      <description>Test type of global xsl:variable without @select and @as="element(QName, user-defined-union-type)". Sequence constructor contains a typed element from input file, or explicitly created xsl:element or LRE. Item types in the union are: -built-in primitive, built-in derived, user-defined atomic, list, mix of the above</description>
+      <keywords>xsl:import-schema strict-validation user-defined-atomic-type ElementTest ElementName TypeName complex-type</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="as-31.xml" validation="strict"/>
+         <schema role="source-reference" file="list-unionSchemaAs.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3101.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3102a">
+      <description>
+         Test of xsl:template which contains a typed element node from input file, or explicitly created xsl:element 
+         or LRE with xsl:type, @as="element(QName, user-defined-union-type)". 
+         There is only one member type, one of: -built-in primitive, built-in derived, user-defined atomic, list</description>
+      <keywords>strict-validation xsl:template user-defined-union-type ElementTest ElementName TypeName select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="t1"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<my:union-primitive xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+            xmlns:my="http://www.example.com/ns/union-list">5</my:union-primitive>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3102b">
+      <description>
+         Test of xsl:template which contains a typed element node from input file, or explicitly created xsl:element 
+         or LRE with xsl:type, @as="element(QName, user-defined-union-type)". 
+         There is only one member type, one of: -built-in primitive, built-in derived, user-defined atomic, list</description>
+      <keywords>xsl:template user-defined-union-type ElementTest ElementName TypeName lre xsl:type</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="t2"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ul:union-primitive xmlns:ul="http://www.example.com/ns/union-list">two words</ul:union-primitive>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3102c">
+      <description>
+         Test of xsl:template which contains a typed element node from input file, or explicitly created xsl:element 
+         or LRE with xsl:type, @as="element(QName, user-defined-union-type)". 
+         There is only one member type, one of: -built-in primitive, built-in derived, user-defined atomic, list</description>
+      <keywords>xsl:template user-defined-union-type ElementTest ElementName TypeName xsl:element xsl:type</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="t3"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ul:union-derived xmlns:ul="http://www.example.com/ns/union-list"
+            >local-name</ul:union-derived>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3102d">
+      <description>
+         Test of xsl:template which contains a typed element node from input file, or explicitly created xsl:element 
+         or LRE with xsl:type, @as="element(QName, user-defined-union-type)". 
+         There is only one member type, one of: -built-in primitive, built-in derived, user-defined atomic, list</description>
+      <keywords>xsl:template user-defined-union-type ElementTest ElementName TypeName lre xsl:type</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="t4"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ul:union-derived xmlns:ul="http://www.example.com/ns/union-list">-128</ul:union-derived>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3102e">
+      <description>
+         Test of xsl:template which contains a typed element node from input file, or explicitly created xsl:element 
+         or LRE with xsl:type, @as="element(QName, user-defined-union-type)". 
+         There is only one member type, one of: -built-in primitive, built-in derived, user-defined atomic, list</description>
+      <keywords>xsl:template user-defined-union-type ElementTest ElementName TypeName strict-validation select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="t5"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<my:union-user-defined xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:my="http://www.example.com/ns/union-list">7</my:union-user-defined>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3102f">
+      <description>
+         Test of xsl:template which contains a typed element node from input file, or explicitly created xsl:element 
+         or LRE with xsl:type, @as="element(QName, user-defined-union-type)". 
+         There is only one member type, one of: -built-in primitive, built-in derived, user-defined atomic, list</description>
+      <keywords>xsl:template user-defined-union-type ElementTest ElementName TypeName lre xsl:type</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="t6"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ul:union-user-defined xmlns:ul="http://www.example.com/ns/union-list"
+            >000-AB</ul:union-user-defined>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3102g">
+      <description>
+         Test of xsl:template which contains a typed element node from input file, or explicitly created xsl:element 
+         or LRE with xsl:type, @as="element(QName, user-defined-union-type)". 
+         There is only one member type, one of: -built-in primitive, built-in derived, user-defined atomic, list</description>
+      <keywords>xsl:template user-defined-union-type ElementTest ElementName TypeName select-expression strict-validation</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="t7"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<my:union-list xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:my="http://www.example.com/ns/union-list">PT EN</my:union-list>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3102h">
+      <description>
+         Test of xsl:template which contains a typed element node from input file, or explicitly created xsl:element 
+         or LRE with xsl:type, @as="element(QName, user-defined-union-type)". 
+         There is only one member type, one of: -built-in primitive, built-in derived, user-defined atomic, list</description>
+      <keywords>xsl:template user-defined-union-type ElementTest ElementName TypeName lre xsl:type</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="t8"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ul:union-list xmlns:ul="http://www.example.com/ns/union-list">123-CD 456-EF</ul:union-list>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3102i">
+      <description>
+         Test of xsl:template which contains a typed element node from input file, or explicitly created xsl:element 
+         or LRE with xsl:type, @as="element(QName, user-defined-union-type)". 
+         There is only one member type, one of: -built-in primitive, built-in derived, user-defined atomic, list</description>
+      <keywords>xsl:template user-defined-union-type ElementTest ElementName TypeName select-expression strict-validation</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="t9"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<my:part-integer-union xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:my="http://www.example.com/ns/union-list">111-CC</my:part-integer-union>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3102j">
+      <description>
+         Test of xsl:template which contains a typed element node from input file, or explicitly created xsl:element 
+         or LRE with xsl:type, @as="element(QName, user-defined-union-type)". 
+         There is only one member type, one of: -built-in primitive, built-in derived, user-defined atomic, list</description>
+      <keywords>xsl:template user-defined-union-type ElementTest ElementName TypeName lre xsl:type</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="t10"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ul:part-integer-union xmlns:ul="http://www.example.com/ns/union-list"
+            >4</ul:part-integer-union>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3102k">
+      <description>
+         Test of xsl:template which contains a typed element node from input file, or explicitly created xsl:element 
+         or LRE with xsl:type, @as="element(QName, user-defined-union-type)". 
+         There is only one member type, one of: -built-in primitive, built-in derived, user-defined atomic, list</description>
+      <keywords>xsl:template user-defined-union-type ElementTest ElementName TypeName strict-validation select-expression complex-type</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="t11"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<my:union-complex xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:my="http://www.example.com/ns/union-list">2.2 4.00099</my:union-complex>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3102l">
+      <description>
+         Test of xsl:template which contains a typed element node from input file, or explicitly created xsl:element 
+         or LRE with xsl:type, @as="element(QName, user-defined-union-type)". 
+         There is only one member type, one of: -built-in primitive, built-in derived, user-defined atomic, list</description>
+      <keywords>xsl:template user-defined-union-type ElementTest ElementName TypeName lre xsl:type complex-type</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="t12"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ul:union-complex xmlns:ul="http://www.example.com/ns/union-list">127</ul:union-complex>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="as-3201">
+      <description>Test type of global xsl:variable with @select selecting a typed element node from input file, @as="schema-element($QName)". Verify that selected element is annotated as an instance of the type defined by the schema element declaration $QName and its name comes from the substitution group of $QName.</description>
+      <keywords>xsl:import-schema SchemaElementTest select-expression xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-32"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3201.xsl"/>
+      </test>
+      <result>
+         <assert>/out/var1 = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-3202">
+      <description>Test type of result of xsl:function with @as="schema-element($QName)". Sequence constructor contains a typed element node from input file.Verify that selected element is annotated as an instance of the type defined by the schema element declaration $QName and its name comes from the substitution group of $QName.</description>
+      <keywords>xsl:import-schema strict-validation SchemaElementTest xsl:function</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-32"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3202.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-3301">
+      <description>Test type of global xsl:variable selecting a typed attribute node from input file and @as="attribute (QName, xs:NOTATION)".</description>
+      <keywords>xsl:import-schema xsl:variable AttributeTest AttributeName TypeName xs:NOTATION select-expression attribute-axis</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="as-33.xml" validation="strict"/>
+         <schema role="source-reference" file="id-idref-notation-schemaas.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3301.xsl"/>
+      </test>
+      <result>
+         <assert>/out/var1 = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-3401">
+      <description>Test type of global xsl:variable selecting a typed attribute node from input file and @as="attribute(QName, built-in-list-type)". Types tested: xs:NMTOKENS, xs:ENTITIES xs:IDREFS.</description>
+      <keywords>xsl:import-schema AttributeTest AttributeName TypeName xs:NMTOKENS xs:ENTITIES xs:IDREFS xsl:variable select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="as-34.xml" validation="strict"/>
+         <schema role="source-reference" file="id-idref-notation-schemaas.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3401.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "truetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-3501">
+      <description>Test type of global xsl:variable with @as="element(*, user-defined-atomic-type) +". @select has: - a typed element node from input file, a sequence of typed element nodes from input file</description>
+      <keywords>xsl:import-schema ElementTest ElementNameOrWildcard user-defined-atomic-type OccurrenceIndicator xsl:variable select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-35"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3501.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/var1 = "truetrue"</assert>
+            <assert>/out/var2 = "truefalse"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-3502">
+      <description>Test type of global xsl:variable with @as="schema-element($QName) *"; @select has: -(), a typed element node from input file, a set of typed element nodes from input file</description>
+      <keywords>SchemaElementTest OccurrenceIndicator xsl:variable select-expression xsl:import-schema</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-35"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3502.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/var1 = "truefalse"</assert>
+            <assert>/out/var2 = "truetrue"</assert>
+            <assert>/out/var3 = "truefalse"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-3503">
+      <description>Test with xsl:template that has @as="document-node(element(QName, user-defined-list-type) +". The sequence constructor contains several xsl:document with a valid document elements.</description>
+      <keywords>xsl:import-schema xsl:template ElementTest ElementNameOrWildcard user-defined-atomic-type TypeName empty-sequence OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-35"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3503.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/temp1 = ""</assert>
+            <assert>/out/temp2 = ""</assert>
+            <assert>/out/temp3/*:simpleUserElem = "123-AB"</assert>
+            <assert>/out/temp4/item = "000-TM"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-3504">
+      <description>Test of xsl:template with @as="schema-element($QName) *". Sequence constructor contains: -(), a typed element node from input file, a set of typed element nodes from input file</description>
+      <keywords>xsl:import-schema SchemaElementTest xsl:template strict-validation OccurrenceIndicator</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-35"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3504.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:my="http://www.example.com/ns/various">
+            <assert>/out/temp1 = ""</assert>
+            <assert>/out/temp2/my:simpleUserElem = "123-AB"</assert>
+            <assert>/out/temp3[my:simpleUserElem = "123-AB"][my:simpleUserElem = "000-AB"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="as-3505">
+      <description>Test type of non-tunnel xsl:with-param with @as="element(*, user-defined-atomic-type) *". @select has one of: -(), an empty sequence obtained at run time, a typed element node from input file, a set of typed element nodes from input file</description>
+      <keywords>xsl:import-schema ElementTest ElementNameOrWildcard TypeName user-defined-atomic-type non-tunnel xsl:with-param OccurrenceIndicator empty-sequence</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="as-35"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3505.xsl"/>
+      </test>
+      <result>
+         <assert>every $var in /out/* satisfies $var = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="as-3601">
+      <description>Test of xsl:template with @as="schema-attribute($QName) +". Sequence constructor contains: -a typed attribute node from input file, a set of typed attribute nodes from input file</description>
+      <keywords>xsl:import-schema SchemaAttributeTest OccurrenceIndicator xsl:template strict-validation</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="as-36.xml" validation="strict"/>
+         <schema role="source-reference" file="attributesSchemaAs.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3601.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/temp1/@*:nationality = "americans"</assert>
+            <assert>/out/temp2/@*:nationality = "1.2"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3602">
+      <description>Validation of freestanding attribute node. Saxon bug 5732.</description>
+      <keywords>xsl:import-schema SchemaAttributeTest OccurrenceIndicator xsl:template strict-validation</keywords>
+      <created by="Michael Kay" on="2022-10-30"/>
+      <environment>
+         <source role="." file="as-36.xml" validation="strict"/>
+         <schema role="source-reference" file="attributesSchemaAs.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3602.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "falsetrue"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3603">
+      <description>Validation of freestanding computed attribute node. Saxon bug 5732.</description>
+      <keywords>xsl:import-schema SchemaAttributeTest OccurrenceIndicator xsl:template strict-validation</keywords>
+      <created by="Michael Kay" on="2022-10-30"/>
+      <environment>
+         <source role="." file="as-36.xml" validation="strict"/>
+         <schema role="source-reference" file="attributesSchemaAs.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3603.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "falsetrue"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3604">
+      <description>Validation of freestanding attribute node. Attribute is invalid. Saxon bug 5732.</description>
+      <keywords>xsl:import-schema SchemaAttributeTest OccurrenceIndicator xsl:template strict-validation</keywords>
+      <created by="Michael Kay" on="2022-10-30"/>
+      <environment>
+         <source role="." file="as-36.xml" validation="strict"/>
+         <schema role="source-reference" file="attributesSchemaAs.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3604.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3605">
+      <description>Validation of freestanding computed attribute node. Attribute is invalid. Saxon bug 5732.</description>
+      <keywords>xsl:import-schema SchemaAttributeTest OccurrenceIndicator xsl:template strict-validation</keywords>
+      <created by="Michael Kay" on="2022-10-30"/>
+      <environment>
+         <source role="." file="as-36.xml" validation="strict"/>
+         <schema role="source-reference" file="attributesSchemaAs.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3605.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="as-3701">
+      <description>Type annotation of complex type with simple content. Saxon bug 3628</description>
+      <created by="Michael Kay" on="2018-01-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="as-3701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<tns:r xmlns:tns="http://www.3701.com"><tns:t id="t-1">one</tns:t></tns:r>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

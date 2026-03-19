@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="apply-imports">
+   <description>Tests xsl:apply-imports (note, most of the tests for this are elsewhere, e.g. under "import")</description>
+   <environment name="apply-imports-A">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <foo att1="c">
+    <foo att1="b">
+      <foo att1="a">
+        <baz att1="wrong"/>
+      </foo>
+    </foo>
+  </foo>
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="apply-imports-001">
+      <description>Test apply-imports on atomic values.</description>
+      <created by="Michael Kay" on="2016-01-19"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="apply-imports-001.xsl" role="principal"/>
+         <stylesheet file="apply-imports-001a.xsl" role="secondary"/>
+         <stylesheet file="apply-imports-001b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>/out = "R1R2BQ3BQ4AP5"</assert>
+      </result>
+   </test-case>
+
+</test-set>

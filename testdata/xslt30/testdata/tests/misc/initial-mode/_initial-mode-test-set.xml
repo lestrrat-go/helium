@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="initial-mode">
+   <description>Tests initial-mode</description>
+   <environment name="inimode001">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="initial-mode-001">
+      <description>Test use of an initial mode (see config file)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="inimode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="initial-mode-001.xsl"/>
+         <initial-mode name="inimode"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz>1,2,3,4,5,6,7,8,9,10</zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="initial-mode-002">
+      <description> Test use of an initial mode matching a template with mode="#all". Following the
+         resolution of http://www.w3.org/Bugs/Public/show_bug.cgi?id=3690 this test should raise an
+         error (XTDE0045) </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="inimode001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="initial-mode-002.xsl"/>
+         <initial-mode name="inimode"/>
+      </test>
+      <result>
+         <error code="XTDE0045"/>
+      </result>
+   </test-case>
+
+   <test-case name="initial-mode-003">
+      <description>It's an error if no value is supplied for a required parameter, even if the
+         parameter is never referenced</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="inimode001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="initial-mode-003.xsl"/>
+         <initial-mode name="inimode"/>
+      </test>
+      <result>
+         <error code="XTDE0050"/>
+      </result>
+   </test-case>
+
+   <test-case name="initial-mode-004">
+      <description>Initial mode with local parameters</description>
+      <created by="John Lumley" on="2014-08-19"/>
+      <modified by="John Lumley" on="2014-09-24"
+         change="Dependency changed from XT20+ to XT30+ - [Bug 26891]"/>
+      <environment ref="inimode001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="initial-mode-004.xsl"/>
+         <initial-mode name="flobble">
+            <param name="a" select="1234"/>
+            <param xmlns:my="http://my.net/" name="my:b" tunnel="yes" select="999"/>
+         </initial-mode>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><doc/>1234 999</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="initial-mode-005">
+      <description>Initial mode is one of several modes for the initial template</description>
+      <created by="Michael Kay" on="2017-07-16"/>
+      <environment ref="inimode001"/>
+      <test>
+         <stylesheet file="initial-mode-005.xsl"/>
+         <initial-mode name="b"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><vimble/></out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

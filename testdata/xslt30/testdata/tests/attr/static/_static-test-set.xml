@@ -1,0 +1,924 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="static">
+   <description>Tests static attributes on xsl:variable and xsl:param declarations</description>
+   <environment name="static-1">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+
+
+   <test-case name="static-001">
+      <description>
+         Tests static attribute on xsl:param and dynamic ctx usage in a TVT
+      </description>
+      <keywords>static-variable tvt</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-001.xsl"/>
+      </test>
+      <result>
+         <assert-string-value>success</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-001a">
+      <description>
+         Tests setting a static attr to a value from the calling processor, and its usage in a TVT
+      </description>
+      <keywords>static-variable tvt</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-001.xsl"/>
+         <param name="static-param" static="yes" select="'Hello World'"/>
+      </test>
+      <result>
+         <assert-string-value>Hello World</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-002">
+      <description>
+         Using a static param in another static param, which uppercases the value
+      </description>
+      <keywords>static-variable tvt</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-002.xsl"/>
+      </test>
+      <result>
+         <assert-string-value>successSUCCESS</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-002a">
+      <description>
+         Using a static param in another static param, set base value from the calling processor, value will be uppercased
+      </description>
+      <keywords>static-variable tvt</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-002.xsl"/>
+         <param name="static-param" static="yes" select="'ohgoodie'" />
+      </test>
+      <result>
+         <assert-string-value>ohgoodieOHGOODIE</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-002b">
+      <description>
+         Using a static param in another static param, set overridden value from the calling processor, the uppercasing param will now have the set value
+      </description>
+      <keywords>static-variable tvt</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-002.xsl"/>
+         <param name="alt-param" static="yes" select="'ohgoodie'" />
+      </test>
+      <result>
+         <assert-string-value>successohgoodie</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-002c">
+      <description>
+         Using a static param in another static param, set overridden and overriding value from the calling processor, the uppercasing param will now have the set value
+      </description>
+      <keywords>static-variable tvt</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-002.xsl"/>
+         <param name="static-param" static="yes" select="'errare humanum '" />
+         <param name="alt-param" static="yes" select="'est'" />
+      </test>
+      <result>
+         <assert-string-value>errare humanum est</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-003">
+      <description>
+         Using a static param in another static param, but in the wrong stylesheet declaration order: ERROR scenario
+      </description>
+      <keywords>static-variable tvt err:XPST0008</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-003.xsl"/>
+      </test>
+      <result>
+         <error code="XPST0008"/>
+      </result>
+   </test-case>
+   
+   <test-case name="static-003a">
+      <description>
+         Using a static param in another static param, but in the wrong stylesheet declaration order
+         After setting the value from the calling processor, it is not an error anymore.
+      </description>
+      <keywords>static-variable tvt err:XPST0008</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-003.xsl"/>
+         <param name="alt-param" static="yes" select="' in a better world'" />
+      </test>
+      <result>
+         <assert-string-value>success in a better world</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-004">
+      <description>
+         Simple test with a required static param
+      </description>
+      <keywords>static-variable required-param tvt</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-004.xsl"/>
+         <param name="req-param" static="yes" select="'required'" />
+      </test>
+      <result>
+         <assert-string-value>required-required</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-004a">
+      <description>
+         Simple test with a required static param, no value given, ERROR scenario
+      </description>
+      <keywords>static-variable required-param tvt err:XTSE0050</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-004.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0050"/>
+      </result>
+   </test-case>
+   
+   <test-case name="static-005">
+      <description>
+         Simple test with a required static param, select-attribute present, ERROR scenario
+      </description>
+      <keywords>static-variable required-param tvt err:XTSE0010</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-005.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="static-005a">
+      <description>
+         Simple test with a required static param, select-attribute present, ERROR scenario (even when param value is supplied)
+      </description>
+      <keywords>static-variable required-param tvt err:XTSE0010</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-005.xsl"/>
+         <param name="req-param" static="yes" select="'this will not work'" />
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="static-006">
+      <description>
+         Simple test with a required static param, seqtor is non-empty, ERROR scenario
+      </description>
+      <keywords>static-variable required-param tvt err:XTSE0010</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <modified by="Michael Kay" on="2017-02-19" change="supply param value to prevent alternative error results"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-006.xsl"/>
+         <param name="req-param" static="yes" select="'this will not work'" />
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="static-006a">
+      <description>
+         Simple test with a required static param, seqtor is non-empty, ERROR scenario (even when a value is supplied)
+      </description>
+      <keywords>static-variable required-param tvt err:XTSE0010</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-006.xsl"/>
+         <param name="req-param" static="yes" select="'this will not work'" />
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="static-007">
+      <description>
+         Simple test with a static param, seqtor is non-empty, ERROR scenario
+      </description>
+      <keywords>static-variable required-param tvt err:XTSE0010</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-007.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="static-007a">
+      <description>
+         Simple test with a static param, seqtor is non-empty, ERROR scenario (even when a value is supplied)
+      </description>
+      <keywords>static-variable required-param tvt err:XTSE0010</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-007.xsl"/>
+         <param name="static-param" static="yes" select="'this will not work'" />
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="static-008">
+      <description>
+         Simple test with a static param, no select attr, no as attr, which is allowed and defaults to empty string
+      </description>
+      <keywords>static-variable tvt</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-008.xsl"/>
+      </test>
+      <result>
+         <assert-string-value>false--true</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-008a">
+      <description>
+         Simple test with a static param, no select attr, no as attr, which is allowed, and is set by the processor
+      </description>
+      <keywords>static-variable tvt</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-008.xsl"/>
+         <param name="static-param" static="yes" select="'not so empty anymore'" />
+      </test>
+      <result>
+         <assert-string-value>false-NOT SO EMPTY ANYMORE-false</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-009">
+      <description>
+         Simple test with static param with implicit default value of item()*, no select attr, value NOT set from calling processor, defaults to empty seq
+      </description>
+      <keywords>static-variable tvt implicit-default item occurrence-indicator</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-009.xsl"/>
+      </test>
+      <result>
+         <assert-string-value>true--false</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-009a">
+      <description>
+         Simple test with static param with implicit default value of item()*, no select attr, value set from calling processor
+      </description>
+      <keywords>static-variable tvt implicit-default item occurrence-indicator</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <modified by="Michael Kay" on="2018-10-24" change="supply an xs:untypedAtomic value as expected by the test"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-009.xsl"/>
+         <param name="static-param" static="yes" as="xs:untypedAtomic" select="xs:untypedAtomic(23)" xmlns:xs="http://www.w3.org/2001/XMLSchema"/>
+      </test>
+      <result>
+         <assert-string-value>false-230-false</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-010">
+      <description>
+         Simple test with static param with implicit default value of xs:integer?, no select attr, value NOT set from calling processor, defaults to empty seq
+         Note: this should behave similarly to setting the default value of a non-static param, i.e., the default value is the empty sequence.
+      </description>
+      <keywords>static-variable tvt implicit-default xs:integer occurrence-indicator</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-010.xsl"/>
+      </test>
+      <result>
+         <assert-string-value>true--</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-010a">
+      <description>
+         Simple test with static param with implicit default value of xs:integer?, no select attr, value set from calling processor
+      </description>
+      <keywords>static-variable tvt implicit-default xs:integer occurrence-indicator</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <modified by="Michael Kay" on="2018-10-24" change="put static=yes on the param element as clearly intended by the test"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-010.xsl"/>
+         <param name="static-param" as="xs:integer" static="yes" select="541" xmlns:xs="http://www.w3.org/2001/XMLSchema" />
+      </test>
+      <result>
+         <assert-string-value>false-5410-41</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-011">
+      <description>
+         Simple test with static param with implicit default value of xs:integer?, no select attr, value NOT set from calling processor, defaults to empty seq
+         Note: this should behave similarly to setting the default value of a non-static param, i.e., the default value is the empty sequence.
+         Note: this tests an edge-case situation where an empty-sequence value of type xs:integer? is deliberately compared with xs:string, which is legal
+         See: https://lists.w3.org/Archives/Member/w3c-xsl-wg/2015Mar/0058.html (member only)
+      </description>
+      <keywords>static-variable tvt implicit-default xs:integer occurrence-indicator</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-011.xsl"/>
+      </test>
+      <result>
+         <assert-string-value>true--false</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-011a">
+      <description>
+         Simple test with static param with implicit default value of xs:integer?, no select attr, value set from calling processor to the empty seq
+         Note: this should behave similarly to setting the default value of a non-static param, i.e., the default value is the empty sequence.
+         Note: this tests an edge-case situation where an empty-sequence value of type xs:integer? is deliberately compared with xs:string, which is legal
+         See: https://lists.w3.org/Archives/Member/w3c-xsl-wg/2015Mar/0058.html (member only)
+      </description>
+      <keywords>static-variable tvt implicit-default xs:integer occurrence-indicator</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-011.xsl"/>
+         <!-- expected value is xs:integer, left untyped to allow empty seq -->
+         <param name="static-param" static="yes" select="()" />
+      </test>
+      <result>
+         <assert-string-value>true--false</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-011b">
+      <description>
+         Simple test with static param with implicit default value of xs:integer?, no select attr, value set from calling processor, defaults to empty seq
+         Note: this tests an edge-case situation where an empty-sequence value of type xs:integer? is deliberately compared with xs:string, which is legal
+         (reverse of prev test, raising the type error if value is set to something other than an empty seq)
+         See: https://lists.w3.org/Archives/Member/w3c-xsl-wg/2015Mar/0058.html (member only)
+      </description>
+      <keywords>static-variable tvt implicit-default xs:integer occurrence-indicator</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-011.xsl"/>
+         <param name="static-param" static="yes" select="124" />
+      </test>
+      <result>
+         <error code="XPTY0004" />
+      </result>
+   </test-case>
+   
+   <test-case name="static-012">
+      <description>
+         Simple test with static param that is implicitly mandatory with type xs:integer, no select attr, value NOT set from calling processor, ERROR scenario
+         (this follows the same rules as non-static parameters)
+         (See also Bug#28355, this error seems to have disappeared from the spec.)
+      </description>
+      <keywords>static-variable tvt implicit-default xs:integer occurrence-indicator</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <modified by="Abel Braaksma" on="2015-04-07" change="Bug 28429 and 28355, error XTDE0610 was dropped in 3.0"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-012.xsl"/>         
+      </test>
+      <result>
+         <!-- see for the error discussion: Bug 28355 -->
+         <error code="XTDE0700"/>
+      </result>
+   </test-case>
+   
+   <test-case name="static-012a">
+      <description>
+         Simple test with static param with explicit default value of xs:integer, no select attr, value set from calling processor
+      </description>
+      <keywords>static-variable tvt implicitly-mandatory xs:integer</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-012.xsl"/>
+         <param name="static-param" static="yes" as="xs:integer" select="23" />
+      </test>
+      <result>
+         <assert-string-value>230</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-013">
+      <description>
+         Implicitly mandatory param by an incompatible default value, value not set by caller, error
+         (this follows the same rules as non-static parameters)
+         (See also Bug#28355, this error seems to have disappeared from the spec.)
+      </description>
+      <keywords>static-variable tvt implicit-default xs:integer occurrence-indicator</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <modified by="Abel Braaksma" on="2015-04-07" change="Bug 28429 and 28355, error XTDE0610 was dropped in 3.0"/>
+      <modified by="Abel Braaksma" on="2015-04-30" change="Bug 28355 resolution ended up using XTDE0050  instead of XTDE0700 in this case" />
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-013.xsl"/>         
+      </test>
+      <result>
+         <!-- see for the error discussion: Bug 28355 -->
+         <error code="XTDE0050"/>
+      </result>
+   </test-case>
+   
+   <test-case name="static-013a">
+      <description>
+         Implicitly mandatory param by an incompatible default value, value set by caller, no error
+      </description>
+      <keywords>static-variable tvt implicitly-mandatory xs:integer</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <modified by="Abel Braaksma" on="2015-04-30" change="Bug 28586, a processor may report the error or may allow the set value" />
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-013.xsl"/>
+         <param name="static-param" static="yes" as="xs:integer" select="111" />
+      </test>
+      <result>
+         <any-of>
+            <assert-string-value>110889</assert-string-value>
+            <error code="XTTE0590"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="static-013b">
+      <description>
+         Implicitly mandatory param by an incompatible default value, value set by caller to a promotable type, no error
+      </description>
+      <keywords>static-variable tvt implicitly-mandatory xs:integer</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <modified by="Abel Braaksma" on="2015-04-30" change="Bug 28586, a processor may report the error or may allow the set value" />
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-013.xsl"/>
+         <param name="static-param" static="yes" as="xs:untypedAtomic" select="111" />
+      </test>
+      <result>
+         <any-of>
+            <assert-string-value>110889</assert-string-value>
+            <error code="XTTE0590"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="static-013c">
+      <description>
+         Implicitly mandatory param by an incompatible default value, value set by caller to incompatible type, type error
+      </description>
+      <keywords>static-variable tvt implicitly-mandatory xs:integer err:XTTE0590</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-013.xsl"/>
+         <param name="static-param" static="yes" as="xs:string" select="111" />
+      </test>
+      <result>
+         <error code="XTTE0590"/>
+      </result>
+   </test-case>
+   
+   <test-case name="static-014">
+      <description>
+         Static param with tunnel attribute set, but not referenced, static error.
+      </description>
+      <keywords>static-variable err:XTSE0020</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-014.xsl"/>
+         <param name="static-param" static="yes" as="xs:integer" select="111" />
+      </test>
+      <result>
+         <error code="XTSE0020" />
+      </result>
+   </test-case>
+   
+   <test-case name="static-015">
+      <description>
+         Static param with version attribute set, forward and backward compat behavior has no effect.
+      </description>
+      <keywords>static-variable forward-compatbility backward-compatibility</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <modified by="Michael Kay" on="2017-04-29" change="Needs processor support for backwards compatibility or the version='1.0' will be rejected"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-015.xsl"/>
+         <param name="static-param1" static="yes" select="123" />
+         <param name="static-param2" static="yes" select="456" />
+         <param name="static-param3" static="yes" select="789" />
+      </test>
+      <result>
+         <assert-string-value>123456789</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="static-016">
+      <description>
+         Static param with visibility attribute set (this was allowed in earlier drafts)
+      </description>
+      <keywords>static-variable visibility err:XTSE0090</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-016.xsl"/>
+         <param name="static-param" static="yes" as="xs:string" select="'Private visibility'" />
+      </test>
+      <result>
+         <error code="XTSE0090" />
+      </result>
+   </test-case>
+   
+   <test-case name="static-017">
+      <description>
+         Static param with visibility attribute set to a previously invalid value (this used to raise XTSE0020)
+      </description>
+      <keywords>static-variable visibility ERR:XTSE0090</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-017.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0090" />
+      </result>
+   </test-case>
+   
+   <test-case name="static-018">
+      <description>
+         Static param with invalid value "YES" for the static attribute
+      </description>
+      <keywords>static-variable err:XTSE0020</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-018.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020" />
+      </result>
+   </test-case>
+   
+   <test-case name="static-019">
+      <description>
+         Static param referencing itself in the use-when attribute, error scenario.
+      </description>
+      <keywords>static-variable err:XPST0008</keywords>
+      <created by="Abel Braaksma" on="2015-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-019.xsl"/>
+      </test>
+      <result>
+         <error code="XPST0008" />
+      </result>
+   </test-case>
+   
+   <test-case name="static-020">
+      <description>
+         Static param declared repeatedly with different import precedences.
+      </description>
+      <keywords>static-variable</keywords>
+      <created by="Michael Kay" on="2017-01-06"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-020.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3450"/>
+      </result>
+   </test-case>
+   
+   <test-case name="static-021">
+      <description>
+         Static param declared repeatedly with different import precedences: ok because the declarations are consistent
+      </description>
+      <keywords>static-variable</keywords>
+      <created by="Michael Kay" on="2017-01-06"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result v1="1" v4="1"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="static-022">
+      <description>
+         Static param declared repeatedly with higher-precedence first: OK even though inconsistent
+      </description>
+      <keywords>static-variable</keywords>
+      <created by="Michael Kay" on="2017-01-06"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result v1="3" v4="3"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="static-023">
+      <description>
+         Inconsistent static declarations: variable versus param
+      </description>
+      <keywords>static-variable</keywords>
+      <created by="Michael Kay" on="2017-01-06"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-023.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3450"/>
+      </result>
+   </test-case>
+   
+   <test-case name="static-024">
+      <description>
+         Inconsistent static declarations: variable versus param; but higher precedence declaration comes first so it's OK
+      </description>
+      <keywords>static-variable</keywords>
+      <created by="Michael Kay" on="2017-01-06"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result v1="1" v4="1"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="static-025">
+      <description>
+         Error case, static="yes" on non-global param
+      </description>
+      <keywords>static-variable</keywords>
+      <created by="Michael Kay" on="2017-01-06"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-025.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0020"/>
+            <error code="XTSE0090"/>
+         </any-of>        
+      </result>
+   </test-case>
+   
+   <test-case name="static-026">
+      <description>
+         Error case, static="yes" with visibility="final"
+      </description>
+      <keywords>static-variable</keywords>
+      <created by="Michael Kay" on="2017-01-06"/>
+      <modified by="Abel Braaksma" on="2019-02-15" change="Fixed expected error code from XTSE0020 (invalid attribute value) to XTSE0090 (invalid attribute name)"/>
+      <modified by="Michael Kay" on="2023-03-06" change="I beg to differ. Allow either error code, since none is defined"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-026.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0020"/>
+            <error code="XTSE0090"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="static-027">
+      <description>
+         Static param overridden by non-static param with same name and higher import precedence. Spec unclear. See bug 30301.
+      </description>
+      <keywords>static-variable</keywords>
+      <created by="Michael Kay" on="2018-10-23"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-027.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/result/@p = '0'</assert>
+            <assert>/result/@q = '11'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="static-028">
+      <description>
+         A sizeable node-valued static variable
+      </description>
+      <keywords>static-variable</keywords>
+      <created by="Michael Kay" on="2018-11-19"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-028.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/result/@count = '1000'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="static-029">
+      <description>
+         A static variable whose value is a sequence of attribute nodes
+      </description>
+      <keywords>static-variable</keywords>
+      <created by="Michael Kay" on="2019-08-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-029.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/result/@count = '4'</assert>
+            <assert>/result/@names = 'key key key key'</assert>
+            <assert>/result/@values = 'a b c d'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="static-030">
+      <description>
+         A static variable whose value is a sequence of namespace nodes
+      </description>
+      <keywords>static-variable</keywords>
+      <created by="Michael Kay" on="2019-08-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-030.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/result/@count = '10'</assert>
+            <assert>/result/@names = ' xml'</assert>
+            <assert>/result/@values = 'http://www.w3.org/2005/xpath-functions http://www.w3.org/XML/1998/namespace'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="static-031">
+      <description>A static parameter whose type has a cardinality indicator (Saxon-JS bug 4619)</description>
+      <keywords>static-variable</keywords>
+      <created by="Debbie Lockett" on="2020-09-17"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="static-031.xsl"/>
+      </test>
+      <result>
+         <assert>/result/@value = 'Hello world'</assert>
+      </result>
+   </test-case>
+   
+
+
+</test-set>

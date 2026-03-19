@@ -1,0 +1,1564 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="sequence">
+   <description>
+      Tests the xsl:sequence instruction and other expressions that
+      construct sequences
+   </description>
+   
+   <environment name="sequence-01">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="sequence-02">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<item>a</item>
+	<item>b</item>
+	<item>c</item>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="sequence-04">
+      <source role="." file="sequence-04.xml"/>
+   </environment>
+   
+   <environment name="sequence-05">
+      <source role="." file="sequence-05.xml"/>
+   </environment>
+   
+   <environment name="sequence-10">
+      <source role=".">
+         <content><![CDATA[<doc><a>1</a><a>2</a><a>3</a></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="sequence-11">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<product price="400.00">a</product>
+	<product cost="600.00">b</product>
+	<product price="300.00">c</product>
+	<product cost="800.00">d</product>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="sequence-12">
+      <source role=".">
+         <content><![CDATA[<doc><num>13</num></doc>]]></content>
+      </source>
+      <source file="sequence-1202a.xml" uri="sequence-1202a.xml"/>
+   </environment>
+   
+   <environment name="sequence-14">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<integer>5</integer>
+	<decimal>5.5</decimal>
+	<double>2E-1</double>
+	<string>foo</string>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="sequence-15">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<integer>5</integer>
+	<decimal>5.5</decimal>
+	<double>2E-1</double>
+	<boolean>false</boolean>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="sequence-16">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<integer>5</integer>
+	<decimal>5.5</decimal>
+	<double>2E-1</double>
+	<daytime>P111D</daytime>
+	<yearmonth>P500Y</yearmonth>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="sequence-17">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<integer>5</integer>
+	<decimal>5.5</decimal>
+	<double>2E-1</double>
+	<date>2004-03-01</date>
+	<time>12:13:14</time>
+	<datetime>2004-03-01T12:13:14-05:00</datetime>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="sequence-18">
+      <source role="." >
+         <content><![CDATA[<doc>
+	<integer>5</integer>
+	<decimal>5.5</decimal>
+	<double>2E-1</double>
+	<date>2004-03-01</date>
+	<time>12:13:14</time>
+	<datetime>2004-03-01T12:13:14-05:00</datetime>
+	<qname>example2:bar</qname>
+</doc>]]></content>
+      </source>
+   </environment>
+      
+   <environment name="sequence-19">
+      <source role="." >
+         <content><![CDATA[<doc>
+   <integer>5</integer>
+   <decimal>5.5</decimal>
+   <double>2E-1</double>
+   <date>2004-03-01</date>
+   <time>12:13:14</time>
+   <datetime>2004-03-01T12:13:14-05:00</datetime>
+   <qname>example1:bar</qname>
+   <uri>http://www.yahoo.com</uri>
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="sequence-0101">
+      <description>Test sequence construction in a variable</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z>a,b,c</z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0102">
+      <description>Test sequence construction in a variable</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><item><name/><value>a</value><id>true</id></item
+            ><item><name>att</name><value>b</value><id>true</id></item
+            ><item><name/><value>c</value><id>true</id></item
+            ><item><name>pi</name><value>data</value><id>true</id></item></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0103">
+      <description>Test sequence construction of parentless elements</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><item><name>a</name><value>1</value><id>true</id></item
+            ><item><name>b</name><value>2</value><id>true</id></item
+            ><item><name>c</name><value>3</value><id>true</id></item></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0104">
+      <description>Test sequence construction of parentless elements, followed by attachment to a new element</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz><a>1</a><b>2</b><c>3</c></zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0105">
+      <description>Test sequence construction of parentless attributes, followed by attachment to a new element</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz a="4" b="2" c="3"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0106">
+      <description>Test sequence construction with atomization</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz>1,2,3,4</zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0107">
+      <description>Test sequence construction using xsl:sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz>1,2,3,4,5,6,7,8,9,10</zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0108">
+      <description>Test sequence construction using xsl:sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz>1,4,9,16,25,36,49,64,81,100</zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0109">
+      <description>Test sequence construction using xsl:sequence with node content</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0109.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz><e/><f/><g/><g/><f/><e/></zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0110">
+      <description>Test xsl:sequence adding atomic values to an element</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0110.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz>1 2 3 4 5<x/>5 4 3 2 1</zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0111">
+      <description>Test xsl:sequence adding atomic values to an attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0111.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz a="[12345]"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0112">
+      <description>initial comment Test xsl:sequence adding a document node to a result tree final comment</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0112.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="sequence-0112.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0113">
+      <description>Test navigation from a parentless element</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0113.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz><a>0</a><b>1</b><c>0</c><all>3</all><anc>a,b</anc><att>a1</att><ns>http://a.uri/,http://www.w3.org/XML/1998/namespace</ns></zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0114">
+      <description>
+         Test sequence construction using xsl:sequence with a type check 
+         (type check removed 2004-03-25, facility dropped from the spec)
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0114.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz>1,4,9,16,25,36,49,64,81,100</zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0115">
+      <description>
+         Test sequence construction using xsl:sequence with atomization 
+         (type check removed 2004-03-25, facility dropped from the spec)
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0115.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz>1,2,3,4,5,6,7,8,9,10</zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0116">
+      <description>Basic test of "as" attribute on xsl:template</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0116.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz>15</zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0117">
+      <description>Test that root() is OK when the context node is in a non-document tree</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0117.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<foo><bar/></foo>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0118">
+      <description>Test that in 2.0 mode the default separator in xsl:value of is a single space</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0118.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z>1 2 3 4 5</z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0119">
+      <description>Test that in 1.0 mode xsl:value uses first-value semantics</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-04-30" change="add 1.0-mode dependency"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0119.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z>1</z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0120">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0120.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z>1 2 3</z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0121">
+      <description>Test xsl:sequence containing xsl:fallback</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0121.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz>17</zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0122">
+      <description>Test xsl:perform-sort with a sequence constructor</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0122.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz><x a="1" b="4"/><x a="1" b="5"/><x a="2" b="5"/><x a="3" b="5" id="1"/><x a="3" b="5" id="2"/><x a="3" b="6"/><x a="7" b="5"/></zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0123">
+      <description>Test xsl:sequence with a fallback child</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0123.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<zzz>1 2 3</zzz>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0124">
+      <description>Test pattern matching on parentless elements</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0124.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<do><aaa>1</aaa><bbb>2</bbb><ccc>3</ccc><ddd-got-it/></do>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0125">
+      <description>Test use of various axes within a sequence of parentless elements (this test is specifically designed to check the implementation of axes in a Saxon TinyTree forest, i.e. a TinyTree with multiple root nodes.)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0125.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="sequence-0125.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0126">
+      <description>Test subsequence() function with various non-integer parameters. NOTE: 2010-06-20 changed expected results for a6 in response to test suite bug 837 - MHK</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0126.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z xmlns:xs="http://www.w3.org/2001/XMLSchema"><a1>2 3 4</a1><a2>1 2</a2
+            ><a3>5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20</a3><a4/><a5/><a6/><a7>5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20</a7
+            ><a8/><a9/></z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0127">
+      <description>Test use of current() within a "for" loop</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0127.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z xmlns:xs="http://www.w3.org/2001/XMLSchema"><a><a x="1"/></a><b><b x="2"/></b><c/><d/></z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0128">
+      <description>Test sequence construction where a constructed item has the wrong type</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0128.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0570"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0129">
+      <description>Test sequence construction where a constructed item has the wrong cardinality</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0129.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0570"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0130">
+      <description>Test sequence construction where a constructed item has the wrong cardinality</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0130.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0570"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0131">
+      <description>Test sequence construction using xsl:sequence with a failing type check</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0131.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0570"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0132">
+      <description>Test sequence construction using xsl:sequence with a failing type check</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-02-21" change="corrected error code"/>
+      <modified by="Michael Kay" on="2018-09-25" change="corrected error code (again)"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0132.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0570"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0133">
+      <description>Basic error test of "as" attribute on xsl:template</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0133.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0505"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0134">
+      <description>Basic error test of "as" attribute on xsl:template</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0134.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0505"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0135">
+      <description>Test that '/' is an error when the context node is in a non-document tree</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0135.xsl"/>
+      </test>
+      <result>
+         <error code="XPDY0050"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0136">
+      <description>Test that '/x' is an error when the context node is in a non-document tree</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0136.xsl"/>
+      </test>
+      <result>
+         <error code="XPDY0050"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0137">
+      <description>Test sequence construction using xsl:sequence with content ERROR: xsl:sequence cannot have content</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0137.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sequence-0137a">
+      <description>Test sequence construction using xsl:sequence with content. Not an error in 3.0</description>
+      <created by="Michael Kay" on="2013-06-19"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0137.xsl"/>
+      </test>
+      <result>
+         <assert>/zzz = '5 10 6 11 7 5 20 6 21 7 5 30 6 31 7'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0138">
+      <description>Test xsl:perform-sort with a sequence constructor ERROR: xsl:sort elements must come first</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0138.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0139">
+      <description>Test within xsl:for-each, xsl:sort must come first</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0139.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0201">
+      <description>xsl:for-each over sequence of atomic values</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><it>10</it><it>20</it><it>30</it></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0202">
+      <description>xsl:for-each over sequence of atomic values constructed by 'for'</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><it>10</it><it>20</it><it>30</it></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0203">
+      <description>test op:concatenate on nested sequences using for clauses</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0301">
+      <description>test op:concatenate on nested sequences, paren notation</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0302">
+      <description>Nest parentheses, with concatenation and range expressions</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1, 2, 3, 4, 5, 6, 7, 8, 9, 10</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0303">
+      <description>Test for positional indexing in sequence</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0303.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><in/><in>1</in><in>4</in><in/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0304">
+      <description>Test for xsl:sequence in a function passed from a param</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0304.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a|b|c</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0305">
+      <description>range operator - empty sequence in arg2</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0305.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0306">
+      <description>Test case to verify that no error is raised for using xs:untypedAtomic as the first argument of 'to' operand if the value can be casted to an integer.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0306.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0307">
+      <description>Test case to verify that no error is raised for using xs:untypedAtomic as the second argument of 'to' operand if the value can be casted to an integer.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0307.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0401">
+      <description>test op:concatenate on nested sequences with path expressions</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(a, b, c, d, e, f, g, h, i, j, k, l)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0402">
+      <description>test op:concatenate of nested sequences with path expressions, for clause, and for-each</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>([a|b|c][d|e|f][g|h|i][j|k|l])</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0403">
+      <description>test basic nesting of constructed sequences with path expressions, with xsl:for-each / xpath for expr</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0403.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(j|k|l|g|h|i|d|e|f|a|b|c)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0501">
+      <description>apply positional predicate to sequence.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(4|5|6|7)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0502">
+      <description>sequence op:concatenate of nodes and for clause</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0502.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(1|2|3|4|5|6)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0601">
+      <description>Simple test of calling xsl:function from within the for loop, which stresses the variable stack.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Abel Braaksma" on="2015-04-08" change="Bug 20291, removed expected whitespace and changed to indent=no"/>
+      <environment>
+         <source role="." file="sequence-06.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="sequence-0601.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0701">
+      <description>when first operand of op:concatenate is the empty sequence, just return the other</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(1, 2, 3)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0702">
+      <description>when second operand of op:concatenate is the empty sequence, just return the other</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0702.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(1, 2, 3)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0703">
+      <description>when both operands of op:concatenate are empty sequences, return empty sequence</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0703.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>()</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0704">
+      <description>test op:concatenate of three sequences, empty in middle</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0704.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(1, 2, 3, 4, 5, 6)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0705">
+      <description>Range expression, variable to variable (both integers)</description>
+      <created by="(spec authors)" on="2012-11-07"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0705.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-3, -2, -1, 0, 1, 2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0706">
+      <description>Range expression, upward, (positive integer) function to (positive integer) function</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0706.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1, 2, 3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-0901">
+      <description>Range expression, node holding positive integer to node holding positive integer, weird name</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><to>1987456321</to></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1987456321</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1001">
+      <description>Simple test for constructing an integer sequence</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1 2 3 4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1002">
+      <description>Simple test for constructing a sequence from source</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema">1|2|3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1003">
+      <description>Test for a sequence in a global parameter</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema">a|b|c</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1004">
+      <description>Test for passing a sequence into a function parameter</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1|2|3|4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1005">
+      <description>First example from spec.</description>
+      <created by="XSLT Editors" on="2012-11-07"/>
+      <environment ref="sequence-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema">37</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1101">
+      <description>Second example from spec.</description>
+      <created by="XSLT Editors" on="2012-11-07"/>
+      <environment ref="sequence-11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema">700.00</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1201">
+      <description>sequence constructor with explicit items of all types supported by basic processor</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1201.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="sequence-1201.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1202">
+      <description>Test using xsl:sequence to add a document node to a result tree.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>(((<doc/>)))</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1203">
+      <description>Tests xsl:sequence instruction containing xsl:fallback.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>text</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sequence-1204">
+      <description>Range expression, upward, positive integer to node holding positive integer</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1204.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>9, 10, 11, 12, 13</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sequence-1205">
+      <description>Range expression - nested range expression</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1205.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1 2 3 4 5</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1301">
+      <description>sequence constructor/concatenator with nodes</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="sequence-13.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>yes this is nonsense, foo</a><b>blah, good, bar1, bar2, bar3</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1401">
+      <description>Tests xs:integer, xs:double. xs:decimal and xs:untypedAtomic types in a sequence.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="sequence-1401.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1402">
+      <description>Tests xs:string and xs:untypedAtomic types in a sequence</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1402.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="sequence-1402.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1501">
+      <description>Tests xs:boolean and xs:untypedAtomic types in a sequence</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-15"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<output>
+<out>false</out>
+<out>truefalse</out>
+<out>falsefalse</out>
+<out>truetrue</out>
+<out>falsetrue</out>
+<out>false</out></output>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1601">
+      <description>Tests xs:yearMonthDuration, xs:dayTimeDuration types in a sequence</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1601.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="sequence-1601.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1701">
+      <description>Tests xs:date, xs:time, and xs:dateTime types in a sequence.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1701.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="sequence-1701.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1801">
+      <description>Tests xs:QName types in a sequence</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<qname>false</qname>
+<qname>false</qname>
+<qname>false</qname>
+<qname>true</qname>
+<qname>false</qname>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-1901">
+      <description>Tests xs:anyURI types in a sequence.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-1901.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="sequence-1901.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-2001">
+      <description>xsl:sequence - Construction of empty sequence</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-2001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sequence-2002">
+      <description>xsl:sequence - check reverse() does not modify argument (Saxon-JS bug #3362)</description>
+      <created by="Debbie Lockett" on="2017-08-17"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-2002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><x1>1 2 3</x1><x2>3 2 1</x2><x3>3 2 1 1 2 3</x3></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-2101">
+      <description>range expression with functions as operands</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><num>1</num><num>2</num><num>3</num><num>4</num><num>5</num><num2>35</num2><num2>36</num2><one>1</one></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-2101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3 4 5 6 7 8 9 1032 33 34 35 3635 36</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-2301">
+      <description>xsl:sequence - node identity should be preserved</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><one>1</one><two>2</two></doc>]]></content>
+         </source>
+      </environment>     
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-2301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-2401a">
+      <description>xsl:sequence - Content in the sequence constructor is an instruction other than xsl:fallback.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-2401.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sequence-2401b">
+      <description>xsl:sequence - Content in the sequence constructor is an instruction other than xsl:fallback.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-2401.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3185"/>
+      </result>
+   </test-case>
+
+   <test-case name="sequence-2402a">
+      <description>xsl:sequence instruction is missing the REQUIRED 'select' attribute.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-2402.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sequence-2402b">
+      <description>
+         xsl:sequence instruction is missing the REQUIRED 'select' attribute.
+         No longer an error in XSLT 3.0
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-2402.xsl"/>
+      </test>
+      <result>
+         <assert>/out[not(node())]</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sequence-2403a">
+      <description>
+         Purpose: xsl:sequence with content but no 'select' attribute. 
+         (OK in XSLT 3.0) 
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-2403.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sequence-2403b">
+      <description>
+         Purpose: xsl:sequence with content but no 'select' attribute. 
+         (OK in XSLT 3.0) 
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="sequence-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sequence-2403.xsl"/>
+      </test>
+      <result>
+         <assert>/out[foo and bar]</assert>
+      </result>
+   </test-case>
+</test-set>

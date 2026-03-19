@@ -1,0 +1,438 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="system-property">
+   <description>Tests system-property</description>
+   <environment name="systemprop001">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="systemprop009">
+      <source role="." file="systemprop009.xml"/>
+   </environment>
+
+   <test-case name="system-property-001">
+      <description>Test that xsl:version is a valid system-property and the returned result is an xs:string with numeric value between 1.0 and 2.0.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="system-property-002">
+      <description>Test that xsl:vendor is a valid system-property and the returned result is an xs:string.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="system-property-003">
+      <description>Test that xsl:vendor-url is a valid system-property and the returned result is an xs:string.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="system-property-004">
+      <description>Test that xsl:product-name is a valid system-property and the returned result is an xs:string.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="system-property-005">
+      <description>Test that xsl:product-version is a valid system-property and the returned result is an xs:string.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="system-property-006">
+      <description>Test that xsl:is-schema-aware is a valid system-property and the returned result is an xs:string - one of 'yes' or 'no'.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="system-property-007">
+      <description>Test that xsl:supports-serialization is a valid system-property and the returned result is an xs:string. Conditional xsl:if used to verify result value is 'yes' or 'no'</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="system-property-008">
+      <description>Test that xsl:supports-backwards-compatibility is a valid system-property and the returned result is an xs:string - one of 'yes' or 'no'.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="system-property-009">
+      <description>Test to verify that all specification defined arguments of system-property must be lower case or they will not be recognized.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="system-property-010">
+      <description>Test to show that empty string is returned if the argument in system-property() does not have a prefix, (even if the default namespace is set to the 'xsl' namespace and the keyword is correct).</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a:out xmlns:a="http://example.org/test"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="system-property-011">
+      <description>Test to verify that system-property($property) accepts an argument that comes from a node, variable and subsequence and the result returned is an xs:string.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="systemprop009"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="system-property-011.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-012">
+      <description>Test for system-property('supports-streaming') .</description>
+      <created by="Michael Kay" on="2014-10-30"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>           
+      <test>
+         <stylesheet file="system-property-012.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'yes'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-013">
+      <description>Test for system-property('supports-streaming') .</description>
+      <created by="Michael Kay" on="2014-10-30"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming" satisfied="false"/>
+      </dependencies>           
+      <test>
+         <stylesheet file="system-property-012.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'no'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-014a">
+      <description>Test for system-property('supports-dynamic-evaluation') .</description>
+      <created by="Michael Kay" on="2014-10-30"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+         <feature value="dynamic_evaluation"/>
+      </dependencies>           
+      <test>
+         <stylesheet file="system-property-014.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '4yes'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-014b">
+      <description>Test for system-property('supports-dynamic-evaluation') .</description>
+      <created by="Michael Kay" on="2014-10-30"/>
+      <modified by="Michael Kay" on="2014-11-14" change="@xpath must be a string, the inner quotes were missing"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+         <feature value="dynamic_evaluation" satisfied="false"/>
+      </dependencies>           
+      <test>
+         <stylesheet file="system-property-014.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'no'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-015">
+      <description>Test that xsl:xpath-version is 3.0 or 3.1</description>
+      <created by="Michael Kay" on="2015-09-04"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-016">
+      <description>Test that xsl:xsd-version is 1.0 or 1.1</description>
+      <created by="Michael Kay" on="2015-09-04"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-017">
+      <description>Test use of an EQName (bug 29113)</description>
+      <created by="Michael Kay" on="2015-09-13"/>
+      <modified by="Michael Kay" on="2015-10-15" change="Fix bug 29124 (test depends on 3.0)"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-018">
+      <description>Test use of system-property('xsl:supports-higher-order-functions')</description>
+      <created by="Michael Kay" on="2015-11-05"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-018.xsl"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-019">
+      <description>Test that xsl:supports-backwards-compatibility is correct according to the test dependencies</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-019.xsl"/>
+      </test>
+      <result>
+         <assert>/out="yes"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-019a">
+      <description>Test that xsl:supports-backwards-compatibility is correct according to the test dependencies</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="backwards_compatibility" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-019.xsl"/>
+      </test>
+      <result>
+         <assert>/out="no"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-020">
+      <description>Unknown system property returns zero-length string</description>
+      <created by="Michael Kay" on="2020-06-15"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="backwards_compatibility" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-020.xsl"/>
+      </test>
+      <result>
+         <assert>count(/out/a[.='']) = 3</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-021">
+      <description>System-property in a static expression</description>
+      <created by="Michael Kay" on="2020-06-15"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-021.xsl"/>
+      </test>
+      <result>
+         <assert>/out/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-022">
+      <description>System-property not allowed in xsl:evaluate</description>
+      <created by="Michael Kay" on="2020-06-15"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-022.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE3160"/>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-023">
+      <description>Dynamic evaluation of system-property()</description>
+      <created by="Michael Kay" on="2020-06-15"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-023.xsl"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-024">
+      <description>Dynamic evaluation of system-property() via function-lookup</description>
+      <created by="Michael Kay" on="2020-06-15"/>
+      <environment ref="systemprop001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-024.xsl"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="system-property-025">
+      <description>system-property() called within a text value template</description>
+      <created by="Michael Kay" on="2020-09-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="system-property-025.xsl"/>
+      </test>
+      <result>
+         <assert>/out[matches(., 'Run with [3-9]\.[0-9]')]</assert>
+      </result>
+   </test-case>
+
+</test-set>

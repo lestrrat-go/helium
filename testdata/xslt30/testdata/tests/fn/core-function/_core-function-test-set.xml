@@ -1,0 +1,1372 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="core-function">
+   <description>Tests core-function</description>
+   <environment name="coreFunction001">
+      <source role=".">
+         <content><![CDATA[<doc></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="coreFunction088">
+      <source role="." file="coreFunction088.xml"/>
+   </environment>
+   <environment name="coreFunction089">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <element1>Incorrect Execution!!</element1>
+  <element1>Test executed Successfully!!</element1>
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="core-function-001">
+      <description>Purpose: Test of 'substring()' function with 'substring()' as an argument. The third argument is missing.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>correct substring</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-002">
+      <description>Purpose: Test of 'substring()' function with 'substring()' as an argument. The third argument is present.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>correct substring</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-003">
+      <description>Purpose: Test of 'concat()' function with 'concat()' as an argument. Only the first argument of the outer "concat" is build by a call to another "concat" function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>A New Concatenated String</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-004">
+      <description>Purpose: Test of 'string()' function with 'string()' as an argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Unchanged String</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-005">
+      <description>Purpose: Test of 'substring-after()' function with 'substring-after()' as an argument. The first argument of the outer function is build by calling another "substring-after()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Correct Substring After</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-006">
+      <description>Purpose: Test of 'substring-before()' function with 'substring-before()' as an argument. The first argument of the outer 'substring-before()' function is build by calling another 'substring-before()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>correct substring Before</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-007">
+      <description>Purpose: Test of 'translate()' function with 'translate()' as an argument. Only first argument of outer 'translate' uses another call to 'translate' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>new string</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-008">
+      <description>Purpose: Test of 'translate()' function with 'translate()' as an argument. Only the second argument of outer 'translate' uses another call to 'translate' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>new string</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-009">
+      <description>Purpose: Test of 'translate()' function with 'translate()' as an argument. Each of the three string arguments of the outer 'translate' are generated by a call to another to 'translate' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>new string</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-010">
+      <description>Purpose: Test of 'translate()' function with 'translate()' as an argument. Each of the three string arguments of the outer 'translate' are generated by a call to another to 'translate' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>new string</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-011">
+      <description>Purpose: Test of 'concat()' function with 'concat()' as an argument. Only the second argument of the outer "concat" is build by a call to another "concat" function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>A New Concatenated String</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-012">
+      <description>Purpose: Test of 'concat()' function with 'concat()' as an argument. Only the third argument of the outer "concat" is build by a call to another "concat" function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>A New Concatenated String</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-013">
+      <description>Purpose: Test of 'concat()' function with 'concat()' as an argument. All three arguments of the outer "concat" are build by calls to another "concat" function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>A New Concatenated String</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-014">
+      <description>Purpose: Test of 'substring-after()' function with 'substring-after()' as an argument. The second argument of the outer function is build by calling another "substring-after()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Correct Substring After</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-015">
+      <description>Purpose: Test of 'substring-after()' function with 'substring-after()' as an argument. Both arguments of the outer function are build by calling the "substring-after()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Correct Substring After</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-016">
+      <description>Purpose: Test of 'substring-before()' function with 'substring-before()' as an argument. The second argument of the outer 'substring-before()' function is build by calling another 'substring-before()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Correct Substring Before</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-017">
+      <description>Purpose: Test of 'substring-before()' function with 'substring-before()' as an argument. Both arguments in the outer 'substring-before()' function are build by invoking corresponding 'substring-before()' functions.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Correct Substring Before</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-018">
+      <description>Purpose: Test of 'string()' function with a variable reference as the argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>String From Variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-019">
+      <description>Purpose: Test of 'concat()' function with a variable reference as the argument. Only the first argument of the function is build by referencing a variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>String From Variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-020">
+      <description>Purpose: Test of 'concat()' function with a variable reference as the argument. Only the second argument of the function is build by referencing a variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>String From Variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-021">
+      <description>Purpose: Test of 'concat()' function with a variable reference as the argument. Only the third argument of the function is build by referencing a variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>String From Variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-022">
+      <description>Purpose: Test of 'concat()' function with a variable reference as the argument. All arguments of the function are build by referencing a variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>String From Variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-023">
+      <description>Purpose: Test of 'substring-before()' function with a variable reference as the argument. Only the first argument of the function is build by referencing a variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring-before with variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-024">
+      <description>Purpose: Test of 'substring-before()' function with a variable reference as the argument. Only the second argument of the function is build by referencing a variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring-before with variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-025">
+      <description>Purpose: Test of 'substring-before()' function with a variable reference as the argument. Both arguments of the function are build by referencing a variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring before with variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-026">
+      <description>Purpose: Test of 'substring-after()' function with a variable reference as the argument. Only the first argument of the function is build by referencing a variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring-after with variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-027">
+      <description>Purpose: Test of 'substring-after()' function with a variable reference as the argument. Only the second argument of the function is build by referencing a variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring after with variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-028">
+      <description>Purpose: Test of 'substring-after()' function with a variable reference as the argument. Both arguments of the function are build by referencing a variable.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring-after with variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-029">
+      <description>Purpose: Test of 'substring()' function with a variable reference as the first argument. Third argument is missing.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring with variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-030">
+      <description>Purpose: Test of 'substring()' function with a variable reference as the first argument. Third argument is present.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring with variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-031">
+      <description>Purpose: Test of 'string-length()' function with a variable reference as the argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-031.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>26</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-032">
+      <description>Purpose: Test of 'translate()' function with a variable reference as the first argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-032.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>translate with variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-033">
+      <description>Purpose: Test of 'translate()' function with a variable reference as the second argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>translate with variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-034">
+      <description>Purpose: Test of 'translate()' function with a variable reference as the third argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-034.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>translate with variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-035">
+      <description>Purpose: Test of 'translate()' function with a variable reference for all three arguments.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>translate with variable</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-036">
+      <description>Purpose: Test of 'string()' function with a param reference as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>string with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-037">
+      <description>Purpose: Test of 'concat' function with a param reference as its first argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>concat with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-038">
+      <description>Purpose: Test of 'concat' function with a param reference as its second argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>concat with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-039">
+      <description>Purpose: Test of 'concat' function with a param reference as its third argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-039.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>concat with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-040">
+      <description>Purpose: Test of 'concat' function with a param reference for all its arguments.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-040.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>concat with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-041">
+      <description>Purpose: Test of 'starts-with' function with a param reference as its first argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-041.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-042">
+      <description>Purpose: Test of 'starts-with' function with a param reference as its second argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-042.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-043">
+      <description>Purpose: Test of 'starts-with' function with a param reference for all its arguments.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-043.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-044">
+      <description>Purpose: Test of 'contains' function with a param reference as its first argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-044.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-045">
+      <description>Purpose: Test of 'contains' function with a param reference as its second argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-045.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-046">
+      <description>Purpose: Test of 'contains' function with a param reference for all its arguments.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-046.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-047">
+      <description>Purpose: Test of 'substring-before' function with a param reference as its first argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-047.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring-before with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-048">
+      <description>Purpose: Test of 'substring-before' function with a param reference as its second argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-048.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-049">
+      <description>Purpose: Test of 'substring-before' function with a param reference for all its arguments.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-049.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring-before with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-050">
+      <description>Purpose: Test of 'substring-after' function with a param reference as its first argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-050.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring-after with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-051">
+      <description>Purpose: Test of 'substring-after' function with a param reference as its second argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-051.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring-after with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-052">
+      <description>Purpose: Test of 'substring-after' function with a param reference for all its arguments.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-052.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring-after with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-053">
+      <description>Purpose: Test of 'substring' function with a param reference as its first argument. Third argument is missing.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-053.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-054">
+      <description>Purpose: Test of 'substring' function with a param reference as its first argument. Third argument is present.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-054.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>substring with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-055">
+      <description>Purpose: Test of 'string-length' function with a param reference as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-055.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>15</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-056">
+      <description>Purpose: Test of 'translate' function with a param reference as its first argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-056.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>translate with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-057">
+      <description>Purpose: Test of 'translate' function with a param reference as its second argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-057.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>translate with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-058">
+      <description>Purpose: Test of 'translate' function with a param reference as its third argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-058.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>translate with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-059">
+      <description>Purpose: Test of 'translate' function with a param reference for all its arguments.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-059.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>translate with param</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-060">
+      <description>Purpose: Test of 'floor' function with a borderline negative number. The argument is very close to expected result.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-060.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-061">
+      <description>Purpose: Test of 'floor' function with a borderline negative number. The argument is relatively far from the expected result.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-061.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-062">
+      <description>Purpose: Test of 'floor' function with a variable reference as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-062.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-063">
+      <description>Purpose: Test of 'floor' function with a "param" reference as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-063.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-064">
+      <description>Purpose: Test of 'floor' function with a 'ceiling' function as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-064.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-065">
+      <description>Purpose: Test of 'floor' function with a 'round' function as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-065.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-066">
+      <description>Purpose: Test of 'floor' function with another 'floor' function as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-066.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-067">
+      <description>Purpose: Test of 'floor' function with a complex expression as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-067.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-068">
+      <description>Purpose: Test of 'ceiling' function with a negative borderline number as its argument. The argument is very close to expected result.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-068.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-069">
+      <description>Purpose: Test of 'ceiling' function with a negative borderline number as its argument. The argument is relatively far from the expected result.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-069.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-070">
+      <description>Purpose: Test of 'ceiling' function with a variable reference as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-070.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-071">
+      <description>Purpose: Test of 'ceiling' function with a "floor" function as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-071.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-072">
+      <description>Purpose: Test of 'ceiling' function with another "ceiling" function as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-072.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-073">
+      <description>Purpose: Test of 'ceiling' function with a "param" reference as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-073.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-074">
+      <description>Purpose: Test of 'ceiling' function with a complex expression as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-074.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-075">
+      <description>Purpose: Test of 'round' function with a negative borderline number as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-075.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-076">
+      <description>Purpose: Test of 'round' function with a variable reference as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-076.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-077">
+      <description>Purpose: Test of 'round' function with a "param" reference as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-077.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-078">
+      <description>Purpose: Test of 'round' function with "ceiling" function as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-078.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-079">
+      <description>Purpose: Test of 'round' function with a complex expression as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-079.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-080">
+      <description>Section: 4.4 Number Functions Purpose: Test of 'round' function with NAN as its its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-080.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>NaN</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-081">
+      <description>Purpose: Test of 'round' function with -0 as its its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-081.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-0</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-082">
+      <description>Purpose: Test of 'round' function with an argument between 0 and -0.5 (inclusive). the value returned is negative zero, but it's displayed as "0" - MHK</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-082.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-0</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-083">
+      <description>Purpose: Test of 'round' function with another "round" function as an argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-083.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-084">
+      <description>Purpose: Test of 'round' function with positive infinity as the argument (use expression that yields infinity).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-084.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>INF</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-085">
+      <description>Purpose: Test of 'round' function with negative infinity as the argument (use expression that yields -infinity).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-085.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-INF</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-086">
+      <description>Purpose: Test of 'number' function with a negative borderline value as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-086.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-1.9999</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-087">
+      <description>Purpose: Test of 'number' function with a positive borderline value as its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-087.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1.9999</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-088">
+      <description>Purpose: Test of 'substring()' function with 'substring()' as an argument. The third argument is missing. Uses the fn: namespace explicitly</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-088.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:fn="http://www.w3.org/2005/xpath-functions">correct substring</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-089">
+      <description>Purpose: Test of a function ("count") with an axes ("ancestor") as part of its argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction088"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-089.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="core-function-090">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="coreFunction089"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="core-function-090.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed Successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

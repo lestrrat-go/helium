@@ -1,0 +1,488 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="data-manipulation">
+   <description>Tests data-manipulation</description>
+   <environment name="dataManipulation001">
+      <source role=".">
+         <content><![CDATA[<doc></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="dataManipulation009">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <element1>Test executed successfully!!</element1>
+  <element2>Incorrect execution!!</element2>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="dataManipulation013">
+      <source role="." file="dataManipulation013.xml"/>
+   </environment>
+   <environment name="dataManipulation016">
+      <source role="." file="dataManipulation016.xml"/>
+   </environment>
+
+   <test-case name="data-manipulation-001">
+      <description>Purpose: Test an "xsl:when" instruction with and "xsl-if" instruction as part of its content template (if inside of when). SpecCitation: Rec="XSLT" version="1.0" type="" place="" Scenario: Operation="Standard-XML"</description>
+      <keywords>xsl:if xsl:choose xsl:when xsl:otherwise</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+          Test executed successfully!!
+        </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-002">
+      <description>Purpose: Test an "xsl:choose" instruction with and "xsl:if" instruction as part of its content template (if inside "otherwise".</description>
+      <keywords>xsl:if xsl:choose xsl:when xsl:otherwise</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+         Test excuted successfully!!
+       </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-003">
+      <description>Purpose: Test an "xsl:if" with a complex true expression.</description>
+      <keywords>xsl:if complex-expression</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+        Test excuted successfully!!
+    </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-004">
+      <description>Purpose: Test an "xsl:if" with a complex false expression.</description>
+      <keywords>xsl:if complex-expression</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+    This text (and the "out" text) should be the only text 
+    displayed by this test.
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-005">
+      <description>Purpose: Test an "xsl:choose" with a complex true expression in its "when" section.</description>
+      <keywords>xsl:choose xsl:when xsl:otherwise complex-expression</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+       Test executed successfully.
+     </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-006">
+      <description>Purpose: Test an "xsl:choose" with a complex false expression in its "when" section.</description>
+      <keywords>xsl:choose xsl:when xsl:otherwise complex-expression</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+       Test executed successfully!!
+     </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-007">
+      <description>Purpose: Test an "xsl:if" with a function as part of the test (use "round" function).</description>
+      <keywords>xsl:if fn:round</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+       Test executed successfully!!
+     </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-008">
+      <description>Purpose: Test an "xsl:choose" with a function as part of the test (use "round" function).</description>
+      <keywords>xsl:choose xsl:when xsl:otherwise fn:round</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+        Test executed successfully!!
+      </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-009">
+      <description>Purpose: Test of "format-number" using a string function as part of the format pattern.</description>
+      <keywords>fn:format-number fn:substring-after</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,234.78</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-010">
+      <description>Purpose: Test of "format-number" using a number function as part of the number to be formatted.</description>
+      <keywords>fn:format-number fn:number</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,234.78</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-011">
+      <description>Purpose: Test of "format-number" using a number function as part of the number to be formatted and a string function as part of the format pattern.</description>
+      <keywords>fn:format-number fn:substring-after fn:number</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,234.78</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-012">
+      <description>Purpose: Test of "format-number" using a variable as the format pattern.</description>
+      <keywords>fn:format-number variable-reference</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,234.78</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-013">
+      <description>Purpose: Test of "format-number" using a parameter as the format pattern.</description>
+      <keywords>fn:format-number xsl:param global-variable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,234.78</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-014">
+      <description>Purpose: Test of "format-number" using a variable as the number to be formatted.</description>
+      <keywords>fn:format-number xsl:variable global-variable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,234.78</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-015">
+      <description>Purpose: Test of "format-number" using a parameter as the number to be formatted.</description>
+      <keywords>fn:format-number xsl:param global-variable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,234.78</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-016">
+      <description>Purpose: Test of "format-number" using a parameter as the number to be formatted and a parameter for the format pattern.</description>
+      <keywords>xsl:param global-variable fn:format-number</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,234.78</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-017">
+      <description>Purpose: Test of "format-number" using a variable as the number to be formatted and a variable for the format pattern.</description>
+      <keywords>xsl:variable fn:format-number global-variable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,234.78</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-018">
+      <description>Purpose: Test of "format-number" using a variable as the number to be formatted and a parameter for the format pattern.</description>
+      <keywords>xsl:variable fn:format-number global-variable xsl:param</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,234.78</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-019">
+      <description>Purpose: Test of "format-number" using a parameter as the number to be formatted and a variable for the format pattern.</description>
+      <keywords>xsl:variable fn:format-number global-variable xsl:param</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,234.78</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-020">
+      <description>Purpose: Test an "xsl:variable" using another variable as part of the "select" attribute.</description>
+      <keywords>xsl:variable global-variable variable-dependencies</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-021">
+      <description>Purpose: Test an "xsl:param" using another param as part of the "select" attribute.</description>
+      <keywords>xsl:param global-variable variable-dependencies</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-022">
+      <description>Purpose: Test an "xsl:variable" using a parameter as part of the "select" attribute.</description>
+      <keywords>xsl:param global-variable variable-dependencies xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-023">
+      <description>Purpose: Test an "xsl:param" using a variable as part of the "select" attribute.</description>
+      <keywords>xsl:param global-variable variable-dependencies xsl:variable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-024">
+      <description>Purpose: Test an "xsl:variable" using a function as part of the "select" attribute.</description>
+      <keywords>xsl:param global-variable fn:last predicate</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation013"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test Executed Successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-025">
+      <description>Purpose: Test an "xsl:variable" using a complex expression as part of the "select" attribute.</description>
+      <keywords>xsl:param global-variable predicate complex-expression</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation013"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test Executed Successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-026">
+      <description>Purpose: Test an "xsl:param" using a complex expression as part of the "select" attribute.</description>
+      <keywords>xsl:param global-variable predicate complex-expression</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation013"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test Executed Successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-027">
+      <description>Purpose: Test an "xsl:variable" using the "ancestor" axes as part of the "select" attribute.</description>
+      <keywords>xsl:variable ancestor-or-self global-variable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation016"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test Executed Successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="data-manipulation-028">
+      <description>Purpose: Test an "xsl:param" using the "ancestor" axes as part of the "select" attribute.</description>
+      <keywords>xsl:param ancestor-or-self global-variable</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="dataManipulation016"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="data-manipulation-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test Executed Successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

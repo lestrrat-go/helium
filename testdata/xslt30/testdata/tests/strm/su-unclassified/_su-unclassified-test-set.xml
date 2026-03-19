@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="su-unclassified">
+   <description>Streamable stylesheet functions: category "unclassified"</description>
+   
+   <environment name="su-unclassified-A">
+      <stylesheet file="su-unclassified-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="su-unclassified-001">
+      <description>Call a zero-arity stylesheet function</description>
+      <created by="Michael Kay" on="2015-03-16"/>
+      <environment ref="su-unclassified-A"/>
+      <test>
+         <initial-template name="t-001"/>
+      </test>
+      <result>
+         <assert>count(/out/ITEM) = 6</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-unclassified-002">
+      <description>Call an arity=1 stylesheet function that atomizes first argument</description>
+      <created by="Michael Kay" on="2015-03-16"/>
+      <environment ref="su-unclassified-A"/>
+      <test>
+         <initial-template name="t-002"/>
+      </test>
+      <result>
+         <assert>/out = 9.06</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-unclassified-003">
+      <description>Call a recursive arity=1 stylesheet function that atomizes first argument</description>
+      <created by="Michael Kay" on="2015-03-16"/>
+      <environment ref="su-unclassified-A"/>
+      <test>
+         <initial-template name="t-003"/>
+      </test>
+      <result>
+         <assert>/out = 5.83</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-unclassified-004">
+      <description>Call an arity=2 stylesheet function that atomizes first argument</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-unclassified-A"/>
+      <test>
+         <initial-template name="t-004"/>
+      </test>
+      <result>
+         <assert>/out = 11.06</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-unclassified-005">
+      <description>Call a recursive arity=2 stylesheet function that atomizes first argument</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-unclassified-A"/>
+      <test>
+         <initial-template name="t-005"/>
+      </test>
+      <result>
+         <assert>/out = 5.86</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-unclassified-006">
+      <description>Call a recursive arity=2 stylesheet function that atomizes second argument</description>
+      <created by="Michael Kay" on="2016-06-27"/>
+      <environment ref="su-unclassified-A"/>
+      <test>
+         <initial-template name="t-006"/>
+      </test>
+      <result>
+         <assert>/out = 5.86</assert>
+      </result>       
+   </test-case>
+   
+
+
+</test-set>

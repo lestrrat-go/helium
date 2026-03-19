@@ -1,0 +1,1005 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="si-fork">
+   <description>xsl:fork instruction with streaming</description>
+   
+   <environment name="si-fork-A">
+     <stylesheet file="si-fork-A.xsl"/>
+   </environment>
+   
+   <environment name="si-fork-B">
+     <stylesheet file="si-fork-B.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="si-fork-001">
+      <description>Basic Test of xsl:source-document instruction with xsl:fork</description>
+      <keywords>multiple-xsl-sequence-children fn:avg PathExpr xsl:value-of striding consuming</keywords>
+      <created by="Michael Kay" on="2014-01-13"/>
+      <environment ref="si-fork-A"/>
+      <test>
+         <initial-template name="f-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>9.06</a><b>420</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-002">
+      <description>xsl:source-document instruction with xsl:fork, some motionless prongs</description>
+      <keywords>multiple-xsl-sequence-children fn:avg PathExpr striding xsl:value-of consuming</keywords>
+      <created by="Michael Kay" on="2014-01-13"/>
+      <environment ref="si-fork-A"/>
+      <test>
+         <initial-template name="f-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>[<a>9.06</a><b>420</b>]</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-003">
+      <description>xsl:source-document instruction with xsl:fork, split input to multiple result files</description>
+      <keywords>multiple-xsl-sequence-children xsl:result-document motionless-predicate striding PathExpr fn:number consuming</keywords>
+      <created by="Michael Kay" on="2014-01-13"/>
+      <environment ref="si-fork-A"/>
+      <test>
+         <initial-template name="f-003"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-result-document uri="credits.xml">
+               <all-of>
+                  <assert>count(/credits/transaction) = 15</assert>
+                  <assert>/credits/transaction[1]/@value = 13.24</assert>
+         	   </all-of>
+         	</assert-result-document>
+         	<assert-result-document uri="debits.xml">
+         		<all-of>
+                  <assert>count(/debits/transaction) = 4</assert>
+                  <assert>/debits/transaction[1]/@value = -15.00</assert>
+         	   </all-of>
+         	</assert-result-document>
+         </all-of>	
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-004">
+      <description>xsl:source-document instruction with xsl:fork, all prongs motionless</description>
+      <keywords>multiple-xsl-sequence-children motionless lre literals</keywords>
+      <created by="Michael Kay" on="2014-01-13"/>
+      <environment ref="si-fork-A"/>
+      <test>
+         <initial-template name="f-004"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><in>[<a/><b/>]</in></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-005">
+      <description>xsl:source-document / xsl:for-each / xsl:fork </description>
+      <keywords>xsl:for-each multiple-xsl-sequence-children AxisStep striding consuming</keywords>
+      <created by="Michael Kay" on="2014-01-13"/>
+      <environment ref="si-fork-A"/>
+      <test>
+         <initial-template name="f-005"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/book[@title="Pride and Prejudice"]/@price-per-page = "0.0141"</assert>
+            <assert>count(/out/book) = 6</assert>
+            <assert>count(//*) = 7</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-006">
+      <description>xsl:fork with only one branch consuming</description>
+      <keywords>multiple-xsl-sequence-children consuming motionless mixed-sweep</keywords>
+      <created by="Michael Kay" on="2014-01-13"/>
+      <environment ref="si-fork-A"/>
+      <test>
+         <initial-template name="f-006"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/book[1][@category="MMP"][.="Pride and Prejudice"]</assert>
+            <assert>/out/book[2][@category="P"][.="Wuthering Heights"]</assert>
+            <assert>count(/out/book) = 6</assert>
+            <assert>count(//*) = 13</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-007">
+      <description>xsl:fork with try/catch within a single prong</description>
+      <keywords>multiple-xsl-sequence-children xsl:try fn:outermost crawling-then-striding XPTY0004 consuming</keywords>
+      <created by="Michael Kay" on="2014-01-13"/>
+      <environment ref="si-fork-A"/>
+      <test>
+         <initial-template name="f-007"/>
+      </test>
+      <result>
+		 <assert>/out = "2520 9.06"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-008">
+      <description>xsl:fork with try/catch around the whole xsl:fork</description>
+      <keywords>multiple-xsl-sequence-children consuming fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2014-01-13"/>
+      <environment ref="si-fork-A"/>
+      <test>
+         <initial-template name="f-008"/>
+      </test>
+      <result>
+		 <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-009">
+      <description>xsl:fork used to create attribute nodes</description>
+      <keywords>multiple-xsl-sequence-children AxisStep consuming striding</keywords>
+      <created by="Michael Kay" on="2014-01-13"/>
+      <environment ref="si-fork-A"/>
+      <test>
+         <initial-template name="f-009"/>
+      </test>
+      <result>
+         <all-of>
+		   <assert>/out/book[1][@title="Pride and Prejudice"][@author="Jane Austen"][@publisher="Modern Library"][@price="4.95"]</assert>
+		   <assert>/out/book[6][@title="The Eyre Affair"][@author="Jasper Fforde"][@publisher="Penguin"][@price="16.47"]</assert>
+		 </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-101">
+      <description>xsl:source-document instruction with xsl:fork with xsl:for-each-group</description>
+      <created by="Michael Kay" on="2015-07-09"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-001"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/CAT) = 3</assert>
+            <assert>count(/out/CAT[@ID="MMP"]/ITEM) = 1</assert>
+            <assert>count(/out/CAT[@ID="P"]/ITEM) = 4</assert>
+            <assert>count(/out/CAT[@ID="H"]/ITEM) = 1</assert>
+            <assert>every $I in //ITEM satisfies $I/@CAT = $I/../@ID</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-102">
+      <description>xsl:source-document instruction with xsl:fork with xsl:for-each-group, population is grounded</description>
+      <created by="Michael Kay" on="2016-02-24"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-002"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/CAT) = 3</assert>
+            <assert>count(/out/CAT[@ID="MMP"]/ITEM) = 1</assert>
+            <assert>count(/out/CAT[@ID="P"]/ITEM) = 4</assert>
+            <assert>count(/out/CAT[@ID="H"]/ITEM) = 1</assert>
+            <assert>every $I in //ITEM satisfies $I/@CAT = $I/../@ID</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-103">
+      <description>xsl:source-document/xsl:fork/xsl:for-each-group/@group-by, multiple result documents, population is striding</description>
+      <created by="Michael Kay" on="2016-02-24"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-003"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-result-document uri="P.xml">
+               <all-of>
+                  <assert>/CAT[@ID="P"]/ITEM</assert>
+                  <assert>count(/CAT/ITEM) = 4</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="MMP.xml">
+               <all-of>
+                  <assert>/CAT[@ID="MMP"]/ITEM</assert>
+                  <assert>count(/CAT/ITEM) = 1</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="H.xml">
+               <all-of>
+                  <assert>/CAT[@ID="H"]/ITEM</assert>
+                  <assert>count(/CAT/ITEM) = 1</assert>
+               </all-of>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-104">
+      <description>xsl:source-document/xsl:fork/xsl:for-each-group/@group-by, aggregate over current-group</description>
+      <created by="Michael Kay" on="2016-02-24"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-004"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/CAT) = 3</assert>
+            <assert>/out/CAT[@ID="MMP"][@SIZE="1"]</assert>
+            <assert>/out/CAT[@ID="P"][@SIZE="4"]</assert>
+            <assert>/out/CAT[@ID="H"][@SIZE="1"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-105">
+      <description>xsl:source-document/xsl:fork/xsl:for-each-group/@group-by, non-consuming action</description>
+      <created by="Michael Kay" on="2016-02-24"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-005"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/CAT) = 3</assert>
+            <assert>/out/CAT[@ID="MMP"]</assert>
+            <assert>/out/CAT[@ID="P"]</assert>
+            <assert>/out/CAT[@ID="H"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-106">
+      <description>xsl:for-each-group with both striding and grounded items</description>
+      <created by="Michael Kay" on="2016-02-25"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-006"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/CAT) = 3</assert>
+            <assert>count(/out/CAT[@ID="MMP"]/ITEM) = 1</assert>
+            <assert>count(/out/CAT[@ID="P"]/ITEM) = 4</assert>
+            <assert>count(/out/CAT[@ID="H"]/ITEM) = 2</assert>
+            <assert>every $I in //ITEM satisfies $I/@CAT = $I/../@ID</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-107">
+      <description>xsl:for-each-group with both striding and grounded items</description>
+      <created by="Michael Kay" on="2016-02-25"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-007"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/CAT) = 3</assert>
+            <assert>count(/out/CAT[@ID="MMP"]/ITEM) = 1</assert>
+            <assert>count(/out/CAT[@ID="P"]/ITEM) = 4</assert>
+            <assert>count(/out/CAT[@ID="H"]/ITEM) = 2</assert>
+            <assert>every $I in //ITEM satisfies $I/@CAT = $I/../@ID</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-108">
+      <description>xsl:for-each-group downward selection from current-group(), mixed posture</description>
+      <created by="Michael Kay" on="2016-02-25"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-008"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/CAT) = 3</assert>
+            <assert>count(/out/CAT[@ID="MMP"]/PRICE) = 1</assert>
+            <assert>count(/out/CAT[@ID="P"]/PRICE) = 4</assert>
+            <assert>count(/out/CAT[@ID="H"]/PRICE) = 2</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-109">
+      <description>xsl:for-each-group downward selection from current-group(), mixed posture</description>
+      <created by="Michael Kay" on="2016-02-25"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-009"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/CAT) = 3</assert>
+            <assert>count(/out/CAT[@ID="MMP"]/PRICE) = 1</assert>
+            <assert>count(/out/CAT[@ID="P"]/PRICE) = 4</assert>
+            <assert>count(/out/CAT[@ID="H"]/PRICE) = 2</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-110">
+      <description>xsl:for-each-group - group-by - composite key</description>
+      <created by="Michael Kay" on="2016-02-29"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-010"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/CAT) = 5</assert>
+            <assert>/out/CAT[@DATE="2002-12-31"][@LANG="English"][@AVG-PRICE="5.765"]</assert>
+            <assert>/out/CAT[@DATE="1984-05-01"][@LANG="English"][@AVG-PRICE="4.95"]</assert>
+            <assert>/out/CAT[@DATE="1998-09-01"][@LANG="English"][@AVG-PRICE="4.95"]</assert>
+            <assert>/out/CAT[@DATE="2005-07-11"][@LANG="English"][@AVG-PRICE="16.47"]</assert>
+            <assert>/out/CAT[@DATE="2003-02-25"][@LANG="English"][@AVG-PRICE="16.47"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-111">
+      <description>xsl:for-each-group - group-by - composite key</description>
+      <created by="Michael Kay" on="2016-02-29"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-011"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/CAT) = 4</assert>
+            <assert>/out/CAT[@ID="MMP"][@COUNT="1"][@AVG-QTY="187"][@AUTHOR="Jane Austen"][@PRICE="4.95"]</assert>
+            <assert>/out/CAT[@ID="P"][@COUNT="1"][@AVG-QTY="113"][@AUTHOR="Charlotte Brontë"][@PRICE="6.58"]</assert>
+            <assert>/out/CAT[@ID="P"][@COUNT="2"][@AVG-QTY="107"][@AUTHOR="Thomas Hardy"][@PRICE="4.95"]</assert>
+            <assert>/out/CAT[@ID=("H P", "P H")][@COUNT="2"][@AVG-QTY="129"][@AUTHOR="Jasper Fforde"][@PRICE="16.47"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-112">
+      <description>xsl:for-each-group - group-by - position() of groups</description>
+      <created by="Michael Kay" on="2016-02-29"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-012"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/g) = 4</assert>
+            <assert>/out/g[@author="Jane Austen" and @position="1"]</assert>
+            <assert>/out/g[@author="Charlotte Brontë" and @position="2"]</assert>
+            <assert>/out/g[@author="Thomas Hardy" and @position="3"]</assert>
+            <assert>/out/g[@author="Jasper Fforde" and @position="4"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-113">
+      <description>xsl:for-each-group - group-by - current-grouping-key() not available in called template</description>
+      <created by="Michael Kay" on="2016-02-29"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-013"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/g/h) = 4</assert>
+            <assert>every $h in /out/g/h satisfies $h/@key = "#absent#"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-114">
+      <description>xsl:for-each-group - group-by - current-group() not available in called template</description>
+      <created by="Michael Kay" on="2016-02-29"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-014"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/g/h) = 4</assert>
+            <assert>every $h in /out/g/h satisfies $h/@size = "#absent#"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-115">
+      <description>xsl:for-each-group - group-by - current-grouping-key() not available in applied template</description>
+      <created by="Michael Kay" on="2016-02-29"/>
+      <modified by="Michael Kay" on="2017-02-04" change="extracted test into separate stylesheet as it's a static error"/>
+      <modified by="Michael Kay" on="2018-09-25" change="First, there was a spurious static error (invalid use-when attribute). When we
+         fix that, XTDE1071 is thrown: but it gets caught, so the test as a whole succeeds. The processor has the option of catching
+         XTDE1071 statically, but that can't happen here (or anywhere??) because the processor can't know where the template with
+         the offending call of current-grouping-key() is going to be called from."/>
+      <test>
+         <stylesheet file="si-fork-115.xsl"/>
+         <initial-template name="g-015"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/g[@author='Jane Austen'][count(h)=1 and h/@key="#absent#"]</assert>
+            <assert>/out/g[starts-with(@author, 'Charlotte Bront')][count(h)=1 and h/@key="#absent#"]</assert>
+            <assert>/out/g[@author='Thomas Hardy'][count(h)=2 and h/@key="#absent#"]</assert>
+            <assert>/out/g[@author='Jasper Fforde'][count(h)=2 and h/@key="#absent#"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-116">
+      <description>xsl:for-each-group - group-by - current-group() not available in applied template</description>
+      <created by="Michael Kay" on="2016-02-29"/>
+      <modified by="Michael Kay" on="2017-02-04" change="extracted test into separate stylesheet as it's a static error"/>
+      <test>
+         <stylesheet file="si-fork-116.xsl"/>
+         <initial-template name="g-016"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-117">
+      <description>xsl:for-each-group - group-by - items landing in more than one group - non-consuming action</description>
+      <created by="Michael Kay" on="2016-12-08"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-017"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/g) = 24</assert>
+            <assert>/out/g[@author-contains="J"]/books="Pride and Prejudice|The Big Over Easy|The Eyre Affair"</assert>
+            <assert>/out/g[@author-contains="n"]/books="Pride and Prejudice|Wuthering Heights"</assert>
+            <assert>/out/g[@author-contains="A"]/books="Pride and Prejudice"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-118">
+      <description>xsl:for-each-group - group-by - items landing in more than one group - consuming action</description>
+      <created by="Michael Kay" on="2016-12-08"/>
+      <modified by="Michael Kay" on="2017-02-15" change="add expected results"/>
+      <environment ref="si-fork-B"/>
+      <test>
+         <initial-template name="g-018"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/CAT) = 3</assert>
+            <assert>/out/CAT[@ID="H"] = "The Big Over Easy|Ulysses"</assert>
+            <assert>/out/CAT[@ID="M"] = "Pride and Prejudice"</assert>
+            <assert>/out/CAT[@ID="P"] = "Pride and Prejudice|Wuthering Heights|Tess of the d'Urbervilles|Jude the Obscure|The Eyre Affair"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-119">
+      <description>Streaming xsl:fork use case</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-10-02"/>
+      <environment>
+         <source file="si-fork-119.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-fork-119.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>every $i in 1 to 5 satisfies matches(//li[$i], 'Item i' || $i || ', position: ' || $i || ', attribute pos: ' || $i)</assert>
+            <assert-result-document uri="item_i1.html">
+               <all-of>
+                  <assert>not(//a[.='prev'])</assert>
+                  <assert>//a[.='next']/@href = 'item_i2.html'</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="item_i2.html">
+               <all-of>
+                  <assert>//a[.='prev']/@href = 'item_i1.html'</assert>
+                  <assert>//a[.='next']/@href = 'item_i3.html'</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="item_i5.html">
+               <all-of>
+                  <assert>not(//a[.='next'])</assert>
+                  <assert>//a[.='prev']/@href = 'item_i4.html'</assert>
+               </all-of>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-801">
+      <description>Streamable xsl:fork - returns streamed nodes</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-08-15"/>
+      <environment>
+         <source role="." file="si-fork-801.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-fork-801.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/doc/body/*[1][self::heading='TOC']</assert>
+            <assert>/doc/body/*[2][self::ordered-list][count(list-item/link/@href) = 3]</assert>
+            <assert>/doc/body/*[3][self::heading][.='heading 1']['#'||@id = (//@href)[1]]</assert>
+            <assert>/doc/body/*[4][self::section][.='section 1']</assert>
+            <assert>/doc/body/*[5][self::heading][.='heading 2']['#'||@id = (//@href)[2]]</assert>
+            <assert>/doc/body/*[6][self::section][.='section 2']</assert>
+            <assert>/doc/body/*[7][self::heading][.='heading 3']['#'||@id = (//@href)[3]]</assert>
+            <assert>/doc/body/*[8][self::section][.='section 3']</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-802">
+      <description>Streamable xsl:fork</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-08-15"/>
+      <environment>
+         <source role="." file="si-fork-802.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-fork-802.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-result-document uri="account01826370.xml">
+               <all-of>
+                  <assert>count(/transactions/transaction) = 3</assert>
+                  <assert>/transactions/transaction[1]/value = "5.60"</assert>
+                  <assert>/transactions/transaction[2]/value = "-3.40"</assert>
+                  <assert>/transactions/transaction[3]/value = "2.51"</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="account92741838.xml">
+               <all-of>
+                  <assert>count(/transactions/transaction) = 2</assert>
+                  <assert>/transactions/transaction[1]/value = "11.20"</assert>
+                  <assert>/transactions/transaction[2]/value = "8.90"</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="account43861562.xml">
+               <all-of>
+                  <assert>count(/transactions/transaction) = 2</assert>
+                  <assert>/transactions/transaction[1]/value = "-1.99"</assert>
+                  <assert>/transactions/transaction[2]/value = "5.31"</assert>
+               </all-of>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-803">
+      <description>Streamable xsl:fork containing xsl:for-each-group containing a map constructor</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-15"/>
+      <environment>
+         <source role="." file="si-fork-803.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-fork-803.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(data(/html/body/table/tr/*[1]), ("Position", "1", "2", "3"))</assert>
+            <assert>deep-equal(data(/html/body/table/tr/*[2]), ("Country", "Italia", "France", "Deutschland"))</assert>
+            <assert>deep-equal(data(/html/body/table/tr/*[3]), ("City List", "Milano, Venezia", "Paris, Lyon, Toulouse", "München"))</assert>
+            <assert>deep-equal(data(/html/body/table/tr/*[4]), ("Population", "6", "15", "4"))</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-804">
+      <description>Streamable xsl:fork containing xsl:for-each-group containing an xsl:fork</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-19"/>
+      <environment>
+         <source role="." file="si-fork-803.xml" streaming="true"/> <!--sic -->
+      </environment>
+      <test>
+         <stylesheet file="si-fork-804.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(data(/html/body/table/tr/*[1]), ("Position", "1", "2", "3"))</assert>
+            <assert>deep-equal(data(/html/body/table/tr/*[2]), ("Country", "Italia", "France", "Deutschland"))</assert>
+            <assert>deep-equal(data(/html/body/table/tr/*[3]), ("City List", "Milano, Venezia", "Paris, Lyon, Toulouse", "München"))</assert>
+            <assert>deep-equal(data(/html/body/table/tr/*[4]), ("Population", "6", "15", "4"))</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-805">
+      <description>Streamable xsl:fork containing xsl:for-each-group</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-22"/>
+      <environment>
+         <source role="." file="si-fork-805.xml" streaming="true"/> 
+      </environment>
+      <test>
+         <stylesheet file="si-fork-805.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Root><Brand><Vehicle>Car</Vehicle></Brand><Brand><Vehicle>Truck</Vehicle></Brand><Brand><Vehicle>Motorcycle</Vehicle></Brand></Root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-806">
+      <description>Aggregate (avg) computed using streamable xsl:fork containing xsl:for-each-group</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-07-13"/>
+      <environment>
+         <source role="." file="si-fork-806.xml" streaming="true"/> 
+      </environment>
+      <test>
+         <stylesheet file="si-fork-806.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/p[1] = 'Milano, Italia, 5.26'</assert>
+            <assert>/out/p[2] = 'Padova, Italia, 0.81'</assert>
+            <assert>/out/p[3] = 'Paris, France, 7.4'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-807">
+      <description>Aggregate (avg) computed using streamable xsl:fork containing xsl:for-each-group</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-07-13"/>
+      <environment>
+         <source role="." file="si-fork-806.xml" streaming="true"/> <!-- sic -->
+      </environment>
+      <test>
+         <stylesheet file="si-fork-807.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/p[1] = 'Milano, Italia, 5.23, 5.29'</assert>
+            <assert>/out/p[2] = 'Padova, Italia, 0.69, 0.93'</assert>
+            <assert>/out/p[3] = 'Paris, France, 7.2, 7.6'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-808">
+      <description>Streamable xsl:fork containing xsl:for-each-group (Saxon bug 3375)</description>
+      <!-- 2018-01-31 - not yet working in Saxon -->
+      <created by="Michael Kay after Martin Honnen" on="2017-08-07"/>
+      <modified by="Michael Kay after Martin Honnen" on="2018-02-02" change="add expected results, based on non-streamed evaluation"/>
+      <environment>
+         <source role="." file="si-fork-808.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-fork-808.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><orderlist type="manual"><item num="(a)"><para>blah blah</para
+    ><orderlist type="manual"><item num="(i)"><para>blah blah</para
+    ><orderlist type="manual"/></item></orderlist></item><item num="(b)"><para>blah blah</para
+    ><orderlist type="manual"/></item><item num="(c)"><para>blah blah</para
+    ><orderlist type="manual"><item num="(i)"><para>blah blah</para
+    ><orderlist type="manual"><item num="(1)"><para>blah blah</para
+    ><orderlist type="manual"/></item><item num="(2)"><para>blah blah</para
+    ><orderlist type="manual"/></item></orderlist></item><item num="(ii)"><para>blah blah</para
+    ><orderlist type="manual"/></item><item num="(iii)"><para>blah blah</para><orderlist type="manual"/></item><item num="(iv)"><para>blah blah</para
+    ><orderlist type="manual"/></item></orderlist></item></orderlist></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-808-ns">
+      <description>As -808 with streaming disabled, for comparison</description>
+     <created by="Michael Kay after Martin Honnen" on="2017-08-07"/>
+      <modified by="Michael Kay after Martin Honnen" on="2018-02-02" change="add expected results, based on non-streamed evaluation"/>
+      <environment>
+         <source role="." file="si-fork-808.xml" streaming="false"/>
+      </environment>
+      <test>
+         <stylesheet file="si-fork-808.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><orderlist type="manual"><item num="(a)"><para>blah blah</para
+    ><orderlist type="manual"><item num="(i)"><para>blah blah</para
+    ><orderlist type="manual"/></item></orderlist></item><item num="(b)"><para>blah blah</para
+    ><orderlist type="manual"/></item><item num="(c)"><para>blah blah</para
+    ><orderlist type="manual"><item num="(i)"><para>blah blah</para
+    ><orderlist type="manual"><item num="(1)"><para>blah blah</para
+    ><orderlist type="manual"/></item><item num="(2)"><para>blah blah</para
+    ><orderlist type="manual"/></item></orderlist></item><item num="(ii)"><para>blah blah</para
+    ><orderlist type="manual"/></item><item num="(iii)"><para>blah blah</para><orderlist type="manual"/></item><item num="(iv)"><para>blah blah</para
+    ><orderlist type="manual"/></item></orderlist></item></orderlist></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-809">
+      <description>Streamable xsl:fork containing xsl:for-each-group (Saxon bug 3399)</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-08-31"/>
+      <environment>
+         <source role="." file="si-fork-809.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-fork-809.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/text()) = 12</assert>
+            <assert>/out/text()[1] = "Comedy, New, Paperback, 3"</assert>
+            <assert>/out/text()[2] = "Comedy, Old, Paperback, 3"</assert>
+            <assert>/out/text()[3] = "Comedy, New, Hardback, 3"</assert>
+            <assert>/out/text()[4] = "Comedy, Old, Hardback, 3"</assert>
+            <assert>/out/text()[5] = "Drama, New, Paperback, 3"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-810">
+      <description>Streamable xsl:fork containing xsl:for-each-group (Saxon bug 3375) - simplified version of -808</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-08-31"/>
+      <environment>
+         <source role="." file="si-fork-808.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-fork-810.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/root/orderlist/item[@num="(a)"]/rest/@size = "2"</assert>
+            <assert>/root/orderlist/item[@num="(b)"]/rest/@size = "1"</assert>
+            <assert>/root/orderlist/item[@num="(c)"]/rest/@size = "7"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-811">
+      <description>Streamable xsl:fork containing xsl:for-each-group (Saxon bug 3375) - simplified version of -808</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-08-31"/>
+      <environment>
+         <source role="." file="si-fork-808.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-fork-811.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/root/orderlist/item[@num="(a)"]/rest/@size = "1"</assert>
+            <assert>/root/orderlist/item[@num="(b)"]/rest/@size = "0"</assert>
+            <assert>/root/orderlist/item[@num="(c)"]/rest/@size = "6"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-812">
+      <description>Streaming with map constructor - Saxon bug 3599 - streaming on</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-01-05"/>
+      <environment>
+         <source file="../docs/cities.xml" role="." streaming="true"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="si-fork-812.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><country name="Italia" pop="6" cities="Milano Venezia"
+            /><country name="France" pop="9" cities="Paris Lyon"
+            /><country name="Deutschland" pop="4" cities="München"
+            /></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-812ns">
+      <description>Streaming with map constructor - Saxon bug 3599 - streaming off</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-01-05"/>
+      <environment>
+         <source file="../docs/cities.xml" role="." streaming="true"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="si-fork-812.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><country name="Italia" pop="6" cities="Milano Venezia"
+            /><country name="France" pop="9" cities="Paris Lyon"
+            /><country name="Deutschland" pop="4" cities="München"
+            /></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-813">
+      <description>Streaming with map constructor - Saxon bug 3602 - error case</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-01-06"/>
+      <environment>
+         <source file="../docs/cities.xml" role="." streaming="true"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="si-fork-813.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <error code="XTDE3365"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-814">
+      <description>Streaming with map constructor expression - Saxon bug 3602 - error case</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-01-06"/>
+      <environment>
+         <source file="../docs/cities.xml" role="." streaming="true"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="si-fork-814.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <error code="XTDE3365"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-815">
+      <description>Streaming with xsl:fork - json output method. Saxon bug 3601.</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-01-06"/>
+      <environment>
+         <source file="../docs/transactions.xml" role="." streaming="true"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+         <feature value="serialization"/>
+      </dependencies>
+      <test>
+         <stylesheet file="si-fork-815.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <assert-serialization>[[13.24,8.12],[-15],[6],[0.5,2.33,4.44],[-5],[8.99],[16],[-2.33,5.6,4.32],[6.78,12.2,-248.05],[12,13.99],[14.2]]</assert-serialization>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-816">
+      <description>Streaming with xsl:fork and map expressions. See Saxon bug 3888.</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-08-29"/>
+      <environment>
+         <source file="si-fork-816.xml" role="." streaming="true"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming"/>
+         <feature value="serialization"/>
+      </dependencies>
+      <test>
+         <stylesheet file="si-fork-816.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/CustInvoiceJour/CustInvoiceTrans/LineAmount/number(), (125, 215, 40))</assert>
+            <assert>deep-equal(/CustInvoiceJour/TaxTrans/TaxValue/number(), (21, 21, 15))</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-901">
+      <description>Non-streamable xsl:fork - returns streamed nodes</description>
+      <keywords>multiple-xsl-sequence-children AxisStep striding XTSE3430 illegally-returning-streamed-nodes</keywords>
+      <created by="Michael Kay" on="2014-01-13"/>
+      <test>
+         <stylesheet file="si-fork-901.xsl"/>
+         <initial-template name="f-901"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-902">
+      <description>Non-streamable xsl:fork - one prong is non-streamable</description>
+      <keywords>illegally-returning-streamed-nodes multiple-xsl-sequence-children striding AxisStep XTSE3430</keywords>
+      <created by="Michael Kay" on="2014-01-13"/>
+      <test>
+         <stylesheet file="si-fork-902.xsl"/>
+         <initial-template name="f-902"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-951">
+      <description>Non-streamable xsl:fork/xsl:for-each-group: current-group() used repeatedly</description>
+      <created by="Michael Kay" on="2016-02-24"/>
+      <test>
+         <stylesheet file="si-fork-951.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-952">
+      <description>Non-streamable xsl:fork/xsl:for-each-group: 2 down-selections from current-group()</description>
+      <created by="Michael Kay" on="2016-02-24"/>
+      <test>
+         <stylesheet file="si-fork-952.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-953">
+      <description>Non-streamable xsl:fork/xsl:for-each-group: sorted groups (should this be an error?)</description>
+      <created by="Michael Kay" on="2016-02-24"/>
+      <test>
+         <stylesheet file="si-fork-953.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-954">
+      <description>Non-streamable xsl:fork/xsl:for-each-group: Down-selection from current-group() and from "."</description>
+      <created by="Michael Kay" on="2016-02-24"/>
+      <test>
+         <stylesheet file="si-fork-954.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-955">
+      <description>Non-streamable xsl:fork/xsl:for-each-group: Population is crawling</description>
+      <created by="Michael Kay" on="2016-02-24"/>
+      <test>
+         <stylesheet file="si-fork-955.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-956">
+      <description>Non-streamable xsl:fork/xsl:for-each-group: current-group() appears in higher-order operand</description>
+      <created by="Michael Kay" on="2016-02-24"/>
+      <test>
+         <stylesheet file="si-fork-956.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-fork-957">
+      <description>Non-streamable xsl:fork/xsl:for-each-group: group-by expression not motionless</description>
+      <created by="Michael Kay" on="2016-02-24"/>
+      <test>
+         <stylesheet file="si-fork-957.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+
+
+
+</test-set>

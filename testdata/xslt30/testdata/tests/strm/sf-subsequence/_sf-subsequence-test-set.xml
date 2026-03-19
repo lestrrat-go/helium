@@ -1,0 +1,598 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-subsequence">
+   <description>subsequence() function with streaming</description>
+   
+   <!-- NB, expected results are incorrect! -->
+   
+   <environment name="sf-subsequence-A">
+     <stylesheet file="sf-subsequence-A.xsl"/>
+   </environment>
+   
+   <environment name="sf-subsequence-B">
+     <stylesheet file="sf-subsequence-B.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-subsequence-001">
+      <description>Streaming subsequence() - grounded operand</description>
+      <keywords>striding-then-grounded leading-lone-slash PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert>/out = "4.95 4.95 16.47 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-002">
+      <description>Streaming subsequence() - grounded operand</description>
+      <keywords>leading-lone-slash striding-then-grounded fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-003">
+      <description>Streaming subsequence() - grounded atomic operand</description>
+      <keywords>striding-then-grounded leading-lone-slash fn:tokenize ContextItemExpr PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert>/out = "1.1 7.8 0.8 0.9 3.5 0.9"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-010">
+      <description>Streaming subsequence() - striding operand, inspection usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:count</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "4"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-011">
+      <description>Streaming subsequence() - striding operand, absorption usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:sum</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "42.84"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-012">
+      <description>Streaming subsequence() - striding operand, transmission usage</description>
+      <keywords>leading-lone-slash striding motionless-predicate fn:position PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>/out = "4.95 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-013">
+      <description>Streaming subsequence() - striding operand, focus-setting usage</description>
+      <keywords>AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 5.95 17.47 17.47"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-subsequence-014">
+      <description>Streaming subsequence() - striding operand, focus-controlled usage</description>
+      <keywords>leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-subsequence-015">
+      <description>Streaming subsequence() - striding operand, focus-setting usage</description>
+      <keywords>leading-lone-slash striding PathExpr AdditiveExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 5.95 17.47 17.47 "</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-subsequence-016">
+      <description>Streaming subsequence() - striding operand, focus-controlled usage</description>
+      <keywords>xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-017">
+      <description>Streaming subsequence() - striding operand, focus-setting usage for inspection action</description>
+      <keywords>leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "true true true true false false true true true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-018">
+      <description>Streaming subsequence() - striding operand, apply-templates usage</description>
+      <keywords>leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Modern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-020">
+      <description>Streaming subsequence() - crawling operand, inspection usage</description>
+      <keywords>xsl:copy-of fn:count PathExpr leading-double-slash crawling</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "4"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-021">
+      <description>Streaming subsequence() - crawling operand, absorption usage</description>
+      <keywords>leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "9"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-022">
+      <description>Streaming subsequence() - crawling operand, transmission usage</description>
+      <keywords>striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert>/out = "Modern Library2002-12-31English"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-023">
+      <description>Streaming subsequence() - crawling operand, focus-setting usage</description>
+      <keywords>leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 5.95 17.47 17.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-030">
+      <description>Streaming subsequence() - climbing operand, inspection usage</description>
+      <keywords>striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <assert>/out = "ITEM"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-031">
+      <description>Streaming subsequence() - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "ITEM ITEM ITEM ITEM ITEM ITEM"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-subsequence-032">
+      <description>Streaming subsequence() - climbing operand, absorption usage</description>
+      <keywords>climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-033">
+      <description>Streaming subsequence() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "P|P|H|P"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-subsequence-034">
+      <description>Streaming subsequence() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>/out = "P|P|H|P"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-035">
+      <description>Streaming subsequence() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-A"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "P|P|P|H|P"</assert>
+      </result>
+   </test-case>  
+   
+   
+   <test-case name="sf-subsequence-101">
+      <description>Streaming subsequence#3 - grounded operand</description>
+      <keywords>striding-then-grounded leading-lone-slash PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert>/out = "4.95 4.95"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-102">
+      <description>Streaming subsequence#3 - grounded operand</description>
+      <keywords>leading-lone-slash striding-then-grounded fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><PRICE>4.95</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-103">
+      <description>Streaming subsequence#3 - grounded atomic operand</description>
+      <keywords>striding-then-grounded leading-lone-slash fn:tokenize ContextItemExpr PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert>/out = "1.1 7.8 0.8 0.9 3.5 0.9"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-110">
+      <description>Streaming subsequence#3 - striding operand, inspection usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:count</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "2"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-111">
+      <description>Streaming subsequence#3 - striding operand, absorption usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:sum</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "9.9"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-112">
+      <description>Streaming subsequence#3 - striding operand, transmission usage</description>
+      <keywords>leading-lone-slash striding motionless-predicate fn:position PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>/out = "4.95"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-113">
+      <description>Streaming subsequence#3 - striding operand, focus-setting usage</description>
+      <keywords>AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 5.95"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-subsequence-114">
+      <description>Streaming subsequence#3 - striding operand, focus-controlled usage</description>
+      <keywords>leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE></out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-subsequence-115">
+      <description>Streaming subsequence#3 - striding operand, focus-setting usage</description>
+      <keywords>leading-lone-slash striding PathExpr AdditiveExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 5.95 "</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-subsequence-116">
+      <description>Streaming subsequence#3 - striding operand, focus-controlled usage</description>
+      <keywords>xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-117">
+      <description>Streaming subsequence#3 - striding operand, focus-setting usage for inspection action</description>
+      <keywords>leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "true true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-118">
+      <description>Streaming subsequence#3 - striding operand, apply-templates usage</description>
+      <keywords>leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Modern Library2002-12-31"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-120">
+      <description>Streaming subsequence#3 - crawling operand, inspection usage</description>
+      <keywords>xsl:copy-of fn:count PathExpr leading-double-slash crawling</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "2"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-121">
+      <description>Streaming subsequence#3 - crawling operand, absorption usage</description>
+      <keywords>leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "2"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-122">
+      <description>Streaming subsequence#3 - crawling operand, transmission usage</description>
+      <keywords>striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert>/out = "Modern Library2002-12-31"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-123">
+      <description>Streaming subsequence#3 - crawling operand, focus-setting usage</description>
+      <keywords>leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 5.95"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-130">
+      <description>Streaming subsequence#3 - climbing operand, inspection usage</description>
+      <keywords>striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <assert>/out = "ITEM"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-131">
+      <description>Streaming subsequence#3 - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "ITEM ITEM"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-subsequence-132">
+      <description>Streaming subsequence#3 - climbing operand, absorption usage</description>
+      <keywords>climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-133">
+      <description>Streaming subsequence#3 - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "P|P"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-subsequence-134">
+      <description>Streaming subsequence#3 - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>/out = "P|P"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-subsequence-135">
+      <description>Streaming subsequence#3 - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-subsequence-B"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "P|P"</assert>
+      </result>
+   </test-case>  
+
+   
+   
+
+
+
+</test-set>

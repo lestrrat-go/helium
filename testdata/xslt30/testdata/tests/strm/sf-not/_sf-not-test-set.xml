@@ -1,0 +1,467 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-not">
+  <description>not() function with streaming. </description>
+
+  <environment name="sf-not-A">
+    <stylesheet file="sf-not-001.xsl"/>
+  </environment>
+
+  <dependencies>
+    <spec value="XSLT30+"/>
+    <feature value="streaming"/>
+  </dependencies>
+
+  <test-case name="sf-not-001">
+    <description>Test of xsl:stream instruction with not(): count descendant nodes</description>
+    <keywords>PathExpr crawling</keywords>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <stylesheet file="sf-not-001.xsl"/>
+      <initial-template name="c-001"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-002">
+    <description>Test of xsl:stream instruction with not(), filtered with motionless predicate</description>
+    <keywords>PathExpr motionless-predicate striding</keywords>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-002"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-003">
+    <description>Test of xsl:stream instruction with not(), applied to ancestor nodes</description>
+    <keywords>ancestor-axis climbing PathExpr motionless-predicate SimpleMapExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-003"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-004">
+    <description>Test of xsl:stream instruction with not(), applied to grounded consuming items</description>
+    <keywords>striding-then-grounded PathExpr SimpleMapExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-004"/>
+    </test>
+    <result>
+      <error code="FORG0006"/>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-005">
+    <description>Test of xsl:stream instruction with not(), applied to attributes of ancestor nodes</description>
+    <keywords>ancestor-axis attribute-axis striding-then-climbing PathExpr motionless-predicate SimpleMapExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-005"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-006">
+    <description>Test of xsl:stream instruction with not(), applied to namespaces of ancestor nodes</description>
+    <keywords>striding-then-climbing namespace-axis PathExpr motionless-predicate SimpleMapExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-006"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-007">
+    <description>not() with empty downwards selection</description>
+    <keywords>AxisStep striding PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-007"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-008">
+    <description>not() with empty downwards selection</description>
+    <keywords>striding PathExpr positional-predicate</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-008"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-009">
+    <description>not() with a striding(?) union</description>
+    <keywords>striding-then-crawling UnionExpr PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-009"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-010">
+    <description>not() with a crawling union</description>
+    <keywords>crawling-then-crawling UnionExpr childless-nodes PathExpr crawling</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-010"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-011">
+    <description>simple motionless not()</description>
+    <keywords>RangeExpr grounded</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-011"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-012">
+    <description>not() filtered grounded sequence</description>
+    <keywords>leading-double-slash text-nodes PathExpr crawling fn:remove fn:data</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-012"/>
+    </test>
+    <result>
+      <error code="FORG0006"/>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-013">
+    <description>not() filtered crawling sequence</description>
+    <keywords>leading-lone-slash striding PathExpr fn:remove</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-013"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-014">
+    <description>not() with twice-filtered crawling sequence</description>
+    <keywords>leading-lone-slash striding motionless-predicate PathExpr fn:remove</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-014"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-015">
+    <description>not() applied to a non-existent element</description>
+    <keywords>striding PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-015"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-016">
+    <description>not() applied to an existent attribute (can exit early)</description>
+    <keywords>striding-then-climbing attribute-axis PathExpr childless-nodes</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-016"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-017">
+    <description>not() and a boolean filter</description>
+    <keywords>striding PathExpr motionless-predicate</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-017"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-018">
+    <description>not() and both a positional and a boolean filter</description>
+    <keywords>striding PathExpr positional-predicate</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-018"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-100">
+    <description>not() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>striding empty-sequence PathExpr ParenthesizedExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-100"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-101">
+    <description>not() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>striding empty-sequence _IMPROVE:fix-description PathExpr mixed-posture ParenthesizedExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-101"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-102">
+    <description>not() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>striding mixed-posture PathExpr ParenthesizedExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-102"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = "false"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-103">
+    <description>not() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>striding mixed-posture ParenthesizedExpr PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-103"/>
+    </test>
+    <result>
+      <error code="FORG0006"/>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-104">
+    <description>not() on a sequence containing a single xs:anyURI</description>
+    <keywords>fn:base-uri striding-then-grounded fn:not PathExpr positional-predicate</keywords>
+    <created by="Michael Kay" on="2014-01-06"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-104"/>
+    </test>
+    <result>
+      <assert>/out = "false"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-105">
+    <description>not() on a sequence containing a single xs:date</description>
+    <keywords>ParenthesizedExpr mixed-posture fn:not PathExpr positional-predicate FORG0006 empty-sequence</keywords>
+    <created by="Michael Kay" on="2014-01-06"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-105"/>
+    </test>
+    <result>
+      <error code="FORG0006"/>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-106">
+    <description>not() on a sequence containing a single xs:date; error is caught</description>
+    <keywords>empty-sequence mixed-posture fn:not xsl:try error-handling specific-catch-clause FORG0006 PathExpr positional-predicate ParenthesizedExpr</keywords>
+    <created by="Michael Kay" on="2014-01-06"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-106"/>
+    </test>
+    <result>
+      <assert>/out = "caught"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-107">
+    <description>test that streaming resumes OK after a caught error</description>
+    <keywords>climbing attribute-axis fn:not xsl:try error-handling specific-catch-clause FORG0001 PathExpr</keywords>
+    <created by="Michael Kay" on="2014-01-06"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-107"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>every $b in /out/t satisfies $b = ('true', 'false', 'invalid')</assert>
+        <assert>count(/out/t) = 100000</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-114">
+    <description>not() applied to grounded element nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-114"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-115">
+    <description>not() applied to grounded text nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-115"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-116">
+    <description>not() applied to grounded attribute nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-116"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-117">
+    <description>not() applied to constructed attribute nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-117"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-118">
+    <description>not() applied to constructed element nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-118"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-119">
+    <description>not() applied to constructed text nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-119"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-120">
+    <description>not() applied to sequence starting with an atomic value and followed by a node</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <environment ref="sf-not-A"/>
+    <test>
+      <initial-template name="c-120"/>
+    </test>
+    <result>
+      <error code="FORG0006"/>
+    </result>
+  </test-case>
+
+  <test-case name="sf-not-901">
+    <description>Test of xsl:stream instruction with not(), filtered with non-motionless predicate.</description>
+    <keywords>striding consuming-predicate XTSE3430 PathExpr</keywords>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <test>
+      <stylesheet file="sf-not-901.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XTSE3430"/>
+    </result>
+  </test-case>
+</test-set>

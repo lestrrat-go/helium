@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="xpath-compat">
+   <description>Tests xpath-compat</description>
+   <environment name="xpath-compat-01">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="xpath-compat-02">
+      <source role="." file="xpath-compat-02.xml"/>
+   </environment>
+   <environment name="xpath-compat-03">
+      <source role="." file="xpath-compat-03.xml"/>
+   </environment>
+   
+   <dependencies>
+      <feature value="backwards_compatibility"/>
+   </dependencies>
+  
+   <test-case name="xpath-compat-0101">
+      <description>Test string rendition of certain numbers that are not backward compatible.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xpath-compat-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><posInf>INF</posInf><negInf>-INF</negInf><negZero>-0</negZero><small>1.0E-8</small><large>1.0E7</large></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0102">
+      <description>Test fn:dateTime() being given a sequence of values, of the proper type, for either argument.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xpath-compat-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0102.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/first = "1999-11-11T12:34:56"</assert>
+            <assert>/out/second = "1999-11-11T07:00:11"</assert>
+            <assert>/out/third = "2006-05-11T01:02:03"</assert>
+            <assert>/out/fourth = "1888-08-08T01:02:03"</assert>
+            <assert>/out/fifth = "1999-11-11T01:02:03"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0103">
+      <description>Test substring-before() first or second argument being a datatype unknown in 1.0 but having a string representation, and using BC Mode to force casting.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xpath-compat-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><first>P6Y</first><second>98:76:</second><third>7015D</third></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0104">
+      <description>Test integer being divided by zero; returns infinity in 1.0 behavior.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xpath-compat-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Infinity</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0105">
+      <description>General compare of boolean constant to zero-length string.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xpath-compat-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><eqTrue>false</eqTrue><eqFalse>true</eqFalse><neTrue>true</neTrue><neFalse>false</neFalse></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0106">
+      <description>General compare of boolean constant to numeric NaN.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xpath-compat-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><eqTrue>false</eqTrue><eqFalse>true</eqFalse><neTrue>true</neTrue><neFalse>false</neFalse></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0107">
+      <description>Test inequality relation between number and string that is a lexically-valid number.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xpath-compat-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><gtNum>true</gtNum><ltNum>true</ltNum><ltString>true</ltString><geNum>true</geNum><leNum>true</leNum><leString>true</leString></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0108">
+      <description>Test the div operator on two type-annotated integers.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xpath-compat-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><DivOdd>double</DivOdd><DivOdd>double</DivOdd></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0109">
+      <description>Test string() of float or double infinity, positive or negative, explicitly constructed.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xpath-compat-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0109.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><floatPos>INF</floatPos><floatNeg>-INF</floatNeg><doublePos>INF</doublePos><doubleNeg>-INF</doubleNeg></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0201">
+      <description>Test substring-before() first or second argument choosing first of multiple nodes.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xpath-compat-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><first>text n</first><second>April</second><third>text n</third></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0202">
+      <description>Test substring-before() first or second argument being number or boolean.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xpath-compat-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><first>1234</first><second>content </second><third>89</third><fourth>tr</fourth></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0301">
+      <description>Test ceiling() first argument choosing first of multiple nodes.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xpath-compat-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>15</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0302">
+      <description>Test round() first argument being path that selects no nodes.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xpath-compat-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>NaN</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0303">
+      <description>Test string-join() second argument choosing first of multiple nodes and being cast to string.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-11-30" change="See Bug 20022"/>
+      <environment ref="xpath-compat-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0303.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="xpath-compat-0303.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0401">
+      <description>Test subsequence() second and third arguments being cast to double.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="xpath-compat-04.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><first>d, e, f, g, h, i</first><second>a, b, c</second><third>c, d, e, f</third><fourth>b, c, d, e</fourth></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0501">
+      <description>Test id() first argument choosing all nodes even in version=1.0 scope.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2021-06-11" change="Add DTD dependency"/>
+      <environment>
+         <source role="." file="xpath-compat-05.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>WXY</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0601">
+      <description>Give a string that is not a lexically-valid number as one operand of an arithmetic operator, and use result in a predicate.</description>
+      <created by="spec-editors" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><item seq="1" width="1"/><item seq="2"/><item seq="3" width="3"/><item seq="4" width="bad"/></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ok>2</ok><ok>3</ok><ok>4</ok></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="xpath-compat-0701">
+      <description>Give a path to a comment node that is a lexically-valid number as one operand of an arithmetic operator.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><!--6--></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xpath-compat-0701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>23</out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

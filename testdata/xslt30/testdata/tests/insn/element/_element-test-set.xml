@@ -1,0 +1,545 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="element">
+
+   <description>Tests the xsl:element instruction</description>
+
+   <environment name="element-01">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<data type="binary" >
+		<e1 type="junk" value="0.0"/>
+		<e2 type="valid" value="eternity">Worth</e2>
+	</data>
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <environment name="element-03">
+      <source role="." file="element-03.xml"/>
+   </environment>
+
+   <test-case name="element-0001">
+      <description>Test that the element name is cast to a string if supplied as a
+         QName</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<p:local xmlns:p="http://ns.p.com/">content</p:local>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0002">
+      <description>Test that the element namespace is cast to a string if supplied as a
+         anyURI</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<p:local xmlns:p="http://ns.p.com/2">content</p:local>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0003">
+      <description>Test that the element name is cast to a string if supplied as a dynamic
+         QName</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<p:local xmlns:p="http://ns.p.com/">content</p:local>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0004">
+      <description>Test that the element namespace is cast to a string if supplied as a dynamic
+         anyURI</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<p:local xmlns:p="http://ns.p.com/2">content</p:local>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0005">
+      <description> Test that the element namespace is cast to a string if supplied as a dynamic
+         boolean (Highly artifial test, but legal XSLT, even though the results cannot be converted
+         to canonical XML) </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result value="true"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="element-0006">
+      <description>Zero-length element name is rejected </description>
+      <created by="Michael Kay after Michael Wirth (Saxon bug 2971)" on="2016-09-29"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE0820"/>
+      </result>
+   </test-case>
+
+   <test-case name="element-0101">
+      <description>Test case that uses xsl:sequence inside xsl:element to create children and
+         attributes for the new element.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="element-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><Asset type="junk" value="0.0"><Worth><e2 type="valid" value="eternity">Worth</e2></Worth></Asset></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0102">
+      <description>Test case to create a new element using xsl:element and use
+         inherit-namespaces="no".</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="element-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><Outer xmlns="http://www.test.com"><Worth xmlns=""
+            ><e2 type="valid" value="eternity">Worth</e2></Worth></Outer></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0103">
+      <description>Test case to verify that duplicate namespace nodes are removed.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="element-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><name xmlns:abc="http://www.test.com"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0104">
+      <description>xsl:element with on-empty.</description>
+      <created by="Michael Kay" on="2013-07-30"/>
+      <modified by="Michael Kay" on="2014-12-22" change="use new where-populated instruction"/>
+      <environment ref="element-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one><name><e/></name></one><two/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0105">
+      <description>xsl:element with on-empty, producing an element</description>
+      <created by="Michael Kay" on="2013-07-30"/>
+      <modified by="Michael Kay" on="2014-12-22" change="use new where-populated instruction"/>
+      <environment ref="element-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one><name><e/></name></one><two><jaq/></two></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0106">
+      <description>xsl:element with on-empty, with intervening document node</description>
+      <created by="Michael Kay" on="2013-07-30"/>
+      <modified by="Michael Kay" on="2014-12-22" change="use new where-populated instruction"/>
+      <environment ref="element-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one><name><e/></name></one><two><jaq/></two></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0107">
+      <description>xsl:element with on-empty, with intervening empty text node</description>
+      <created by="Michael Kay" on="2013-07-30"/>
+      <modified by="Michael Kay" on="2014-12-22" change="use new where-populated instruction"/>
+      <environment ref="element-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one><name><e/></name></one><two><jaq/></two></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0108">
+      <description>xsl:element with on-empty, value is an atomic type (now allowed)</description>
+      <created by="Michael Kay" on="2013-07-30"/>
+      <modified by="Michael Kay" on="2014-12-22" change="use new where-populated instruction"/>
+      <environment ref="element-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one><name><e/></name></one><two>ues</two></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="element-0110">
+      <description>Test case to create a new element using xsl:element and use inherit-namespaces="
+         false" (with some white-space). (Adapted element-0102)</description>
+      <created by="Debbie Lockett" on="2014-07-31"/>
+      <environment ref="element-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0110.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><Outer xmlns="http://www.test.com"><Worth xmlns=""
+            ><e2 type="valid" value="eternity">Worth</e2></Worth></Outer></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="element-0111">
+      <description>Test case to create a new element using xsl:element and use
+         inherit-namespaces="0". (Adapted element-0102)</description>
+      <created by="Debbie Lockett" on="2014-07-31"/>
+      <environment ref="element-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0111.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><Outer xmlns="http://www.test.com"><Worth xmlns=""
+            ><e2 type="valid" value="eternity">Worth</e2></Worth></Outer></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0201">
+      <description> Test case that creates an element using xsl:element instruction and uses
+         different ways (xsl:attribute instruction, xsl:call-template, xsl:copy-of) to add
+         attributes to the newly created element. </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<file title="XSLT Tutorial"
+   author="no name"
+   type="text"
+   id="0 abc 874 b"
+   date="2005_11_04"/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1 a1="1" a2="2" id="0 abc 874 b"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0301">
+      <description>Test case that uses validation="strip" on an xsl:element.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="element-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0302">
+      <description> Test case that uses xml:base in the content of a new element to verify that the
+         base URI of the new element is the value of xml:base attribute resolved against the base
+         URI of the xsl:element in the stylesheet. </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="element-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e1>http://www.one.org/002.xml</e1><e2>http://www.example.com/ns/xsl/test</e2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0303">
+      <description>Test case to verify that zero-length strings result in no text node
+         child.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="element-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0303.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="element-0303.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="element-0304">
+      <description>Test case to verify that adjacent strings/text nodes copied into content result
+         in one merged text node.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="element-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0304.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+Number of text node: 1
+Number of element node: 2
+Number of element node: 2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0305">
+      <description> Test case that uses inherit-namespaces = "yes" on an xsl:element instruction to
+         verify that the namespace nodes are copied to the children and descendants of the newly
+         constructed element. </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="element-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0305.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="element-0305.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="element-0306">
+      <description> Test case that uses inherit-namespaces = "yes" inherit-namespaces = "no" on
+         different xsl:element instructions to verify the effect of the inherit-namespaces attribute
+         on differents levels of elements (parent, child, grandchild). </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2012-11-27"
+         change="rewrote expected result to test the namespace nodes explicitly"/>
+      <modified by="Abel Braaksma" on="2014-05-23" change="expected results changed: see bug 20340"/>
+      <environment ref="element-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0306.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/namespace::* = "http://www.funJobs.com"</assert>
+            <assert>/out/namespace::* = "http://www.easyJobs.com"</assert>
+            <assert>/out/namespace::* = "http://www.w3.org/XML/1998/namespace"</assert>
+            <assert>count(/out/namespace::*) = 3</assert>
+            <assert>/out/*:profession/namespace::* = "http://www.funJobs.com"</assert>
+            <assert>/out/*:profession/namespace::* = "http://www.easyJobs.com"</assert>
+            <assert>/out/*:profession/namespace::* = "http://www.dummy_ns.com"</assert>
+            <assert>/out/*:profession/namespace::* = "http://www.w3.org/XML/1998/namespace"</assert>
+            <assert>count(/out/*:profession/namespace::*) = 4</assert>
+            <assert>/out/*:profession/*:IT_Architect/namespace::* =
+               "http://www.w3.org/XML/1998/namespace"</assert>
+            <assert>/out/*:profession/*:IT_Architect/namespace::* =
+               "http://www.dummy_ns.com"</assert>
+            <assert>count(/out/*:profession/*:IT_Architect/namespace::*) = 4</assert>
+            <assert>/out/*:profession/*:IT_Specialist/namespace::* =
+               "http://www.w3.org/XML/1998/namespace"</assert>
+            <assert>/out/*:profession/*:IT_Specialist/namespace::* = "http://www.all.com"</assert>
+            <assert>count(/out/*:profession/*:IT_Specialist/namespace::*) = 4</assert>
+            <assert>/out/*:profession/*:IT_Specialist/*:dogsbody/namespace::* =
+               "http://www.w3.org/XML/1998/namespace"</assert>
+            <assert>/out/*:profession/*:IT_Specialist/*:dogsbody/namespace::* =
+               "http://www.funJobs.com"</assert>
+            <assert>/out/*:profession/*:IT_Specialist/*:dogsbody/namespace::* =
+               "http://www.easyJobs.com"</assert>
+            <assert>/out/*:profession/*:IT_Specialist/*:dogsbody/namespace::* =
+               "http://www.dummy_ns.com"</assert>
+            <assert>count(/out/*:profession/*:IT_Specialist/*:dogsbody/namespace::*) = 4</assert>
+            <assert>/out/*:profession/Business_Analyst/namespace::* =
+               "http://www.w3.org/XML/1998/namespace"</assert>
+            <assert>count(/out/*:profession/Business_Analyst/namespace::*) = 3</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="element-0307">
+      <description> Test case that uses different combinations of xsl:namespace and xmlns attribute
+         on an xsl:element instruction with prefixed and unprefixed QNames to test the effect of the
+         namespace on the newly created element. </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="element-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0307.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="element-0307.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="element-0308">
+      <description> Test case that creates an xsl:element and the AVT used in the name attribute
+         delivers a result that is of type xs:QName. That will be casted to string to compute the
+         result of the AVT. </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="element-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0308.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><my:Var xmlns:my="http://www.examples.com/my"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="element-0309">
+      <description> Test case that uses default-validation="strip" on an xsl:stylesheet element to
+         verify the type annotation is stripped. </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="element-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0309.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>   
+
+   <test-case name="element-0310">
+      <description> Test case that uses inherit-namespaces ="true" on an xsl:element instruction to
+         verify that the namespace nodes are copied to the children and descendants of the newly
+         constructed element. (Adapted element-0305) </description>
+      <created by="Debbie Lockett" on="2014-07-31"/>
+      <environment ref="element-03"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0310.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="element-0305.out"/>
+      </result>
+   </test-case>   
+
+   <test-case name="element-0311">
+      <description> Test case that uses inherit-namespaces ="1" on an xsl:element instruction to
+         verify that the namespace nodes are copied to the children and descendants of the newly
+         constructed element. (Adapted element-0305) </description>
+      <created by="Debbie Lockett" on="2014-07-31"/>
+      <environment ref="element-03"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0311.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="element-0305.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="element-0312">
+      <description> Test case that uses inherit-namespaces ="01" on an xsl:element instruction (not
+         allowed). (Adapted element-0305) </description>
+      <created by="Debbie Lockett" on="2014-08-04"/>
+      <environment ref="element-03"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="element-0312.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+
+</test-set>

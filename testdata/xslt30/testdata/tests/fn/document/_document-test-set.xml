@@ -1,0 +1,1497 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          xsi:schemaLocation="http://www.w3.org/2012/10/xslt-test-catalog ../../../admin/catalog-schema.xsd"
+          name="document">
+    
+   <description>Tests the fn:document function</description>
+   
+   <environment name="document-01">
+      <source role="." file="document-01.xml"/>
+      <source file="doc02.xml" uri="doc02.xml"/>
+      <source file="doc03.xml" uri="doc03.xml"/>
+      <source file="doc04.xml" uri="doc04.xml"/>
+      <source file="doc01.xsl" uri="doc01.xsl"/>
+      <stylesheet file="document-0101.xsl"/>
+   </environment>
+   
+   <environment name="document-02">
+      <!-- Changed by MHK 2018-01-18 to an external document, so that it has a known base URI -->
+      <source role="." file="document-02.xml"/>
+      <source file="doc02.xml" uri="doc02.xml"/>
+      <source file="doc03.xml" uri="doc03.xml"/>
+      <source file="doc04.xml" uri="doc04.xml"/>
+      <source file="doc01.xsl" uri="doc01.xsl"/>
+      <stylesheet file="document-0201.xsl"/>
+   </environment>
+   
+   <environment name="document-03">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <source file="doc02.xml" uri="doc02.xml"/>
+      <source file="doc03.xml" uri="doc03.xml"/>
+      <source file="doc13.xml" uri="doc13.xml"/>
+      <source file="innerdoc/doc06.xml" uri="innerdoc/doc06.xml"/>
+   </environment>
+   
+   <environment name="document-04">
+      <source role="." file="document-04.xml"/>
+      <source file="doc02.xml" uri="doc02.xml"/>
+      <source file="doc03.xml" uri="doc03.xml"/>
+      <source file="doc04.xml" uri="doc04.xml"/>
+      <source file="doc05.xml" uri="doc05.xml"/>
+   </environment>
+   
+   <environment name="document-05">
+      <!-- Changed by MHK 2018-01-18 to an external document, so that it has a known base URI -->
+      <source role="." file="document-05.xml"/>
+      <source file="doc02.xml" uri="doc02.xml"/>
+      <source file="doc03.xml" uri="doc03.xml"/>
+      <source file="doc04.xml" uri="doc04.xml"/>
+      <source file="doc01.xsl" uri="doc01.xsl"/>
+      <stylesheet file="document-0501.xsl"/>
+   </environment>
+   
+   <environment name="document-08">
+      <source role=".">
+         <content><![CDATA[<doc><defaultcontent><places>doc05.xml</places><places>doc04.xml</places></defaultcontent></doc>]]></content>
+      </source>
+      <source file="doc05.xml" uri="doc05.xml"/>
+      <source file="doc04.xml" uri="doc04.xml"/>
+      <stylesheet file="document-0801.xsl"/>
+   </environment>
+   
+   <environment name="document-10">
+      <source role=".">
+         <content><![CDATA[<doc><test>ERROR</test></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="document-11">
+      <!-- Changed by MHK 2018-01-18 to an external document, so that it has a known base URI -->
+      <source role="." file="document-11.xml"/>
+      <source file="doc11.xml" uri="doc11.xml"/>
+      <source file="doc12.xml" uri="doc12.xml"/>
+   </environment>
+   
+   <environment name="document-12">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<str1>doc06.xml</str1>
+</doc>]]></content>
+      </source>
+      <source file="doc06.xml" uri="doc06.xml"/>
+      <source file="doc04.xml" uri="doc04.xml"/>
+   </environment>
+   <environment name="document-13">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<str1>dy.xml</str1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="document-14">
+      <source role=".">
+         <content><![CDATA[<table>
+  <foo><b>zzz</b></foo>
+</table>]]></content>
+      </source>
+      <source file="doc17.html" uri="doc17.html"/>
+   </environment>
+   
+   <environment name="document-15">
+      <source role=".">
+         <content><![CDATA[<doc num="1"/>]]></content>
+      </source>
+      <source file="doc09.xml" uri="doc09.xml"/>
+      <source file="doc14.xml" uri="doc14.xml"/>
+      <source file="doc15.xml" uri="doc15.xml"/>
+   </environment>
+   
+   <environment name="document-17">
+      <source role="." file="document-17.xml"/>
+   </environment>
+   
+   
+   <environment name="document-20">
+      <source role=".">
+         <content><![CDATA[<doc>42</doc>]]></content>
+      </source>
+      <resource file="http://www.w3.org/Consortium/mission.html"
+                uri="http://www.w3.org/Consortium/mission.html"
+                media-type="text/plain"/>
+      <resource file="http://www.w3.org/TR/1999/WD-font-19990902"
+                uri="http://www.w3.org/TR/1999/WD-font-19990902"
+                media-type="text/plain"/>
+   </environment>
+   
+   
+   
+   
+   
+   
+   
+   <test-case name="document-0105">
+      <description>
+         Test document() function. Argument is a sequence of xs:string: 
+         -a sequence of literal strings, 
+         -a sequence of variables, 
+         -mixed sequence of strings, nodes and variables, 
+         -a subsequence 
+         Passed values represent relative URI references and are resolved against the base-uri property from the static context.
+         Note that the results of the document() function with multiple strings as arguments is in document
+         order, which is unpredictable</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-template name="a"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/a/body = "Shirt"</assert>
+            <assert>/a/body = "Tie"</assert>
+            <assert>/a/out/*:apply-templates/@select = "@test"</assert>
+            <assert>/a/body = "GoodBye"</assert>
+            <assert>count(/a/*) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0106">
+      <description>
+         Test document() function. Argument is a sequence of xs:string: 
+         -a sequence of literal strings, 
+         -a sequence of variables, 
+         -mixed sequence of strings, nodes and variables, 
+         -a subsequence 
+         Passed values represent relative URI references and are resolved against the base-uri property from the static context.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-template name="b"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/b/body = "Shirt"</assert>
+            <assert>/b/out/*:apply-templates/@select = "@test"</assert>
+            <assert>count(/b/*) = 2</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0107">
+      <description>
+         Test document() function. Argument is a sequence of xs:string: 
+         -a sequence of literal strings, 
+         -a sequence of variables, 
+         -mixed sequence of strings, nodes and variables, 
+         -a subsequence 
+         Passed values represent relative URI references and are resolved against the base-uri property from the static context.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-template name="c"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/c/body = "Shirt"</assert>
+            <assert>/c/body = "Tie"</assert>
+            <assert>/c/out/*:apply-templates/@select = "@test"</assert>
+            <assert>/c/body = "GoodBye"</assert>
+            <assert>count(/c/*) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0108">
+      <description>
+         Test document() function. Argument is a sequence of xs:string: 
+         -a sequence of literal strings, 
+         -a sequence of variables, 
+         -mixed sequence of strings, nodes and variables, 
+         -a subsequence 
+         Passed values represent relative URI references and are resolved against the base-uri property from the static context.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-template name="d"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/d/body = "Tie"</assert>
+            <assert>count(/d/*) = 1</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0109">
+      <description>Test document() function.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0102.xsl"/>
+         <initial-template name="a"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/a/body = "Shirt"</assert>
+            <assert>/a/body = "Tie"</assert>
+            <assert>/a/out/*:apply-templates/@select = "@test"</assert>
+            <assert>/a/body = "GoodBye"</assert>
+            <assert>count(/a/*) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0110">
+      <description>Test document() function.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0102.xsl"/>
+         <initial-template name="b"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/b/body = "Shirt"</assert>
+            <assert>/b/out/*:apply-templates/@select = "@test"</assert>
+            <assert>count(/b/*) = 2</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0111">
+      <description>Test document() function.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0102.xsl"/>
+         <initial-template name="c"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/c/body = "Shirt"</assert>
+            <assert>/c/body = "Tie"</assert>
+            <assert>/c/out/*:apply-templates/@select = "@test"</assert>
+            <assert>/c/body = "GoodBye"</assert>
+            <assert>count(/c/*) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0112">
+      <description>Test document() function.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0102.xsl"/>
+         <initial-template name="d"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/d/body = "Tie"</assert>
+            <assert>count(/d/*) = 1</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0113">
+      <description>Test document($uri-sequence, $base-node) function. Second argument is a node in the input file. </description>
+      <created by="Michael Kay" on="2012-11-15"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0103.xsl"/>
+         <initial-template name="a"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/a/body = "Shirt"</assert>
+            <assert>/a/body = "Tie"</assert>
+            <assert>/a/out/*:apply-templates/@select = "@test"</assert>
+            <assert>/a/body = "GoodBye"</assert>
+            <assert>count(/a/*) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0114">
+      <description>Test document($uri-sequence, $base-node) function. Second argument is a node in the input file. </description>
+      <created by="Michael Kay" on="2012-11-15"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0103.xsl"/>
+         <initial-template name="b"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/b/body = "Shirt"</assert>
+            <assert>/b/out/*:apply-templates/@select = "@test"</assert>
+            <assert>count(/b/*) = 2</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0115">
+      <description>Test document($uri-sequence, $base-node) function. Second argument is a node in the input file. </description>
+      <created by="Michael Kay" on="2012-11-15"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0103.xsl"/>
+         <initial-template name="c"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/c/body = "Shirt"</assert>
+            <assert>/c/body = "Tie"</assert>
+            <assert>/c/out/*:apply-templates/@select = "@test"</assert>
+            <assert>/c/body = "GoodBye"</assert>
+            <assert>count(/c/*) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0116">
+      <description>Test document($uri-sequence, $base-node) function. Second argument is a node in the input file. </description>
+      <created by="Michael Kay" on="2012-11-15"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0103.xsl"/>
+         <initial-template name="d"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/d/body = "Tie"</assert>
+            <assert>count(/d/*) = 1</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0117">
+      <description>Test document($uri-sequence, $base-node) function. Second argument is a node in the input file. First argument is a sequence of xs:anyURI</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0104.xsl"/>
+         <initial-template name="a"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/a/body = "Shirt"</assert>
+            <assert>/a/body = "Tie"</assert>
+            <assert>/a/out/*:apply-templates/@select = "@test"</assert>
+            <assert>/a/body = "GoodBye"</assert>
+            <assert>count(/a/*) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0118">
+      <description>Test document($uri-sequence, $base-node) function. Second argument is a node in the input file. First argument is a sequence of xs:anyURI</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0104.xsl"/>
+         <initial-template name="b"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/b/body = "Shirt"</assert>
+            <assert>/b/out/*:apply-templates/@select = "@test"</assert>
+            <assert>count(/b/*) = 2</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0119">
+      <description>Test document($uri-sequence, $base-node) function. Second argument is a node in the input file. First argument is a sequence of xs:anyURI</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0104.xsl"/>
+         <initial-template name="c"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/c/body = "Shirt"</assert>
+            <assert>/c/body = "Tie"</assert>
+            <assert>/c/out/*:apply-templates/@select = "@test"</assert>
+            <assert>/c/body = "GoodBye"</assert>
+            <assert>count(/c/*) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0120">
+      <description>Test document($uri-sequence, $base-node) function. Second argument is a node in the input file. First argument is a sequence of xs:anyURI</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0104.xsl"/>
+         <initial-template name="d"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/d/body = "Tie"</assert>
+            <assert>count(/d/*) = 1</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+
+   <test-case name="document-0201">
+      <description>Test document() function. Argument is a sequence of xs:untypedAtomic: -a sequence of nodes -a sequence of variables -mixed sequence of strings, nodes and variables -a subsequence </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-template name="a"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/a/body = "Shirt"</assert>
+            <assert>/a/body = "Tie"</assert>
+            <assert>/a/out/*:apply-templates/@select = "@test"</assert>
+            <assert>/a/body = "GoodBye"</assert>
+            <assert>count(/a/*) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0202">
+      <description>Test document() function. Argument is a sequence of xs:untypedAtomic: -a sequence of nodes -a sequence of variables -mixed sequence of strings, nodes and variables -a subsequence </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-template name="b"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/b/body = "Shirt"</assert>
+            <assert>/b/out/*:apply-templates/@select = "@test"</assert>
+            <assert>count(/b/*) = 2</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0203">
+      <description>Test document() function. Argument is a sequence of xs:untypedAtomic: -a sequence of nodes -a sequence of variables -mixed sequence of strings, nodes and variables -a subsequence </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-template name="c"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/c/body = "Shirt"</assert>
+            <assert>/c/body = "Tie"</assert>
+            <assert>/c/out/*:apply-templates/@select = "@test"</assert>
+            <assert>/c/body = "GoodBye"</assert>
+            <assert>count(/c/*) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0204">
+      <description>Test document() function. Argument is a sequence of xs:untypedAtomic: -a sequence of nodes -a sequence of variables -mixed sequence of strings, nodes and variables -a subsequence </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-template name="d"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/d/body = "Tie"</assert>
+            <assert>count(/d/*) = 1</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="document-0301">
+      <description>
+         Test that function document() can be called both as document($uri) and fn:document($uri) and the result is the same. 
+         'fn' is bound to the Xpath Functions namespace.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0301.xsl"/>
+      </test>
+      <result>
+         <assert>/output = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="document-0302">
+      <description>Testcase with doc(''). Verify the result is the stylesheet itself.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<t:template xmlns:t="http://www.w3.org/1999/XSL/Transform" match="/"><t:copy-of select="doc('')/t:transform/t:template"/></t:template>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-0303">
+      <description>Testcase with doc(()). Result is the empty sequence.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0303.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a/><b/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-0304">
+      <description>Testcase to verify that two calls of doc($uri) return the same document node if the same $uri is supplied to both calls.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0304.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="document-0305">
+      <description>Testcase with doc($uri) where $uri is a literal string representing relative URI and resolved using the base-uri of the stylesheet module.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0305.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/body = "Tie"</assert>
+            <assert>/out/body = "Sly"</assert>
+            <assert>count(/out/*) = 2</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="document-0306">
+      <description>Test that the result of fn:doc is a document-node().</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0306.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="document-0307">
+      <description>Test that the result of doc(()) is an instance of document-node()? and empty-sequence().</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0307.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "true true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="document-0308">
+      <description>Testcase with xsl:strip-space, xsl:preserve-space and doc($uri).</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0308.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/doc/str1[1]/node()) = 3</assert>
+            <assert>count(/doc/str1[1]/text()[normalize-space(.)]) = 0</assert>
+            <assert>count(/doc/str2[2]/node()) = 1</assert>
+            <assert>every $t in //text()[matches(., '\s+')] satisfies $t/parent::str1</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="document-0309">
+      <description>Testcase with doc($uri) where the base URI is set in the stylesheet by xml:base.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0309.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><outer>
+	<body>
+		<string>inner-GoodBye</string>
+		<string>inner-GoodMorning</string>
+		<string>inner-GoodNight</string>
+	</body>
+</outer></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-0401">
+      <description>Test with document($uri-sequence, $base-node) function: Mini Stress test. $uri-sequence contains a sequence of files with repeating file names, $base-node is the first node in the sequence. The result sequence should not contain duplicate nodes.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0401.xsl"/>
+      </test>
+      <result>
+         <assert>deep-equal(/out/body/string(), ("GoodBye", "Hello", "Overt", "Shirt", "Sly", "Tie"))</assert>
+      </result>
+   </test-case>
+
+   <test-case name="document-0501">
+      <description>
+         Test document($uri-sequence, $base-node) function. Second argument is a node in the input file. 
+         First argument is a sequence of xs:untypedAtomic: 
+         -a sequence of nodes -a sequence of variables -mixed sequence of strings, nodes and variables -a subsequence
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-template name="a"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/a/body = "Shirt"</assert>
+            <assert>/a/body = "Tie"</assert>
+            <assert>/a/out/*:apply-templates/@select = "@test"</assert>
+            <assert>/a/body = "GoodBye"</assert>
+            <assert>count(/a/*) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0502">
+      <description>
+         Test document($uri-sequence, $base-node) function. Second argument is a node in the input file. 
+         First argument is a sequence of xs:untypedAtomic: 
+         -a sequence of nodes -a sequence of variables -mixed sequence of strings, nodes and variables -a subsequence
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-template name="b"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/b/body = "Shirt"</assert>
+            <assert>/b/out/*:apply-templates/@select = "@test"</assert>
+            <assert>count(/b/*) = 2</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0503">
+      <description>
+         Test document($uri-sequence, $base-node) function. Second argument is a node in the input file. 
+         First argument is a sequence of xs:untypedAtomic: 
+         -a sequence of nodes -a sequence of variables -mixed sequence of strings, nodes and variables -a subsequence
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-template name="c"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/c/body = "Shirt"</assert>
+            <assert>/c/body = "Tie"</assert>
+            <assert>/c/out/*:apply-templates/@select = "@test"</assert>
+            <assert>/c/body = "GoodBye"</assert>
+            <assert>count(/c/*) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0504">
+      <description>
+         Test document($uri-sequence, $base-node) function. Second argument is a node in the input file. 
+         First argument is a sequence of xs:untypedAtomic: 
+         -a sequence of nodes -a sequence of variables -mixed sequence of strings, nodes and variables -a subsequence
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-template name="d"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/d/body = "Tie"</assert>
+            <assert>count(/d/*) = 1</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="document-0601">
+      <description>Testcase with doc($uri) where $uri is read from a node and represents relative URI resolved using the base-uri of the source document.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><str1>doc03.xml</str1></doc>]]></content>
+         </source>
+         <source file="doc03.xml" uri="doc03.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><body>Tie</body><body>Sly</body></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-0701">
+      <description>Testcase with doc($uri) where $uri is the result from fn:resolve-ur and static-base-uri functions.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><str1>doc04.xml</str1></doc>]]></content>
+         </source>
+         <source file="doc04.xml" uri="doc04.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>GoodBye</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-0801">
+      <description>
+         Test doc() function where the argument comes from a node, a variable and a subsequence. 
+         Relative URIs are resolved again the base-uri of the static context.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="a"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a><doc><body>Hello</body></doc></a>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0802">
+      <description>
+         Test doc() function where the argument comes from a node, a variable and a subsequence. 
+         Relative URIs are resolved again the base-uri of the static context.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="b"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<b><doc><body>Hello</body></doc></b>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="document-0803">
+      <description>
+         Test doc() function where the argument comes from a node, a variable and a subsequence. 
+         Relative URIs are resolved again the base-uri of the static context.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <initial-mode name="c"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<c><doc><body>Hello</body></doc></c>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-0901">
+      <description>Test doc() function with path following.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<catalog><pointer><urlref urlstr="doc07.xml"/></pointer></catalog>]]></content>
+         </source>
+         <source file="doc07.xml" uri="doc07.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>CompUSA Inc.
+  14951
+  N. Dallas Pkwy
+  Dallas, 
+  TX 
+  75240
+
+  1-800-666-2000
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-1001">
+      <description>Test doc("") in an included stylesheet to verify the root node returned is not the one of the primary stylesheet.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ped:test xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:ped="http://ped.com/" attrib="yeha">YEE-HA</ped:test></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-1002">
+      <description>Test doc("") in an imported stylesheet to verify the root node returned is not the one of the primary stylesheet.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ped:test xmlns:ped="http://ped.com/" attrib="yeha" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">YEE-HA</ped:test></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-1003">
+      <description>When document('') refers to the root node of the stylesheet, it means the current file, not the main stylesheet. In this test, the call to document() is in the included stylesheet, hence local to it. Remember: every top-level node in the stylesheet must have a namespace.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="document-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1003.xsl"/>
+         <stylesheet file="document-1001.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o><out><ped:test xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:ped="http://ped.com/" attrib="yeha">YEE-HA</ped:test></out></o>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-1004">
+      <description>When document('') refers to the root node of the stylesheet, it means the current file, not the main stylesheet. In this test, the call to document() is in the imported stylesheet, hence local to it. Remember: every top-level node in the stylesheet must have a namespace.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="document-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1004.xsl"/>
+         <stylesheet file="document-1001.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o><out><ped:test xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:ped="http://ped.com/" attrib="yeha">YEE-HA</ped:test></out></o>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-1101">
+      <description>Try sorting and numbering nodes from two other documents retrieved by doc().</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2 * 3 body nodes:
+1. A-Flirt
+2. A-Skirt
+ *
+1. B-Dry
+2. B-Pie
+3. B-Why
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-1102">
+      <description>Try sorting and numbering nodes from two other documents. If we didn't sort, we couldn't guarantee the order in which the documents would be read.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="document-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5 body nodes:
+1. B-Dry
+2. A-Flirt
+3. B-Pie
+4. A-Skirt
+5. B-Why
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-1201">
+      <description>Testcase where doc-available($uri) returns true. Both relative and absolute URI values are tested for $uri.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1201.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "truetruetrue"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="document-1202">
+      <description>Testcase to verify that if doc-available($uri) returns true, then calling doc($uri) within the same execution scope returns a document node</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><outer>
+	<body>
+		<string>GoodBye</string>
+		<string>GoodMorning</string>
+		<string>GoodNight</string>
+	</body>
+</outer></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-1301">
+      <description>Testcase where doc-available($uri) returns false because the file cannot be found. Both relative and absolute URI values are tested for $uri.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-13"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1301.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "falsefalsefalse"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="document-1401">
+      <description>Test with doc($uri) where the argument is a local HTML file.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="document-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<html>
+  <body>
+    <table>
+      <tr><td>xxx</td></tr>
+      <tr><td><xml-content/></td></tr>
+      <tr><td>xxx</td></tr>
+    </table>
+  </body>
+</html>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-1501">
+      <description>Test that loading the same document twice gives the same node each time.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="document-15"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><assert>answer should be 1</assert><result>1</result></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-1502">
+      <description>Test that xsl:strip-space applies to result of document() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="document-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1502.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><doc>
+<a/>
+<b/>
+<c> </c>
+</doc></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-1503">
+      <description>Test that fragment identifiers in document() are stripped before determining document identity</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-06-11" change="Add DTD dependency"/>
+      <environment ref="document-15"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1503.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out expect="1">1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-1601">
+      <description>Test document() function: Provides multiple input sources.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="document-16.xml"/>
+         <source file="doc08.xml" uri="doc08.xml"/>
+         <source file="dir05/data05.xml" uri="dir05/data05.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1601.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/s1 = "c1230987"</assert>
+            <assert>/out/s2 = "CompUSA Inc."</assert>
+            <assert>/out/s3/loc = "14951"</assert>
+            <assert>/out/s3/st = "N. Dallas Pkwy"</assert>
+            <assert>/out/s3/city = "Dallas, "</assert>
+            <assert>/out/s3/co = "TX "</assert>
+            <assert>/out/s3/pc = "75240"</assert>
+            <assert>/out/s3/ph = "1-800-666-2000"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-1901">
+      <description>Test loading a document relative to the stylesheet module.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<out>Got it wrong!</out>]]></content>
+         </source>
+         <source file="dir08/xmdocs08a.xml" uri="dir08/xmdocs08a.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-1901.xsl"/>
+         <stylesheet file="dir08/xmdocs08a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><out>Got it right!</out></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   
+   <test-case name="document-2002">
+      <description>test that a simplified stylesheet has the correct base URI</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="document-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-2002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><doc>
+<a> </a>
+<b> </b>
+<c> </c>
+</doc></root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-2003">
+      <description>test use of xml:base with document() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="document-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-2003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xml:base=".."><doc>
+<a> </a>
+<b> </b>
+<c> </c>
+</doc></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <!-- Following three test cases removed because mercurial has problems with the non-ASCII filenames required. MHK 2017-02-15 -->
+
+ <!--  <test-case name="document-2004">      
+      <description>
+         Test use of an escaped URI with document() function.
+         NOTE: This test (and the next two) make use of a file
+         whose name is xgespräch.xml. 
+         
+         Mercurial Hg cannot handle this file in a proper way for both Windows,
+         Linux and Mac. If it works on one, it fails on the other (see Bug 20275)
+         
+         As a resolution, copy the file xgesprach.xml to xgespräch.xml. This file
+         should not show up when you update the repository, it is in the ignore 
+         list, so it can safely stay in this directory for the lifetime of your clone.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2015-04-09" change="Bug 20275, see changed description above of how to deal with xgespräch.xml."/>
+      <environment ref="document-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-2004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><doc>
+<a>gespräch</a>
+<b>b</b>
+<c>c</c>
+</doc></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-2005">
+      <description>test use of an escaped base URI with document() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2015-04-09" change="Bug 20275, see changed description in test document-2004 of how to deal with xgespräch.xml."/>
+      <environment ref="document-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-2005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xml:base="./xgespr%C3%A4ch.xml"><doc>
+<a>gespräch</a>
+<b>b</b>
+<c>c</c>
+</doc></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-2006">
+      <description>test use of doc-available function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2015-04-09" change="Bug 20275, see changed description in test document-2004 of how to deal with xgespräch.xml."/>
+      <environment ref="document-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-2006.xsl"/>
+      </test>
+      <result>
+         <assert>deep-equal(/out/a/string(), ("true", "true", "true", "false", "false"))</assert>
+      </result>
+   </test-case>
+-->
+   <test-case name="document-2009">
+      <description>Test use of a wannabe-URI containing an unescaped space.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <!--<source file="doc with space/mdocs01.xml" uri="doc with space/mdocs01.xml"/>-->
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-2009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><doc num="1"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="document-2011">
+      <description>Identity of document retrieved using doc(document-uri(.))</description>
+      <created by="Michael Kay" on="2020-06-05"/>
+      <modified by="Michael Kay" on="2022-03-13" change="further relax the assertions"/>
+      <environment ref="document-20"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-2011.xsl"/>
+      </test>
+      <result>
+         <!-- Changed the test assertion to allow either option. There's nothing in the spec that
+              says that doc() has to return the same document as the initial source document in the
+              case where it has the same URI; it's just something that would be nice. -->
+         <!-- Further relaxed the assertions on 2022-03-13. It's entirely possible that document-uri(.)
+              returns an empty sequence, in which case only one doc element is output. -->
+         <any-of>
+            <assert>count(/test/doc) = 1</assert>
+            <assert>/test/doc[1]/@id eq /test/doc[2]/@id</assert>
+            <assert>/test/doc[1]/@id ne /test/doc[2]/@id</assert>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="document-2101">
+      <description>Test / as second argument to document(). Two arguments: string variable, node-set.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2018-01-18" change="make document-21.xml external so it has a known base URI"/>
+      <environment>
+         <source role="." file="document-21.xml"/>
+         <source file="doc10.xml" uri="doc10.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-2101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><doc><body/></doc></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="document-2201">
+      <description>Purpose: Compare two evaluation sequences for variable containing node-set returned from document() call.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+         <source file="doc16.xml" uri="doc16.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-2201.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/key = "TableofContents"</assert>
+            <assert>/out/lang = "en"</assert>
+            <assert>/out/var = "Table of Contents"</assert>
+            <assert>/out/text = "Table of Contents"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="document-2301">
+      <description>Use document('') to refer to the stylesheet, and have a local lookup table.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="document-23.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-2301.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/month = "January - 35215 miles earned."</assert>
+            <assert>/out/month = "February - 92731 miles earned."</assert>
+            <assert>/out/month = "March - 76725 miles earned."</assert>
+            <assert>/out/month = "April - 31781 miles earned."</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-2401">
+      <description>
+         Test document() function in an overriding package, with strip-space declarations differing between the two packages</description>
+      <created by="Michael Kay" on="2016-06-11"/>
+      <modified by="Michael Kay" on="2019-03-06" change="make entry point public"/>
+      <environment>
+         <package uri="http://www.w3.org/xslts/document-2401a" package-version="3.0" file="document-2401a.xsl" role="secondary"/>        
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-2401b.xsl" role="principal"/>
+         <initial-template name="a"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/stripped = '0'</assert>
+            <assert>/out/unstripped = '4'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="document-2402">
+      <description>
+         Test doc() function in an overriding package, with strip-space declarations differing between the two packages</description>
+      <created by="Michael Kay" on="2016-06-11"/>
+      <environment>
+         <package uri="http://www.w3.org/xslts/document-2402a" package-version="3.0" file="document-2402a.xsl" role="secondary"/>        
+      </environment>
+      
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="document-2402b.xsl" role="principal"/>
+         <initial-template name="a"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/stripped = '0'</assert>
+            <assert>/out/unstripped = '4'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+</test-set>

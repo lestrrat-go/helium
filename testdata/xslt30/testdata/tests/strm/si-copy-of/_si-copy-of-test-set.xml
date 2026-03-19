@@ -1,0 +1,678 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-copy-of">
+   <description>xsl:copy-of with streaming</description>
+   
+   <environment name="si-copy-of-A">
+     <stylesheet file="si-copy-of-A.xsl"/>
+   </environment>
+   
+   <environment name="si-copy-of-B">
+     <schema file="../docs/loans.xsd"/>
+     <stylesheet file="si-copy-of-B.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   
+   
+   <test-case name="si-copy-of-001">
+      <description>Use xsl:copy-of: atomic values, consuming</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-001"/>
+      </test>
+      <result>
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-002">
+      <description>Use xsl:copy-of: atomic values, consuming and non-consuming</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-002"/>
+      </test>
+      <result>
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05 101 102"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-003">
+      <description>Use xsl:copy-of: climbing posture</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-003"/>
+      </test>
+      <result>
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-004">
+      <description>Use xsl:copy-of: climbing posture</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-004"/>
+      </test>
+      <result>
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05 101 102"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-005">
+      <description>Use xsl:copy-of: striding posture, element nodes</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-005"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-006">
+      <description>Use xsl:copy-of: striding posture, text nodes</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-006"/>
+      </test>
+      <result>
+         <assert>/out = "4.956.584.954.9516.4716.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-007">
+      <description>Use xsl:copy-of: striding posture, text nodes plus atomic values</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-007"/>
+      </test>
+      <result>
+         <assert>/out = "4.956.584.954.9516.4716.47101 102"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-008">
+      <description>Use xsl:copy-of: striding posture, element nodes plus grounded elements</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>100.00</PRICE><PRICE>101.00</PRICE><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-009">
+      <description>Use xsl:copy-of: descendant text nodes</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-009"/>
+      </test>
+      <result>
+         <assert>/out = "4.956.584.954.9516.4716.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-010">
+      <description>Use xsl:copy-of: descendant text nodes plus atomic values</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-010"/>
+      </test>
+      <result>
+         <assert>/out = "100 1014.956.584.954.9516.4716.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-011">
+      <description>Use xsl:copy-of: whole document unchanged</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-011"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/head</assert>
+           <assert>/out/BOOKLIST/BOOKS</assert>
+           <assert>/out/BOOKLIST/CATEGORIES</assert>
+           <assert>/out/tail</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-020">
+      <description>Use xsl:copy-of: copy-namespaces=no</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-020"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>deep-equal(in-scope-prefixes(/out/*), ("xml", "gml"))</assert>
+            <assert>deep-equal(in-scope-prefixes(/out/*), ("gml", "xml"))</assert>
+         </any-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-021">
+      <description>Use xsl:copy-of: copy-namespaces=yes</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-021"/>
+      </test>
+      <result>
+         <assert>count(in-scope-prefixes(/out/*)) = 8</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-022">
+      <description>Use xsl:copy-of: validation="strip" (non-schema-aware)</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-022"/>
+      </test>
+      <result>
+         <assert>/out/* instance of element(*, xs:untyped)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-023">
+      <description>Use xsl:copy-of: validation="preserve" (non-schema-aware)</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-023"/>
+      </test>
+      <result>
+         <assert>/out/* instance of element(*, xs:untyped)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-024">
+      <description>Use xsl:copy-of: validation="lax" (non-schema-aware)</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-024"/>
+      </test>
+      <result>
+         <assert>/out/* instance of element(*, xs:untyped)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-025">
+      <description>Use xsl:copy-of: copy-namespaces=yes, argument grounded and consuming</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-025"/>
+      </test>
+      <result>
+         <assert>count(in-scope-prefixes(/out/*)) = 8</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-026">
+      <description>Use xsl:copy-of: copy-namespaces=no, argument grounded and consuming</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-026"/>
+      </test>
+      <result>
+         <any-of>            
+            <assert>deep-equal(in-scope-prefixes(/out/*), ("xml", "gml"))</assert>
+            <assert>deep-equal(in-scope-prefixes(/out/*), ("gml", "xml"))</assert>
+         </any-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-027">
+      <description>Use xsl:copy-of: argument crawling and consuming, nested nodes</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-A"/>
+      <test>
+         <initial-template name="cy-027"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><n><n>1</n><n>2</n><n>3</n><n>4</n><n>5</n></n><n>1</n><n>2</n><n>3</n><n>4</n><n>5</n></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   
+   
+   <test-case name="si-copy-of-101">
+      <description>Use xsl:copy-of: schema-aware, validation=strict</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-101"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+  <test-case name="si-copy-of-102">
+      <description>Use xsl:copy-of: schema-aware, validation=lax</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-102"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-103">
+      <description>Use xsl:copy-of: schema-aware, validation=strip</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-103"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-104">
+      <description>Use xsl:copy-of: schema-aware, validation=preserve</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-104"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-105">
+      <description>Use xsl:copy-of: schema-aware, validation by type</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-105"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-106">
+      <description>Use xsl:copy-of: schema-aware, validation=strict, no element declaration available</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <modified by="Michael Kay" on="2018-09-24" change="Error code should be XTTE1512 not XTTE1510, but keep the old result as an alternative"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-106"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTTE1510"/>
+            <error code="XTTE1512"/>
+         </any-of>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-107">
+      <description>Use xsl:copy-of: schema-aware, validation=lax, no element declaration available</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-107"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-copy-of-108">
+      <description>Use xsl:copy-of: schema-aware, validation by type, invalid (wrong namespace)</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <modified by="Michael Kay" on="2018-09-24" change="Error code should be XTTE1512 not XTTE1510, but keep the old result as an alternative"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-108"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTTE1510"/>
+            <error code="XTTE1512"/>
+         </any-of>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-109">
+      <description>Use xsl:copy-of: schema-aware, validation=strict, no element declaration available, caught</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <modified by="Michael Kay" on="2018-09-24" change="Error code should be XTTE1512 not XTTE1510, but keep the old result as an alternative"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-109"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "XTTE1510"</assert>
+            <assert>/out = "XTTE1512"</assert>
+         </any-of>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-110">
+      <description>Use xsl:copy-of: schema-aware, validation by type, invalid, caught</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <modified by="Michael Kay" on="2014-08-12" change="correct expected error code"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-110"/>
+      </test>
+      <result>
+         <assert>/out = "XTTE1540"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-111">
+      <description>Use xsl:copy-of: schema-aware, validation=strict, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-111"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+  <test-case name="si-copy-of-112">
+      <description>Use xsl:copy-of: schema-aware, validation=lax, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-112"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-113">
+      <description>Use xsl:copy-of: schema-aware, validation=strip, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-113"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-114">
+      <description>Use xsl:copy-of: schema-aware, validation=preserve, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-114"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-115">
+      <description>Use xsl:copy-of: schema-aware, validation by type, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-115"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-116">
+      <description>Use xsl:copy-of: schema-aware, validate attribute by type, success</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-116"/>
+      </test>
+      <result>
+         <assert>/out/@version = "2.1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-117">
+      <description>Use xsl:copy-of: schema-aware, validate attribute by type, failure</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-117"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-121">
+      <description>Use xsl:copy-of: schema-aware, validation=strict, element node</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-121"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+  <test-case name="si-copy-of-122">
+      <description>Use xsl:copy-of: schema-aware, validation=lax, element node</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-122"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-123">
+      <description>Use xsl:copy-of: schema-aware, validation=strip, element node</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-123"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-124">
+      <description>Use xsl:copy-of: schema-aware, validation=preserve, element node</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-124"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-125">
+      <description>Use xsl:copy-of: schema-aware, validation by type, element node</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-125"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-126">
+      <description>Use xsl:copy-of: schema-aware, validation=strict, element node, no element declaration available</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <modified by="Michael Kay" on="2018-09-24" change="Error code should be XTTE1512 not XTTE1510, but keep the old result as an alternative"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-126"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTTE1510"/>
+            <error code="XTTE1512"/>
+         </any-of>
+      </result>
+   </test-case>
+  
+  <test-case name="si-copy-of-127">
+      <description>Use xsl:copy-of: schema-aware, validation=lax, element node, no element declaration available</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-127"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-copy-of-128">
+      <description>Use xsl:copy-of: schema-aware, validation by type, element node, invalid (wrong namespace)</description>
+      <created by="Michael Kay" on="2012-12-18"/>
+      <modified by="Michael Kay" on="2018-09-24" change="Error code should be XTTE1512 not XTTE1510, but keep the old result as an alternative"/>
+      <environment ref="si-copy-of-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-128"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTTE1510"/>
+            <error code="XTTE1512"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-copy-of-801">
+      <description>Use xsl:copy-of: apply-templates to copy-of outermost</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-07-12"/>
+      <environment>
+         <source file="si-copy-of-801.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-copy-of-801.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<p>The <adjective>quick</adjective> brown fox <verb>jumps</verb> 
+   <span class="highlight">quickly</span> over the lazy dog.</p>]]></assert-xml>
+      </result>
+   </test-case>
+   
+  
+   
+</test-set>

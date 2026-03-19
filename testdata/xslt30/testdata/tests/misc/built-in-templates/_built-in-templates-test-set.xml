@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="built-in-templates">
+   <description>Tests built-in-templates</description>
+   <environment name="built-in-templates-01">
+      <source role="." file="built-in-templates-01.xml"/>
+   </environment>
+   <environment name="built-in-templates-02">
+      <source role="." file="built-in-templates-02.xml"/>
+   </environment>
+
+   <test-case name="built-in-templates-0101">
+      <description>Test to verify that if @mode is specified with value '#current' in xsl:apply-templates, the value is carried automatically through built-in rules to explicit templates for descendants at any level in the tree.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="built-in-templates-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="built-in-templates-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+
+	
+	
+empty-CORRECT!
+
+
+Text in inner element 
+	Text in sub-inner element
+
+
+Text in last item
+	
+empty-CORRECT!
+
+	
+empty-CORRECT!
+
+
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="built-in-templates-0102">
+      <description>Test to verify that if @mode is specified with value '#default' in xsl:apply-templates, the value is carried automatically through built-in rules to explicit templates for descendants at any level in the tree.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="built-in-templates-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="built-in-templates-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="built-in-templates-0102.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="built-in-templates-0201">
+      <description>Test to verify that a parameter that has no 'select' attribute but has an 'as' attribute is carried automatically through built-in rules and type is retained.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="built-in-templates-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="built-in-templates-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+	processing-instruction-CORRECT!
+
+	empty-CORRECT!
+	Param:true
+	Param:true
+	Print this only once.
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="built-in-templates-0202">
+      <description>Test to verify that the value of parameter with a sequence constructor is carried automatically through built-in rules to explicit templates for descendants.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="built-in-templates-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="built-in-templates-0202.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="built-in-templates-0202.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="built-in-templates-0301">
+      <description>Test to verify type annotation of an implicitly shallow-copied element: untyped input</description>
+      <created by="Michael Kay" on="2021-06-01"/>
+      <environment ref="built-in-templates-02"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="built-in-templates-0301.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="built-in-templates-0302">
+      <description>Test to verify type annotation of an implicitly shallow-copied element: typed input</description>
+      <created by="Michael Kay" on="2021-06-01"/>
+      <environment ref="built-in-templates-02"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="built-in-templates-0302.xsl"/>
+      </test>
+      <result>
+         <assert>/out='false'</assert>
+      </result>
+   </test-case>
+</test-set>

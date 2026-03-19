@@ -1,0 +1,180 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-distinct-values">
+   <description>Tests the xsl:stream instruction with distinct-values()</description>
+
+   <environment name="sf-distinct-values-A">
+     <stylesheet file="sf-distinct-values-001.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+
+
+   <test-case name="sf-distinct-values-001">
+      <description>Test of xsl:stream instruction with distinct-values(), applied to an attribute</description>
+      <keywords>striding-then-climbing attribute-axis childless-nodes PathExpr</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-distinct-values-A"/>
+      <test>
+         <initial-template name="d-001"/>
+      </test>
+      <result>
+         <assert>/out = '49863'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-distinct-values-002">
+      <description>Test of xsl:stream instruction with distinct-values(), empty input</description>
+      <keywords>striding-then-climbing empty-sequence attribute-axis childless-nodes PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-distinct-values-A"/>
+      <test>
+         <initial-template name="d-002"/>
+      </test>
+      <result>
+         <assert>/out = '0'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-distinct-values-003">
+      <description>Test of xsl:stream instruction with distinct-values(), numeric values</description>
+      <keywords>fn:number striding-then-grounded attribute-axis PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-distinct-values-A"/>
+      <test>
+         <initial-template name="d-003"/>
+      </test>
+      <result>
+         <assert>/out = '3001'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-distinct-values-004">
+      <description>Test of xsl:stream instruction with distinct-values(), handling of NaN</description>
+      <keywords>striding-then-grounded attribute-axis fn:number PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-distinct-values-A"/>
+      <test>
+         <initial-template name="d-004"/>
+      </test>
+      <result>
+         <assert>/out = '2252'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-distinct-values-005">
+      <description>Test of xsl:stream instruction with distinct-values(), applied to an element</description>
+      <keywords>fn:outermost crawling-then-striding PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-distinct-values-A"/>
+      <test>
+         <initial-template name="d-005"/>
+      </test>
+      <result>
+         <assert>/out = 'English'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-distinct-values-006">
+      <description>Test of xsl:stream instruction with distinct-values(), with collation specified</description>
+      <keywords>collation-argument PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-distinct-values-A"/>
+      <test>
+         <initial-template name="d-006"/>
+      </test>
+      <result>
+         <assert>/out = 'English'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-distinct-values-007">
+      <description>Test of xsl:stream instruction with distinct-values(), with unknown collation specified</description>
+      <keywords>collation-argument PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-distinct-values-A"/>
+      <test>
+         <initial-template name="d-007"/>
+      </test>
+      <result>
+         <error code="FOCH0002"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-distinct-values-008">
+      <description>Test of xsl:stream instruction with distinct-values(), with unknown collation specified, error is caught</description>
+      <keywords>collation-argument xsl:try error-handling specific-catch-clause FOCH0002 PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-distinct-values-A"/>
+      <test>
+         <initial-template name="d-008"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-distinct-values-009">
+      <description>Test of xsl:stream instruction with distinct-values(), with collation from consuming argument</description>
+      <keywords>striding collation-argument PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-distinct-values-A"/>
+      <test>
+         <initial-template name="d-009"/>
+      </test>
+      <result>
+         <any-of>
+           <assert>/out = 'a b'</assert>
+           <assert>/out = 'b a'</assert>
+         </any-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="sf-distinct-values-010">
+      <description>Test of xsl:stream instruction with distinct-values(), with unknown collation from consuming argument</description>
+      <keywords>collation-argument striding PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-distinct-values-A"/>
+      <test>
+         <initial-template name="d-010"/>
+      </test>
+      <result>
+         <error code="FOCH0002"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-distinct-values-011">
+      <description>Test of xsl:stream instruction with distinct-values(), with unknown collation from consuming argument, error is caught</description>
+      <keywords>collation-argument striding xsl:try error-handling specific-catch-clause FOCH0002 PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-distinct-values-A"/>
+      <test>
+         <initial-template name="d-011"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-distinct-values-012">
+      <description>Test that double NaN and float NaN are considered equal</description>
+      <created by="Michael Kay" on="2021-06-12"/>
+      <environment ref="sf-distinct-values-A"/>
+      <test>
+         <initial-template name="d-012"/>
+      </test>
+      <result>
+         <assert>/out = '1'</assert>
+      </result>
+   </test-case>
+   
+
+
+
+
+
+
+</test-set>

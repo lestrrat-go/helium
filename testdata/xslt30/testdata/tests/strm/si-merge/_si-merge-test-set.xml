@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-merge">
+   <description>xsl:merge instruction with streaming</description>
+   
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="si-merge-001">
+      <description>Merge time-series data for gold and uranium prices, selecting days on which both are available</description>
+      <created by="Michael Kay" on="2014-04-11"/>
+      <test>
+         <stylesheet file="si-merge-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/prices/price[@date="2014-03-31"][@gold="1294.0"][@uranium="34.91"]</assert>
+            <assert>/prices/price[@date="2014-02-28"][@gold="1327.75"][@uranium="35.54"]</assert>
+            <assert>/prices/price[@date="2014-01-31"][@gold="1246.5"][@uranium="35.1"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-merge-002">
+      <description>
+         Merge time-series data for two log files, one of which needs access to attributes-of-ancestors.
+         Note: The spec requires an implicit snapshot() on the result of the xsl:merge-source/@select expression.
+      </description>
+      <created by="Michael Kay" on="2014-04-15"/>
+      <test>
+         <stylesheet file="si-merge-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="si-merge-002.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-merge-003">
+      <description>
+         Merge time-series data for two log files, one of which needs access to attributes-of-ancestors.
+         Same as si-merge-002 but with computed file names.
+      </description>
+      <created by="Michael Kay" on="2014-04-15"/>
+      <test>
+         <stylesheet file="si-merge-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="si-merge-002.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-merge-004">
+      <description>
+         Merge time-series data for two files with homogenous structure
+      </description>
+      <created by="Michael Kay" on="2014-04-15"/>
+      <modified by="Michael Kay" on="2014-09-16" change="Change expected result (was 11644)"/>
+      <test>
+         <stylesheet file="si-merge-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>count(/prices/key) = 11774</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-merge-004ns">
+      <description>
+         Merge time-series data for two files with homogenous structure. Non streaming version for comparison.
+      </description>
+      <created by="Michael Kay" on="2014-09-16"/>
+      <test>
+         <stylesheet file="si-merge-004ns.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>count(/prices/key) = 11774</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-merge-005">
+      <description>Test streamable=" true " and " 1 "; merge time-series data for gold and uranium prices.</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <test>
+         <stylesheet file="si-merge-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/prices/price[@date="2014-03-31"][@gold="1294.0"][@uranium="34.91"]</assert>
+            <assert>/prices/price[@date="2014-02-28"][@gold="1327.75"][@uranium="35.54"]</assert>
+            <assert>/prices/price[@date="2014-01-31"][@gold="1246.5"][@uranium="35.1"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-merge-006">
+      <description>Merge XML and non-XML sources.</description>
+      <created by="Michael Kay" on="2015-10-25"/>
+      <test>
+         <stylesheet file="si-merge-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/events/messages[1][@at='2006-02-13']/(count(fax/message)=1 and count(transaction/transaction)=2)</assert>
+            <assert>/events/messages[2][@at='2006-02-15']/(count(fax/message)=1 and count(transaction/transaction)=1)</assert>
+            <assert>/events/messages[4][@at='2006-02-17']/(empty(fax) and count(transaction/transaction)=3)</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   
+</test-set>

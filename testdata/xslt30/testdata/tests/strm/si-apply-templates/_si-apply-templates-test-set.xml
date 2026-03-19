@@ -1,0 +1,262 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="si-apply-templates">
+   <description>Tests xsl:stream instruction introduced in XSLT 3.0 with xsl:apply-templates.</description>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="si-apply-templates-001">
+      <description>Test of xsl:stream instruction with xsl:apply-templates, 
+      	navigating to attributes and ancestors. 
+      	From a Saxon bug report by Roger Costello.</description>
+      <keywords>motionless complex-use-case on-no-match-attribute shallow-copy climbing-childless PathExpr ancestor-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-10-31"/>  
+      <test>
+         <stylesheet file="si-apply-templates-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+         	<assert>/Results/CATEGORIES/CATEGORY[1]/Attributes[Name='CODE' and Value='P' and Name='DESC' and Value='Paperback']</assert>
+         	<assert>/Results/CATEGORIES/CATEGORY[1]/Ancestors[
+         			*[1][self::Name][.='BOOKLIST'] and 
+         			*[2][self::Attributes[not(*)]] and 
+         			*[3][self::Name][.='CATEGORIES'] and
+         			*[4][self::Attributes[Name='DESC' and Value='Miscellaneous categories']]]</assert>
+            <assert>count(/Results/CATEGORIES/CATEGORY) = 3</assert>			
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-apply-templates-002">
+      <description>Test of xsl:stream instruction with xsl:apply-templates, 
+      	itself appearing within a streamable template.
+      	From a Saxon bug report by Roger Costello.</description>
+      <keywords>motionless complex-use-case _IMPROVE:equal-to-previous-test on-no-match-attribute shallow-copy leading-lone-slash climbing-childless PathExpr ancestor-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-04"/>
+      <environment>
+        <source role="." streaming="true">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+      </environment>
+      <test>
+         <stylesheet file="si-apply-templates-002.xsl"/>
+      </test>
+      <result>
+         <all-of>
+         	<assert>/Results/CATEGORIES/CATEGORY[1]/Attributes[Name='CODE' and Value='P' and Name='DESC' and Value='Paperback']</assert>
+         	<assert>/Results/CATEGORIES/CATEGORY[1]/Ancestors[
+         			*[1][self::Name][.='BOOKLIST'] and 
+         			*[2][self::Attributes[not(*)]] and 
+         			*[3][self::Name][.='CATEGORIES'] and
+         			*[4][self::Attributes[Name='DESC' and Value='Miscellaneous categories']]]</assert>
+            <assert>count(/Results/CATEGORIES/CATEGORY) = 3</assert>			
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-apply-templates-003">
+      <description>Test of xsl:stream instruction containing xsl:apply-templates in unstreamed mode.
+      	From a Saxon bug report by Martin Honnen.</description>
+      <created by="Michael Kay" on="2014-10-08"/>
+      <test>
+         <stylesheet file="si-apply-templates-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+         	<assert>/out/p[1] = 'Document type: E'</assert>
+         	<assert>/out/p[2] = 'Name: John Smith'</assert>
+         	<assert>/out/p[3] = 'Document type: F'</assert>
+         	<assert>/out/p[4] = 'Name: Joe Doe'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-apply-templates-004">
+      <description>Test of xsl:stream instruction with xsl:apply-templates, 
+      	navigating to attributes; tests that attribute axis is striding.</description>
+      <created by="Michael Kay" on="2014-12-19"/>  
+      <test>
+         <stylesheet file="si-apply-templates-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+         	<assert>/Results/CATEGORIES/CATEGORY[1]/Attributes[Name='CODE' and Value='P' and Name='DESC' and Value='Paperback']</assert>
+         	<assert>/Results/CATEGORIES/CATEGORY[1]/Ancestors[
+         			*[1][self::Name][.='BOOKLIST'] and 
+         			*[2][self::Attributes[not(*)]] and 
+         			*[3][self::Name][.='CATEGORIES'] and
+         			*[4][self::Attributes[Name='DESC' and Value='Miscellaneous categories']]]</assert>
+            <assert>count(/Results/CATEGORIES/CATEGORY) = 3</assert>				
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-apply-templates-005">
+      <description>Test streaming apply-templates with tunnel parameters. Saxon bug 2308.</description>
+      <created by="Michael Kay" on="2015-02-04"/>
+      <modified by="Michael Kay" on="2015-05-11" change="simplify the test and supply expected results"/>
+      <test>
+         <stylesheet file="si-apply-templates-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/*/name(), ('open', 'copy', 'close'))</assert>
+            <assert>count(/out/copy/Document) = 2</assert>				
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-apply-templates-006">
+      <description>Test streaming apply-templates where the consuming operand is a grounded xsl:with-param.</description>
+      <created by="Michael Kay" on="2016-09-18"/>
+      <environment>
+         <source role="." streaming="true" file="si-apply-templates-006.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="si-apply-templates-006.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/root[1]/item-chunk/item = "item 001"</assert>
+            <assert>/out/root[2]/item-chunk/item = "item 002"</assert>
+            <assert>/out/root[35]/item-chunk/item = "item 035"</assert>
+            <assert>not(/out/root[36])</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="si-apply-templates-007">
+      <description>Test streaming apply-templates with a schema-aware match pattern (Saxon bug 3563).</description>
+      <created by="Michael Kay" on="2017-12-08"/>
+      <environment>
+         <schema file="../docs/books.xsd"/>
+         <source role="." streaming="true" file="../docs/books.xml" validation="strict"/>
+      </environment>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="si-apply-templates-007.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>empty(//AUTHOR)</assert>
+            <assert>exists(//TITLE)</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-apply-templates-008">
+      <description>Test that tunnel and non-tunnel parameters are passed to a streamed template processing an attribute node
+         invoked from a built-in template rule with on-no-match="shallow-copy".
+         From a Saxon bug report by Martin Honnen.</description>
+      <created by="Michael Kay" on="2018-04-09"/>
+      <environment>
+         <source role="." streaming="true" file="si-apply-templates-008.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="si-apply-templates-008.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/ws/w[1]/@id = '[w_1]'</assert>
+            <assert>/ws/w[8]/@id = '[w_8]'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-apply-templates-009">
+      <description>Test that tunnel and non-tunnel parameters are passed to a streamed template processing a text node
+         invoked from a built-in template rule with on-no-match="shallow-copy".
+         From a Saxon bug report by Martin Honnen.</description>
+      <created by="Michael Kay" on="2018-04-09"/>
+      <environment>
+         <source role="." streaming="true" file="si-apply-templates-008.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="si-apply-templates-009.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/ws/w[1] = '[how]'</assert>
+            <assert>/ws/w[8] = '[.]'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-apply-templates-010">
+      <description>Large set of streamable template rules all matching text nodes. Saxon bug 3901, based on 
+         StackOverflow question 52259180 by user Jerome.</description>
+      <created by="Michael Kay" on="2018-09-10"/>
+      <environment>
+         <source role="." streaming="true" file="si-apply-templates-010.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="si-apply-templates-010.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>//id = "10_ID"</assert>
+            <assert>//id = "9_ID"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-apply-templates-011">
+      <description>Large set of streamable template rules all matching text nodes. Same as -010, but with a much larger set of
+         template rules, most of which will never match anything.</description>
+      <created by="Michael Kay" on="2018-09-10"/>
+      <environment>
+         <source role="." streaming="true" file="si-apply-templates-010.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="si-apply-templates-011.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>//id = "10_ID"</assert>
+            <assert>//id = "9_ID"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-apply-templates-012">
+      <description>Schema-aware built-in shallow-copy drops type annotation.</description>
+      <created by="Michael Kay" on="2017-12-08"/>
+      <environment>
+         <schema file="../docs/books.xsd"/>
+         <source role="." streaming="true" file="../docs/books.xml" validation="strict"/>
+      </environment>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="si-apply-templates-012.xsl"/>
+      </test>
+      <result>
+         <assert>/out='false'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-apply-templates-013">
+      <description>Non-Schema-aware built-in shallow-copy drops type annotation.</description>
+      <created by="Michael Kay" on="2017-12-08"/>
+      <environment>
+         <source role="." streaming="true" file="../docs/books.xml" validation="skip"/>
+      </environment>
+      <test>
+         <stylesheet file="si-apply-templates-013.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+   
+
+</test-set>

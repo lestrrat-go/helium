@@ -1,0 +1,506 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-avg">
+   <description>avg() function with streaming</description>
+   <keywords>streaming streamability-analysis avg</keywords>
+   
+   <environment name="sf-avg-A">
+      <stylesheet file="sf-avg-A.xsl"/>
+   </environment>
+   
+   <environment name="transactions-with-schema">
+      <source uri="http://xslt.w3.org/transactions" file="../docs/big-transactions.xml" 
+         streaming="true" validation="strict" role="."/>
+      <schema role="source-reference"
+         file="../docs/transactions.xsd"
+         xsd-version="1.0"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-avg-003">
+      <description>Basic Test of xsl:stream instruction with avg()</description>
+      <keywords>fn:round fn:avg ContextItemExpr RelativePathExpr xsl:copy-of</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>9.06</out>]]></assert-xml>
+      </result>       
+   </test-case>
+
+   <test-case name="sf-avg-004">
+      <description>Test of xsl:stream instruction with avg(), filtered with a motionless predicate</description>
+      <keywords>fn:avg ContextItemExpr RelativePathExpr motionless-predicate</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-004"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>8.2375</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-avg-005">
+      <description>Test of xsl:stream instruction with avg(), filtered with a positional predicate</description>
+      <keywords>fn:avg ContextItemExpr RelativePathExpr positional-predicate</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-005"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5.49</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-avg-006">
+      <description>Test of xsl:stream instruction with avg(), filtered with a positional predicate</description>
+      <keywords>fn:avg ContextItemExpr RelativePathExpr positional-predicate</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-006"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5.49</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-avg-007">
+      <description>Test of xsl:stream instruction with avg(), filtered with a positional predicate</description>
+      <keywords>fn:avg ContextItemExpr RelativePathExpr positional-predicate</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-007"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5.49</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-008">
+      <description>Test of xsl:stream instruction with avg(), filtered with data() to make the predicates motionless</description>
+      <keywords>fn:avg ContextItemExpr RelativePathExpr predicate striding-then-grounded</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>420</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-009">
+      <description>Test of xsl:stream instruction with avg(), filtered with text() to make the predicates motionless</description>
+      <keywords>childless-nodes motionless-predicate TextTest</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-009"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>420</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-010">
+      <description>Test of xsl:stream instruction with avg(), filtered with number() to make the predicates motionless</description>
+      <keywords>motionless-predicate fn:number</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-010"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>420</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-011">
+      <description>avg() selecting nothing, returning the $zero case</description>
+      <keywords>striding PathExpr</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-011"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-012">
+      <description>avg() selecting both streamed nodes and literals</description>
+      <keywords>sequence mixed-posture</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-012"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>322.875</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-013">
+      <description>avg() selecting both streamed nodes and literals while also filtering</description>
+      <keywords>mixed-posture fn:tail</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-013"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>318.71</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-014">
+      <description>avg() output feeding into xsl:stream</description>
+      <keywords>mixed-posture fn:tail</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2014-09-01"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-014"/>
+      </test>
+      <result>
+         <assert>/out = '128.67'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-015">
+      <description>Test of xsl:stream instruction with avg() of a computed value</description>
+      <keywords>fn:outermost ForExpr</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-015"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>267.426</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-016">
+      <description>Test of xsl:stream instruction with avg() of a computed value</description>
+      <keywords>attribute-axis AbbrevForwardStep</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>15</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-017">
+      <description>Test of xsl:stream instruction with avg() using copy-of to make it streamable</description>
+      <keywords> fn:copy-of</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-017"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>420</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-018">
+      <description>Test of xsl:stream instruction with avg() over attribute values</description>
+      <keywords>attribute-axis AbbrevForwardStep</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-018"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>7</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-019">
+      <description>Test of xsl:stream instruction with avg() over attribute values, filtered</description>
+      <keywords>attribute-axis motionless-predicate AbbrevForwardStep</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-019"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>11</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-020">
+      <description>avg() over attribute values, computed</description>
+      <keywords>attribute-axis fn:abs AbbrevForwardStep</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-020"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>9</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-021">
+      <description>avg() over values that depend on a condition</description>
+      <keywords>attribute-axis choice-operand-group IfExpr</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-021"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>8</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-022">
+      <description>avg() with a loop used to compute each value</description>
+      <keywords>SimpleMapExpr xs:NMTOKENS</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-022"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6.25</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-023">
+      <description>Test of xsl:stream calling avg() using striding select expr with grounding mapping operator of the form /x/y!z</description>
+      <keywords>fn:root leading-lone-slash xs:NMTOKENS SimpleMapExpr</keywords>
+      <link section-number="19.8.8"/>
+      <link section-number="19.8.8.15"/>
+      <link section-number="19.8.7.6"/>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-023"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6.25</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-040">
+      <description>avg() over an empty grounded expression</description>
+      <keywords>grounded fn:data</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-040"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-041">
+      <description>avg() over an empty striding expression</description>
+      <keywords>striding leading-lone-slash</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-041"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-042">
+      <description>avg() over an empty rooted striding expression</description>
+      <keywords>striding leading-lone-slash</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-042"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-043">
+      <description>avg() over an empty climbing expression</description>
+      <keywords>attribute-axis childless-nodes crawling-then-climbing</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-043"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-050">
+      <description>avg() over dayTimeDuration values</description>
+      <keywords>avg grounded bang-operator</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-050"/>
+      </test>
+      <result>
+         <assert>/out = "P18404DT20H"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-051">
+      <description>avg() over yearMonthDuration values</description>
+      <keywords>avg forexpr letexpr grounded</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-051"/>
+      </test>
+      <result>
+         <assert>/out = "P50Y4M"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-052">
+      <description>avg() over inconsistent type values</description>
+      <keywords>avg grounded bang-operator</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-052"/>
+      </test>
+      <result>
+         <error code="FORG0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-053">
+      <description>avg() over incorrect type values</description>
+      <keywords>avg grounded bang-operator</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-053"/>
+      </test>
+      <result>
+         <error code="FORG0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-054">
+      <description>avg() over inconsistent type values, error is caught</description>
+      <keywords>avg xsl:try grounded bang-operator FORG0006</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-054"/>
+      </test>
+      <result>
+         <assert>/out = "caught"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-055">
+      <description>avg() over incorrect type values, error is caught</description>
+      <keywords>avg xsl:try grounded bang-operator FORG0006</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-avg-A"/>
+      <test>
+         <initial-template name="s-055"/>
+      </test>
+      <result>
+         <assert>/out = "caught"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-100">
+      <description>avg() over a streamed schema-aware document</description>
+      <created by="Michael Kay" on="2021-03-28"/>
+      <environment ref="transactions-with-schema"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sf-avg-100.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/@avg='7.4587322'</assert>
+            <assert>/out/@is-decimal='true'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="sf-avg-901">
+      <description>Test of xsl:stream instruction with avg(), filtered with predicate that uses last().</description>
+      <keywords>avg last non-motionless-predicate XTSE3430</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <test>
+         <stylesheet file="sf-avg-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-avg-902">
+      <description>Test of xsl:stream instruction with avg(), filtered with predicate that uses last().</description>
+      <keywords>avg last non-motionless-predicate XTSE3430</keywords>
+      <link section-number="19.8.8"/>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <test>
+         <stylesheet file="sf-avg-902.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+
+</test-set>

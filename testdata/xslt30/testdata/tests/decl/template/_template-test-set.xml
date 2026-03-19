@@ -1,0 +1,136 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="template">
+   <description>Tests template</description>
+   <environment name="template001">
+      <source role=".">
+         <content><![CDATA[<doc>
+<!-- This test executed properly.!!!!-->
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="template002">
+      <source role=".">
+         <content><![CDATA[<doc>
+<?PITarget Processing-Instruction 1 type='text/xml'?>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="template003">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <child1>This is the child number 1.</child1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="template004">
+      <source role=".">
+         <content><![CDATA[<doc attribute1="attribute1"></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="template005">
+      <source role=".">
+         <content><![CDATA[<doc></doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="template-001">
+      <description>Purpose: Test apply-templates for a comment with a mode and moded matching template.</description>
+      <keywords>xsl:apply-templates CommentTest matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="template001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="template-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> This test executed properly.!!!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="template-002">
+      <description>Purpose: Test apply-templates for PI with a mode and moded matching template.</description>
+      <keywords>PITest matching-mode xsl:apply-templates</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="template002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="template-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Processing-Instruction 1 type='text/xml'</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="template-003">
+      <description>Purpose: Test apply-templates for node with a mode and moded matching template.</description>
+      <keywords>AnyKindTest xsl:apply-templates matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="template003"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="template-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  This is the child number 1.
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="template-004">
+      <description>Purpose: Test apply-templates for an attribute with a mode and moded matching template.</description>
+      <keywords>attribute-axis AbbrevForwardStep xsl:apply-templates matching-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="template004"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="template-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>attribute1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="template-005">
+      <description>Purpose: Test for basic recursion on named "xsl:template".</description>
+      <keywords>template-recursion named-templates</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="template005"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="template-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+     First call 1
+     Second call (recursing): 2
+     Third call (recursing): 3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="template-006">
+      <description/>
+      <keywords>buildin-template-rules leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="template005"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="template-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o/>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

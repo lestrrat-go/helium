@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="unparsed-entity-uri">
+   <description>Tests the unparsed-entity-uri and unparsed-entity-public-id functions</description>
+   
+   <environment name="unparsed-entity-A">
+      <source role="." file="unparsed-entity-A.xml"/>
+   </environment>
+   
+   
+   <test-case name="unparsed-entity-01">
+      <description>test unparsed-entity-public-id() Also tests nested comments</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-03-18" change="document DTD dependency"/>
+      <modified by="Michael Kay" on="2016-11-22" change="moved from expression-1901"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-01.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = 'true'</assert>
+            <assert>/out/b = ''</assert>
+            <assert>/out/c = 'false'</assert>
+            <assert>/out/d = '-//Textuality//TEXT standard boilerplate//EN'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="unparsed-entity-02">
+      <description>PURPOSE test unparsed-entity-uri() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-03-18" change="document DTD dependency"/>
+      <modified by="Michael Kay" on="2016-11-22" change="moved from expression-1902"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-02.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="unparsed-entity-03">
+      <description>test unparsed-entity-public-id#2</description>
+      <created by="Michael Kay" on="2015-01-15"/>
+      <modified by="Michael Kay" on="2016-03-18" change="document DTD dependency"/>
+      <modified by="Michael Kay" on="2016-11-22" change="moved from expression-1903"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-03.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = 'true'</assert>
+            <assert>/out/b = ''</assert>
+            <assert>/out/c = 'false'</assert>
+            <assert>/out/d = '-//Textuality//TEXT standard boilerplate//EN'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="unparsed-entity-04">
+      <description>PURPOSE test unparsed-entity-uri#2 function</description>
+      <created by="Michael Kay" on="2015-01-15"/>
+      <modified by="Michael Kay" on="2015-03-20" change="mark dependency, bug 28249"/>
+      <modified by="Michael Kay" on="2016-11-22" change="moved from expression-1904"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-04.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="unparsed-entity-05">
+      <description>Unparsed entities preserved by xsl:copy-of</description>
+      <created by="Michael Kay" on="2015-05-01"/>
+      <modified by="Michael Kay" on="2016-03-18" change="document DTD dependency"/>
+      <modified by="Michael Kay" on="2016-11-22" change="moved from expression-1905"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-05.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = 'true'</assert>
+            <assert>/out/b = ''</assert>
+            <assert>/out/c = 'false'</assert>
+            <assert>/out/d = '-//Textuality//TEXT standard boilerplate//EN'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="unparsed-entity-06">
+      <description>Unparsed entities preserved by xsl:copy</description>
+      <created by="Michael Kay" on="2015-05-01"/>
+      <modified by="Michael Kay" on="2015-06-30" change="fix bug 28866"/>
+      <modified by="Michael Kay" on="2016-11-22" change="moved from expression-1906"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-06.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = 'true'</assert>
+            <assert>/out/b = ''</assert>
+            <assert>/out/c = 'false'</assert>
+            <assert>/out/d = '-//Textuality//TEXT standard boilerplate//EN'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="unparsed-entity-07">
+      <description>Unparsed entities preserved by fn:copy-of</description>
+      <created by="Michael Kay" on="2015-05-01"/>
+      <modified by="Michael Kay" on="2016-03-18" change="document DTD dependency"/>
+      <modified by="Michael Kay" on="2016-11-22" change="moved from expression-1907"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-07.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = 'true'</assert>
+            <assert>/out/b = ''</assert>
+            <assert>/out/c = 'false'</assert>
+            <assert>/out/d = '-//Textuality//TEXT standard boilerplate//EN'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="unparsed-entity-08">
+      <description>Unparsed entities preserved by fn:snapshot</description>
+      <created by="Michael Kay" on="2015-05-01"/>
+      <modified by="Michael Kay" on="2016-03-18" change="document DTD dependency"/>
+      <modified by="Michael Kay" on="2016-11-22" change="moved from expression-1908"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-08.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = 'true'</assert>
+            <assert>/out/b = ''</assert>
+            <assert>/out/c = 'false'</assert>
+            <assert>/out/d = '-//Textuality//TEXT standard boilerplate//EN'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="unparsed-entity-09">
+      <description>PURPOSE test dynamic call to unparsed-entity-uri() function with context in closure</description>
+      <created by="Michael Kay" on="2016-11-22"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dtd"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-09.xsl"/>
+      </test>
+      <result>
+         <assert>/out/in = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="unparsed-entity-10">
+      <description>PURPOSE test dynamic call to unparsed-entity-public-id() function with context in closure</description>
+      <created by="Michael Kay" on="2016-11-22"/>
+      <modified by="Abel Braaksma" on="2019-02-28" change="Bug #30408. Wrong stylesheet was linked, was: unparsed-entity-09.xsl, now: unparsed-entity-10.xsl"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dtd"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-10.xsl"/>
+      </test>
+      <result>
+         <assert>/out/in = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="unparsed-entity-11">
+      <description>PURPOSE test result of unparsed-entity-uri has type xs:anyURI</description>
+      <created by="Michael Kay" on="2016-11-22"/>
+      <environment ref="unparsed-entity-A"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-11.xsl"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="unparsed-entity-50">
+      <description>Test that when multiple entities have the same name, we choose the first. See bug 27369.</description>
+      <created by="Michael Kay" on="2014-11-19"/>
+      <modified by="Michael Kay" on="2016-11-22" change="renamed from unparsed-entity-uri-050"/>
+      <modified by="Michael Kay" on="2021-06-11" change="add DTD dependency"/>
+      <environment>
+        <source role="." file="unparsed-entity-uri-050.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="unparsed-entity-uri-050.xsl"/>
+      </test>
+      <result>
+         <assert>//img/@src="images\epub\dgr-en-08sdexample06-a.jpg"</assert>
+      </result>
+   </test-case>
+
+</test-set>

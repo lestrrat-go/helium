@@ -1,0 +1,126 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-exactly-one">
+   <description>exactly-one() function with streaming</description>
+   
+   <environment name="sf-exactly-one-A">
+     <stylesheet file="sf-exactly-one-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-exactly-one-001">
+      <description>Streaming exactly-one() - grounded operand</description>
+      <keywords>striding-then-grounded leading-lone-slash fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-exactly-one-A"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <error code="FORG0005"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-exactly-one-002">
+      <description>Streaming exactly-one() - grounded operand</description>
+      <keywords>striding-then-grounded predicate fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-exactly-one-A"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/ITEM[@CAT='MMP']</assert>
+           <assert>count(/out/*) = 1</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-exactly-one-003">
+      <description>Streaming exactly-one() - grounded operand</description>
+      <keywords>striding-then-grounded predicate fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-exactly-one-A"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <error code="FORG0005"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-exactly-one-004">
+      <description>Streaming exactly-one() - striding operand</description>
+      <keywords>leading-lone-slash striding cardinality-of-one PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-exactly-one-A"/>
+      <test>
+         <initial-template name="r-004"/>
+      </test>
+      <result>
+         <error code="FORG0005"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-exactly-one-005">
+      <description>Streaming exactly-one() - striding operand</description>
+      <keywords>leading-lone-slash striding cardinality-of-one PathExpr motionless-predicate</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-exactly-one-A"/>
+      <test>
+         <initial-template name="r-005"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/ITEM[@CAT='H']</assert>
+           <assert>count(/out/*) = 1</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-exactly-one-006">
+      <description>Streaming exactly-one() - striding operand</description>
+      <keywords>leading-lone-slash cardinality-of-one FORG0001 PathExpr motionless-predicate empty-sequence</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-exactly-one-A"/>
+      <test>
+         <initial-template name="r-006"/>
+      </test>
+      <result>
+         <error code="FORG0005"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-exactly-one-007">
+      <description>Streaming exactly-one() - grounded operand - recover from error</description>
+      <keywords>striding-then-grounded leading-lone-slash fn:copy-of xsl:try error-handling specific-catch-clause FORG0005 PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-exactly-one-A"/>
+      <test>
+         <initial-template name="r-007"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-exactly-one-008">
+      <description>Streaming exactly-one() - striding operand - recover from error</description>
+      <keywords>leading-lone-slash striding xsl:try error-handling specific-catch-clause FORG0005 PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-exactly-one-A"/>
+      <test>
+         <initial-template name="r-008"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+      
+
+
+</test-set>

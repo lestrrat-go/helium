@@ -1,0 +1,1935 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="function">
+   <description>Tests function</description>
+   <environment name="function-01">
+      <source role="." file="function-01.xml"/>
+   </environment>
+   <environment name="function-01s">
+      <source role="." file="function-01.xml" streaming="true"/>
+   </environment>
+   <environment name="function-02">
+      <source role="." file="function-02.xml"/>
+   </environment>
+   <environment name="function-03">
+      <source role=".">
+         <content><![CDATA[ 
+
+<doc>
+<a c="bananas"/>
+<a c="apples"/>
+<a c="oranges"/>
+<a c="grapefruit"/>
+<a c="lemons"/>
+<a c="tangerines"/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="function-04">
+      <source role="." file="function-04.xml"/>
+   </environment>
+   <environment name="function-05">
+      <source role="." file="function-05.xml"/>
+   </environment>
+   <environment name="function-06">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+<a>1</a>
+<a>10</a>
+<a>13</a>
+<a>5</a>
+<a>19</a>
+<a>20</a>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="function-07">
+      <source role=".">
+         <content><![CDATA[<d/>]]></content>
+      </source>
+   </environment>
+
+   <environment name="function-09">
+      <source role=".">
+         <content><![CDATA[
+<test/>
+]]></content>
+      </source>
+   </environment>
+   <environment name="function-10">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="function-11">
+      <source role="." file="function-11.xml"/>
+   </environment>
+   <environment name="function-12">
+      <source role="." file="function-12.xml"/>
+   </environment>
+   <environment name="function-13">
+      <source role="." file="function-13.xml"/>
+   </environment>
+   <environment name="function-14">
+      <source role=".">
+         <content><![CDATA[<doc>
+   <name1 >
+       <a>Test1</a>
+       
+   </name1>
+    <name2/>
+    <name3>
+        <a>Test2</a>
+    </name3>
+    <name4/>
+   
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="function-15">
+      <source role=".">
+         <content><![CDATA[<doc>
+ Test
+</doc>
+]]></content>
+      </source>
+   </environment>
+
+   
+   <environment name="function-20">
+      <source role="." file="function-20.xml"/>
+   </environment>
+   
+   <environment name="function-21">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="function-1901">
+      <source role="." file="function-1901.xml"/>
+   </environment>
+   
+   <environment name="function-1902">
+      <source role="." file="function-1902.xml"/>
+   </environment>
+   
+   <environment name="function-2001">
+      <source role="." file="function-2001.xml"/>
+   </environment>
+
+   <test-case name="function-0001">
+      <description>Test the format-integer#2 of XSLT3.0 spec</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>1</a><b>11</b><c>1,230</c></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-0002">
+      <description>Basic test of first-class functions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-09" change="fn:function-name() - The prefix part of the returned QName is implementation dependent."/>
+      <modified by="Michael Kay" on="2014-12-17" change="Prevent eager evaluation"/>
+      <modified by="Michael Kay" on="2016-04-06" change="Add HOF dependency"/>
+      <modified by="Michael Kay" on="2019-01-21" change="correct unintended error (reserved namespace in extension-element-prefixes)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<x><a>2</a><b>abs</b><c>1</c><d>1</d></x>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-0003">
+      <description>Basic test of first-class functions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-09" change="fn:function-name() - The prefix part of the returned QName is implementation dependent."/>
+      <modified by="Michael Kay" on="2016-04-06" change="Add HOF dependency"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml><![CDATA[<x><a>2</a><b>abs</b><c>1</c><d>1</d></x>]]></assert-xml>
+            <assert-xml><![CDATA[<x><a>2</a><b>fn:abs</b><c>1</c><d>1</d></x>]]></assert-xml>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="function-0004">
+      <description>Basic test of first-class functions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-04-06" change="Add HOF dependency"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<x><a>1.23</a><b/><c>1</c><d>1</d></x>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-0101">
+      <description>simple xsl:function, no types declared</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>17</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-0102">
+      <description>simple xsl:function, namespace not reserved despite appearances</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:saxon="http://icl.com/saxon"><el>17</el>;
+    <at>7</at>;
+    <union>24</union></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0103">
+      <description>simple xsl:function, test override=" yes " accepted</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>17</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0104">
+      <description>simple xsl:function, test override="no" accepted</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0104.xsl"/>
+      </test>
+      <result>
+         <assert>out</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0105">
+      <description>simple xsl:function, test override="true" accepted</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>17</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0106">
+      <description>simple xsl:function, test override="false" accepted</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0106.xsl"/>
+      </test>
+      <result>
+         <assert>out</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0107">
+      <description>simple xsl:function, test override="1" accepted</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>17</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0108">
+      <description>simple xsl:function, test override="0" accepted</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0108.xsl"/>
+      </test>
+      <result>
+         <assert>out</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0109">
+      <description>simple xsl:function, test override-extension-function="yes" and identity-sensitive="yes" accepted</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0109.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>17</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0110">
+      <description>simple xsl:function, test override-extension-function=" no " accepted</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0110.xsl"/>
+      </test>
+      <result>
+         <assert>out</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0111">
+      <description>simple xsl:function, test override-extension-function="true" and identity-sensitive="true" accepted</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0111.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>17</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0112">
+      <description>simple xsl:function, test override-extension-function="false" accepted</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0112.xsl"/>
+      </test>
+      <result>
+         <assert>out</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0113">
+      <description>simple xsl:function, test override-extension-function="1" and identity-sensitive="1" accepted</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0113.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>17</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0114">
+      <description>simple xsl:function, test override-extension-function="0" accepted</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0114.xsl"/>
+      </test>
+      <result>
+         <assert>out</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0115">
+      <description>simple xsl:function, test override-extension-function=" " (not allowed)</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0115.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0116">
+      <description>simple xsl:function, test @override-extension-function="yes" and @override="true" accepted</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0116.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>17</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0117">
+      <description>simple xsl:function, test @override-extension-function="1" and @override="no" rejected</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0117.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0118">
+      <description>simple xsl:function, test @identity-sensitive="Yes" (not allowed)</description>
+      <created by="Debbie Lockett" on="2014-08-15"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0118.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0119a">
+      <description>simple xsl:function, required='yes' is allowed in 3.0 but disallowed in 2.0</description>
+      <created by="Michael Kay" on="2015-08-30"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0119.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0119b">
+      <description>simple xsl:function, required='yes' is allowed in 3.0 but disallowed in 2.0</description>
+      <created by="Michael Kay" on="2015-08-30"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0119.xsl"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0120a">
+      <description>simple xsl:function, required='no' is disallowed in both 2.0 and 3.0</description>
+      <created by="Michael Kay" on="2015-08-30"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0120.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0120b">
+      <description>simple xsl:function, required='no' is disallowed in both 2.0 and 3.0</description>
+      <created by="Michael Kay" on="2015-08-30"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0120.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0121">
+      <description>Function declaration and call both use EQName syntax</description>
+      <created by="Michael Kay" on="2016-03-17"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0121.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>17</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0122">
+      <description>Even with EQName syntax, the function name must be in a namespace</description>
+      <created by="Michael Kay" on="2019-02-12"/>
+      <environment ref="function-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0122.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0740"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-0201">
+      <description>simple function, 2 args, one atomized</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="function-0201.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-0202">
+      <description>recursive xsl:function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:saxon="http://icl.com/saxon">120</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-0203">
+      <description>xsl:function with many arguments</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>15</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-0205">
+      <description>stylesheet function with 0 arguments</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0205.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<y>x</y>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-0301">
+      <description>stylesheet function invoked from within sort key</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="function-0301.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-0302">
+      <description>Test element-available on a range of names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-10-16" change="Fixes bug#27068, element-available on xsl:key should return true" />
+      <modified by="Michael Kay" on="2014-10-27" change="split into 2.0 and 3.0 tests"/>
+      <modified by="Michael Kay" on="2018-09-27" change="corrected faulty assertion: out/a becomes /out/*"/>
+      <environment ref="function-03"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0302.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>every $a in /out/* except /out/a4 satisfies $a/@actual = $a/@expected</assert>
+            <assert>/out/a4/@actual = 'false'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0302b">
+      <description>Test element-available on a range of names</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-10-16" change="Fixes bug#27068, element-available on xsl:key should return true" />
+      <modified by="Michael Kay" on="2014-10-27" change="split into 2.0 and 3.0 tests"/>
+      <modified by="Michael Kay" on="2018-09-27" change="corrected faulty assertion: out/a becomes /out/*"/>
+      <environment ref="function-03"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0302.xsl"/>
+      </test>
+      <result>
+         <assert>every $a in /out/* satisfies $a/@actual = $a/@expected</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-0303">
+      <description>Test element-available on a range of names expressed as EQNames</description>
+      <created by="Michael Kay" on="2019-07-26"/>
+      <environment ref="function-03"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0303.xsl"/>
+      </test>
+      <result>
+         <assert>every $a in /out/* satisfies $a/@actual = $a/@expected</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-0401">
+      <description>TEST lazy evaluation of expressions using values returned from a function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-04"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:test="http://foobar/"><item att="a" desc="one"/><thing att="b" desc="zwei"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-0501">
+      <description>test case for bug https://sourceforge.net/tracker/index.php?func=detail&amp;aid=553347&amp;group_id=29872&amp;atid=397617 (Context not reset on return from a call to a stylesheet function)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2019-11-26" change="Rewritten to avoid serialization"/>
+      <environment ref="function-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0501.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/section[1]/actor[1][@name='User'][children/child='Administrator'][empty(parents/node())]</assert>
+            <assert>/out/section[1]/actor[2][@name='Administrator'][empty(children/node())][parents/parent='User']</assert>
+            <assert>/out/section[2]/actor[1][@name='User'][children/child='Administrator'][empty(parents/node())]</assert>
+            <assert>/out/section[2]/actor[2][@name='Administrator'][empty(children/node())][parents/parent='User']</assert>
+            <assert>/out/section[3]/actor[1][@name='User'][children/child='Administrator'][empty(parents/node())]</assert>
+            <assert>/out/section[3]/actor[2][@name='Administrator'][empty(children/node())][parents/parent='User']</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="function-0601">
+      <description>stylesheet functions with declared types of argument</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>120</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-0602">
+      <description>Show that by default stylesheet functions override vendor-supplied functions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0602.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>342</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-0701">
+      <description>XSLT stylesheet to perform a knight's tour of the chessboard. Author: Michael H. Kay Date: 15 November 2002 This version modified to use XSLT 2.0 and XPath 2.0, with sequences and functions. Type declarations added in Nov 2002 version. This stylesheet can be run using any XML file as a dummy source document. There is an optional parameter, start, which can be set to any square on the chessboard, e.g. a3 or h5. By default the tour starts at a1. The output is an HTML display of the completed tour. Internally, the following data representations are used: * A square on the chessboard: represented as a number in the range 0 to 63 * A state of the chessboard: a sequence of 64 integers, each containing a move number. A square that has not been visited yet is represented by a zero. * A set of possible moves: represented as a sequence of integers, * each integer representing the number of the destination square start-column is an integer in the range 0-7 start-row is an integer in the range 0-7, with zero at the top This template controls the processing. It does not access the source document.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2019-11-19" change="Drop serialization requirement"/>
+      <environment ref="function-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0701.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(//td) = 64</assert>
+            <assert>count(distinct-values(//td)) = 64</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="function-0901">
+      <description>A user-supplied test that once revealed a bug</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2019-01-21" change="correct unintended error (reserved namespace in extension-element-prefixes)"/>
+      <environment ref="function-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<testing>true,true</testing>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-1001">
+      <description>variant of func18 using XSLT conditionals instead of XPath Tests recursive functions with declared argument types</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>120</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-1002">
+      <description>Test two stylesheet functions with the same name and different arity</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out one="1" two="2"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-1003">
+      <description>tests a forwards reference to a function within a variable declaration</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z xmlns:ns="http://namespace/">gogo</z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-1004">
+      <description>test XPath comments in awkward places</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:saxon="http://icl.com/saxon">120</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-1005">
+      <description>recursive stylesheet functions used to do numeric computation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3.1623</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-1007">
+      <description>test treatment of whitespace after calling a function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>;
+        [ ];                      
+      </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-1009">
+      <description>Test that a stylesheet function can return zero-length text nodes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out count="3"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-1011">
+      <description>
+         Test whether function evaluation is pipelined. This test will return -100 if evaluation is pipelined, 
+         or throw a divide-by-zero error if not
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-09" change="Corrected error code from FAOR0001(typo) to FOAR0001"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1011.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml><![CDATA[<out result="-100"/>]]></assert-xml>
+            <error code="FOAR0001"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="function-1012">
+      <description>Test numeric promotion of function result</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out result="5.5"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-1013">
+      <description>derivative of func39 to test progressive reading of a closure</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><x value="1"/><x value="4"/><x value="9"/><x value="16"/><x value="25"/><x value="36"/><x value="49"/><x value="64"/><x value="81"/><x value="100"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-1014">
+      <description>One of many tests from Dimitre Novatchev's FXSL library. Tests FXSL max() function. Exercises recursion including tail call optimization &lt;xsl:message&gt; $pList: '&lt;xsl:copy-of select="$pList"/&gt;' &lt;/xsl:message&gt;</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result>10</result>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-1015">
+      <description>Promotion of xs:anyURI argument supplied to a function expecting a string</description>
+      <created by="Michael Kay" on="2018-12-21"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1015.xsl"/>
+      </test>
+      <result>
+         <assert>/out = 'false'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-1016">
+      <description>Error: two stylesheet functions with the same name and the same arity</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1016.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0770"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-1017">
+      <description>Error: stylesheet function returning wrong type of value</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1017.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml/>
+            <error code="XTTE0780"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="function-1018">
+      <description>Error: xsl:sequence within stylesheet function returning wrong type of value Test is obsolete, as attribute no longer allowed</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1018.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml/>
+            <error code="XTSE0090"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="function-1019">
+      <description>Error: wrong type of value passed as argument to a function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-02-16" change="XSLT 3.0 has different error code"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1019.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XPTY0004"/> <!-- XSLT 3.0 -->
+            <error code="XTTE0790"/> <!-- XSLT 2.0 -->
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="function-1020">
+      <description>Error: wrong type declaration in a variable within a function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1020.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0570"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-1021">
+      <description>Error: reserved namespace used for a function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1021.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0080"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-1022">
+      <description>This stylesheet crashes out at run-time saying that () isn't allowed as the second argument of subsequence() If there's an anchor, find it don't output that attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1022.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-1023">
+      <description>This stylesheet crashes out at run-time saying that System function node-name#0 is not available with this host language - XSLT2.0</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1023.xsl"/>
+      </test>
+      <result>
+         <error code="XPST0017"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-1024">
+      <description>Test the format-integer#2 of XSLT3.0 spec crashes out at runtime - picture is not valid</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-09" change="Corrected error code from XTDE0030 into more specific FODF1310 
+         (This error is raised if the picture string supplied to fn:format-number has invalid syntax.)"/>
+      <modified by="Michael Kay" on="2023-03-06" change="Drop declaration of XSD namespace, 
+         which cannot be used in extension-element-prefixes because it is reserved"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1024.xsl"/>
+      </test>
+      <result>
+         <error code="FODF1310"/>
+      </result>
+   </test-case>
+   
+   <test-case name="function-1025">
+      <description>XSLT 3.0 deterministic function: creates nodes</description>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <modified by="Abel Braaksma" on="2015-10-22" change="Fixed stylesheet for xslt version 2.0 --> 3.0, fixed bug#29223, allowing alternative outcomes"/>
+      <modified by="Abel Braaksma" on="2016-07-07" change="undo prev change, see discussion bug 29223." />
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1025.xsl"/>
+         <param name="new-each-time" static="yes" select="'no'"/>
+      </test>
+      <result>
+         <assert>/out = "7"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-1026">
+      <description>XSLT 3.0 deterministic function: uses generate-id</description>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <modified by="Abel Braaksma" on="2015-10-22" change="Fixed stylesheet for xslt version 2.0 --> 3.0, fixed bug#29223, allowing alternative outcomes"/>
+      <modified by="Abel Braaksma" on="2016-07-07" change="undo prev change, see discussion bug 29223." />
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1026.xsl"/>
+         <param name="new-each-time" static="yes" select="'no'"/>
+      </test>
+      <result>
+         <assert>/out = "7"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-1027">
+      <description>XSLT 3.0 proactive function: creates nodes</description>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1025.xsl"/>
+         <param name="new-each-time" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <assert>/out = "10"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-1028">
+      <description>XSLT 3.0 proactive function: uses generate-id</description>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1026.xsl"/>
+         <param name="new-each-time" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <assert>/out = "10"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-1029">
+      <description>XSLT 3.0 elidable function: creates nodes</description>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1025.xsl"/>
+         <param name="new-each-time" static="yes" select="'maybe'"/>
+      </test>
+      <result>
+         <assert>/out = ("7", "8", "9", "10")</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-1030">
+      <description>XSLT 3.0 elidable function: uses generate-id</description>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1026.xsl"/>
+         <param name="new-each-time" static="yes" select="'maybe'"/>
+      </test>
+      <result>
+         <assert>/out = ("7", "8", "9", "10")</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-1031">
+      <description>Memo function: a function that is tediously slow without caching</description>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <modified by="Abel Braaksma" on="2015-10-22" change="keeping it in bounds of a 64 bit signed integer to prevent impl. dependencies"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1031.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "7540113804746346429"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-1032">
+      <description>Deterministic function: input nodes are "the same" based on identity</description>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1032.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "100"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-1033">
+      <description>Tempt the optimizer with a loop-lifting opportunity</description>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <modified by="Michael Kay" on="2020-06-11" 
+         change="Produce 100 messages rather than 10,000, because there's no requirement for the optimizer
+         to loop-lift this, and if it doesn't, the test driver has to cope with 10,000 messages in case there
+         are assertions against them. Also, improve the test assertions."/>
+      <environment ref="function-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1033.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>xs:integer(/out/@total) = 100</assert>
+            <assert>xs:integer(/out/@distinct) = (1, 100)</assert> 
+                    <!-- technically, it can be anything between 1 and 100 -->
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="function-1034">
+      <description>Functions with cache=yes and various types of argument</description>
+      <created by="Michael Kay" on="2018-02-19"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1034.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><int-int><a>4</a><b>2</b><c>4</c><d>-3</d><e>4</e></int-int
+            ><str-str><a>14</a><b>9</b><c>18</c><d>14</d></str-str
+            ><qn-qn><a>true</a><b>false</b><c>true</c></qn-qn
+            ><node-node><a>true</a><b>false</b><c>true</c></node-node
+            ><map-map><a>30~30</a><b>30~30</b><c>30~50</c><d>30~30</d></map-map
+            ><fn-fn><a>xypq</a><b>xypq</b><c>xypq</c><d>xypq</d></fn-fn></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-1035">
+      <description>Tail recursive function with cache=yes</description>
+      <created by="Michael Kay" on="2022-03-30"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1035.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/pass1 = "832040 1346269 2178309 3524578 5702887 9227465 14930352 24157817 39088169 63245986 102334155"</assert>
+            <assert>/out/pass2 = "832040 1346269 2178309 3524578 5702887 9227465 14930352 24157817 39088169 63245986 102334155"</assert>           
+         </all-of>
+      </result>
+   </test-case>
+
+
+   <test-case name="function-1101">
+      <description>recursive stylesheet function test</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1101.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="function-1101.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-1201">
+      <description>bug reported by Dimitre Novatchev against Saxon 8.2</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2018-01-10" change="move expected result inline, and make well-formed"/>
+      <environment ref="function-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><author value="Anthony Burgess"><title value="A Clockwork Orange"/><title value="Earthly Powers"/></author
+            ><author value="Frank Herbert"><title value="Children of Dune"/><title value="Dragon in the Sea"/><title value="Dune"/></author
+            ><author value="Isaak Asimov"><title value="The Caves of Steel"/><title value="The Foundation Trilogy"/></author
+            ><author value="Kate Wilhelm"><title value="Where Late the Sweet Bird Sang"/></author
+            ><author value="Roberto Quaglia"><title value="Bread, Butter and Paradoxine"/></author></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-1301">
+      <description>Test of str:reverse() function from Dimitre Novatchev's FXSL library To be applied on text.xml</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="function-13"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="function-1301.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-1401">
+      <description>Test the node-name#0 function of XSLT 3.0 spec</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2019-01-21" change="correct unintended error (reserved namespace in extension-element-prefixes)"/>
+      <environment ref="function-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<x><out>doc</out><out>name1</out><out>a</out><out>name2</out><out>name3</out><out>a</out><out>name4</out></x>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-1501">
+      <description>Test the available-environment-variables#0 and environment-variable#1 functions of XPath3.0 spec</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-10-22" change="See bug 29222"/>
+      <modified by="Michael Kay" on="2019-01-21" change="correct unintended error (reserved namespace in extension-element-prefixes)"/>
+      <environment ref="function-15"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1501.xsl"/>
+      </test>
+      <result>
+         <assert>/x = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-1601">
+      <description>
+         Test the available-environment-variables#0 and get-environment-variable#1 functions of XSLT3.0 spec
+         with a compile-time use-when</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-10-22" change="See bug 29222"/>
+      <modified by="Michael Kay" on="2019-01-21" change="correct unintended error (reserved namespace in extension-element-prefixes)"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<para>p1</para>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1601.xsl"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-1701">
+      <description>Test the format-integer#2 function of XSLT3.0 spec</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><a>1</a><a>2</a><a>3</a><a>4</a><a>5</a></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1701.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="function-1701.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-1901">
+      <description>
+         Test that all functions defined in the F+O 3.0 specification are implemented. 
+         Note: update the source document from time to time with the latest draft spec
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-10-16" change="Changed the auto-generation of this test, it is now dependent on actual XHTML spec, and updated the set of functions it tests"/>
+      <modified by="Michael Kay" on="2014-11-14" change="Changed test assertion to pass catalog-004"/>
+      <modified by="Michael Kay" on="2017-04-30" change="Add HOF dependency (if not available, function-available() returns false)"/>
+      <environment ref="function-1901"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1901.xsl"/>
+      </test>
+      <result>
+         <assert>empty(/out/*)</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-1902">
+      <description>
+         Test that all functions defined in the F+O 3.0 specification are NOT implemented in a 2.0 processor. 
+         Note: call function-2001-generate.xsl (without arguments) from time to time if the RECs are updated</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-12-20" change="Removed whitespace"/>
+      <modified by="Michael Kay" on="2014-06-04" change="Update results for renamed functions; output only the discrepancies to make results comparison easier"/>
+      <modified by="Abel Braaksma" on="2014-10-16" change="Changed the auto-generation of this test, it is now dependent on actual XHTML spec, and updated the set of functions it tests"/>
+      <modified by="Michael Kay" on="2014-11-14" change="Changed test assertion to pass catalog-004"/>
+      <modified by="Abel Braaksma" on="2015-03-30" change="Bug 20843: Updated autogen xslt to exclude xslt30 functions, updated test to create more useful output, added output comparison file."/>
+      <modified by="Abel Braaksma" on="2015-10-22" change="changed XSLT file and test to have version 2.0" />
+      <environment ref="function-1902"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-1902.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="function-1902.out" />
+      </result>
+   </test-case>
+
+   <test-case name="function-2001">
+      <description>
+         Test that all functions defined in the XSLT 3.0 specification are implemented. 
+         Note: call function-2001-generate.xsl from time to time with the latest draft spec</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-10-16" change="Changed the auto-generation of this test, it is now dependent on actual XHTML spec, and updated the set of functions it tests"/>
+      <modified by="Michael Kay" on="2014-11-14" change="Changed test assertion to pass catalog-004"/>
+      <environment ref="function-2001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-2001.xsl"/>
+      </test>
+      <result>
+         <assert>empty(/out/*)</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-2002">
+      <description>
+         Test that all functions defined in the XSLT 3.0 specification are NOT implemented in a 2.0 processor. 
+         Note: update the source document from time to time with the latest draft spec
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-12-20" change="Removed whitespace"/>
+      <environment ref="function-20"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-2002.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="function-2002.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-2101">
+      <description>Testcase to verify that a static error is raised on a function declaration without name attribute. Also contains a function call to an undefined function - see bug 820.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-12-20" change="all-of to any-of"/>
+      <environment ref="function-21"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-2101.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0010"/>
+            <error code="XPST0017"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="function-2102">
+      <description>Testcase to verify that a static error is raised on a function declaration with an invalid QName attribute value.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="function-21"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-2102.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-2103">
+      <description>Testcase to verify that a static error is raised on a function declaration with a name attribute that is in a reserved namespace for Schema.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="function-21"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-2103.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0080"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-2104">
+      <description>Testcase to verify that a static error is raised on a function declaration with an invalid override attribute value.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="function-21"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-2104.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-2105">
+      <description>Testcase to verify that a static error is raised if xsl:function is declared within a sequence-constructor (it is not a top level element)</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="function-21"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-2105.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-2106">
+      <description>Test that an error is raised if xsl:param is not the first element within a stylesheet function.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="function-21"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-2106.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-2107">
+      <description>Testcase to verify that a static error is raised on a function declaration with a name attribute that is in the standard functions reserved namespace.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="function-21"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-2107.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0080"/>
+      </result>
+   </test-case>
+
+   <test-case name="function-2108">
+      <description>Testcase to verify that a static error is raised on a function declaration with a name attribute that is in the XSLT reserved namespace.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="function-21"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-2108.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0080"/>
+      </result>
+   </test-case>
+   
+   <test-case name="function-2109">
+      <description>Saxon bug #5913 - tail recursion combined with lazy evaluation</description>
+      <created by="Michael Kay" on="2023-03-10"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-2109.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "A"</assert>
+      </result>
+   </test-case>
+
+   <!-- note (AB): 5xxx tests are streaming tests, perhaps they should be moved elsewhere? -->
+   <test-case name="function-5001">
+      <description>Base test SC: unclassified, making sure no error is raised</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5001.xsl"/>
+      </test>
+      <result>
+         <assert>/p[. = 'Hello again.']</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-5002">
+      <description>Base test SC: absorbing, making sure no error is raised</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5002.xsl"/>
+      </test>
+      <result>
+         <assert>/p[. = 'Hello again.']</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-5003">
+      <description>Base test SC: inspection, making sure no error is raised</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5003.xsl"/>
+      </test>
+      <result>
+         <assert>/p[. = 'Hello again.']</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-5004">
+      <description>Base test SC: filter, making sure no error is raised</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5004.xsl"/>
+      </test>
+      <result>
+         <assert>/p[. = 'Hello again.']</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-5005">
+      <description>Base test SC: shallow-descent, making sure no error is raised</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <modified by="Michael Kay" on="2016-02-17" change="fix bug 29451"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5005.xsl"/>
+      </test>
+      <result>
+         <assert>/p[. = 'Hello again.']</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-5006">
+      <description>Base test SC: deep-descent, making sure no error is raised</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <modified by="Abel Braaksma" on="2016-11-05" change="Changed the test such it is not roaming anymore"/>
+      <modified by="Michael Kay" on="2017-01-28" change="See bug 29958"/>
+      <modified by="Abel Braaksma" on="2017-03-23" change="Made the test streamable, see bug 30064"/>
+      <modified by="Michael Kay" on="2017-08-15" change="Add xsl:function/@streamability attribute"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result>HelloHello again.</result>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-5007">
+      <description>Base test SC: ascent, making sure no error is raised</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5007.xsl"/>
+      </test>
+      <result>
+         <assert>/p[. = 'Hello again.']</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-5011">
+      <description>Base test SC: unclassified, making sure no error is raised</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5011.xsl"/>
+      </test>
+      <result>
+         <assert>/p[. = 'Hello again.']</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-5012">
+      <description>Base test SC: absorbing, making sure no error is raised</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5012.xsl"/>
+      </test>
+      <result>
+         <assert>/p[. = 'Hello again.']</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-5013">
+      <description>Base test SC: inspection, making sure no error is raised</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5013.xsl"/>
+      </test>
+      <result>
+         <assert>/p[. = 'Hello again.']</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-5014">
+      <description>Base test SC: filter, making sure no error is raised</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5014.xsl"/>
+      </test>
+      <result>
+         <assert>/p[. = 'Hello again.']</assert>
+      </result>
+   </test-case>
+
+   <test-case name="function-5015">
+      <description>Base test SC: shallow-descent, making sure no error is raised.</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <modified by="Abel Braaksma" change="Added missing files, fixed expected result, fix bug 29777" on="2016-11-02"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<p>Hello</p><p>Hello again.</p><p>Hello</p><p>Hello again.</p><p>Hello</p><p>Hello again.</p><p>Hello</p><p>Hello again.</p>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-5015a">
+      <description>Inlined version of 5015 for comparison.</description>
+      <created by="Michael Kay" on="2017-02-17"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5015a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<p>Hello</p><p>Hello again.</p><p>Hello</p><p>Hello again.</p><p>Hello</p><p>Hello again.</p><p>Hello</p><p>Hello again.</p>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="function-5016">
+      <description>Base test SC: deep-descent, making sure no error is raised.</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <modified by="Abel Braaksma" change="Added missing files, fixed expected result, fix bug 29777" on="2016-11-02"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result>section1 subSection1.1 section2 subSection2.1 subSection2.2 subSection2.3</result>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-5017">
+      <description>Base test SC: ascent, making sure no error is raised, tests overlapping nodes returned by ascent function.</description>
+      <created by="Abel Braaksma" on="2015-12-31"/>
+      <modified by="Abel Braaksma" change="Added missing files, fixed expected result, fix bug 29777" on="2016-11-02"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result><inverted-section name="section1" depth="1"/><inverted-section name="subSection1.1" depth="2"/><inverted-section name="section2" depth="1"/><inverted-section name="subSection2.1" depth="2"/><inverted-section name="subSection2.2" depth="2"/><inverted-section name="subSection2.3" depth="2"/></result>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="function-5018">
+      <description>Inlined equivalent of -5017, for comparison.</description>
+      <created by="Michael Kay" on="2017-02-10"/>
+      <environment ref="function-01s"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-5018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result><inverted-section name="section1" depth="1"/><inverted-section name="subSection1.1" depth="2"/><inverted-section name="section2" depth="1"/><inverted-section name="subSection2.1" depth="2"/><inverted-section name="subSection2.2" depth="2"/><inverted-section name="subSection2.3" depth="2"/></result>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

@@ -1,0 +1,1123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="analyze-string">
+   <description>Tests regex</description>
+   <environment name="regex001">
+      <source role=".">
+         <content><![CDATA[<doc>
+Mary had a little lamb
+Its fleece was black as soot
+And everywhere that Mary went
+It put its sooty foot
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="regex002">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="regex006">
+      <source role="." file="analyze-string-006.xml"/>
+   </environment>
+   
+   <environment name="regex009">
+      <source role=".">
+         <content><![CDATA[<doc><str1>hello&#x0A;world</str1></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="regex010">
+      <source role="." file="analyze-string-010.xml"/>
+   </environment>
+   <environment name="regex011">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <str1>aBcDeFgHiJkLmNoPq</str1>
+  <str2>abcdefGHIJklmnopq</str2>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="regex012">
+      <source role=".">
+         <content><![CDATA[<poem author="Wilhem Busch">Kaum hat dies der Hahn gesehen,</poem>]]></content>
+      </source>
+   </environment>
+   <environment name="regex013">
+      <source role=".">
+         <content><![CDATA[<poem author="Wilhem Busch">
+Kaum hat dies der Hahn gesehen,
+Fangt er auch schon an zu krahen: 
+Kikeriki! Kikikeriki!! 
+Tak, tak, tak! - da kommen sie.</poem>]]></content>
+      </source>
+   </environment>
+   <environment name="regex024">
+      <source role=".">
+         <content><![CDATA[<doc><date>23 March 2002</date></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="regex025">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <str1>zzzaBcDeFgHiJkLmNoPq</str1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="regex030">
+      <source role="." file="analyze-string-030.xml"/>
+   </environment>
+   <environment name="regex031">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <str1>aBcDeFgHiJkLmNoPqzzzaBcDeFgHiJkLmNoPq</str1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="regex039">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <str>a</str>
+  <str>b</str>
+  <str>banana</str>
+  <str>c</str>
+  <str>d</str>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="regex905">
+      <source role="." file="analyze-string-905.xml"/>
+   </environment>
+   
+   <test-case name="analyze-string-001">
+      <description>Type-check select attribute of xsl:analyze-string (failure case)</description>
+      <created by="Michael Kay" on="2019-12-09"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-001.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-002">
+      <description>Type-check select attribute of xsl:analyze-string (success case - URI promotion)</description>
+      <created by="Michael Kay" on="2019-12-09"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://[e]n[e]rg[e]x.com/</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-003">
+      <description>Type-check select attribute of xsl:analyze-string (failure case: sequence of several values)</description>
+      <created by="Michael Kay" on="2019-12-09"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-003.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-005">
+      <description>test xsl:analyze-string with dynamic regex expression.</description>
+      <created by="Michael Kay" on="2018-11-09"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>|Mary had a littl[e] lamb|Its fl[e][e]c[e] was black as soot|And [e]v[e]rywh[e]r[e] that Mary w[e]nt|It put its sooty foot|</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-006">
+      <description>test xsl:analyze-string.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>|Mary had a littl[e] lamb|Its fl[e][e]c[e] was black as soot|And [e]v[e]rywh[e]r[e] that Mary w[e]nt|It put its sooty foot|</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-007">
+      <description>test xsl:analyze-string using multi-line mode.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-007.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/p[1] = "Mary had a little lamb"</assert>
+            <assert>/out/p[2] = "Its fleece was black as soot"</assert>
+            <assert>/out/p[3] = "And everywhere that Mary went"</assert>
+            <assert>/out/p[4] = "It put its sooty foot"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-008">
+      <description>test xsl:analyze-string using groups.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>|[Mary ()][had (had )]a [little ()][lamb|Its fleece ()]was b[lack as soot|And everywhere ()]that [Mary ()]went|It put its sooty foot|</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+   <test-case name="analyze-string-012">
+      <description>test xsl:analyze-string with a pattern that doesn't match anything.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>|Mary had a little lamb|Its fleece was black as soot|And everywhere that Mary went|It put its sooty foot|</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+   <test-case name="analyze-string-033">
+      <description>test position() and last() within xsl:analyze-string.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-033.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/*/name(), ('non-match', 'match', 'non-match', 'match', 'match', 
+               'non-match', 'match', 'non-match', 'match', 'non-match', 'match', 'non-match', 'match', 
+               'non-match', 'match', 'non-match', 'match', 'non-match'))</assert>
+            <assert>deep-equal(/out/*/@position/number(), (1 to 18))</assert>
+            <assert>every $a in /out/*/@last/number() satisfies $a = 18</assert>
+            <assert>//out/*[1] = "|Mary had a littl"</assert>
+            <assert>//out/*[2] = "e"</assert>
+            <assert>//out/*[3] = " lamb|Its fl"</assert>
+            <assert>//out/*[4] = "e"</assert>
+            <assert>//out/*[5] = "e"</assert>
+            <assert>//out/*[6] = "c"</assert>
+            <assert>//out/*[7] = "e"</assert>
+            <assert>//out/*[8] = " was black as soot|And "</assert>
+            <assert>//out/*[9] = "e"</assert>
+            <assert>//out/*[10] = "v"</assert>
+            <assert>//out/*[11] = "e"</assert>
+            <assert>//out/*[12] = "rywh"</assert>
+            <assert>//out/*[13] = "e"</assert>
+            <assert>//out/*[14] = "r"</assert>
+            <assert>//out/*[15] = "e"</assert>
+            <assert>//out/*[16] = " that Mary w"</assert>
+            <assert>//out/*[17] = "e"</assert>
+            <assert>//out/*[18] = "nt|It put its sooty foot|"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-034">
+      <description>test regex-group() is empty inside a stylesheet function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-034.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+[()][()]a [()][()]was b[()]that [()]went
+It put its sooty foot
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-035">
+      <description>test xsl:analyze-string applied to empty sequence. Error in 2.0, allowed in 3.0 (bug 7976)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-036">
+      <description>test xsl:analyze-string with 'q' flag. Error in 2.0, allowed in 3.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><n val="A"/><m val="."/><n val="A"/><m val="."/><n val="A"/><m val="."/><n val="A"/><m val="."/><n val="A"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-037">
+      <description>test xsl:analyze-string with non-capturing groups. Error in 2.0, allowed in 3.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><m g1="CD" g2="GH" g3="" g4=""/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+   <test-case name="analyze-string-042">
+      <description>ERR XTSE1130 - neither matching-substring nor non-matching-substring present.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-042.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1130"/>
+      </result>
+   </test-case>
+
+
+   <test-case name="analyze-string-045">
+      <description>test xsl:analyze-string applied to empty sequence. Error in 2.0, allowed in 2.1 (bug 7976)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-045.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-046">
+      <description>test xsl:analyze-string with 'q' flag. Error in 2.0, allowed in 2.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-046.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE1145"/>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-047">
+      <description>test xsl:analyze-string with non-capturing groups. Error in 2.0, allowed in 2.1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex001"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-047.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE1140"/>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-048">
+      <description>Testcase with xsl:analyze-string on a literal string where regex uses positional metacharacters ^ and $.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-048.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="analyze-string-048.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-049">
+      <description>Testcase with xsl:analyze-string on a literal string where @regex uses reluctant quantifiers.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-049.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<e1>b</e1>
+<E1>bbbb</E1>
+<E2>bbb</E2>
+<e3>b</e3>
+<E3>bbb</E3>
+<e4>bb</e4>
+<E4>bbb</E4>
+<E5>a</E5>
+<E6/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-050">
+      <description>Testcase with xsl:analyze-string on a literal string where @regex uses backreferences. Verifies that backreferences match the exact string that was already matched by the capturing subexpressions they refer to and not just its pattern.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-050.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="analyze-string-050.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-051">
+      <description>Testcase with xsl:analyze-string where @regex matches several overlapping substrings of different length. Cases tested: @regex contains a greedy quantifier @regex contains a non-greedy quantifier @regex contains alternatives that both match different substrings</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-051.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<E1>b#</E1>
+<E2>b#na</E2>
+<E3>b#n#n#</E3>
+<E4>b#n#</E4></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-052">
+      <description>Testcase where the result from xsl:analyze-string is set as the value of a variable which is used for @select in another xsl:analyze-string element.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-052.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><A>Ma*ha* a*la*</A><B>*!*!*!*!</B></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-053">
+      <description>Testcase with xsl:analyze-string where the value of @select is a the result of a function call.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-053.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><E1>1#1</E1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+   <test-case name="analyze-string-063">
+      <description>Testcase with xsl:analyze-string on a literal string, node, context node(.), variable and a subsequence where @regex value is resolved at run-time.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex006"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-063.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="analyze-string-063.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-064">
+      <description>Testcase to verify that when @flags in xsl:analyze-string is omitted, the effect is the same as supplying a zero-length string.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><str1>Mary had a little lamb.</str1></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-064.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = "*ry had* little lamb."</assert>
+            <assert>/out/b = "*ry had* little lamb."</assert>
+            <assert>/out/c = "*ry had* little lamb."</assert>
+            <assert>/out/d = "*ry had* little lamb."</assert>
+            <assert>/out/e = "*ry had* little lamb."</assert>
+            <assert>/out/f = "*ry had* little lamb."</assert>
+            <assert>/out/g = "*ry had* little lamb."</assert>
+            <assert>/out/h = "*ry had* little lamb."</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-065">
+      <description>Testcase with xsl:analyze-string using 'dot-all' mode (@flags is set to 's').</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex009"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-065.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><E1>hello
+world</E1><E2>*</E2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-067">
+      <description>Testcase with xsl:analyze-string using multiline mode (@flags is set to 'm').</description>
+      <created by="XSLT Editors" on="2012-11-07"/>
+      <environment ref="regex010"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-067.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="analyze-string-067.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-069">
+      <description>Testcase with xsl:analyze-string using case-sensitive mode (@flags is set to 'i').</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex011"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-069.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/r[@name="str1"]/e1 = "aBcDeFgHiJkLmNoPq"</assert>
+            <assert>/out/r[@name="str1"]/E1 = "aBcDeF!!!!kLmNoPq"</assert>
+            <assert>/out/r[@name="str1"]/e2 = "aBcDeFgHiJkLmNoPq"</assert>
+            <assert>/out/r[@name="str1"]/E2 = "aBcD1234567LmNoPq"</assert>
+            <assert>/out/r[@name="str1"]/e3 = "aBcDeFgHiJkLmNoPq"</assert>
+            <assert>/out/r[@name="str1"]/E3 = "aBcD#LmNoPq"</assert>
+            <assert>/out/r[@name="str2"]/e1 = "abcdef!!!!klmnopq"</assert>
+            <assert>/out/r[@name="str2"]/E1 = "abcdef!!!!klmnopq"</assert>
+            <assert>/out/r[@name="str2"]/e2 = "abcdefGHIJklmnopq"</assert>
+            <assert>/out/r[@name="str2"]/E2 = "abcd1234567lmnopq"</assert>
+            <assert>/out/r[@name="str2"]/e3 = "abcdefGHIJklmnopq"</assert>
+            <assert>/out/r[@name="str2"]/E3 = "abcd#lmnopq"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-070">
+      <description>Testcase with xsl:analyze-string using whitespace-ignore mode (@flags is set to 'x').</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex012"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-070.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><E1>Kaum hat dies der Hahn gesehen,</E1><E2>* der Hahn gesehen,</E2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-071">
+      <description>Testcase to verify that @flags in xsl:analyze-string can be used to set multiple modes simultaneously and repeats are allowed.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex013"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-071.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="analyze-string-071.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-072">
+      <description>Test of regex-group() with 3 existing groups that have found matches in the analyzed string.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex024"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-072.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2002-03-23</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-073">
+      <description>Test with regex-group(0) to verify that the returned substring is the whole value of @regex.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex025"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-073.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>#aBcDeFgHiJkLmNoPq</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-074">
+      <description>
+         Test to verify that the zero-length string is returned if there is no matched substring with the 
+         number passed as an argument to regex-group().
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex025"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-074.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>#</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-075">
+      <description>Test to verify that the set of captured substring is set to an empty sequence inside xsl:non-matching-substring.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex025"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-075.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>aBcDeFgHiJkLmNoPq</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-076">
+      <description>
+         Use regex-group() inside @group-starting-with of xsl:for-each-group.
+         Verify that the set of captured substrings is set to an empty sequence inside a pattern.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex030"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-076.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/empty[@id="non-match1"] = "zzz"</assert>
+            <assert>/out/empty[@id="match2-1"] = "string2string5string6string7"</assert>
+            <assert>/out/empty[@id="match2-2"] = "string2string5string6string7"</assert>
+            <assert>/out/empty[@id="non-match3"] = "HiJkLmNoPq"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-077">
+      <description>
+         Test to verify that the set of captured substrings is set to an empty sequence inside stylesheet function.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex031"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-077.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>inside the function   zzz  inside the function </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-078">
+      <description>
+         Test to verify that the value of current captured substrings is unaffected through a call to xsl:apply-templates.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex031"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-078.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>azzza</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-079">
+      <description>Test to verify that the value of current captured substrings is unaffected through a call to xsl:call-template.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex031"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-079.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>azzza</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-080">
+      <description>Test to verify that the value of current captured substrings is unaffected through a call to xsl:apply-imports.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex031"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-080.xsl"/>
+         <stylesheet file="analyze-string-080a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>azzza</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-081">
+      <description>Test to verify that the value of current captured substrings is unaffected through a call to xsl:next-match.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex031"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-081.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>azzza</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-082">
+      <description>Test to verify that the value of current captured substring is unaffected by an expansion of named attribute sets.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex031"/>
+      <!-- TODO: also uses regex082.xml -->
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-082.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><b size="12" weight="500">a</b>zzz<b size="12" weight="500">a</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-083">
+      <description>Testcase with xsl:analyze-string to test context item, position and size inside xsl:(non)-matching-substring.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="regex039"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-083.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/*[1][self::non-match]/item = "b"</assert>
+            <assert>/out/*[1][self::non-match]/pos = "1"</assert>
+            <assert>/out/*[1][self::non-match]/size = "6"</assert>
+            <assert>/out/*[2][self::match]/item = "a"</assert>
+            <assert>/out/*[2][self::match]/pos = "2"</assert>
+            <assert>/out/*[2][self::match]/size = "6"</assert>
+            <assert>/out/*[3][self::non-match]/item = "n"</assert>
+            <assert>/out/*[3][self::non-match]/pos = "3"</assert>
+            <assert>/out/*[3][self::non-match]/size = "6"</assert>
+            <assert>/out/*[4][self::match]/item = "a"</assert>
+            <assert>/out/*[4][self::match]/pos = "4"</assert>
+            <assert>/out/*[4][self::match]/size = "6"</assert>
+            <assert>/out/*[5][self::non-match]/item = "n"</assert>
+            <assert>/out/*[5][self::non-match]/pos = "5"</assert>
+            <assert>/out/*[5][self::non-match]/size = "6"</assert>
+            <assert>/out/*[6][self::match]/item = "a"</assert>
+            <assert>/out/*[6][self::match]/pos = "6"</assert>
+            <assert>/out/*[6][self::match]/size = "6"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-084">
+      <description>
+         Test with regex-group() inside matching-substring with an argument coming from a node. 
+         Absolute path must be used to reach the node.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="analyze-string-084.xml" uri="analyze-string-084.xml">
+            <description>Source file used both as initial context node and as argument to doc()</description>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-084.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><p>this</p></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="analyze-string-085">
+      <description>context item within matching-substring is not a node</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="regex905"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-085.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-090a">
+      <description>regex matching zero-length string</description>
+      <created by="Michael Kay" on="2013-05-03"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-090.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE1150"/>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-090b">
+      <description>regex matching zero-length string</description>
+      <created by="Michael Kay" on="2013-05-03"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-090.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/a[@nr='2'] = '&#xa;Heading&#xa;'</assert>
+           <assert>/out/a[@nr='4'] = '&#xa;above is an empty line&#xa;'</assert>
+           <assert>/out/a[@nr='6'] = '&#xa;above is a line of three spaces&#xa;'</assert>
+           <assert>/out/a[@nr='8'] = '&#xa;above is a line containing a tab&#xa;'</assert>
+           <assert>count(/out/a) = 4</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-091a">
+      <description>regex matching zero-length string</description>
+      <created by="Michael Kay" on="2013-05-03"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-091.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE1150"/>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-091b">
+      <description>regex matching zero-length string</description>
+      <created by="Michael Kay" on="2013-05-03"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-091.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out='a b c d e f'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-092">
+      <description>regex matching zero-length string</description>
+      <created by="Michael Kay" on="2013-05-03"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-092.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/col[1]='Ten Thousand'</assert>
+            <assert>/out/col[2]='10000'</assert>
+            <assert>/out/col[3]=''</assert>
+            <assert>/out/col[4]='10,000'</assert>
+            <assert>/out/col[5]='It''s "10 Grand", mister'</assert>
+            <assert>/out/col[6]='10K'</assert>
+            <assert>count(/out/col) = 6</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-093">
+      <description>matching-substring and non-matching-substring in wrong order</description>
+      <created by="Michael Kay" on="2013-12-09"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-093.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-094">
+      <description>xsl:fallback must come last</description>
+      <created by="Michael Kay" on="2013-12-09"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-094.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-095">
+      <description>Test of regex-group(), Saxon bug 2487 from Tomos Hillman</description>
+      <created by="Michael Kay" on="2013-12-09"/>
+      <modified by="Michael Kay" on="2019-12-09" change="Drop xsl:output method=text"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-095.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/one = ""</assert>
+            <assert>/out/two = ""</assert>
+            <assert>/out/three = "1949"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-096">
+      <description>Test of regex-group(), Saxon bug 2487 from Gerrit Imsieke</description>
+      <created by="Michael Kay" on="2016-09-21"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-096.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '1:UV_STD_ 2:00000_ 3:00000 4:39000'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-097">
+      <description>Test of analyze-string with non-capturing groups, Saxon bug 3211 from Henry Thompson</description>
+      <created by="Michael Kay" on="2017-04-27"/>
+      <modified by="Michael Kay" on="2019-12-09" change="The regex is invalid: it contains an unescaped right curly brace at position 19 - '(\{[^}]+})'. 
+         Right curly brace in XSD regex syntax is not a NormalChar so it must be backslash-escaped. A corrected version of the test is at analyze-string-097a"/>
+      <modified by="Michael Kay" on="2020-07-03" change="Corrected error code, FORX0002 not FORX0001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-097.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FORX0002"/>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-097a">
+      <description>Test of analyze-string with non-capturing groups, Saxon bug 3211 from Henry Thompson. 
+          Corrected version of test analyze-string-097</description>
+      <created by="Michael Kay" on="2019-12-09"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-097a.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<analyze-string-result xmlns="http://www.w3.org/2005/xpath-functions"
+            ><match><group nr="4">SUM(</group></match
+            ><match><group nr="8">A1</group></match
+            ><match><group nr="10">:</group></match
+            ><match><group nr="8">B2</group></match
+            ><match><group nr="5">)</group></match
+            ></analyze-string-result>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-098">
+      <description>Test of analyze-string where the same regex is used repeatedly: designed to exercise possible optimizations</description>
+      <created by="Michael Kay" on="2018-06-08"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-098.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>every $c in //row/cell[1] satisfies $c = 'a'</assert>
+            <assert>every $c in //row/cell[7] satisfies $c = 'vw'</assert>
+            <assert>deep-equal(data(//row/cell[3]), ('de', 'ss', 'ff', 'hl', 'mm', 'oo'))</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-099">
+      <description>A test for non-greedy matching</description>
+      <created by="Michael Kay after Vladimir Nestorovsky" on="2018-09-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-099.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/match) = 2</assert>
+            <assert>/out/match[1] = '"a"'</assert>
+            <assert>/out/match[2] = '"b"'</assert> 
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="analyze-string-100">
+      <description>Test of regex-group() on rhs of "!", Saxon-JS bug 4629</description>
+      <created by="Michael Kay" on="2020-07-03"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="analyze-string-100.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/one = ""</assert>
+            <assert>/out/two = ""</assert>
+            <assert>/out/three = "1949"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+</test-set>

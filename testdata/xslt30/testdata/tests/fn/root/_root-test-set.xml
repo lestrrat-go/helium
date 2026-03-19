@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="root">
+   <description>Tests root</description>
+   <environment name="root-01">
+      <source role="." file="root-01.xml"/>
+   </environment>
+   <environment name="root-02">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="root-03">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="root-04">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <a/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="root-05">
+      <source role=".">
+         <content><![CDATA[ 
+<doc/>]]></content>
+      </source>
+      <source file="extradoc.xml" uri="extradoc.xml"/>
+   </environment>
+   <environment name="root-06">
+      <source role="." file="root-06.xml"/>
+   </environment>
+
+   <test-case name="root-0101">
+      <description>Function is invoked with a element node.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="root-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="root-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+	hellonested1nestednestednestednested1hello again
+	var with spaces35  	
+	abcdhellohello againABCB
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="root-0102">
+      <description>Function is invoked with a document node.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="root-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="root-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="root-0102.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="root-0103">
+      <description>Function is invoked with element node in variable.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="root-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="root-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="root-0104">
+      <description>Function is invoked with an XML document that contains just a single empty element tag that has no attributes..</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="root-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="root-0104.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="root-0104.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="root-0201">
+      <description>Function is invoked with non-existant element node.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="root-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="root-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="root-0301">
+      <description>Show that root(node) in source tree gets the real root node</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="root-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="root-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Success</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="root-0401">
+      <description>Show that root(node) can be applied to the root node, which is a document node</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="root-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="root-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Success</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="root-0501">
+      <description>Apply root(node) to a temporary tree</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="root-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="root-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Success</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="root-0502">
+      <description>Apply root(node) to a document opened via document()</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="root-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="root-0502.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Success</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="root-0601">
+      <description>Function is invoked with node(), element(), attribute() and comment() as arguments</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="root-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="root-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="root-0601.out"/>
+      </result>
+   </test-case>
+</test-set>

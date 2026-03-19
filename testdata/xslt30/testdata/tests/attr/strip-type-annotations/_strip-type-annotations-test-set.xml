@@ -1,0 +1,609 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="strip-type-annotations">
+   <description>Tests strip-type-annotations</description>
+   <environment name="striptype001">
+      <source role="." file="striptype001.xml" validation="strict"/>
+      <schema role="source-reference" file="varietyOfTypes.xsd" xsd-version="1.0"/>
+   </environment>
+   <environment name="striptype003">
+      <source role="." file="striptype003.xml" validation="strict"/>
+      <schema role="source-reference"
+              file="allBuiltinTypes.xsd"
+              xsd-version="1.0"/>
+   </environment>
+   <environment name="striptype004">
+      <source role="." file="striptype004.xml" validation="strict"/>
+      <schema role="source-reference" file="varietyOfTypes.xsd" xsd-version="1.0"/>
+   </environment>
+   
+   
+   <environment name="striptype011">
+      <source role="." file="striptype011.xml" validation="strict"/>
+      <schema role="source-reference"
+              file="allBuiltinTypes.xsd"
+              xsd-version="1.0"/>
+   </environment>
+   
+   <environment name="striptype026">
+      <source role="." file="striptype026.xml"/>
+   </environment>
+   
+
+   <test-case name="strip-type-annotations-001">
+      <description>Test with xsl:stylesheet, no @input-type-annotations. Show that type annotations for input data are preserved.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="striptype001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-001.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-002">
+      <description>Test with xsl:stylesheet and @input-type-annotations="unspecified". Show that type annotations for input data are preserved.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="striptype001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-002.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-003">
+      <description>
+         Test that type annotations from the initial source tree are retained if imported stylesheet has 
+         @input-type-annotations="preserve". The primary stylesheet has @input-type-annotations="unspecified".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="label included stylesheet module as secondary"/>
+      <environment ref="striptype001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-003.xsl"/>
+         <stylesheet file="import_preserve.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>every $e in /out/*/* satisfies $e='truefalse'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-004">
+      <description>
+         Test that type annotations from the initial source tree are retained if an included stylesheet 
+         has @input-type-annotations="preserve". The primary stylesheet has @input-type-annotations="unspecified".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="label included stylesheet module as secondary"/>
+      <environment ref="striptype001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-004.xsl"/>
+         <stylesheet file="import_preserve.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>every $e in /out/*/* satisfies $e='truefalse'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-005">
+      <description>
+         Test that type annotations are stripped from the initial source tree if imported stylesheet 
+         has @input-type-annotations="strip". The primary stylesheet has @input-type-annotations= "unspecified".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="label included stylesheet module as secondary"/>
+      <environment ref="striptype001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-005.xsl"/>
+         <stylesheet file="import_strip.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>every $e in /out/*/* satisfies $e='falsetrue'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-006">
+      <description>
+         Test that type annotations are stripped from the initial source tree if an included stylesheet 
+         has @input-type-annotations="strip". The primary stylesheet has @input-type-annotations="unspecified".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="label included stylesheet module as secondary"/>
+      <environment ref="striptype001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-006.xsl"/>
+         <stylesheet file="import_strip.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>every $e in /out/*/* satisfies $e='falsetrue'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-007">
+      <description>
+         Test that type annotations from the initial source tree are retained if imported stylesheet has 
+         @input-type-annotations="unspecified". The primary stylesheet has @input-type-annotations="preserve".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="label included stylesheet module as secondary"/>
+      <environment ref="striptype001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-007.xsl"/>
+         <stylesheet file="import_unspecified.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>every $e in /out/*/* satisfies $e='truefalse'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-008">
+      <description>
+         Test that type annotations from the initial source tree are retained if an included stylesheet 
+         has @input-type-annotations="unspecified". The primary stylesheet has @input-type-annotations="preserve".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="label included stylesheet module as secondary"/>
+      <environment ref="striptype001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-008.xsl"/>
+         <stylesheet file="import_unspecified.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>every $e in /out/*/* satisfies $e='truefalse'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-009">
+      <description>
+         Test that type annotations from the initial source tree are retained if imported stylesheet 
+         has @input-type-annotations="unspecified". The primary stylesheet has @input-type-annotations="strip".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="label included stylesheet module as secondary"/>
+      <environment ref="striptype001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-009.xsl"/>
+         <stylesheet file="import_unspecified.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>every $e in /out/*/* satisfies $e='falsetrue'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-010">
+      <description>
+         Test that type annotations from the initial source tree are retained if an included stylesheet 
+         has @input-type-annotations="unspecified". The primary stylesheet has @input-type-annotations="strip".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="label included stylesheet module as secondary"/>
+      <environment ref="striptype001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-010.xsl"/>
+         <stylesheet file="import_unspecified.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>every $e in /out/*/* satisfies $e='falsetrue'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-011">
+      <description>
+         Test that type annotations are stripped from the initial source tree if an imported, 
+         an included and the primary stylesheet have @input-type-annotations="strip".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="label included stylesheet module as secondary"/>
+      <environment ref="striptype001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-011.xsl"/>
+         <stylesheet file="import_strip.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>every $e in /out/*/* satisfies $e='falsetrue'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-012">
+      <description>
+         Test with xsl:stylesheet and @input-type-annotations="preserve". Show that all element and 
+         attribute nodes preserve their type annotations. All nodes are of built-in schema types if validated.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="striptype003"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-012.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e='truetruefalsefalse'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-013">
+      <description>
+         Show that when @input-type-annotations="strip" the type of all element nodes is changed 
+         to xs:untyped. Only built-in schema types are used.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="striptype003"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-013.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e='falsefalsetruetrue'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-014">
+      <description
+         >Test with xsl:stylesheet and @input-type-annotations="preserve". 
+         Show that all element and attribute nodes preserve their type annotations. 
+         All nodes are of user-defined schema types.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="striptype004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-014.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/E1='truefalse'</assert>
+            <assert>/out/E2='truetruefalsefalse'</assert>
+            <assert>/out/E3='truefalsefalse'</assert>
+            <assert>/out/E4='truetruefalsefalse'</assert>
+            <assert>/out/E5='truefalsefalse'</assert>
+            <assert>/out/E6='truefalsefalse'</assert>
+            <assert>/out/E7='truefalse'</assert>
+            <assert>/out/E8='truetruefalsefalse'</assert>
+            <assert>/out/E9='truetruefalse'</assert>
+            <assert>/out/E10='truetruefalse'</assert>
+            <assert>/out/E11='truefalse'</assert>
+            <assert>/out/E12='truefalse'</assert>
+            <assert>/out/E13='truetruefalsefalse'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-015">
+      <description>
+         Show that when @input-type-annotations="strip" the type of all element nodes is changed to xs:untyped. 
+         User-defined simple and complex schema types are used.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="striptype004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-015.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/E1='falsetrue'</assert>
+            <assert>/out/E2='falsefalsetruetrue'</assert>
+            <assert>/out/E3='falsetruetrue'</assert>
+            <assert>/out/E4='falsetruetrue'</assert>
+            <assert>/out/E5='falsetrue'</assert>
+            <assert>/out/E6='falsefalsetruetrue'</assert>
+            <assert>/out/E7='falsetruetrue'</assert>
+            <assert>/out/E8='falsetruetrue'</assert>
+            <assert>/out/E9='falsetrue'</assert>
+            <assert>/out/E10='falsetrue'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-016">
+      <description>
+         Show that when @input-type-annotations="strip" the type of all attribute nodes is changed to xs:untypedAtomic. 
+         User-defined simple schema types are used.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="striptype004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><E1>falsefalsetruetrue</E1><E2>falsetruetrue</E2><E3>falsefalsetruetrue</E3><E4>falsetruetrue</E4><E5>falsefalsetruetrue</E5></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-017">
+      <description>
+         Show that type annotations in temporary trees or element and attribute nodes constructed in the stylesheet 
+         are not affected by @input-type-annotations="strip".
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+         <schema role="stylesheet-import" file="varietyOfTypes.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<output><out1>truefalsetruefalse</out1><out2>truefalsetruefalse</out2><out3 var2="21">truefalse</out3></output>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-018">
+      <description>
+         Show that when @input-type-annotations="strip" the type of all attribute nodes is changed to xs:untypedAtomic. 
+         Only built-in schema types are used.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="striptype008.xml"/>
+         <schema role="source-reference" file="allBuiltinTypes.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-018.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e='falsefalsetruetrue'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-019">
+      <description>
+         Show that when @input-type-annotations="strip", the typed value of a node is changed to be equal 
+         to its string value and the type annotation of the value is changed to xs:untypedAtomic.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="striptype011"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>003|003|true|false|true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-020">
+      <description>
+         Show that when @input-type-annotations="preserve", the typed value of the integer 003 is different 
+         to its string value.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="striptype011"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3|003|true|false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-021">
+      <description>
+         Show that when @input-type-annotations="strip", is-id and is-idref properties of element and 
+         attribute nodes are preserved.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-12-20" change="Added validation attribute"/>
+      <environment>
+         <source role="." file="striptype012.xml" validation="strict"/>
+         <schema role="source-reference" file="id-idref-types.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><E0>false</E0><E1>false</E1><E2>false</E2><E3>false</E3><E4>false</E4><E5>id1</E5><E6>id1</E6><E7>id2</E7><E8>ref refs</E8><E9>refs</E9></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-022">
+      <description>Show that when @input-type-annotations="strip", is-nilled property of element nodes is set to false.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="striptype013.xml"/>
+         <schema role="source-reference" file="varietyOfTypes.xsd" xsd-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-023">
+      <description>Test with xsl:stylesheet and @input-type-annotations="unspecified". Input file is not validated.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="striptype026"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-023.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e='falsetruetrue'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-024">
+      <description>Test with xsl:stylesheet and @input-type-annotations="preserve". Input file is not validated.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="striptype026"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-024.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e='falsetruetrue'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-025">
+      <description>Test with xsl:stylesheet and @input-type-annotations="strip". Input file is not validated.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="striptype026"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-025.xsl"/>
+      </test>
+      <result>
+         <assert>every $e in /out/* satisfies $e='falsetruetrue'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="strip-type-annotations-026">
+      <description>
+         Show that when @input-type-annotations="strip", is-id and is-idref properties of element and attribute 
+         nodes are preserved when input is validated againt a DTD.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2021-06-14" change="add DTD dependency"/>
+      <environment>
+         <source role="." file="striptype038.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><E1>false</E1><E2>false</E2><E3>false</E3><E4>false</E4><E5>id1</E5><E7>id2</E7><E8>ref refs</E8><E9>refs</E9></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="strip-type-annotations-027">
+      <description>
+         Test that type annotations from the initial source tree are retained if an included stylesheet 
+         has @input-type-annotations="unspecified". The primary stylesheet has @input-type-annotations="strip".
+         The outermost element is xsl:package rather than xsl:transform.
+      </description>
+      <created by="Michael Kay" on="2017-02-04"/>
+      <modified by="Michael Kay" on="2018-01-11" change="label included stylesheet module as secondary"/>
+      <environment ref="striptype001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+         <year_component_values value="support negative year"/>
+      </dependencies>
+      <test>
+         <stylesheet file="strip-type-annotations-027.xsl"/>
+         <stylesheet file="import_unspecified.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>every $e in /out/*/* satisfies $e='falsetrue'</assert>
+      </result>
+   </test-case>
+</test-set>

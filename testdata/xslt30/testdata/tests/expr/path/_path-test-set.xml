@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="path">
+   <description>Tests path</description>
+   <environment name="locationPath001">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <child1>Text from child1<child2></child2></child1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="locationPath002">
+      <source role="." file="locationPath002.xml"/>
+   </environment>
+   <environment name="locationPath004">
+      <source role="." file="locationPath004.xml"/>
+   </environment>
+   <environment name="locationPath005">
+      <source role="." file="locationPath005.xml"/>
+   </environment>
+   <environment name="locationPath006">
+      <source role="." file="locationPath006.xml"/>
+   </environment>
+   <environment name="locationPath007">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <element1>Wrong node selected!!</element1>
+  <element1>Test executed successfully!!</element1>
+  <element1>Wrong node selected!!</element1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="locationPath010">
+      <source role="." file="locationPath010.xml"/>
+   </environment>
+
+   <test-case name="path-001">
+      <description>Purpose: Test a predicate that uses the "child" axes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="locationPath001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="path-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Text from child1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="path-002">
+      <description>Purpose: Test a predicate that uses the "ancestor" axes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="locationPath002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="path-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Text from child2 of second element (corect execution!!)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="path-003">
+      <description>Purpose: Test a predicate that uses the "ancestor-or-self" axes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="locationPath002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="path-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Text from child2 of second element (corect execution!!)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="path-004">
+      <description>Purpose: Test a predicate that uses the "attribute" axes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="locationPath004"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="path-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Text from child2 of second element (corect execution!!)</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="path-005">
+      <description>Purpose: Test a predicate that uses the "descendant-or-self" axes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="locationPath005"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="path-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Text from first element (correct execution)!!!
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="path-006">
+      <description>Purpose: Test a predicate that uses the "parent" axes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="locationPath006"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="path-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="path-007">
+      <description>Purpose: Test a predicate that uses elaborate complex expressions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="locationPath007"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="path-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="path-008">
+      <description>Purpose: Test a predicate that uses functions inside a predicate.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="locationPath007"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="path-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="path-009">
+      <description>Purpose: Test a predicate that only has a function call.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="locationPath007"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="path-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test executed successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="path-010">
+      <description>Purpose: Test a matching patttern with a complex expression.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="locationPath010"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="path-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test Executed Successfully!!</out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

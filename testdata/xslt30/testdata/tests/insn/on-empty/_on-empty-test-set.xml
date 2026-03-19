@@ -1,0 +1,1017 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="on-empty">
+   <description>
+      Tests sequence constructors containing xsl:on-empty instructions
+   </description>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+   </dependencies>
+   
+
+   
+   <environment name="on-empty-A">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<item>a</item>
+	<item>b</item>
+	<item>c</item>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+
+   <test-case name="on-empty-001">
+      <description>Simple use of xsl:on-empty with no other instructions</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-empty-A"/>
+      <test>
+         <stylesheet file="on-empty-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>23</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-002">
+      <description>Simple use of xsl:on-empty with other instructions yielding empty</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-empty-A"/>
+      <test>
+         <stylesheet file="on-empty-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>23</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-003">
+      <description>Simple use of xsl:on-empty before other instructions yielding empty</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <modified by="Michael Kay" on="2015-08-16" change="bug 28888 makes this an error"/>
+      <environment ref="on-empty-A"/>
+      <test>
+         <stylesheet file="on-empty-003.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-004">
+      <description>Simple use of xsl:on-empty with other instructions yielding non-empty</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <modified by="Michael Kay" on="2015-08-16" change="bug 28888 makes this an error"/>
+      <environment ref="on-empty-A"/>
+      <test>
+         <stylesheet file="on-empty-004.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-005">
+      <description>Simple use of xsl:on-empty with other instructions yielding non-empty</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <modified by="Michael Kay" on="2015-08-24" change="strip whitespace to give cleaner results comparison"/>
+      <environment ref="on-empty-A"/>
+      <test>
+         <stylesheet file="on-empty-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><doc><item>a</item><item>b</item><item>c</item></doc></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-006">
+      <description>xsl:on-empty at root level</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <modified by="Michael Kay" on="2015-08-16" change="modified so it's not an error under bug 28888"/>
+      <environment ref="on-empty-A"/>
+      <test>
+         <stylesheet file="on-empty-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>21 23</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-007">
+      <description>xsl:on-empty followed by significant text nodes</description>
+      <created by="Michael Kay" on="2015-08-16"/>
+      <environment ref="on-empty-A"/>
+      <test>
+         <stylesheet file="on-empty-007.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-008">
+      <description>Stereotypical use case for xsl:on-empty</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-empty-A"/>
+      <test>
+         <stylesheet file="on-empty-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><p>There are no things</p></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-009">
+      <description>Stereotypical use case for xsl:on-empty</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-empty-A"/>
+      <test>
+         <stylesheet file="on-empty-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>itemitemitem</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-010">
+      <description>Use xsl:on-empty with xsl:sort</description>
+      <created by="Michael Kay" on="2014-12-22"/>
+      <environment ref="on-empty-A"/>
+      <test>
+         <stylesheet file="on-empty-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>apple apple apple</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-011">
+      <description>Zero length text nodes count as empty (bug 28888)</description>
+      <created by="Michael Kay" on="2015-08-16"/>
+      <environment ref="on-empty-A"/>
+      <test>
+         <stylesheet file="on-empty-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>apple</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-012">
+      <description>Empty document nodes count as empty (bug 28888)</description>
+      <created by="Michael Kay" on="2015-08-16"/>
+      <environment ref="on-empty-A"/>
+      <test>
+         <stylesheet file="on-empty-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>apple</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-100">
+      <description>Basic test with on-empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <test>
+         <stylesheet file="on-empty-100.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty>we are the champions!</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-101">
+      <description>Basic test with on-empty with numeric</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty>42</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-101a">
+      <description>Basic test with on-empty with sequence</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-101a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty>1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-101b">
+      <description>Basic test with on-empty with base64</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-101b.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty>dkaieKDsiws85eks</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-101c">
+      <description>Basic test with on-empty with element</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-101c.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty><this><is><empty/></is></this></empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-101d">
+      <description>Basic test with on-empty with document</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-101d.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty><document/></empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-102">
+      <description>Basic test with on-empty with numeric</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty>42</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-102a">
+      <description>Basic test with on-empty with sequence</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-102a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty>1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-102b">
+      <description>Basic test with on-empty with base64</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-102b.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty>dkaieKDsiws85eks</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-102c">
+      <description>Basic test with on-empty with element</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-102c.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty><this><is><empty/></is></this></empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-102d">
+      <description>Basic test with on-empty with document</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-102d.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty><document/></empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-103">
+      <description>Basic test with on-empty with numeric, not empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty>not so empty</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-103a">
+      <description>Basic test with on-empty with sequence, not empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-103a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty>not so empty</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-103b">
+      <description>Basic test with on-empty with base64, not empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-103b.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty>not so empty</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-103c">
+      <description>Basic test with on-empty with element, not empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-103c.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty>not so empty</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-103d">
+      <description>Basic test with on-empty with document, not empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-103d.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty>not so empty</empty>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-104">
+      <description>Basic test with on-empty with numeric and significant space</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty> </empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-104a">
+      <description>Basic test with on-empty with sequence and significant space</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-104a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty> </empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-104b">
+      <description>Basic test with on-empty with base64 and significant space</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-104b.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty> </empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-104c">
+      <description>Basic test with on-empty with element and significant space</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-104c.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty> </empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-104d">
+      <description>Basic test with on-empty with document and significant space</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-104d.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty> </empty>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-105">
+      <description>Basic test with on-empty with numeric and three empty comments, not considered empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty><!----><!----><!----></empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-105a">
+      <description>Basic test with on-empty with sequence and three empty comments, not considered empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-105a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty><!----><!----><!----></empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-105b">
+      <description>Basic test with on-empty with base64 and three empty comments, not considered empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-105b.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty><!----><!----><!----></empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-105c">
+      <description>Basic test with on-empty with element and three empty comments, not considered empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-105c.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty><!----><!----><!----></empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-105d">
+      <description>Basic test with on-empty with document and three empty comments, not considered empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-105d.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty><!----><!----><!----></empty>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-106">
+      <description>Basic test with on-empty with numeric and an attribute constructor canceling making the content non-empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-106a">
+      <description>Basic test with on-empty with sequence and an attribute constructor canceling making the content non-empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-106a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-106b">
+      <description>Basic test with on-empty with base64 and an attribute constructor canceling making the content non-empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-106b.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-106c">
+      <description>Basic test with on-empty with element and an attribute constructor canceling making the content non-empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-106c.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-106d">
+      <description>Basic test with on-empty with document and an attribute constructor canceling making the content non-empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-106d.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-106e">
+      <description>As -106, but the attribute is generated conditionally at run-time to thwart compile-time optimization</description>
+      <created by="Michael Kay" on="2021-09-17"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-106e.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-107">
+      <description>Basic test with on-empty with numeric and a namespace</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty xmlns:test="http://testme"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-107a">
+      <description>Basic test with on-empty with sequence and a namespace</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-107a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty xmlns:test="http://testme"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-107b">
+      <description>Basic test with on-empty with base64 and a namespace</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-107b.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty xmlns:test="http://testme"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-107c">
+      <description>Basic test with on-empty with element and a namespace</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-107c.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty xmlns:test="http://testme"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-107d">
+      <description>Basic test with on-empty with document and a namespace</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-107d.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty xmlns:test="http://testme"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-107e">
+      <description>As -106, but the namespace is generated conditionally at run-time to thwart compile-time optimization</description>
+      <created by="Michael Kay" on="2021-09-17"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-107d.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty xmlns:test="http://testme"/>]]></assert-xml>
+      </result>
+   </test-case>  
+   
+   <test-case name="on-empty-108">
+      <description>Basic test with on-empty with numeric and a use-attributes, leaving the content empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two">42</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-108a">
+      <description>Basic test with on-empty with sequence and a use-attributes, leaving the content empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-108a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two">1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-108b">
+      <description>Basic test with on-empty with base64 and a use-attributes, leaving the content empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-108b.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two">dkaieKDsiws85eks</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-108c">
+      <description>Basic test with on-empty with element and a use-attributes, leaving the content empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-108c.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two"><this><is><empty/></is></this></empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-108d">
+      <description>Basic test with on-empty with document and a use-attributes, leaving the content empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-108d.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two"><document/></empty>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-109">
+      <description>Basic test with on-empty with numeric and an attribute, leaving the content empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-109.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two">42</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-109a">
+      <description>Basic test with on-empty with sequence and an attribute, leaving the content empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-109a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two">1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-109b">
+      <description>Basic test with on-empty with base64 and an attribute, leaving the content empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-109b.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two">dkaieKDsiws85eks</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-109c">
+      <description>Basic test with on-empty with element and an attribute, leaving the content empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-109c.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two"><this><is><empty/></is></this></empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-109d">
+      <description>Basic test with on-empty with document and an attribute, leaving the content empty</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-109d.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty what-is="fourty-two"><document/></empty>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-110">
+      <description>Test with on-empty, nested and significant space</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-110.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty><empty><empty>42</empty></empty></empty>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-111">
+      <description>Test with on-empty, nested with variables and significant space</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-111.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty><empty>42</empty></empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-112">
+      <description>Test with on-empty, combined with for-each</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <modified by="Michael Kay" on="2016-02-17" change="fix bug 29454 (change expected results)"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-112.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<empty>123456789|111213141516171819|212223242526272829|313233343536373839|414243444546474849|515253545556575859|616263646566676869|717273747576777879|818283848586878889|919293949596979899|</empty>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-113a">
+      <description>Test with on-empty, combined with for-each</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <modified by="Michael Kay" on="2017-10-08" change="produce well-formed document to eliminate complications"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-113a.xsl"/>
+      </test>
+      <result>
+         <assert-string-value>START-->1|3|5|7|9|11|13|15|17|19|21|23|25|27|29|31|33|35|37|39|41|43|45|47|49|51|53|55|57|59|61|63|65|67|69|71|73|75|77|79|81|83|85|87|89|91|93|95|97|99&lt;-- END</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-113b">
+      <description>Test with on-empty, combined with for-each, subtle variant in spaces generated from the -a version of the test</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <modified by="Michael Kay" on="2017-10-08" change="produce well-formed document to eliminate complications"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-113b.xsl"/>
+      </test>
+      <result>
+         <assert-string-value>START-->1 |3 |5 |7 |9 |11 |13 |15 |17 |19 |21 |23 |25 |27 |29 |31 |33 |35 |37 |39 |41 |43 |45 |47 |49 |51 |53 |55 |57 |59 |61 |63 |65 |67 |69 |71 |73 |75 |77 |79 |81 |83 |85 |87 |89 |91 |93 |95 |97 |99&lt;-- END</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-114a">
+      <description>Test with on-empty, combined with for-each and on-non-empty to test subtle differences in spaces generated</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-114a.xsl"/>
+      </test>
+      <result>
+         <assert-string-value>START-->1 | 3 | 5 | 7 | 9 | 11 | 13 | 15 | 17 | 19 | 21 | 23 | 25 | 27 | 29 | 31 | 33 | 35 | 37 | 39 | 41 | 43 | 45 | 47 | 49 | 51 | 53 | 55 | 57 | 59 | 61 | 63 | 65 | 67 | 69 | 71 | 73 | 75 | 77 | 79 | 81 | 83 | 85 | 87 | 89 | 91 | 93 | 95 | 97 | 99 &lt;-- END</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-114b">
+      <description>Test with on-empty, combined with for-each and on-non-empty to test subtle differences in spaces generated, combare with -a version</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-114b.xsl"/>
+      </test>
+      <result>
+         <assert-string-value>START-->1  |3  |5  |7  |9  |11  |13  |15  |17  |19  |21  |23  |25  |27  |29  |31  |33  |35  |37  |39  |41  |43  |45  |47  |49  |51  |53  |55  |57  |59  |61  |63  |65  |67  |69  |71  |73  |75  |77  |79  |81  |83  |85  |87  |89  |91  |93  |95  |97  |99 &lt;-- END</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="on-empty-115a">
+      <description>Test with on-empty, nested with variables and significant space in simple content seqtor: xsl:comment</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <modified by="Michael Kay" on="2017-10-08" change="produce well-formed document to eliminate complications"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-115a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><!-- --></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-115b">
+      <description>Test with on-empty, nested with variables and significant space in simple content seqtor: xsl:namespace</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <modified by="Michael Kay" on="2022-06-19" change="Alternative results. See https://github.com/w3c/xslt30-test/issues/60"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-115b.xsl"/>
+      </test>
+      <result>
+         <assert>$result/child::foo</assert>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-115c">
+      <description>Test with on-empty, nested with variables and significant space in simple content seqtor: xsl:attribute</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-115c.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<foo bar=" "/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-115d">
+      <description>Test with on-empty, nested with variables and significant space in simple content seqtor: xsl:processing-instruction</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <modified by="Michael Kay" on="2017-10-08" change="produce well-formed document to eliminate complications"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-115d.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><?foo ?></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="on-empty-115e">
+      <description>Test with on-empty, nested with variables and significant space in simple content seqtor: xsl:value-of (text node)</description>
+      <created by="Abel Braaksma" on="2016-01-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="on-empty-115e.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<foo> </foo>]]></assert-xml>
+      </result>
+   </test-case>
+
+</test-set>

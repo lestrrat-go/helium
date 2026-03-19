@@ -1,0 +1,108 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="streaming-fallback">
+   <description>
+      Tests stylesheets that are not streamable, but where streaming fallback is requested.
+      See §19.10: these tests are designed for a streaming processor that is configured to fall back
+      to non-streaming mode if the stylesheet is found to be non-streamable. The tests should also work
+      if run on a non-streaming processor.
+   </description>
+   <keywords>streaming streamability-analysis</keywords>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+      <feature value="streaming-fallback"/>
+   </dependencies>
+   
+   <test-case name="streaming-fallback-001">
+      <description>Match pattern is not motionless (external invocation)</description>
+      <created by="Michael Kay" on="2018-01-08"/>
+      <environment>
+         <source role="." file="../../strm/si-value-of/si-value-of-100.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="../../strm/si-value-of/si-value-of-101.xsl"/>
+      </test>
+      <result>
+         <assert>starts-with(/out, '1,"foo 1, ""quoted 1"", bar 1"')</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="streaming-fallback-002">
+      <description>Accumulator is not motionless (xsl:source-document invocation)</description>
+      <created by="Michael Kay" on="2018-01-08"/>
+      <test>
+         <stylesheet file="../../insn/source-document/stream-204.xsl"/>
+      </test>
+      <result>
+         <assert>/score-partwise/identification/encoding</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="streaming-fallback-003">
+      <description>Invalid absorbing function - not grounded</description>
+      <created by="Michael Kay" on="2018-01-08"/>
+      <test>
+         <stylesheet file="../../strm/su-absorbing/su-absorbing-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>count(/out/WEIGHT) = 6</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="streaming-fallback-004">
+      <description>
+         Initial-value expression is not motionless. Error case when streaming.
+      </description>
+      <created by="Michael Kay" on="2018-01-08"/>
+      <modified by="Michael Kay" on="2021-03-16" 
+         change="Test failed because the result of select='//x' is an empty sequence, which
+                 is not permitted by the @as attribute on accumulator name='count'"/>
+      <environment>
+         <source role="." file="../../decl/accumulator/accumulator-004.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="../../decl/accumulator/accumulator-007.xsl"/>
+         <param name="initial-count" as="xs:string" select="'xs:integer(xs:decimal(//transaction[9]/@amount))'" static="yes"/>
+         <param name="streamable" static="yes" select="'yes'"/>
+      </test>
+      <result>
+         <assert>/result/@min = '-16'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="streaming-fallback-005">
+      <description>xsl:merge test on two heterogeneous files; not streamable because select expression is crawling</description>
+      <created by="Michael Kay" on="2018-01-08"/>
+      <environment>
+         <source role="." file="../../insn/merge/merge001.xml"/>
+         <source file="../../insn/merge/log-file-1.xml" uri="log-file-1.xml"/>
+         <source file="../../insn/merge/log-file-2.xml" uri="log-file-2.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="../../insn/merge/merge-094.xsl"/>
+      </test>
+      <result>
+         <assert>/events/group[5]</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="streaming-fallback-006">
+      <description>xsl:merge test on two heterogeneous files; not streamable because of xsl:merge-source/@sort-before-merge</description>
+      <created by="Michael Kay" on="2018-01-08"/>
+      <environment>
+         <source role="." file="../../insn/merge/merge001.xml"/>
+         <source file="../../insn/merge/log-file-1.xml" uri="log-file-1.xml"/>
+         <source file="../../insn/merge/log-file-2.xml" uri="log-file-2.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="../../insn/merge/merge-095.xsl"/>
+      </test>
+      <result>
+         <assert>/events/group[5]</assert>
+      </result>
+   </test-case>
+
+
+</test-set>

@@ -1,0 +1,2460 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="xml-to-json">
+   <description>xml-to-json() function</description>
+   
+   <environment name="xml-to-json-A">
+      <stylesheet file="xml-to-json-A.xsl"/>
+      <param name="use-xslt-implementation" static="yes" select="false()"/>
+   </environment>
+   
+   <environment name="xml-to-json-B">
+      <stylesheet file="xml-to-json-B.xsl"/>
+      <param name="use-xslt-implementation" static="yes" select="false()"/>
+   </environment>
+   
+   <environment name="xml-to-json-C">
+      <stylesheet file="xml-to-json-C.xsl"/>
+   </environment>
+   
+   <environment name="xml-to-json-D">
+      <stylesheet file="xml-to-json-D.xsl"/>
+   </environment>
+   
+   <environment name="xml-to-json-A2">
+      <stylesheet file="xml-to-json-A.xsl"/>
+      <package uri="http://www.w3.org/2013/XSLT/xml-to-json" role="secondary" file="xml-to-json.xsl"/>
+      <param name="use-xslt-implementation" static="yes" select="true()"/>
+   </environment>
+   
+   <environment name="xml-to-json-B2">
+      <stylesheet file="xml-to-json-B.xsl"/>
+      <package uri="http://www.w3.org/2013/XSLT/xml-to-json" role="secondary" file="xml-to-json.xsl"/>
+      <param name="use-xslt-implementation" static="yes" select="true()"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+   </dependencies>
+   
+   <test-case name="xml-to-json-A001">
+      <description>Test of xml-to-json: simple "null" content</description>
+      <keywords>simple-content fn:xml-to-json fn:json-to-xml json-null</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t001"/>
+      </test>
+      <result>
+         <assert>/t001 = "null"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A002">
+      <description>Test of xml-to-json: simple "true" content</description>
+      <keywords>simple-content fn:xml-to-json fn:json-to-xml json-boolean</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t002"/>
+      </test>
+      <result>
+         <assert>/t002 = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A003">
+      <description>Test of xml-to-json: simple "false" content</description>
+      <keywords>simple-content fn:xml-to-json fn:json-to-xml json-boolean</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t003"/>
+      </test>
+      <result>
+         <assert>/t003 = "false"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A004">
+      <description>Test of xml-to-json: simple numeric content</description>
+      <keywords>simple-content json-numeric fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t004"/>
+      </test>
+      <result>
+         <assert>/t004 = '93.7'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A005">
+      <description>Test of xml-to-json: simple string content</description>
+      <keywords>simple-content json-string fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t005"/>
+      </test>
+      <result>
+         <assert>/t005 = '"London"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A006">
+      <description>Test of xml-to-json: empty string content</description>
+      <keywords>json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t006"/>
+      </test>
+      <result>
+         <assert>/t006 = '""'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A007">
+      <description>Test of xml-to-json: empty array</description>
+      <keywords>json-array fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t007"/>
+      </test>
+      <result>
+         <assert>/t007 = '[]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A008">
+      <description>Test of xml-to-json: singleton array</description>
+      <keywords>json-array fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t008"/>
+      </test>
+      <result>
+         <assert>/t008 = '[34]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A009">
+      <description>Test of xml-to-json: two-member array</description>
+      <keywords>json-array json-boolean fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t009"/>
+      </test>
+      <result>
+         <assert>/t009 = '[true,false]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A010">
+      <description>Test of xml-to-json: 5-member array</description>
+      <keywords>json-array json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t010"/>
+      </test>
+      <result>
+         <assert>/t010 = '["A","B","C","D","E"]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A011">
+      <description>Test of xml-to-json: empty map</description>
+      <keywords>json-map fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t011"/>
+      </test>
+      <result>
+         <assert>/t011 = '{}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A012">
+      <description>Test of xml-to-json: single-entry map</description>
+      <keywords>json-map fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t012"/>
+      </test>
+      <result>
+         <assert>/t012 = '{"A":true}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A013">
+      <description>Test of xml-to-json: five-entry map</description>
+      <keywords>json-map fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t013"/>
+      </test>
+      <result>
+         <assert>/t013 = '{"A":1,"B":2,"C":3,"D":4,"E":5}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A014">
+      <description>Test of xml-to-json: complex map</description>
+      <keywords>json-map complex-content fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t014"/>
+      </test>
+      <result>
+         <assert>/t014 = '{"A":[1,2],"B":[true,false],"C":["Paris","London","Berlin"],"D":[1,true,"on"],"E":[null,null]}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A015">
+      <description>Test of xml-to-json: empty array not the last member of an array</description>
+      <keywords>json-array json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-01"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t015"/>
+      </test>
+      <result>
+         <assert>/t015 = '[[],1]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A016">
+      <description>Test of xml-to-json: empty map not the last member of an array</description>
+      <keywords>json-array json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-01"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t016"/>
+      </test>
+      <result>
+         <assert>/t016 = '[{},1]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A017">
+      <description>Test of xml-to-json: empty map not the last value of a map</description>
+      <keywords>json-map json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-04"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t017"/>
+      </test>
+      <result>
+         <assert>/t017 = '{"A":{},"B":1}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A018">
+      <description>Test of xml-to-json: empty array not the last value of a map</description>
+      <keywords>json-map json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-04"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t018"/>
+      </test>
+      <result>
+         <assert>/t018 = '{"A":[],"B":1}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A019">
+      <description>Test of xml-to-json: valid maps (copy of D-507, different environment)</description>
+      <created by="Michael Kay" on="2022-07-26"/>
+      <environment ref="xml-to-json-A"/>
+      <test>
+         <initial-template name="t019"/>
+      </test>
+      <result>
+         <assert>/t eq '{"\"":"1","\\\"":"0"}'</assert>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="xml-to-json-A2-001">
+      <description>Test of xml-to-json: simple "null" content</description>
+      <keywords>simple-content fn:xml-to-json fn:json-to-xml json-null</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t001"/>
+      </test>
+      <result>
+         <assert>/t001 = "null"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-002">
+      <description>Test of xml-to-json: simple "true" content</description>
+      <keywords>simple-content fn:xml-to-json fn:json-to-xml json-boolean</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t002"/>
+      </test>
+      <result>
+         <assert>/t002 = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-003">
+      <description>Test of xml-to-json: simple "false" content</description>
+      <keywords>simple-content fn:xml-to-json fn:json-to-xml json-boolean</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t003"/>
+      </test>
+      <result>
+         <assert>/t003 = "false"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-004">
+      <description>Test of xml-to-json: simple numeric content</description>
+      <keywords>simple-content json-numeric fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t004"/>
+      </test>
+      <result>
+         <assert>/t004 = '93.7'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-005">
+      <description>Test of xml-to-json: simple string content</description>
+      <keywords>simple-content json-string fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t005"/>
+      </test>
+      <result>
+         <assert>/t005 = '"London"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-006">
+      <description>Test of xml-to-json: empty string content</description>
+      <keywords>json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t006"/>
+      </test>
+      <result>
+         <assert>/t006 = '""'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-007">
+      <description>Test of xml-to-json: empty array</description>
+      <keywords>json-array fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t007"/>
+      </test>
+      <result>
+         <assert>/t007 = '[]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-008">
+      <description>Test of xml-to-json: singleton array</description>
+      <keywords>json-array fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t008"/>
+      </test>
+      <result>
+         <assert>/t008 = '[34]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-009">
+      <description>Test of xml-to-json: two-member array</description>
+      <keywords>json-array json-boolean fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t009"/>
+      </test>
+      <result>
+         <assert>/t009 = '[true,false]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-010">
+      <description>Test of xml-to-json: 5-member array</description>
+      <keywords>json-array json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t010"/>
+      </test>
+      <result>
+         <assert>/t010 = '["A","B","C","D","E"]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-011">
+      <description>Test of xml-to-json: empty map</description>
+      <keywords>json-map fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t011"/>
+      </test>
+      <result>
+         <assert>/t011 = '{}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-012">
+      <description>Test of xml-to-json: single-entry map</description>
+      <keywords>json-map fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t012"/>
+      </test>
+      <result>
+         <assert>/t012 = '{"A":true}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-013">
+      <description>Test of xml-to-json: five-entry map</description>
+      <keywords>json-map fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t013"/>
+      </test>
+      <result>
+         <assert>/t013 = '{"A":1,"B":2,"C":3,"D":4,"E":5}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-014">
+      <description>Test of xml-to-json: complex map</description>
+      <keywords>json-map complex-content fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t014"/>
+      </test>
+      <result>
+         <assert>/t014 = '{"A":[1,2],"B":[true,false],"C":["Paris","London","Berlin"],"D":[1,true,"on"],"E":[null,null]}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-015">
+      <description>Test of xml-to-json: empty array not the last member of an array</description>
+      <keywords>json-array json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-01"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>     
+      <dependencies>
+         <feature value="streaming"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t015"/>
+      </test>
+      <result>
+         <assert>/t015 = '[[],1]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-016">
+      <description>Test of xml-to-json: empty map not the last member of an array</description>
+      <keywords>json-array json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-01"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t016"/>
+      </test>
+      <result>
+         <assert>/t016 = '[{},1]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-017">
+      <description>Test of xml-to-json: empty map not the last value of a map</description>
+      <keywords>json-map json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-04"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t017"/>
+      </test>
+      <result>
+         <assert>/t017 = '{"A":{},"B":1}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-018">
+      <description>Test of xml-to-json: empty array not the last value of a map</description>
+      <keywords>json-map json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-04"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-A2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t018"/>
+      </test>
+      <result>
+         <assert>/t018 = '{"A":[],"B":1}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-A2-019">
+      <description>Test of xml-to-json: valid maps (copy of D-507, different environment)</description>
+      <created by="Michael Kay" on="2022-07-26"/>
+      <environment ref="xml-to-json-A2"/>
+      <test>
+         <initial-template name="t019"/>
+      </test>
+      <result>
+         <assert>/t eq '{"\"":"1","\\\"":"0"}'</assert>
+      </result>
+   </test-case>
+   
+   
+   
+   <test-case name="xml-to-json-B001">
+      <description>Test of xml-to-json: simple "null" content, indented</description>
+      <keywords>simple-content json-null json-indented fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t001"/>
+      </test>
+      <result>
+         <assert>translate(/t001, ' 
+	&#xD;', '') = "null"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B002">
+      <description>Test of xml-to-json: simple "true" content, indented</description>
+      <keywords>simple-content json-boolean json-indented fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t002"/>
+      </test>
+      <result>
+         <assert>translate(/t002, ' 
+	&#xD;', '') = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B003">
+      <description>Test of xml-to-json: simple "false" content, indented</description>
+      <keywords>simple-content json-boolean json-indented fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t003"/>
+      </test>
+      <result>
+         <assert>translate(/t003, ' 
+	&#xD;', '') = "false"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B004">
+      <description>Test of xml-to-json: simple numeric content, indented</description>
+      <keywords>simple-content json-numeric json-indented fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t004"/>
+      </test>
+      <result>
+         <assert>translate(/t004, ' 
+	&#xD;', '') = '93.7'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B005">
+      <description>Test of xml-to-json: simple string content, indented</description>
+      <keywords>json-indented simple-content json-string fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t005"/>
+      </test>
+      <result>
+         <assert>translate(/t005, ' 
+	&#xD;', '') = '"London"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B006">
+      <description>Test of xml-to-json: empty string content, indented</description>
+      <keywords>json-string json-indented simple-content fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t006"/>
+      </test>
+      <result>
+         <assert>translate(/t006, ' 
+	&#xD;', '') = '""'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B007">
+      <description>Test of xml-to-json: empty array, indented</description>
+      <keywords>json-array simple-content json-indented fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t007"/>
+      </test>
+      <result>
+         <assert>translate(/t007, ' 
+	&#xD;', '') = '[]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B008">
+      <description>Test of xml-to-json: singleton array, indented</description>
+      <keywords>json-indented simple-content json-array fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t008"/>
+      </test>
+      <result>
+         <assert>translate(/t008, ' 
+	&#xD;', '') = '[34]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B009">
+      <description>Test of xml-to-json: two-member array, indented</description>
+      <keywords>simple-content json-array json-boolean json-indented fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t009"/>
+      </test>
+      <result>
+         <assert>translate(/t009, ' 
+	&#xD;', '') = '[true,false]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B010">
+      <description>Test of xml-to-json: 5-member array, indented</description>
+      <keywords>json-array json-string json-indented fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t010"/>
+      </test>
+      <result>
+         <assert>translate(/t010, ' 
+	&#xD;', '') = '["A","B","C","D","E"]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B011">
+      <description>Test of xml-to-json: empty map, indented</description>
+      <keywords>json-map json-indented fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t011"/>
+      </test>
+      <result>
+         <assert>translate(/t011, ' 
+	&#xD;', '') = '{}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B012">
+      <description>Test of xml-to-json: single-entry map, indented</description>
+      <keywords>json-map json-indented simple-content fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t012"/>
+      </test>
+      <result>
+         <assert>translate(/t012, ' 
+	&#xD;', '') = '{"A":true}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B013">
+      <description>Test of xml-to-json: five-entry map, indented</description>
+      <keywords>simple-content json-indented json-map fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t013"/>
+      </test>
+      <result>
+         <assert>translate(/t013, ' 
+	&#xD;', '') = '{"A":1,"B":2,"C":3,"D":4,"E":5}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B014">
+      <description>Test of xml-to-json: complex map, indented</description>
+      <keywords>json-map json-indented complex-content fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t014"/>
+      </test>
+      <result>
+         <assert>translate(/t014, ' 
+	&#xD;', '') = '{"A":[1,2],"B":[true,false],"C":["Paris","London","Berlin"],"D":[1,true,"on"],"E":[null,null]}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>  
+   
+   <test-case name="xml-to-json-B015">
+      <description>Test of xml-to-json: empty array not the last member of an array</description>
+      <keywords>json-array json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-01"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t015"/>
+      </test>
+      <result>
+         <assert>translate(/t015, ' 
+            &#xD;', '') = '[[],1]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B016">
+      <description>Test of xml-to-json: empty map not the last member of an array</description>
+      <keywords>json-array json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-01"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t016"/>
+      </test>
+      <result>
+         <assert>translate(/t016, ' 
+            &#xD;', '') = '[{},1]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B017">
+      <description>Test of xml-to-json: empty map not the last value of a map</description>
+      <keywords>json-map json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-04"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t017"/>
+      </test>
+      <result>
+         <assert>translate(/t017, ' 
+            &#xD;', '') = '{"A":{},"B":1}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B018">
+      <description>Test of xml-to-json: empty array not the last value of a map</description>
+      <keywords>json-map json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-04"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="xml-to-json-B"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <initial-template name="t018"/>
+      </test>
+      <result>
+         <assert>translate(/t018, ' 
+            &#xD;', '') = '{"A":[],"B":1}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+   
+   
+   <test-case name="xml-to-json-B2-001">
+      <description>Test of xml-to-json: simple "null" content, indented</description>
+      <keywords>simple-content json-null json-indented fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t001"/>
+      </test>
+      <result>
+         <assert>translate(/t001, ' 
+            &#xD;', '') = "null"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-002">
+      <description>Test of xml-to-json: simple "true" content, indented</description>
+      <keywords>simple-content json-boolean json-indented fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t002"/>
+      </test>
+      <result>
+         <assert>translate(/t002, ' 
+            &#xD;', '') = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-003">
+      <description>Test of xml-to-json: simple "false" content, indented</description>
+      <keywords>simple-content json-boolean json-indented fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t003"/>
+      </test>
+      <result>
+         <assert>translate(/t003, ' 
+            &#xD;', '') = "false"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-004">
+      <description>Test of xml-to-json: simple numeric content, indented</description>
+      <keywords>simple-content json-numeric json-indented fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t004"/>
+      </test>
+      <result>
+         <assert>translate(/t004, ' 
+            &#xD;', '') = '93.7'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-005">
+      <description>Test of xml-to-json: simple string content, indented</description>
+      <keywords>json-indented simple-content json-string fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t005"/>
+      </test>
+      <result>
+         <assert>translate(/t005, ' 
+            &#xD;', '') = '"London"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-006">
+      <description>Test of xml-to-json: empty string content, indented</description>
+      <keywords>json-string json-indented simple-content fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t006"/>
+      </test>
+      <result>
+         <assert>translate(/t006, ' 
+            &#xD;', '') = '""'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-007">
+      <description>Test of xml-to-json: empty array, indented</description>
+      <keywords>json-array simple-content json-indented fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t007"/>
+      </test>
+      <result>
+         <assert>translate(/t007, ' 
+            &#xD;', '') = '[]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-008">
+      <description>Test of xml-to-json: singleton array, indented</description>
+      <keywords>json-indented simple-content json-array fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t008"/>
+      </test>
+      <result>
+         <assert>translate(/t008, ' 
+            &#xD;', '') = '[34]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-009">
+      <description>Test of xml-to-json: two-member array, indented</description>
+      <keywords>simple-content json-array json-boolean json-indented fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t009"/>
+      </test>
+      <result>
+         <assert>translate(/t009, ' 
+            &#xD;', '') = '[true,false]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-010">
+      <description>Test of xml-to-json: 5-member array, indented</description>
+      <keywords>json-array json-string json-indented fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t010"/>
+      </test>
+      <result>
+         <assert>translate(/t010, ' 
+            &#xD;', '') = '["A","B","C","D","E"]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-011">
+      <description>Test of xml-to-json: empty map, indented</description>
+      <keywords>json-map json-indented fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t011"/>
+      </test>
+      <result>
+         <assert>translate(/t011, ' 
+            &#xD;', '') = '{}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-012">
+      <description>Test of xml-to-json: single-entry map, indented</description>
+      <keywords>json-map json-indented simple-content fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t012"/>
+      </test>
+      <result>
+         <assert>translate(/t012, ' 
+            &#xD;', '') = '{"A":true}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-013">
+      <description>Test of xml-to-json: five-entry map, indented</description>
+      <keywords>simple-content json-indented json-map fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t013"/>
+      </test>
+      <result>
+         <assert>translate(/t013, ' 
+            &#xD;', '') = '{"A":1,"B":2,"C":3,"D":4,"E":5}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-014">
+      <description>Test of xml-to-json: complex map, indented</description>
+      <keywords>json-map json-indented complex-content fn:xml-to-json fn:json-to-xml</keywords>
+      <created by="Michael Kay" on="2014-07-19"/>
+      <modified by="Michael Kay" on="2015-06-23" change="Namespace change resulting from bug 28174"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t014"/>
+      </test>
+      <result>
+         <assert>translate(/t014, ' 
+            &#xD;', '') = '{"A":[1,2],"B":[true,false],"C":["Paris","London","Berlin"],"D":[1,true,"on"],"E":[null,null]}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>  
+   
+   <test-case name="xml-to-json-B2-015">
+      <description>Test of xml-to-json: empty array not the last member of an array</description>
+      <keywords>json-array json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-01"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t015"/>
+      </test>
+      <result>
+         <assert>translate(/t015, ' 
+            &#xD;', '') = '[[],1]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-016">
+      <description>Test of xml-to-json: empty map not the last member of an array</description>
+      <keywords>json-array json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-01"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t016"/>
+      </test>
+      <result>
+         <assert>translate(/t016, ' 
+            &#xD;', '') = '[{},1]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-017">
+      <description>Test of xml-to-json: empty map not the last value of a map</description>
+      <keywords>json-map json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-04"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t017"/>
+      </test>
+      <result>
+         <assert>translate(/t017, ' 
+            &#xD;', '') = '{"A":{},"B":1}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-B2-018">
+      <description>Test of xml-to-json: empty array not the last value of a map</description>
+      <keywords>json-map json-string fn:xml-to-json fn:json-to-xml simple-content</keywords>
+      <created by="Debbie Lockett" on="2016-04-04"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <modified by="Michael Kay" on="2022-03-11" change="add streaming dependency"/>
+      <environment ref="xml-to-json-B2"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <initial-template name="t018"/>
+      </test>
+      <result>
+         <assert>translate(/t018, ' 
+            &#xD;', '') = '{"A":[],"B":1}'</assert>
+         <!-- Note: order not guaranteed! -->
+      </result>
+   </test-case>
+ 
+   <test-case name="xml-to-json-C001">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t001"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C002">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t002"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C003">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t003"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C004">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t004"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C005">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t005"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C006">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t006"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C007">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t007"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C008">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t008"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C009">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t009"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C010">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t010"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C011">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t011"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C012">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t012"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C013">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t013"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C014">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t014"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C015">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t015"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C016">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <modified by="Michael Kay" on="2017-02-04" change="no longer invalid (key attribute now allowed at top level)"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t016"/>
+      </test>
+      <result>
+         <assert>/t016 = '"xxxx"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C017">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t017"/>
+      </test>
+      <result>
+         <error code="FOJS0007"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C018">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t018"/>
+      </test>
+      <result>
+         <error code="FOJS0007"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C019">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t019"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C020">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t020"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C021">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t021"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C022">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t022"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C023">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t023"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C024">
+      <description>Test of xml-to-json: invalid input</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t024"/>
+      </test>
+      <result>
+         <error code="FOJS0007"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C100">
+      <description>Test of xml-to-json: invalid options</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t100"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C101">
+      <description>Test of xml-to-json: invalid options</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t101"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C102">
+      <description>Test of xml-to-json: invalid options</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t102"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C103">
+      <description>Test of xml-to-json: invalid options</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t103"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-C104">
+      <description>Test of xml-to-json: invalid options</description>
+      <created by="Michael Kay" on="2016-04-22"/>
+      <modified by="Michael Kay" on="2017-02-21" change="alternative error code. See bug 30069."/>
+      <environment ref="xml-to-json-C"/>
+      <test>
+         <initial-template name="t104"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XPTY0004"/>
+            <error code="FORG0001"/>
+         </any-of>        
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D001">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t001"/>
+      </test>
+      <result>
+         <assert>/t eq '"a"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D002">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t002"/>
+      </test>
+      <result>
+         <assert>/t eq '"a"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D003">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t003"/>
+      </test>
+      <result>
+         <assert>/t eq '"\""'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D004">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t004"/>
+      </test>
+      <result>
+         <assert>/t eq '"\\"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D005">
+      <description>Test of xml-to-json: valid strings ("Any valid escape sequence is copied unchanged to the output")</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t005"/>
+      </test>
+      <result>
+         <assert>/t = '"\uD834\uDD1E"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D006">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t006"/>
+      </test>
+      <result>
+         <assert>/t eq '"\\\""'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D007">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t007"/>
+      </test>
+      <result>
+         <assert>/t eq '"\\\\"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D008">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t008"/>
+      </test>
+      <result>
+         <assert>/t eq '"\\uD834\\uDD1E"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D009">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t009"/>
+      </test>
+      <result>
+         <assert>/t eq '"  "'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D010">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t010"/>
+      </test>
+      <result>
+         <assert>/t eq '"-\"-"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D011">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t011"/>
+      </test>
+      <result>
+         <assert>/t eq '"-\n-"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D012">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t012"/>
+      </test>
+      <result>
+         <assert>/t eq '"-\r-"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D013">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t013"/>
+      </test>
+      <result>
+         <assert>/t eq '"-\t-"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D014">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t014"/>
+      </test>
+      <result>
+         <assert>/t eq '"-\u007F-"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D015">
+      <description>Test of xml-to-json: valid strings - backspace</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <dependencies>
+         <feature value="XML_1.1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xml-to-json-D2.xsl"/>
+         <initial-template name="t015"/>
+      </test>
+      <result>
+         <assert>/t eq '"-\b-"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D016">
+      <description>Test of xml-to-json: valid strings</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t016"/>
+      </test>
+      <result>
+         <assert>/t eq '"-\u0090-"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D017">
+      <description>Test of xml-to-json: valid strings - bell</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <modified by="Michael Kay" on="2017-09-20" change="remove reference to unused environment"/>
+      <dependencies>
+         <feature value="XML_1.1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xml-to-json-D2.xsl"/>
+         <initial-template name="t017"/>
+      </test>
+      <result>
+         <assert>/t eq '"-\u0007-"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D018">
+      <description>Test of xml-to-json: valid strings - form feed</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <modified by="Michael Kay" on="2017-09-20" change="remove reference to unused environment"/>
+      <dependencies>
+         <feature value="XML_1.1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="xml-to-json-D2.xsl"/>
+         <initial-template name="t018"/>
+      </test>
+      <result>
+         <assert>/t eq '"-\f-"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D019">
+      <description>Test of xml-to-json: valid strings - solidus is escaped (bug 29665)</description>
+      <created by="Michael Kay" on="2016-07-20"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t019"/>
+      </test>
+      <result>
+         <assert>/t eq '"-\/-"'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D101">
+      <description>Test of xml-to-json: valid booleans</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t101"/>
+      </test>
+      <result>
+         <assert>/t eq 'false'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D102">
+      <description>Test of xml-to-json: valid booleans</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t102"/>
+      </test>
+      <result>
+         <assert>/t eq 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D103">
+      <description>Test of xml-to-json: valid booleans</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t103"/>
+      </test>
+      <result>
+         <assert>/t eq 'false'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D104">
+      <description>Test of xml-to-json: valid booleans</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t104"/>
+      </test>
+      <result>
+         <assert>/t eq 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D201">
+      <description>Test of xml-to-json: valid numbers</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t201"/>
+      </test>
+      <result>
+         <assert>/t eq '7'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D202">
+      <description>Test of xml-to-json: valid numbers</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t202"/>
+      </test>
+      <result>
+         <assert>/t eq '-0'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D203">
+      <description>Test of xml-to-json: valid numbers</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t203"/>
+      </test>
+      <result>
+         <assert>/t eq '1.0E6'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D204">
+      <description>Test of xml-to-json: valid numbers</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t204"/>
+      </test>
+      <result>
+         <assert>/t eq '-0.000001'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D205">
+      <description>Test of xml-to-json: valid numbers</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t205"/>
+      </test>
+      <result>
+         <assert>/t eq '0.001'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D206">
+      <description>Test of xml-to-json: valid numbers</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t206"/>
+      </test>
+      <result>
+         <assert>/t eq '23'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D301">
+      <description>Test of xml-to-json: valid nulls</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t301"/>
+      </test>
+      <result>
+         <assert>/t eq 'null'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D302">
+      <description>Test of xml-to-json: valid nulls</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t302"/>
+      </test>
+      <result>
+         <assert>/t eq 'null'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D303">
+      <description>Test of xml-to-json: valid nulls</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t303"/>
+      </test>
+      <result>
+         <assert>/t eq 'null'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D401">
+      <description>Test of xml-to-json: valid arrays</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t401"/>
+      </test>
+      <result>
+         <assert>/t eq '[]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D402">
+      <description>Test of xml-to-json: valid arrays</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t402"/>
+      </test>
+      <result>
+         <assert>/t eq '[]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D403">
+      <description>Test of xml-to-json: valid arrays</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t403"/>
+      </test>
+      <result>
+         <assert>/t eq '[]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D404">
+      <description>Test of xml-to-json: valid arrays</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t404"/>
+      </test>
+      <result>
+         <assert>/t eq '[null]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D405">
+      <description>Test of xml-to-json: valid arrays</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t405"/>
+      </test>
+      <result>
+         <assert>/t eq '["(",null,null,")"]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D406">
+      <description>Test of xml-to-json: valid arrays</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t406"/>
+      </test>
+      <result>
+         <assert>/t eq '["(",null,null,")"]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D407">
+      <description>Test of xml-to-json: valid arrays</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t407"/>
+      </test>
+      <result>
+         <assert>/t eq '[null]'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D501">
+      <description>Test of xml-to-json: map containing duplicates</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <modified by="Michael Kay" on="2016-06-09" change="Now deemed an error: see bug 29588"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t501"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D502">
+      <description>Test of xml-to-json: map containing duplicates</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <modified by="Michael Kay" on="2016-06-09" change="Now deemed an error: see bug 29588"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t502"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D503">
+      <description>Test of xml-to-json: map containing duplicates</description>
+      <created by="Michael Kay" on="2016-04-25"/>
+      <modified by="Michael Kay" on="2016-06-09" change="Now deemed an error: see bug 29588"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t503"/>
+      </test>
+      <result>
+         <error code="FOJS0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D504">
+      <description>Test of xml-to-json: valid maps</description>
+      <created by="Michael Kay" on="2016-04-29"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t504"/>
+      </test>
+      <result>
+         <assert>/t eq '{"\"":"1"}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D505">
+      <description>Test of xml-to-json: valid maps</description>
+      <created by="Michael Kay" on="2016-04-29"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t505"/>
+      </test>
+      <result>
+         <assert>/t eq '{"\\":"1"}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D506">
+      <description>Test of xml-to-json: valid maps </description>
+      <created by="Michael Kay" on="2016-04-29"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t506"/>
+      </test>
+      <result>
+         <assert>/t eq '{"\uD834\uDD1E":"1"}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D507">
+      <description>Test of xml-to-json: valid maps </description>
+      <created by="Michael Kay" on="2016-04-29"/>
+      <modified by="Michael Kay" on="2016-06-09" change="result confirmed by WG decision on bug 29588"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t507"/>
+      </test>
+      <result>
+         <assert>/t eq '{"\"":"1","\\\"":"0"}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D508">
+      <description>Test of xml-to-json: valid maps</description>
+      <created by="Michael Kay" on="2016-04-29"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t508"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/t eq '{"A":"1","B":"  "}'</assert>
+            <assert>/t eq '{"B":"  ","A":"1"}'</assert>
+         </any-of>       
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D509">
+      <description>Test of xml-to-json: valid maps </description>
+      <created by="Michael Kay" on="2016-04-29"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t509"/>
+      </test>
+      <result>
+         <assert>/t eq '{"-\n-":"1"}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D510">
+      <description>Test of xml-to-json: valid maps </description>
+      <created by="Michael Kay" on="2016-04-29"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t510"/>
+      </test>
+      <result>
+         <assert>/t eq '{"-\r-":"1"}'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="xml-to-json-D511">
+      <description>Test of xml-to-json: valid maps</description>
+      <created by="Michael Kay" on="2016-04-29"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t511"/>
+      </test>
+      <result>
+         <assert>/t eq '{"-\t-":"1"}'</assert>
+      </result>
+   </test-case>
+   
+   <!--
+   <test-case name="xml-to-json-D512">
+      <description>Test of xml-to-json: valid maps </description>
+      <created by="Michael Kay" on="2016-04-29"/>
+      <environment ref="xml-to-json-D"/>
+      <test>
+         <initial-template name="t512"/>
+      </test>
+      <result>
+         <assert>/t eq '{"\n":"1","\n":"2"}'</assert>
+      </result>
+   </test-case>-->
+   
+   
+   
+ 
+
+ 
+</test-set>

@@ -1,0 +1,737 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="avt">
+   <description>Tests Attribute Value Templates</description>
+   <environment name="avt-01">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<item>att1</item>
+	<item>att2</item>
+	<item>att3</item>
+	<item>att4</item>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="avt-02">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="avt-03">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<item>,</item>
+	<item>,</item>
+	<str>a</str>
+	<str>b</str>
+	<str>c</str>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="avt-04">
+      <source role="." file="avt-04.xml"/>
+   </environment>
+   <environment name="avt-05">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<str1>a</str1>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="avt-06">
+      <source role="." file="avt-06.xml"/>
+   </environment>
+   <environment name="avt-07">
+      <source role=".">
+         <content><![CDATA[<doc>
+<str>no</str>
+<msg>AVT with value 'no' in @terminate of xsl:message</msg>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="avt-08">
+      <source role="." file="avt-08.xml"/>
+   </environment>
+   <environment name="avt-09">
+      <source role="." file="avt-09.xml"/>
+   </environment>
+   <environment name="avt-10">
+      <source role="." file="avt-10.xml"/>
+   </environment>
+   <environment name="avt-11">
+      <source role=".">
+         <content><![CDATA[<doc>hello</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="avt-12">
+      <source role=".">
+         <content><![CDATA[<photograph>
+  <href>headquarters.jpg</href>
+  <size width="300"/>
+</photograph>]]></content>
+      </source>
+   </environment>
+   <environment name="avt-13">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="avt-14">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="avt-15">
+      <source role=".">
+         <content><![CDATA[<doc>
+<a/>
+<a/>
+<a/>
+<a/>
+<a/>
+<a/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="avt-16">
+      <source role=".">
+         <content><![CDATA[<doc>
+<item>a</item>
+<item>nice</item>
+<item>cup</item>
+<item>of</item>
+<item>tea</item>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="avt-17">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="avt-18">
+      <source role=".">
+         <content><![CDATA[<doc a="Front" b="Back" />]]></content>
+      </source>
+   </environment>
+   <environment name="avt-19">
+      <source role=".">
+         <content><![CDATA[<doc a="fools" b="foo" />]]></content>
+      </source>
+   </environment>
+   <environment name="avt-20">
+      <source role=".">
+         <content><![CDATA[<doc xmlns:font="http://xyz.com/">
+  <font:helvetica>pfu</font:helvetica>
+  <helvetica>dfu</helvetica>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="avt-21">
+      <source role=".">
+         <content><![CDATA[<doc xmlns:http="http://xyz.com/">
+  <http:val>pfu</http:val>
+  <val>dfu</val>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="avt-22">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="avt-0101">
+      <description>
+         Test of single AVT where the value is a sequence with mixed atomic content.
+         The result is a whitespace separated list of the values.
+      </description>
+      <keywords>mixed-sequence literals select-expression lre</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="avt-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out test="1 1.2 att1 att2 att3 att4"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-0201">
+      <description>Test of single AVT in a LRE where the value comes from a temporary tree.</description>
+      <keywords>xsl:variable temporary-tree select-expression lre</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="avt-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<output><out test="att1att2att3att4"/><out test="att1 att2 att3 att4"/></output>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-0202">
+      <description>
+         Test of AVT where the value is a sequence of atomic values surrounded only in curly brackets. 
+         The result is a whitespace separated list of the values. (from spec)
+      </description>
+      <keywords>sequence literals numeric-literals lre</keywords>
+      <created by="XSLT Editors" on="2012-11-07"/>
+      <environment ref="avt-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-0202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out test="10.32 5.5 8.31"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-0301">
+      <description>Test of single AVT in the separator attribute of xsl:attribute where the value comes from a set of nodes. (literal elements are present in AVT at start and end)</description>
+      <keywords>select-expression xsl:attribute separator-attribute mixed-avt</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="avt-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><name abc="a;, ,;b;, ,;c"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-0302">
+      <description>Test two AVTs with literal element between them in the separator attribute of xsl:value-of.</description>
+      <keywords>xsl:value-of separator-attribute select-expression mixed-avt</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="avt-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-0302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a,;,b,;,c</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-0303">
+      <description>Test AVT in the name attribute of xsl:namespace. AVT value comes from a node or a variable. Cases for AVT: -no literal element -literal element at start -literal element at end -literal element at start and end -literal element present and value obtained at run time is empty sequence</description>
+      <keywords>xsl:namespace select-expression variable-reference mixed-avt</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-10-30" change="cosmetic improvements"/>
+      <environment ref="avt-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-0303.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<?xml version="1.0" encoding="UTF-8"?><out
+            ><elem xmlns:a="http://www.test.org/" xmlns:b="http://www.example.org/"
+            /><elem xmlns:abc="http://www.test.org/" xmlns:bcd="http://www.example.org/"
+            /><elem xmlns:aa="http://www.test.org/" xmlns:abc="http://www.example.org/"
+            /><elem xmlns:a="http://www.test.org/"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-0401">
+      <description>Test of single AVT in @collation of xsl:for-each-group. Cases for AVT: no literal element, LE at start and end AVT value comes from a node or a variable.</description>
+      <keywords>xsl:for-each-group collation-attribute mixed-avt select-expression variable-reference</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="avt-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+1234
+1234
+1234
+1234</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-0501">
+      <description>Test of single AVT in @regex of xsl:analyze-string. Cases for AVT: no literal element, LE at start and end AVT value comes from a node or a variable.</description>
+      <keywords>xsl:analyze-string regex-attribute mixed-avt select-expression variable-reference</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="avt-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<node>b#n#n# * ba#a</node>
+<variable>b#n#n# * ba#a</variable></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-0601">
+      <description>
+         Test two AVTs with literal element between them in @flags and single AVT in @regex of xsl:analyze-string. 
+         AVT value comes from a node or a variable.
+      </description>
+      <keywords>xsl:analyze-string regex-attribute mixed-avt select-expression flags-attribute variable-reference</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2012-12-11" change="fixed whitespace issues (no bug report)"/>
+      <environment ref="avt-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="avt-0601.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="avt-0701">
+      <description>Test of single AVT with value 'no' in @terminate of xsl:message. AVT value comes from a node or a variable.</description>
+      <keywords>xsl:message terminate-attribute select-expression variable-reference</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2012-12-11" change="removed leading whitespace from output, see bug 20027"/>
+      <modified by="Michael Kay" on="2019-09-17" change="avoid use of assert-xml for text-only message content"/>
+      <environment ref="avt-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-0701.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out>Printing.</out>]]></assert-xml>
+            <assert-message>
+               <assert-eq>"AVT with value 'no' in @terminate of xsl:message"</assert-eq>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="avt-0801">
+      <description>Test AVT in the ordinal attribute of xsl:number. AVT value comes from a variable.</description>
+      <keywords>xsl:number lang-attribute letter-value-attribute ordinal-attribute variable-reference</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="avt-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <default_language_for_numbering value="en"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-0801.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="avt-0801.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="avt-0901">
+      <description>Test of single AVT in @lang, @order and @collation of xsl:sort. 
+         AVT value has no literal element and comes from a node or a variable.</description>
+      <keywords>xsl:sort lang-attribute collation-attribute order-attribute variable-reference select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="avt-09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12 * 14 * 4 * 1 * 6 * 10 * 13 * 7 * 9 * 8 * 3 * 11 * 5 * 2 * </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1001">
+      <description>Test of single AVT in @stable of xsl:sort. AVT value has no literal element and comes from a node.</description>
+      <keywords>xsl:sort stable-attribute select-expression</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="avt-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2a@b * 6a@b * 1a@B * 8a@bb * 5a@bB * 4a@Bb * 7a@Bb * 3a@BB * </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1101">
+      <description>Test of single AVT.</description>
+      <keywords>lre select-expression</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out test="hello"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1201">
+      <description>Test two AVTs with literal element between them (based on example in the draft).</description>
+      <keywords>lre mixed-avt select-expression variable-reference</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out src="/images/headquarters.jpg"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1202">
+      <description>DOCUMENT: http://www.w3.org/TR/xslt SECTION: 7.6.2 Attribute Value Templates Test of AVT containing XPath 2.0 comments.</description>
+      <keywords>lre xpath-comments literals sequence</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out test="someexp 23stuff"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1203">
+      <description>Test of sequence-valued AVT in backwards compatibility mode.</description>
+      <keywords>lre numeric-literals sequence empty-sequence backwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out test="1" empty=""/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1204">
+      <description>Test of sequence-valued AVT in 2.0 mode.</description>
+      <keywords>lre numeric-literals sequence empty-sequence</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1204.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out test="1 2 3 4 5" empty=""/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1205">
+      <description>Test handling of text nodes in an AVT. AUTHOR: Michael Kay</description>
+      <keywords>text-node xsl:function lre</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1205.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:f="http://f/" test="[0][1][2]"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1206">
+      <description>Test handling of }}} in an AVT.</description>
+      <keywords>escaped-curlies lre mixed-avt</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1206.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ant xmlns:f="http://f/" target="fofofo" inheritall="false" antfile="${project.rarara}/mymymy"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1301">
+      <description>Test of left curly brace escape.</description>
+      <keywords>lre escaped-curlies</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out test="{"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1302">
+      <description>Test of right curly brace escape.</description>
+      <keywords>lre escaped-curlies</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out test="}"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1401">
+      <description>Test of curly braces (single and double) within the expression.</description>
+      <keywords>lre escaped-curlies literals</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out test="aaabbb{--{{--}}--}cccddd"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1501">
+      <description>Test context within an AVT.</description>
+      <keywords>lre context fn:position fn:last mixed-avt</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1501.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="avt-1501.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1502">
+      <description>Check that attributes of top-level data elements are not treated as AVTs.</description>
+      <keywords> data-elements</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1502.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<x>OK</x>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1601">
+      <description>Check space-separation of a list-valued AVT (new 2.0 incompatibility). AUTHOR: Michael Kay test changed in 7.4</description>
+      <keywords>lre sequence literals select-expression space-separation</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a val="[1 2 3]" simple="1 2 3"/><b val="[a nice cup of tea]" simple="a nice cup of tea"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1701">
+      <description>Purpose: Testing generation of null attribute. Bug: if $From was null, it was not outputting the attribute. Author: Geoff Crowther</description>
+      <keywords>empty-sequence variable-reference xsl:param lre</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-17"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><setvar name="From" value=""/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1801">
+      <description>Evaluation of string expression in AVT, surrounded by fixed strings.</description>
+      <keywords>fn:concat select-expression attribute-axis mixed-avt lre</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-18"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out z="BeforeFrontBackAfter"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-1901">
+      <description>Evaluation of boolean expression in AVT, surrounded by fixed strings.</description>
+      <keywords> fn:starts-with select-expression attribute-axis mixed-avt lre</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-1901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out z="BeforetrueAfter"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-2001">
+      <description>Double braces to neutralize AVT processing, including colon.</description>
+      <keywords>escaped-curlies lre</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-2001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out style="{font:helvetica}"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-2101">
+      <description>Use of colon in AVT expression to signify namespaced element.</description>
+      <keywords>lre select-expression namespace-resolution</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-21"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-2101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out href="pfu"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="avt-2102">
+      <description>Absent expression in AVTs (Bug 29226)</description>
+      <keywords>lre select-expression</keywords>
+      <created by="Michael Kay" on="2015-10-30"/>
+      <environment ref="avt-21"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-2102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out a="xyz" b="" c="xyz" d="" e=""/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="avt-2103">
+      <description>Absent expression in AVTs (Saxon-JS Bug 5037)</description>
+      <keywords>xsl:element namespace-attribute</keywords>
+      <created by="Debbie Lockett" on="2021-07-06"/>
+      <modified by="Debbie Lockett" on="2023-03-01" change="remove indent='yes' to prevent catalog-004 failure"/>
+      <environment ref="avt-21"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-2103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<test><foo>test</foo></test>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="avt-2201">
+      <description>this one works @@1 this one gives "not a QName" error @@2 this one gives "not a QName" error this one works</description>
+      <keywords>xsl:element xsl:attribute name-attribute variable-reference qname-resolution lre</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="avt-22"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-2201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<erg><aa name="str"/><bb str=""/><str/><astr/><aa name="rtf"/><bb rtf=""/><rtf/></erg>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="avt-3201">
+      <description>New description</description>
+      <keywords>AVT in an illegal place</keywords>
+      <created by="Abel Braaksma" on="2016-04-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="avt-3201.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0340"/>
+      </result>
+   </test-case>
+</test-set>

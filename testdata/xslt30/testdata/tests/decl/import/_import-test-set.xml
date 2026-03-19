@@ -1,0 +1,881 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="import">
+   <description>Tests import</description>
+   <environment name="import-01">
+      <source role=".">
+         <content><![CDATA[<root-tag>
+		 <one-tag>Text of one-tag</one-tag>
+		 <two-tag>Text of two-tag</two-tag>
+</root-tag>]]></content>
+      </source>
+   </environment>
+   <environment name="import-02">
+      <source role=".">
+         <content><![CDATA[<foo/>]]></content>
+      </source>
+   </environment>
+   <environment name="import-03">
+      <source role="." file="import-03.xml"/>
+   </environment>
+   <environment name="import-04">
+      <source role="." file="import-04.xml"/>
+   </environment>
+   <environment name="import-05">
+      <source role="." file="import-05.xml"/>
+   </environment>
+   <environment name="import-06">
+      <source role="." file="import-06.xml"/>
+   </environment>
+   <environment name="import-07">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="import-08">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <tag>Example of apply-imports</tag>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="import-09">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+<title>Testing include</title>
+<author>Joe Jones</author>
+<chapters>
+<chapter num="1">know xsl</chapter>
+<chapter num="2">love xsl</chapter>
+</chapters>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="import-10">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+<title>Testing include</title>
+<author>Joe Jones</author>
+<overview x="y">testing apply-imports from include</overview>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="import-11">
+      <source role="." file="import-11.xml"/>
+   </environment>
+   <environment name="import-12">
+      <source role="." file="import-12.xml"/>
+   </environment>
+   <environment name="import-13">
+      <source role=".">
+         <content><![CDATA[<a>
+  <Definition>
+    <LAMBDA id="i1"/>
+    <LAMBDA id="i5"/>
+  </Definition>
+  <Annotation of="i1"><node id="i5"/></Annotation>
+  <Annotation of="i5"/>
+</a>]]></content>
+      </source>
+   </environment>
+   <environment name="import-14">
+      <source role=".">
+         <content><![CDATA[<root>This is from the XML Source Document.</root>]]></content>
+      </source>
+   </environment>
+   <environment name="import-15">
+      <source role=".">
+         <content><![CDATA[<test>Hello</test>]]></content>
+      </source>
+   </environment>
+   <environment name="import-16">
+      <source role=".">
+         <content><![CDATA[ 
+<foo>
+  <bar>
+    <baz/>
+  </bar>
+</foo>]]></content>
+      </source>
+   </environment>
+   <environment name="import-17">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <foo><bar/></foo>
+  <goo><bar/></goo>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="import-18">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <foo><bar/></foo>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="import-19">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <outer><middle><inner/></middle></outer>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="import-20">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <num>1</num>
+  <num>2</num>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="import-21">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <tag>Example of apply-imports</tag>
+  <bag>Example of apply-templates</bag>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="import-22">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <p>Original content</p>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="import-24">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+      <source file="a.xsl" uri="a.xsl"/>
+   </environment>
+
+   <test-case name="import-0001">
+      <description>See what happens when declarations precede an xs:include that contains an xs:import</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0001.xsl"/>
+         <stylesheet file="import-0001a.xsl" role="secondary"/>
+         <stylesheet file="import-0001b.xsl" role="secondary"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><variable>1</variable
+            ><call-template>1</call-template><function>1</function><apply-template>1</apply-template
+            ><decimal-format>~10000093.70</decimal-format><xsl:transform a="1"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-0002">
+      <description>See what happens when declarations precede an xs:import (allowed in XSLT 3.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0002.xsl"/>
+         <stylesheet file="import-0002a.xsl" role="secondary"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><variable>1</variable
+            ><call-template>1</call-template><function>1</function><apply-template>1</apply-template
+            ><decimal-format>~10000093.70</decimal-format><xsl:transform a="1"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-0101">
+      <description>Purpose: Test of basic Import &amp; Include functionality.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>From Imported stylesheet: Text of one-tag</a><b>From Included stylesheet: Text of two-tag</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-0201">
+      <description>Purpose: Included document's xsl:import (f imports g) is moved into the including document.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-02"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><good-match sheet="f"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-0202">
+      <description>
+      	With two imports, precedence goes to the last one. Import precedence for 
+      	templates matching foo (f imports g) is (high) h, f, g (low)
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-02"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><best-match/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-0203">
+      <description>Included document's xsl:import (i23incl imports i23sub) is moved into the including document. Import precedence for templates matching foo is (high) i23sub, h (low) last one on list has higher precedence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><good-match/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-0301">
+      <description>Purpose: Nest imports and includes so that there are two of each, import on top.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="import-0301.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-0302">
+      <description>Nest imports and includes using relative paths.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0302.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="import-0302.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-0401">
+      <description>Purpose: Two imports, each of which has an import, plus an apply-imports in main stylesheet. Precedence (low) DBECA (high) per spec. This has import precedence over all others</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="import-0401.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-0501">
+      <description>Purpose: Two includes (see below), each of which has an import. This has import precedence over e.xsl INCLUDES can be anywhere and are positionally significant This has import precedence over d.xsl, plus it's last</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-05"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="import-0501.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-0502a">
+      <description>
+      	Two includes (see below), each of which has an import. 
+      	This has import precedence over e.xsl INCLUDES can be anywhere and are positionally significant. 
+      	This has import precedence over d.xsl, plus it's last.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-05"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="recover"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="import-0502.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="import-0502b">
+      <description>
+      	Two includes (see below), each of which has an import. 
+      	This has import precedence over e.xsl INCLUDES can be anywhere and are positionally significant. 
+      	This has import precedence over d.xsl, plus it's last.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-05"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="error"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0501.xsl"/>
+      </test>
+      <result>
+         <error code="XTRE0540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="import-0502c">
+      <description>
+      	Two includes (see below), each of which has an import. 
+      	This has import precedence over e.xsl INCLUDES can be anywhere and are positionally significant. 
+      	This has import precedence over d.xsl, plus it's last.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-05"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="import-0502.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-0601">
+      <description>
+      	Purpose: Show the significance of the order of xsl:import declarations. 
+      	This has import precedence over all others</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="import-0601.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-0701">
+      <description>The resource located by the href attribute value is parsed as an XML document, and the children of the xsl:stylesheet element in this document replace the xsl:include element in the including document. (No namespaces should be copied over.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><test xmlns="http://www.lotus.com/" color="black" text-decoration="underline" test=""/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-0801">
+      <description>Purpose: General test of xsl:apply-imports from spec.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-08"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  <div style="border: solid red"><pre>Example of apply-imports</pre></div>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-0802">
+      <description>Test that apply-imports stays in same mode as what called it.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-08"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0802.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  <div style="border: solid green"><pre>Example of apply-imports</pre></div>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-0803">
+      <description>Show that global variables are in scope in apply-imports templates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0803.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  <div style="border: solid red"><pre>border should be red</pre></div>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-0901">
+      <description>
+      	Show that apply-imports really means imports, not includes INCLUDES can be anywhere and are 
+      	positionally significant, This has import precedence over e.xsl, plus it's last
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-09"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="import-0901.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-0902a">
+      <description>
+      	Show that apply-imports really means imports, not includes INCLUDES can be anywhere and are positionally significant. 
+      	This has import precedence over e.xsl, plus it's last
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-09"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="recover"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="import-0902.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="import-0902b">
+      <description>
+      	Show that apply-imports really means imports, not includes INCLUDES can be anywhere and are positionally significant. 
+      	This has import precedence over e.xsl, plus it's last
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-09"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="error"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0901.xsl"/>
+      </test>
+      <result>
+         <error code="XTRE0540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="import-0902c">
+      <description>
+      	Show that apply-imports really means imports, not includes INCLUDES can be anywhere and are positionally significant. 
+      	This has import precedence over e.xsl, plus it's last
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-09"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="import-0902.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-1001">
+      <description>Show that included templates doing apply-imports *will* get includer's import tree. This is last, so it wins out over the imports/includes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  MAIN title: Testing include
+  MAIN author: Joe Jones
+  IMPORT author: Joe Jones
+<y>IMPORT overview: testing apply-imports from include</y></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-1101">
+      <description>Show that apply-imports has limited scope of rules to search. "xsl:apply-imports processes the current node using only template rules that were imported into the stylesheet CONTAINING THE CURRENT TEMPLATE RULE...." The apply-imports will be done in c.xsl; rules from r won't apply at that time. c, e, r all have templates for this.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-1101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  C-title: Testing:apply-imports
+  E-title: Testing:apply-imports</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-1201">
+      <description>Test of importing a basic stylesheet involving matching.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-1201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>@val=yes ,9 ,44 ,51 ,77 ,114 ,The node containing 117 is qqe ,118 ,154 ,176 ,187 ,209 ,224 ,Middle: 250 ,255 ,A century node is yyl ,355 ,374 ,390 ,426 ,494 ,</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-1301">
+      <description>Purpose: Test of importing a stylesheet involving keys. Author: Claudio Sacerdoti Coen, revised by David Marston Uncomment either line below if keyspace fails when defined only in import. &lt;xsl:key name="id" use="@id" match="LAMBDA"/&gt;</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-13"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  
+  On node whose id is i5 -nodes to apply: 1
+NO BUG
+  
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-1401">
+      <description>When no stylesheets are imported, an xsl:apply-imports should select the built-in templates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result>
+    Before apply-imports
+      This is from the XML Source Document.
+    After apply-imports
+  </result>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-1501">
+      <description>Test of import (down and up directory tree) using ..\main_import.xsl from two separate subdiretories. Filename deliberately repeated!</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-15"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-1501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+From Stylesheet: Hello
+In Frag-Subdir: Hello
+In Fragments: Hello
+In ImpIncl: Hello</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-1601">
+      <description>Purpose: Show that apply-imports applies on its matching node, not children.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-1601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match on / in top xsl
+<A><D>
+  match on bar in top xsl
+</D></A></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-1701">
+      <description>Show selection of templates from files with 1st and 2nd import precedence.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-1701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match on /doc in top xsl
+<A><D>foo - match on bar in top xsl</D></A>
+<A><B><C>goo - match on bar in top xsl</C></B></A>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-1801">
+      <description>Show apply-imports matching a template deeper into the import tree.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-1801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Match on /doc in top xsl
+  <C>foo - match on bar in top xsl</C>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-1901">
+      <description>Each apply-imports must take its own view of the import tree.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-1901.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="import-1901.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-2001">
+      <description></description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-2001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><num>1</num><num>2</num></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-2101">
+      <description>
+      	See what happens to apply-imports when there is a param stack in place. 
+      	No template for "bag" here, so it will use the one in the imported file.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-21"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-2101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><main-t>top</main-t><div><imp-t>default</imp-t></div><imp-b>top</imp-b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-2102">
+      <description>
+      	See what happens to apply-imports when there is a param stack in place on the upper apply-templates, 
+      	but no xsl:param to receive p1 until we get to the import. 
+      	No template for "bag" here, so it will use the one in the imported file.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-21"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-2102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><div><imp-t>default</imp-t></div><imp-b>top</imp-b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-2103">
+      <description>Importing a stylesheet module that has an invalid top-level element. Saxon bug 2003065.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-21"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-2103.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0165"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-2201">
+      <description>See what happens to xsl:next-match when the same stylesheet module is imported several times.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-22"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-2201.xsl"/>
+         <stylesheet file="import-2201a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out a="23" glob="93.7"><wrap><wrap><wrap><wrap><wrap><wrap>Original content</wrap></wrap></wrap></wrap></wrap></wrap></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-2202">
+      <description>See what happens to xsl:next-match when the same stylesheet module is included several times.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="import-22"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-2202.xsl"/>
+         <stylesheet file="import-2201a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  <wrap><wrap><wrap><wrap><wrap><wrap>Original content</wrap></wrap></wrap></wrap></wrap></wrap>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="import-2401">
+      <description>Test case that is missing the REQUIRED href attribute in an xsl:include instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-24"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-2401.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-2402">
+      <description>Test case to verify that an static error is raised when the included stylesheet has an error.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-24"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-2402.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0010"/>
+            <error code="XTSE0090"/>
+            <error code="XTSE0165"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="import-2403">
+      <description>Test case that is missing the REQUIRED href attribute in an xsl:import instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-24"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-2403.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="import-2404">
+      <description>Test case to verify that an error is raised when the imported stylesheet has an error.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="import-24"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="import-2404.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0010"/>
+            <error code="XTSE0090"/>
+            <error code="XTSE0165"/>
+         </any-of>
+      </result>
+   </test-case>
+</test-set>

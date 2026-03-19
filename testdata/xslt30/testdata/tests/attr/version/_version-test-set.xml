@@ -1,0 +1,659 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="version">
+   <description>Tests the version attribute, forwards compatibility, and xsl:fallback</description>
+   <environment name="ver01">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="ver03">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="ver12">
+      <source role="." file="ver12.xml"/>
+   </environment>
+   <environment name="ver13">
+      <source role="." file="ver13.xml"/>
+   </environment>
+   <environment name="ver15">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="ver17">
+      <source role=".">
+         <content><![CDATA[<doc>
+ <a>
+   <b id="3"/>
+   <c id="4"/>
+   <d><e/></d>
+ </a>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="xsltversion019">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="xsltversion022">
+      <source role="." file="xsltversion022.xml"/>
+   </environment>
+   <environment name="xsltversionerr003">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <item n="3">Some</item>
+  <item>string</item>
+  <item n="19">value</item>
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="version-001">
+      <description>Test the basics of the XSLT version declaration.</description>
+      <keywords>fn:system-property xsl:version use-when-attribute forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-001.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-xml><![CDATA[This stylesheet requires XSLT 8.5 or higher]]></assert-xml>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="version-002">
+      <description>Test that version attribute can be used on any XSLT element. (This is an XSLT 2.0 feature</description>
+      <keywords>fn:system-property xsl:version use-when-attribute forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>This stylesheet requires XSLT 8.5 or higher</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-003">
+      <description>Test xsl:message.</description>
+      <keywords>_IMPROVE:test-xsl:message-output XTMM9000 forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-003.xsl"/>
+      </test>
+      <result>
+         <error code="XTMM9000"/>
+      </result>
+   </test-case>
+
+   <test-case name="version-004">
+      <description>Test xsl:fallback for an XSL instruction.</description>
+      <keywords>forwards-compatibility-mode xsl:fallback</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Fallback processing More fallback processing</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-005">
+      <description>Test xsl:fallback for an extension element.</description>
+      <keywords>forwards-compatibility-mode xsl:fallback extension-element-prefixes-attribute extension-element</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Fallback processing More fallback processing</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-006">
+      <description>Test xsl:fallback is ignored if the element is a known XSL element.</description>
+      <keywords>forwards-compatibility-mode xsl:fallback extension-element-prefixes-attribute</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out pigs="35"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-007">
+      <description>In forwards compatible mode, unknown attributes on XSL elements should be accepted.</description>
+      <keywords>xsl:value-of forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>21</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-008">
+      <description>Test xsl:fallback for existing top-level element used instruction.</description>
+      <keywords>forwards-compatibility-mode xsl:fallback</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Fallback processing</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-009">
+      <description>Test that in forwards compatibility mode, unknown top-level XSL elements are ignored.</description>
+      <keywords>forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Success</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-010">
+      <description>Test xsl:message with terminate as an AVT (XSLT 2.0).</description>
+      <keywords>_IMPROVE:test-in-wrong-location xsl:message avt terminate-attribute</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-010.xsl"/>
+      </test>
+      <result>
+         <error code="XTMM9000"/>
+      </result>
+   </test-case>
+
+   <test-case name="version-011">
+      <description>Test that exclude-result-prefix attribute can be used on any XSLT element. (This is an XSLT 2.0 feature)</description>
+      <keywords>forwards-compatibility-mode 2.0-behaves-like-1.0</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+        baccarat
+    </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-012">
+      <description>TEST that absent extension elements don't cause an error (a) if they aren't instantiated (b) if they have an xsl:fallback</description>
+      <keywords>xsl:vendor fn:system-property xsl:fallback extension-element-prefixes-attribute extension-element</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<testing>fallback</testing>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-013">
+      <description>TEST that a call to an extension function that cannot be loaded is not an error unless we try to execute it</description>
+      <keywords>xsl:vendor extension-function fn:system-property</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<testing/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-014">
+      <description>Type error in argument to arithmetic operator, works in backwards compatible mode for failing example with version=2.0, see error229</description>
+      <keywords>backwards-compatibility-mode ignore-type-error</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2019-02-27" change="Added backwards_compatibility dependency"/>
+      <environment ref="ver15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility" satisfied="true" />
+      </dependencies>
+      <test>
+         <stylesheet file="version-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a val="5"/>;
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-015">
+      <description>Test trace() function with a singleton and with an empty sequence</description>
+      <keywords>fn:trace _IMPROVE:test-in-wrong-location</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver15"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a val="13"/>;
+<a val="London"/>;
+<a val=""/>;
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-016">
+      <description>Test trace() function with a sequence of nodes</description>
+      <keywords>fn:trace _IMPROVE:test-in-wrong-location</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e>doc</e><e>a</e><e>b</e><a>id</a><e>c</e><a>id</a><e>d</e><e>e</e></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-017">
+      <description>Test xsl:message with select attribute</description>
+      <keywords>xsl:message</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2019-12-03" change="Avoid assert-xml for non-XML results"/>
+      <modified by="Michael Kay" on="2020-02-18" change="Corrected previous change (bad XPath syntax in assertions)"/>
+      <environment ref="ver17"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-017.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<out/>]]></assert-xml>
+            <assert-message>
+               <assert-string-value><![CDATA[message 1: A message]]></assert-string-value>
+            </assert-message>
+            <assert-message>
+               <all-of>
+                  <assert-string-value>Another message</assert-string-value>
+                  <assert>/b[@id='3'][following-sibling::text()[.='Another message']]</assert>
+               </all-of>
+            </assert-message>
+            <assert-message>
+               <all-of>
+                  <assert-string-value>message 3</assert-string-value>
+                  <assert>/b[@id='3'][preceding-sibling::text()[.='message 3']]</assert>
+               </all-of>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="version-018">
+      <description>Test [xsl:] version on various elements</description>
+      <keywords>version-attribute forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver17"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Hello</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-019">
+      <description>Test extension attributes on various elements</description>
+      <keywords>extension-attribute version-attribute forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Hello</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-020">
+      <description>Crashes with an NPE in Saxon 7.9.1 the &lt;dummy/&gt; causes the NPE</description>
+      <keywords>extension-element xsl:fallback extension-element-prefixes-attribute</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>12</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-021">
+      <description>Crashes with an NPE in Saxon 7.9.1</description>
+      <keywords>backwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>NaN</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-022">
+      <description>Show that a local variable is not visible within a sibling xsl:fallback element</description>
+      <keywords>version-attribute forwards-compatibility-mode xsl:fallback xsl:variable variable-dependencies</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o val="42"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-023">
+      <description>
+         XSLT20 only
+         Show that an invalid match pattern is *not* ignored in forwards compatibility mode
+      </description>
+      <keywords>version-attribute XTSE0340 forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28415, only applies to version 2.0, see also version-023a for 3.0 version" />
+      <environment ref="ver17"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-023.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0340"/>
+      </result>
+   </test-case>
+
+   <test-case name="version-023a">
+      <description>
+         XSLT 3.0+ version of previous (which incidentally raises the same error for 2.0)
+         Show that an invalid match pattern is *not* ignored in forwards compatibility mode
+         See Bug 28415
+      </description>
+      <keywords>version-attribute XTSE0340 forwards-compatibility-mode</keywords>
+      <created by="Abel Braaksma" on="2015-04-06"/>
+      <environment ref="ver17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-023a.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0340"/>
+      </result>
+   </test-case>
+
+   <test-case name="version-024">
+      <description>Unrecognized top-level elements are ignored in forwards-compatibility mode *along with their content*</description>
+      <keywords>forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="ver17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<boo/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-025">
+      <description>Call supports-namespace-axis system property introducted by erratum E14</description>
+      <keywords>erratum-XT.E14 _WRONG:incorrect-system-property xsl:supports-namespace-axis fn:system-property use-when-attribute forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-03-11" change="change test to use correct system property name"/>
+      <environment ref="ver17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out ns="http://www.w3.org/XML/1998/namespace"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="version-025a">
+      <description>Variant of versino-025 that does things unconditionally the 2.0 way</description>
+      <created by="Michael Kay" on="2016-03-11"/>
+      <environment ref="ver17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-025a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out ns="http://www.w3.org/XML/1998/namespace"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-026">
+      <description>Later-version (8.5) stylesheet has (fictional) 8.5 function guarded by use-when testing function-available, 2 arguments.</description>
+      <keywords>fn:function-available use-when-attribute forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltversion019"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>fell back on burnish</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-027">
+      <description>Later-version (8.5) stylesheet has (fictional) 8.5 declaration guarded by use-when testing system-property.</description>
+      <keywords>fn:system-property use-when-attribute forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltversion019"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>success</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-028">
+      <description>Later-version (8.5) stylesheet has (fictional) 8.5 attribute on older instruction, unguarded.</description>
+      <keywords>forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltversion022"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a key="1"><b>a,b,c,d</b></a><a key="2"><b>e,f,g,h</b></a><a key="3"><b>i,j,k,l</b></a><a key="4"><b>m,n,o,p</b></a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-029">
+      <description>2.0 stylesheet has (fictional) higher-versioned instruction guarded by xsl:fallback.</description>
+      <keywords>version-attribute forwards-compatibility-mode xsl:fallback</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltversion022"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>we fell back<a key="1"><b>a,b,c,d</b></a><a key="2"><b>e,f,g,h</b></a><a key="3"><b>i,j,k,l</b></a><a key="4"><b>m,n,o,p</b></a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-030">
+      <description>2.0 stylesheet has (fictional) higher-versioned instruction guarded by use-when testing element-available.</description>
+      <keywords>version-attribute use-when-attribute forwards-compatibility-mode</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltversion022"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a key="1"><b>a,b,c,d</b></a><a key="2"><b>e,f,g,h</b></a><a key="3"><b>i,j,k,l</b></a><a key="4"><b>m,n,o,p</b></a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="version-031">
+      <description>Use version flag on xsl:namespace to singularize AVT; error if BC not supported.</description>
+      <keywords>version-attribute backwards-compatibility-mode XTDE0160 avt</keywords>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="xsltversionerr003"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="backwards_compatibility" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-031.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0160"/>
+      </result>
+   </test-case>
+   
+   <test-case name="version-032">
+      <description>Test xsl:fallback with an XSLT instruction child.</description>
+      <created by="Michael Kay" on="2017-06-13"/>
+      <environment ref="xsltversionerr003"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-032.xsl"/>
+      </test>
+      <result>
+         <assert>/out="Fallback: extension was not found."</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="version-033">
+      <description>Test xsl:fallback for an XSL instruction, not in forwards compatible mode in 3.0.</description>
+      <keywords>forwards-compatibility-mode xsl:fallback</keywords>
+      <created by="Michael Kay" on="2022-05-11"/>
+      <environment ref="ver01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="version-033.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+</test-set>

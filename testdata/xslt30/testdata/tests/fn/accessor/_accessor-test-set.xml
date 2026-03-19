@@ -1,0 +1,916 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="accessor">
+   <description>Tests accessor functions: including node-name(), nilled(), base-uri(), document-uri(), path()</description>
+   <environment name="accessor001">
+      <source role="." file="accessor001.xml"/>
+   </environment>
+   <environment name="accessor002">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <inner/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="accessor003">
+      <source role=".">
+         <content><![CDATA[ 
+<doc att="top" xmlns:mynamespace="http://test.com">
+  <?mypi some data?>
+  <!-- This is the 1st comment -->
+  text-in-doc
+  <inner/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="accessor004">
+      <source role="." file="accessor-004.xml" uri="accessor-004.xml">
+         <description>Trivial file. Not held inline, so that base-uri() and document-uri() make sense. See bug 20015.</description>
+      </source>
+   </environment>
+   <environment name="accessor005">
+      <source role=".">
+         <content><![CDATA[ 
+<doc att="top">
+  <?mypi some data?>
+  <!-- This is the 1st comment -->
+  text-in-doc
+  <inner/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="accessor006">
+      <source role="." file="accessor006.xml"/>
+   </environment>
+   <environment name="accessor009">
+      <source role=".">
+         <content><![CDATA[ 
+<doc att="att1" xmlns:sub="http://test.com"><?mypi some_data?><!--comment 1-->text-node-1<inner att2="att2">text-node-2</inner></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="accessor010">
+      <source role=".">
+         <content><![CDATA[ 
+<doc att="att1" xmlns:sub="http://test.com">
+  <inner/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="accessor012">
+      <source role=".">
+         <content><![CDATA[ 
+<doc att="att1" xmlns:sub="http://test.com"><inner/></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="accessor013">
+      <source role=".">
+         <content><![CDATA[<doc att="top" xmlns:sub="http://test.com"><?mypi some data?><!--This is the 1st comment-->outter-text<inner att2="blob">inner-text</inner></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="accessor015">
+      <source role="." file="accessor015.xml"/>
+   </environment>
+   
+   <environment name="accessor021">
+      <source role="." file="accessor021.xml"/>
+   </environment>
+   
+   <environment name="accessor033">
+      <source role=".">
+         <content><![CDATA[<doc att="top" xmlns:mynamespace="http://test.com"><?mypi some data?><!--This is the 1st comment-->text-in-doc1<inner>text-in-doc2</inner></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="accessor050">
+      <source role=".">
+         <content><![CDATA[<doc att="top" xmlns:mynamespace="http://test.com"><?mypi some data?><!--This is the 1st comment-->text-in-doc1<inner>text-in-doc2</inner></doc>]]></content>        
+      </source>
+      <stylesheet file="accessor-050.xsl"/>
+   </environment>
+
+   <test-case name="accessor-001">
+      <description>Test of node-name() accessor with doc node, element, attr, txt, comment, and PI nodes.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-002">
+      <description>Test of node-name() accessor with empty sequence as arg</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor002"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1><t2>true</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-003">
+      <description>Test of node-name() accessor with node stored in variable</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor003"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>mypi</t1><t2/><t3/><t4>inner</t4><t5>att</t5><t6>mynamespace</t6></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-004">
+      <description>Test of node-name() accessor with node from a temporary tree</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>pi</t1><t2/><t3/><t4>inner</t4><t5>att</t5><t6>xml</t6></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-005">
+      <description>Test of nilled() accessor with node stored in temporary tree</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1/><t2/><t3/><t4>false</t4><t5/><t6/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-006">
+      <description>Test of fn:base-uri accessor with variable containing nodes from a temporary tree as argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-006.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-007">
+      <description>Test of fn:document-uri accessor with node from a temporary tree as argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1><t2>true</t2><t3>true</t3><t4>true</t4><t5>true</t5><t6/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-008">
+      <description>Test for the equality "fn:doc(fn:document-uri($arg)) is $arg", where $arg is a document node</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-009">
+      <description>Test of fn:base-uri accessor with empty seqeunce as argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1><t2>true</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-010">
+      <description>Test of fn:nilled accessor with empty sequence as argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1><t2>true</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-011">
+      <description>Test the return types of fn:data with sequence of atomic values as argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor004"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-011.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-012">
+      <description>Test of node-name()'s return type as xs:QName</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor005"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1><t2>true</t2><t3>true</t3><t4>true</t4><t5>true</t5></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-013">
+      <description>Test of nilled() accessor with node stored in variable</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor005"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1/><t2/><t3/><t4>false</t4><t5/><t6/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-014">
+      <description>Test of nilled() accessor withdocument, element, attr, txt, comment, and PI nodes.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor006"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-014.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-015">
+      <description>Test of fn:string accessor with doc node, element, attr, txt, comment, and PI nodes.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor009"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-015.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-016">
+      <description>Test of fn:string accessor with empty sequence as argument.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor010"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1><t2>true</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-017">
+      <description>Test of fn:string accessor with atomic value as argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor010"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-017.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-018">
+      <description>Test of fn:data accessor with sequence of atomic values</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor010"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-018.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-019">
+      <description>Test of fn:data accessor with empty sequence</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor010"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>truetrue</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-020">
+      <description>Test of fn:string accessor with node from a temporary tree</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor012"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>text-in-doctext-in-doc2</t1><t2>text-in-doc2</t2><t3>top</t3></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-021">
+      <description>Test of fn:data accessor with no schema validation, context node set to document, element, attr, txt, comment, and PI nodes</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor013"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-021.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-022">
+      <description>Test of fn:data accessor with node stored in variable</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor015"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-022.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-023">
+      <description>Test of fn:data accessor with a sequence of both atomic and node types</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor015"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-023.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-024">
+      <description>Test base uri after a node has been copied</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor015"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1><t2>false</t2><t3>false</t3><t4>true</t4><t5>false</t5><t6>true</t6></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-025">
+      <description>Test of nilled accessor with copied nodes as argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor015"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1><t2>true</t2><t3>true</t3><t4>false</t4><t5>true</t5><t6>true</t6></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-026">
+      <description>Test of fn:data accessor with copied nodes as argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor015"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>some data</t1><t2>This is the 1st comment</t2><t3>text-in-doc1</t3><t4>text-in-doc2</t4><t5>top</t5><t6>text-in-doc1text-in-doc2</t6></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-027">
+      <description>
+      	Test of fn:base-uri accessor with context node set to document, element, attr, txt, comment, and PI nodes 
+      	(the xml source contains no xml:base attributes)
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+        <source role="." file="accessor017.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-027.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-028">
+      <description>
+      	Test of fn:base-uri accessor with context node set to document, element, attr, txt, comment, and PI nodes 
+      	(the xml source contains xml:base attributes overwriting base-uri of child node)
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="accessor018.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-028.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-029">
+      <description>Test of fn:base-uri accessor with no argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+      <source role="." file="accessor020.xml"/>
+   </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1><t2>false</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-030">
+      <description>Test of fn:static-base-uri accessor invoked under several different context items</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor021"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1><t2>true</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-031">
+      <description>Test of fn:document-uri accessor with document node as argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor021"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-031.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1><t2>true</t2><t3>true</t3></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-032">
+      <description>Test of fn:document-uri accessor with empty sequence as argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor021"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-032.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1><t2>true</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-033">
+      <description>Test of fn:document-uri accessor with no argument</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="accessor021"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-034">
+      <description>Test of fn:document-uri accessor with no argument for XPATH 2.0, expecting error</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="accessor021"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-034.xsl"/>
+      </test>
+      <result>
+         <error code="XPST0017"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-035">
+      <description>Test of fn:document-uri accessor with context node set to document node, element, atttribute, comment, text, and PI as argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="accessor023.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-035.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-036">
+      <description>Test of fn:document-uri in conjunction with document(), doc()</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor021"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>true</t1><t2>true</t2></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-037">
+      <description>Test of node-name accessor with copied nodes as argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor033"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t1>mypi</t1><t2/><t3/><t4>inner</t4><t5>att</t5><t6/><t7>mynamespace</t7></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="accessor-038">
+      <description>Test of fn:string accessor with copied nodes as argument</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="accessor033"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="accessor-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="accessor-038.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-050">
+      <description>Test of fn:path applied to document node</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t050"/>
+      </test>
+      <result>
+         <assert-string-value>/</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-051">
+      <description>Test of fn:path applied to outermost element node</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t051"/>
+      </test>
+      <result>
+         <assert-string-value>/Q{}doc[1]</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-052">
+      <description>Test of fn:path applied to inner element node</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t052"/>
+      </test>
+      <result>
+         <assert-string-value>/Q{}doc[1]/Q{}inner[1]</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-053">
+      <description>Test of fn:path applied to comment node</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t053"/>
+      </test>
+      <result>
+         <assert-string-value>/Q{}doc[1]/comment()[1]</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-054">
+      <description>Test of fn:path applied to PI node</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t054"/>
+      </test>
+      <result>
+         <assert-string-value>/Q{}doc[1]/processing-instruction(mypi)[1]</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-055">
+      <description>Test of fn:path applied to text node</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t055"/>
+      </test>
+      <result>
+         <assert-string-value>/Q{}doc[1]/text()[1]</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-056">
+      <description>Test of fn:path applied to attribute node</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t056"/>
+      </test>
+      <result>
+         <assert-string-value>/Q{}doc[1]/@att</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-057">
+      <description>Test of fn:path applied to namespace node</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t057"/>
+      </test>
+      <result>
+         <assert-string-value>/Q{}doc[1]/namespace::mynamespace</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-058">
+      <description>Test of fn:path applied to outermost element node in non-document tree</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t058"/>
+      </test>
+      <result>
+         <assert-string-value>Q{http://www.w3.org/2005/xpath-functions}root()</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-059">
+      <description>Test of fn:path applied to inner element node in non-document tree</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t059"/>
+      </test>
+      <result>
+         <assert-string-value>Q{http://www.w3.org/2005/xpath-functions}root()/Q{}inner[1]</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-060">
+      <description>Test of fn:path applied to comment node in non-document tree</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t060"/>
+      </test>
+      <result>
+         <assert-string-value>Q{http://www.w3.org/2005/xpath-functions}root()/comment()[1]</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-061">
+      <description>Test of fn:path applied to PI node in non-document tree</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t061"/>
+      </test>
+      <result>
+         <assert-string-value>Q{http://www.w3.org/2005/xpath-functions}root()/processing-instruction(mypi)[1]</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-062">
+      <description>Test of fn:path applied to text node in non-document tree</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t062"/>
+      </test>
+      <result>
+         <assert-string-value>Q{http://www.w3.org/2005/xpath-functions}root()/text()[1]</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-063">
+      <description>Test of fn:path applied to attribute node in non-document tree</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t063"/>
+      </test>
+      <result>
+         <assert-string-value>Q{http://www.w3.org/2005/xpath-functions}root()/@att</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="accessor-064">
+      <description>Test of fn:path applied to namespace node in non-document tree</description>
+      <created by="Michael Kay" on="2020-10-07"/>
+      <environment ref="accessor050"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <initial-template name="t064"/>
+      </test>
+      <result>
+         <assert-string-value>Q{http://www.w3.org/2005/xpath-functions}root()/namespace::mynamespace</assert-string-value>
+      </result>
+   </test-case>
+</test-set>

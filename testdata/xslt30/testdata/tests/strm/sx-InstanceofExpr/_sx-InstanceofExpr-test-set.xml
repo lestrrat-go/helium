@@ -1,0 +1,437 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="sx-InstanceofExpr">
+   <description>"instance of" expression with streaming</description>
+   
+   <environment name="sx-instance-of-A">
+     <stylesheet file="sx-instance-of-001.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sx-instance-of-001">
+      <description>Test of xsl:stream instruction with "instance of": count descendant nodes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <stylesheet file="sx-instance-of-001.xsl"/>
+         <initial-template name="c-001"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sx-instance-of-002">
+      <description>Test of xsl:stream instruction with "instance of", filtered with motionless predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-003">
+      <description>Test of xsl:stream instruction with "instance of", applied to ancestor nodes</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-003"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-004">
+      <description>Test of xsl:stream instruction with "instance of", applied to grounded consuming items</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-004"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-005">
+      <description>Test of xsl:stream instruction with "instance of", applied to attributes of ancestor nodes</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-005"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-006">
+      <description>Test of xsl:stream instruction with "instance of", applied to namespaces of ancestor nodes</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-006"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sx-instance-of-007">
+      <description>"instance of" with empty downwards selection</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-007"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-008">
+      <description>"instance of" with empty downwards selection</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-instance-of-009">
+      <description>"instance of" with a striding(?) union</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-009"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-010">
+      <description>"instance of" with a crawling union</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-010"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-instance-of-011">
+      <description>simple motionless "instance of"</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-011"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-012">
+      <description>"instance of" filtered grounded sequence</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-012"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-013">
+      <description>"instance of" filtered crawling sequence</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-013"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-014">
+      <description>"instance of" with twice-filtered crawling sequence</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-instance-of-015">
+      <description>"instance of" applied to a non-existent element</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-015"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-instance-of-016">
+      <description>"instance of" applied to an existent attribute (can exit early)</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-017">
+      <description>"instance of" and a boolean filter</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-017"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-018">
+      <description>"instance of" and both a positional and a boolean filter</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-018"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-100">
+      <description>"instance of" on a sequence containing streamed nodes and atomic values</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-100"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-101">
+      <description>"instance of" on a sequence containing streamed nodes and atomic values</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-101"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-102">
+      <description>"instance of" on a sequence containing streamed nodes and atomic values</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-102"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-103">
+      <description>"instance of" on a sequence containing streamed nodes and atomic values</description>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-103"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sx-instance-of-104">
+      <description>"instance of" applied to grounded element nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-104"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-instance-of-104a">
+      <description>"instance of" applied to grounded element nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-104a"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-instance-of-105">
+      <description>"instance of" applied to grounded text nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-105"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-105a">
+      <description>"instance of" applied to grounded text nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-105a"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-106">
+      <description>"instance of" applied to grounded attribute nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-106"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-106a">
+      <description>"instance of" applied to grounded attribute nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-106a"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-107">
+      <description>"instance of" applied to constructed attribute nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-107"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-107a">
+      <description>"instance of" applied to constructed attribute nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-107a"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-108">
+      <description>"instance of" applied to constructed element nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-108"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-108a">
+      <description>"instance of" applied to constructed element nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-108a"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-109">
+      <description>"instance of" applied to constructed text nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-109"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-instance-of-109a">
+      <description>"instance of" applied to constructed text nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sx-instance-of-A"/>
+      <test>
+         <initial-template name="c-109a"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="sx-instance-of-901">
+      <description>Test of xsl:stream instruction with "instance of", filtered with non-motionless predicate.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="sx-instance-of-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>   
+</test-set>

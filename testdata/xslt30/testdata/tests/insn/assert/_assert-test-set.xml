@@ -1,0 +1,151 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="assert">
+          
+   <description>Tests the xsl:assert instruction introduced in XSLT 3.0</description>
+   
+   <environment name="assert-001">
+     <stylesheet file="assert001.xsl"/>
+   </environment>
+     
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <enable_assertions/>
+   </dependencies>
+   
+   <test-case name="assert-001">
+      <description>Simple assertion; succeeds</description>
+      <keywords>xsl:assert ValueComp assert-fail</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="assert-001"/>
+      <test>
+         <initial-template name="go001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="assert-002">
+      <description>Simple assertion; fails</description>
+      <keywords>xsl:assert ValueComp assert-success</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="assert-001"/>
+      <test>
+         <initial-template name="go002"/>
+      </test>
+      <result>
+         <error code="XTMM9001"/>
+      </result>
+   </test-case>
+
+   <test-case name="assert-003">
+      <description>Simple assertion; ok because assertion disabled</description>
+      <keywords>xsl:assert use-when-attribute</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="assert-001"/>
+      <test>
+         <initial-template name="go003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="assert-004">
+      <description>Simple assertion; fails because assertion enabled</description>
+      <keywords>XTMM9001 xsl:assert use-when-attribute</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="assert-001"/>
+      <test>
+         <initial-template name="go004"/>
+      </test>
+      <result>
+         <error code="XTMM9001"/>
+      </result>
+   </test-case>
+
+   <test-case name="assert-005">
+      <description>Simple assertion; failure caught by try/catch</description>
+      <keywords>xsl:assert ValueComp use-when-attribute xsl:try error-handling specific-catch-clause XTMM9001</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="assert-001"/>
+      <test>
+         <initial-template name="go005"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="assert-006">
+      <description>Assertion with user-defined error code</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="assert-001"/>
+      <test>
+         <initial-template name="go006"/>
+      </test>
+      <result>
+         <error xmlns:my="http://example.com/my" code="my:ABCD9999"/>
+      </result>
+   </test-case>
+   
+   <test-case name="assert-007">
+      <description>Simple assertion; no failure because assertions are externally disabled</description>
+      <keywords>xsl:assert ValueComp assert-success</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Debbie Lockett" on="2018-10-11" change="move stylesheet from local environment into test"/>
+      <!-- Don't use assert-001 environment because the stylesheet may need to be compiled differently... -->
+      <dependencies>
+         <enable_assertions satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="assert001.xsl"/>
+         <initial-template name="go002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="assert-008">
+      <description>Simple assertion; succeeds; message uses select attribute</description>
+      <keywords>xsl:assert</keywords>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <environment ref="assert-001"/>
+      <test>
+         <initial-template name="go008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="assert-009">
+      <description>Simple assertion; fails; message uses select attribute</description>
+      <keywords>xsl:assert</keywords>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <environment ref="assert-001"/>
+      <test>
+         <param name="p" select="3"/>
+         <initial-template name="go008"/> <!--sic -->       
+      </test>
+      <result>
+         <error code="XTMM9001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="assert-010">
+      <description>When xsl:assert fails, following sibling instructions are not evaluated</description>
+      <keywords>xsl:assert</keywords>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <modified by="Michael Kay" on="2015-11-20" change="make test do what was intended"/>
+      <environment ref="assert-001"/>
+      <test>
+         <param name="p" select="3"/>
+         <initial-template name="go010"/>      
+      </test>
+      <result>
+         <assert>/out = "BC"</assert>
+      </result>
+   </test-case>
+</test-set>

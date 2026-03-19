@@ -1,0 +1,152 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sx-QuantifiedExpr">
+  <description>Some/Every expressions with streaming</description>
+
+  <environment name="sx-some-A">
+    <stylesheet file="sx-some-A.xsl"/>
+  </environment>
+
+  <environment name="sx-every-A">
+    <stylesheet file="sx-every-A.xsl"/>
+  </environment>
+
+  <dependencies>
+    <spec value="XSLT30+"/>
+    <feature value="streaming"/>
+  </dependencies>
+
+  <test-case name="sx-some-001">
+    <description>Streaming "some" expression - "in" expression is grounded and
+      consuming</description>
+    <created by="Michael Kay" on="2015-03-27"/>
+    <environment ref="sx-some-A"/>
+    <test>
+      <initial-template name="r-001"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = 'true'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sx-some-002">
+    <description>Streaming "some" expression - "in" expression is grounded and
+      consuming</description>
+    <created by="Michael Kay" on="2015-03-27"/>
+    <environment ref="sx-some-A"/>
+    <test>
+      <initial-template name="r-002"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = 'true'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sx-some-003">
+    <description>Streaming "some" expression - "in" expression is grounded and
+      consuming</description>
+    <created by="Michael Kay" on="2015-03-27"/>
+    <environment ref="sx-some-A"/>
+    <test>
+      <initial-template name="r-003"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = 'true'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sx-some-004">
+    <description>Streaming "some" expression - "in" expression is grounded and
+      consuming</description>
+    <created by="Michael Kay" on="2015-03-27"/>
+    <environment ref="sx-some-A"/>
+    <test>
+      <initial-template name="r-004"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = 'true'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sx-some-005">
+    <description>Streaming "some" expression - "in" expression is grounded and
+      consuming</description>
+    <created by="Michael Kay" on="2015-03-27"/>
+    <environment ref="sx-some-A"/>
+    <test>
+      <initial-template name="r-005"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = 'true'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sx-every-001">
+    <description>Streaming "every" expression - "in" expression is grounded and
+      consuming</description>
+    <created by="Michael Kay" on="2015-03-27"/>
+    <environment ref="sx-every-A"/>
+    <test>
+      <initial-template name="r-001"/>
+    </test>
+    <result>
+      <assert>/out = 'true'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sx-every-002">
+    <description>Streaming "every" expression - "in" expression is grounded and
+      consuming</description>
+    <created by="Michael Kay" on="2015-03-27"/>
+    <environment ref="sx-every-A"/>
+    <test>
+      <initial-template name="r-002"/>
+    </test>
+    <result>
+      <assert>/out = 'true'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sx-every-003">
+    <description>Streaming "every" expression - "in" expression is grounded and
+      consuming</description>
+    <created by="Michael Kay" on="2015-03-27"/>
+    <environment ref="sx-every-A"/>
+    <test>
+      <initial-template name="r-003"/>
+    </test>
+    <result>
+      <assert>/out = 'true'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sx-every-004">
+    <description>Streaming "every" expression - "in" expression is grounded and
+      consuming</description>
+    <created by="Michael Kay" on="2015-03-27"/>
+    <environment ref="sx-every-A"/>
+    <test>
+      <initial-template name="r-004"/>
+    </test>
+    <result>
+      <assert>/out = 'true'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="sx-every-005">
+    <description>Streaming "every" expression - "in" expression is grounded and
+      consuming</description>
+    <created by="Michael Kay" on="2015-03-27"/>
+    <environment ref="sx-every-A"/>
+    <test>
+      <initial-template name="r-005"/>
+    </test>
+    <result>
+      <assert>/out = 'true'</assert>
+    </result>
+  </test-case>
+
+
+
+
+</test-set>

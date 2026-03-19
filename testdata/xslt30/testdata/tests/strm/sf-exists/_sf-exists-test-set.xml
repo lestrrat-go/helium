@@ -1,0 +1,395 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-exists">
+  <description>exists() function with streaming</description>
+
+  <environment name="sf-exists-A">
+    <stylesheet file="sf-exists-001.xsl"/>
+  </environment>
+
+  <dependencies>
+    <spec value="XSLT30+"/>
+    <feature value="streaming"/>
+  </dependencies>
+
+  <test-case name="sf-exists-001">
+    <description>Test of xsl:stream instruction with exists(): count descendant nodes</description>
+    <keywords>crawling PathExpr</keywords>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <stylesheet file="sf-exists-001.xsl"/>
+      <initial-template name="c-001"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-002">
+    <description>Test of xsl:stream instruction with exists(), filtered with motionless predicate</description>
+    <keywords>PathExpr motionless-predicate</keywords>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-002"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-003">
+    <description>Test of xsl:stream instruction with exists(), applied to ancestor nodes</description>
+    <keywords>PathExpr motionless-predicate SimpleMapExpr ancestor-axis climbing</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-003"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-004">
+    <description>Test of xsl:stream instruction with exists(), applied to grounded consuming items</description>
+    <keywords>ContextItemExpr striding-then-grounded fn:tokenize leading-lone-slash PathExpr SimpleMapExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-004"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-005">
+    <description>Test of xsl:stream instruction with exists(), applied to attributes of ancestor nodes</description>
+    <keywords>attribute-axis climbing-then-climbing PathExpr motionless-predicate SimpleMapExpr ancestor-or-self-axis climbing</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-005"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-006">
+    <description>Test of xsl:stream instruction with exists(), applied to namespaces of ancestor nodes</description>
+    <keywords>climbing-then-climbing PathExpr motionless-predicate SimpleMapExpr ancestor-or-self-axis climbing namespace-axis</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-006"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-007">
+    <description>exists() with empty downwards selection</description>
+    <keywords>AxisStep striding</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-007"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-008">
+    <description>exists() with empty downwards selection</description>
+    <keywords>striding PathExpr positional-predicate</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-008"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-009">
+    <description>exists() with a striding(?) union</description>
+    <keywords>striding-then-crawling UnionExpr PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-009"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-010">
+    <description>exists() with a crawling union</description>
+    <keywords>crawling-then-crawling text-nodes childless-nodes UnionExpr crawling PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-010"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-011">
+    <description>simple motionless exists()</description>
+    <keywords>RangeExpr grounded</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-011"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-012">
+    <description>exists() filtered grounded sequence</description>
+    <keywords>childless-nodes crawling-atomizing leading-double-slash PathExpr crawling fn:remove fn:data</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-012"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-013">
+    <description>exists() filtered crawling sequence</description>
+    <keywords>leading-lone-slash striding PathExpr fn:remove</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-013"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-014">
+    <description>exists() with twice-filtered crawling sequence</description>
+    <keywords>leading-lone-slash striding motionless-predicate PathExpr fn:remove</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-014"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-015">
+    <description>exists() applied to a non-existent element</description>
+    <keywords>striding PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-015"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-016">
+    <description>exists() applied to an existent attribute (can exit early)</description>
+    <keywords>striding-then-climbing attribute-axis PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-016"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-017">
+    <description>exists() and a boolean filter</description>
+    <keywords>striding PathExpr motionless-predicate</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-017"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-018">
+    <description>exists() and both a positional and a boolean filter</description>
+    <keywords>striding motionless-predicate PathExpr positional-predicate</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-018"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-100">
+    <description>exists() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>striding empty-sequence mixed-posture ParenthesizedExpr PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-100"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-101">
+    <description>exists() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>ParenthesizedExpr striding mixed-posture empty-sequence PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <modified by="Michael Kay" on="2020-03-23" change="Dropped 'early-exit' label, the early exit comes 
+      after the streamed document has been read, so it's not clear how we should classify it"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-101"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-102">
+    <description>exists() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>striding mixed-posture ParenthesizedExpr PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-102"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-103">
+    <description>exists() on a sequence containing streamed nodes and atomic values</description>
+    <keywords>striding mixed-posture ParenthesizedExpr PathExpr</keywords>
+    <created by="Michael Kay" on="2013-11-18"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-103"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-104">
+    <description>exists() applied to grounded element nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-104"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-105">
+    <description>exists() applied to grounded text nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-105"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-106">
+    <description>exists() applied to grounded attribute nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-106"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-107">
+    <description>exists() applied to constructed attribute nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-107"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-108">
+    <description>exists() applied to constructed element nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-108"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="sf-exists-109">
+    <description>exists() applied to constructed text nodes</description>
+    <created by="Michael Kay" on="2019-05-03"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <environment ref="sf-exists-A"/>
+    <test>
+      <initial-template name="c-109"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+
+  <test-case name="sf-exists-901">
+    <description>Test of xsl:stream instruction with exists(), filtered with non-motionless predicate.</description>
+    <keywords>striding consuming-predicate XTSE3430 PathExpr</keywords>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <test>
+      <stylesheet file="sf-exists-901.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XTSE3430"/>
+    </result>
+  </test-case>
+</test-set>

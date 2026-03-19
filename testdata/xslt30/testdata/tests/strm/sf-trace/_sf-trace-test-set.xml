@@ -1,0 +1,302 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-trace">
+   <description>trace() function with streaming</description>
+   
+   <environment name="sf-trace-A">
+     <stylesheet file="sf-trace-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-trace-001">
+      <description>Streaming trace() - grounded operand</description>
+      <keywords>striding-then-grounded leading-lone-slash PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-002">
+      <description>Streaming trace() - grounded operand</description>
+      <keywords>leading-lone-slash striding-then-grounded fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-003">
+      <description>Streaming trace() - grounded atomic operand</description>
+      <keywords>striding-then-grounded leading-lone-slash fn:tokenize ContextItemExpr PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert>/out = "8.3 5.7 1.1 1.0 5.2 7.8 6.8 4.2 0.8 7.8 5.2 0.9 22.5 18.0 3.5 7.8 5.0 0.9"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-010">
+      <description>Streaming trace() - striding operand, inspection usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:count</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "6"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-011">
+      <description>Streaming trace() - striding operand, absorption usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:sum</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "54.37"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-012">
+      <description>Streaming trace() - striding operand, transmission usage</description>
+      <keywords>leading-lone-slash striding motionless-predicate fn:position PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6.58 4.95 16.47</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-013">
+      <description>Streaming trace() - striding operand, focus-setting usage</description>
+      <keywords>AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-trace-014">
+      <description>Streaming trace() - striding operand, focus-controlled usage</description>
+      <keywords>leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-trace-015">
+      <description>Streaming trace() - striding operand, focus-setting usage</description>
+      <keywords>leading-lone-slash striding PathExpr AdditiveExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47 "</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-trace-016">
+      <description>Streaming trace() - striding operand, focus-controlled usage</description>
+      <keywords>xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-017">
+      <description>Streaming trace() - striding operand, focus-setting usage for inspection action</description>
+      <keywords>leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "true false true true true true false false true true true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-018">
+      <description>Streaming trace() - striding operand, apply-templates usage</description>
+      <keywords>leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-020">
+      <description>Streaming trace() - crawling operand, inspection usage</description>
+      <keywords>xsl:copy-of fn:count crawling PathExpr leading-double-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "6"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-021">
+      <description>Streaming trace() - crawling operand, absorption usage</description>
+      <keywords>leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "11"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-022">
+      <description>Streaming trace() - crawling operand, transmission usage</description>
+      <keywords>striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-023">
+      <description>Streaming trace() - crawling operand, focus-setting usage</description>
+      <keywords>leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-030">
+      <description>Streaming trace() - climbing operand, inspection usage</description>
+      <keywords>striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST BOOKS ITEM"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-031">
+      <description>Streaming trace() - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST BOOKS ITEM ITEM ITEM ITEM ITEM ITEM"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-trace-032">
+      <description>Streaming trace() - climbing operand, absorption usage</description>
+      <keywords>climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-033">
+      <description>Streaming trace() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-trace-034">
+      <description>Streaming trace() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-trace-035">
+      <description>Streaming trace() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-trace-A"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>  
+
+
+
+</test-set>

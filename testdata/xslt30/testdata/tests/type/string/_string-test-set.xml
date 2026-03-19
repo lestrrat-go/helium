@@ -1,0 +1,2307 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="string">
+   <description>Tests string</description>
+   <environment name="str001">
+      <source role=".">
+         <content><![CDATA[<doc>
+<a/>
+<b/>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="str002">
+      <source role=".">
+         <content><![CDATA[ 
+
+<doc xmlns:ns1="http://xsl.lotus.com/ns1"
+     xmlns="http://xsl.lotus.com/ns2">
+  <ns1:a attrib1="test"/>
+  <b ns1:attrib2="test"/>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="str003">
+      <source role=".">
+         <content><![CDATA[<doc xmlns:ns1="http://xsl.lotus.com/ns1" 
+     xmlns="http://xsl.lotus.com/ns2">
+<ns1:a attrib1="test"/>
+<b ns1:attrib2="test"/>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="str004">
+      <source role=".">
+         <content><![CDATA[ 
+<doc xmlns:ns1="http://xsl.lotus.com/ns1"
+     xmlns="http://xsl.lotus.com/ns2">
+<ns1:a attrib1="test"/>
+<b ns1:attrib2="test"/>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="str005">
+      <source role=".">
+         <content><![CDATA[<doc>Test</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="str006">
+      <source role=".">
+         <content><![CDATA[ 
+<doc attr="slamwich">ENCYCLOPEDIA</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="str008">
+      <source role=".">
+         <content><![CDATA[<doc attr="abcdefg">1999/04/01</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="str009">
+      <source role=".">
+         <content><![CDATA[ 
+<doc attr="abcdefg">1999/04/01</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="str010">
+      <source role=".">
+         <content><![CDATA[ 
+<doc> 
+<a>       This          is a       normalized          string.</a>    
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="str011">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+<a attrib="hello">bar</a>
+<b attrib="HELLO">BAR</b>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="str012">
+      <source role=".">
+         <content><![CDATA[<doc>
+<a>a</a>
+<b>b</b>
+<c>c</c>
+<d>d</d>
+<e>ef</e>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="str013">
+      <source role=".">
+         <content><![CDATA[ 
+
+<doc>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="str016">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="str023">
+      <source role=".">
+         <content><![CDATA[<doc>
+<a/>
+<b/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str024">
+      <source role="." file="str024.xml"/>
+   </environment>
+   <environment name="str027">
+      <source role="." file="str027.xml"/>
+   </environment>
+   <environment name="str037">
+      <source role=".">
+         <content><![CDATA[<doc>Test</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str044">
+      <source role=".">
+         <content><![CDATA[<doc attr="slamwich">ENCYCLOPEDIA</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str068">
+      <source role=".">
+         <content><![CDATA[<doc attr="abcdefg">1999/04/01</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str085">
+      <source role=".">
+         <content><![CDATA[<doc> 
+<a>       This          is a       normalized          string.</a>    
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str087">
+      <source role=".">
+         <content><![CDATA[<doc>
+<a attrib="hello">bar</a>
+<b attrib="HELLO">BAR</b>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str097">
+      <source role=".">
+         <content><![CDATA[<doc>
+<a>a</a>
+<b>b</b>
+<c>c</c>
+<d>d</d>
+<e>ef</e>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str106">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str124">
+      <source role=".">
+         <content><![CDATA[<doc><a/><a>bbb</a><a>0</a><a>1</a><a>true</a><a>false</a></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str125">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <a>AAA</a>
+  <a>BBB</a>
+  <a>CCC</a>
+  <sep>/</sep>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str131">
+      <source role=".">
+         <content><![CDATA[<doc>The <i>current</i> node</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str133">
+      <source role=".">
+         <content><![CDATA[<doc>
+<a/>
+<b/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str135">
+      <source role=".">
+         <content><![CDATA[<concepts id="5555 6666"/>]]></content>
+      </source>
+   </environment>
+   <environment name="str200">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str202">
+      <source role=".">
+         <content><![CDATA[<doc>abcdef</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str203">
+      <source role=".">
+         <content><![CDATA[<doc></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="str204">
+      <source role="." file="str204.xml"/>
+   </environment>
+
+   <test-case name="string-001">
+      <description>Test of 'generate-id()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-04-29" change="Changed all tests in this test-set that don't require 1.0-compatibility to say version='2.0'"/>
+      <environment ref="str001"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+    True: true
+    False: false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-002">
+      <description>Test of 'local-name()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str002"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">a</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-003">
+      <description>Test of 'namespace-uri()'. note, this relies on namespace-uri taking the first element in the sequence, which only works under backwards-compatible mode</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str003"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">http://xsl.lotus.com/ns1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-004">
+      <description>Test of 'name()', without arguments.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str004"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">doc</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-005">
+      <description>Test of 'string()' conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str005"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-006">
+      <description>Test of 'starts-with()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str006"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-007">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str006"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-008">
+      <description>Test of 'substring-before()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str008"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1999</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-009">
+      <description>Test of 'substring-after()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>04/01</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-010">
+      <description>Test of 'substring()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str009"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1999</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-011">
+      <description>Test of 'normalize-space()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str010"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ab cd ef</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-012">
+      <description>Test of 'translate()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str011"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>BAr</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-013">
+      <description>Test of 'concat()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str012"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>xyz</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-014">
+      <description>Test of 'format-number()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str013"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-015">
+      <description>PURPOSE</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str016"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>234</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-016">
+      <description>PURPOSE</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str016"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-017">
+      <description>PURPOSE</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str016"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-018">
+      <description>PURPOSE</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str016"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-019">
+      <description>PURPOSE</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str016"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12345</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-020">
+      <description>PURPOSE</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str016"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-021">
+      <description>Test for empty node</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str016"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-022">
+      <description>Test of 'generate-id()' - make sure same node generates same ID.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str023"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-023">
+      <description>Test of 'local-name()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str024"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">b</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-024">
+      <description>Test of 'local-name()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str024"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-025">
+      <description>Test of 'local-name()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str024"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">attrib2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-026">
+      <description>Test of 'namespace-uri()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str027"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-027">
+      <description>Test of 'namespace-uri()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str027"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">http://xsl.lotus.com/ns1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-028">
+      <description>Test of 'namespace-uri()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str027"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">http://xsl.lotus.com/ns2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-029">
+      <description>Test of 'namespace-uri()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str027"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-030">
+      <description>Test of 'namespace-uri()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str027"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">http://xsl.lotus.com/ns1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-031">
+      <description>Test of 'name()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str027"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-031.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">ns1:a</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-032">
+      <description>Test of 'name()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str027"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-032.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">ns1:a</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-033">
+      <description>Test of 'name()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str027"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">b</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-034">
+      <description>Test of 'name()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str027"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-034.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-035">
+      <description>Test of 'name()'.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str027"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">ns1:attrib2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-036">
+      <description>Test of 'string()' conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str037"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-037">
+      <description>Test of 'string()' conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str037"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-038">
+      <description>Test of 'string()' conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str037"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-039">
+      <description>Test of 'string()' conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str037"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-039.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>test</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-040">
+      <description>Test of 'string()' conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str037"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-040.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-041">
+      <description>Test of 'string()' conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str037"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-041.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Test</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-042">
+      <description>Test of 'string()' conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str037"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-042.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-043">
+      <description>Test of 'starts-with()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-043.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-044">
+      <description>Test of 'starts-with()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-044.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-045">
+      <description>Test of 'starts-with()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-045.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-046">
+      <description>Test of 'starts-with()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-046.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-047">
+      <description>Test of 'starts-with()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-047.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-048">
+      <description>Test of 'starts-with()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-048.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-049">
+      <description>Test of 'starts-with()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-049.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-050">
+      <description>Test of 'starts-with()' function. changed 29 May 2001 to do something useful...</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-050.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-051">
+      <description>Test of 'starts-with()' function. changed 29 May 2001 to do something useful</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-051.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-052">
+      <description>Test of 'starts-with()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-052.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-053">
+      <description>Test of 'starts-with()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-053.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-054">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-054.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-055">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-055.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-056">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-056.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-057">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-057.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-058">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-058.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-059">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-059.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-060">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-060.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-061">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-061.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-062">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-062.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-063">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-063.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-064">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-064.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-065">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-065.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-066">
+      <description>Test of 'contains()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str044"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-066.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-067">
+      <description>Test of 'substring-before()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-067.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-068">
+      <description>Test of 'substring-before()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-068.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>EN</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-069">
+      <description>Test of 'substring-before()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-069.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-070">
+      <description>Test of 'substring-before()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-070.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1999</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-071">
+      <description>Test of 'substring-before()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-071.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-072">
+      <description>Test of 'substring-before()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-072.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-073">
+      <description>Test of 'substring-before()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-073.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-074">
+      <description>Test of 'substring-before()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-074.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>abc</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-075">
+      <description>Test of 'substring-after()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-075.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-076">
+      <description>Test of 'substring-after()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-076.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>YCLOPEDIA</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-077">
+      <description>Test of 'substring-after()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-077.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-078">
+      <description>Test of 'substring-after()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-078.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>999/04/01</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-079">
+      <description>Test of 'substring-after()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-079.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>04/01</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-080">
+      <description>Test of 'substring-after()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-080.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-081">
+      <description>Test of 'substring-after()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-081.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-082">
+      <description>Test of 'substring-after()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-082.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-083">
+      <description>Test of 'substring-after()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-083.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>efg</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-084">
+      <description>Test of 'substring()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-084.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>PED</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-085">
+      <description>Test of 'substring()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-085.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>PEDIA</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-086">
+      <description>Test of 'substring()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-086.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-087">
+      <description>Test of 'substring()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-087.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>defghi</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-088">
+      <description>Test of 'substring()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-088.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-089">
+      <description>Test of 'substring()' function. test changed 29 May 2001 to do something useful...</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-089.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1999</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-090">
+      <description>Test of 'substring()' function on an empty sequence.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-090.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-091">
+      <description>Test of 'substring()' function. Changed 2002-12-19</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-091.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>abc</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-092">
+      <description>Test of 'substring()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-092.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out corrected="10 Oct 2001">defg</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-093">
+      <description>Test of 'substring()' function. Changed 2002-12-19</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-093.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>cdef</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-094">
+      <description>Test of 'substring()' function with Unicode surrogate pairs.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-094.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>efg񐀀i</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-095">
+      <description>Test that quotes can be doubled in string literals (XPath 2.0) .</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str068"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-095.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>He isn't</a><a>He said "boo"</a><b text="He isn't"/><b text="Here be brackets '}' and '{'"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-096">
+      <description>Test of 'normalize()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str085"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-096.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>This is a normalized string.</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-097">
+      <description>Test of 'normalize-space()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str085"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-097.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>This is a normalized string.</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-098">
+      <description>Test of 'translate()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str087"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-098.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>BAR</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-099">
+      <description>Test of 'translate()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str087"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-099.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>bar</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-100">
+      <description>Test of 'translate()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str087"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-100.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>BAT</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-101">
+      <description>Test of 'translate()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str087"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>BAr</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-102">
+      <description>Test of 'translate()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str087"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>baR</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-103">
+      <description>Test of 'translate()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str087"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>heIIT</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-104">
+      <description>Test of 'translate()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str087"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>HEiit</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-105">
+      <description>Test of 'translate()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str087"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>HELLO</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-106">
+      <description>Test of 'translate()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str087"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>AAA</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-107">
+      <description>Test of 'translate()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str087"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>xxAAAxxxx</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-108">
+      <description>Test of 'concat()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str097"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>abcdef</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-109">
+      <description>Test of 'concat()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str097"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-109.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ab</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-110">
+      <description>Test of 'concat()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str097"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-110.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>abcdef</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-111">
+      <description>Test of 'concat()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str097"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-111.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>cd34</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-112">
+      <description>Test of 'concat()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str097"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-112.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>cd34</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-113">
+      <description>Test of 'concat()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str097"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-113.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>bc23</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-114">
+      <description>Test of 'concat()' function. spec changed to allow a numeric argument in 2.0 mode (21 Jun 2004)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str097"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-114.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>a34</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-115">
+      <description>Test of 'concat()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str097"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-115.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>falsely</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-116">
+      <description>Test of 'concat()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str097"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-116.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+a
+b
+c
+d
+ef
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-117">
+      <description>Test of 'format-number()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str106"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-117.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1000</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-118">
+      <description>Test of 'format-number()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str106"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-118.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,000</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-119">
+      <description>Test of 'format-number()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str106"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-119.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>01</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-120">
+      <description>Test of 'format-number()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str106"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-120.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>01.0</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-121">
+      <description>Test of 'format-number()' function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str106"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-121.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>25%</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-122">
+      <description>Test optimization of (string-length = 0) .</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str124"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-122.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="string-122.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="string-123">
+      <description>Test string-join()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str125"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-123.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><z>AAA/BBB/CCC</z>;
+    <z>AAA</z>;   
+    <z/>;  
+    <z>AAABBBCCC</z>;
+    <z/>;                
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-124">
+      <description>PURPOSE Test string() with zero arguments: returns the string value of the context node</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str131"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-124.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>The current node</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-125">
+      <description>PURPOSE Test string-length() with zero arguments: returns the string length of the context node</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str131"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-125.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>16</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-126">
+      <description>PURPOSE Test upper-case() applied to an empty sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str133"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-126.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><z len="0" count="1"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-127">
+      <description>PURPOSE Test lower-case() applied to an empty sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str133"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-127.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><z len="0" count="1"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-128">
+      <description>PURPOSE Test substring() with start lt 0 and (start+len) lt 0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str135"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-128.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-129">
+      <description>Test of 'string-length()'</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str200"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-129.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3 should be 3
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-130">
+      <description>Test of 'string-length()'</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str200"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-130.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0 should be 0
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-131">
+      <description>Test of 'string-length()'</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str202"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-131.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6 should be 6
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-132">
+      <description>Test of 'string-length()' with a Unicode surrogate pair</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str203"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-132.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>7 should be 7
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="string-133">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="str204"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-133.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc xmlns:dp="http://dpawson.co.uk/ns" xmlns:xs="http://www.w3.org/2001/XMLSchema-datatypes">
+ a 
+ b
+ c
+ 4
+ 5
+ 6
+
+<a>a</a>
+<a>i</a>
+<a>a</a>
+
+</doc>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="string-134">
+      <description>Test of lower-case() applied to Latin-1 characters</description>
+      <created by="Michael Kay" on="2016-03-21"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-134.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "160 161 162 163 164 165 166 167 168 169 170 171 172 173 174 175 176 177 178 179 180 181 182 183 184 185 186 187 188 189 190 191 224 225 226 227 228 229 230 231 232 233 234 235 236 237 238 239 240 241 242 243 244 245 246 215 248 249 250 251 252 253 254 223 224 225 226 227 228 229 230 231 232 233 234 235 236 237 238 239 240 241 242 243 244 245 246 247 248 249 250 251 252 253 254 255 257"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="string-135">
+      <description>Test of upper-case() applied to Latin-1 characters</description>
+      <created by="Michael Kay" on="2016-03-21"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-135.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "160 161 162 163 164 165 166 167 168 169 170 171 172 173 174 175 176 177 178 179 180 924 182 183 184 185 186 187 188 189 190 191 192 193 194 195 196 197 198 199 200 201 202 203 204 205 206 207 208 209 210 211 212 213 214 215 216 217 218 219 220 221 222 83 83 192 193 194 195 196 197 198 199 200 201 202 203 204 205 206 207 208 209 210 211 212 213 214 247 216 217 218 219 220 221 222 376 256"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="string-136">
+      <description>Test of whitespace normalization in xs:string subtypes</description>
+      <created by="Michael Kay" on="2016-03-29"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="string-136.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/string = "true"</assert>
+            <assert>/out/normalizedString = "true"</assert>
+            <assert>/out/token = "true"</assert>
+         </all-of>
+      </result>
+   </test-case>
+</test-set>

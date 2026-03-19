@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-has-children">
+   <description>has-children() function with streaming</description>
+   <keywords>streaming streamability-analysis avg</keywords>
+
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-has-children-001">
+      <description>Call has-children() on streamed element nodes</description>
+      <keywords>fn:has-children</keywords>
+      <created by="Michael Kay" on="2014-10-16"/>
+      <modified by="Michael Kay" on="2014-11-14" change="corrected two assertions"/>
+      <test>        
+         <stylesheet file="sf-has-children-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/BOOKLIST/@has-children = 'true'</assert>
+           <assert>/BOOKLIST/BOOKS/@has-children = 'true'</assert>
+           <assert>/BOOKLIST/BOOKS/ITEM[1]/@has-children = 'true'</assert>
+           <assert>/BOOKLIST/BOOKS/ITEM[1]/TITLE/@has-children = 'true'</assert>
+           <assert>/BOOKLIST/BOOKS/ITEM[1]/PRICE/@has-children = 'true'</assert>
+           <assert>/BOOKLIST/CATEGORIES/@has-children = 'true'</assert>
+           <assert>/BOOKLIST/CATEGORIES/CATEGORY[1]/@has-children = 'false'</assert>
+         </all-of>
+      </result>       
+   </test-case>
+   
+ 
+
+</test-set>

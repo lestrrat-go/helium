@@ -1,0 +1,354 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-outermost">
+   <description>outermost() function with streaming</description>
+   
+   <environment name="sf-outermost-A">
+     <stylesheet file="sf-outermost-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-outermost-001">
+      <description>Streaming outermost() - grounded operand</description>
+      <keywords>striding-then-grounded leading-lone-slash PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4.95 6.58 4.95 4.95 16.47 16.47</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-002">
+      <description>Streaming outermost() - grounded operand</description>
+      <keywords>leading-lone-slash striding-then-grounded fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-003">
+      <description>Streaming outermost() - grounded atomic operand</description>
+      <keywords>striding-then-grounded leading-lone-slash fn:tokenize ContextItemExpr PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>8.3 5.7 1.1 1.0 5.2 7.8 6.8 4.2 0.8 7.8 5.2 0.9 22.5 18.0 3.5 7.8 5.0 0.9</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-010">
+      <description>Streaming outermost() - striding operand, inspection usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:count</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-011">
+      <description>Streaming outermost() - striding operand, absorption usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:sum</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>54.37</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-012">
+      <description>Streaming outermost() - striding operand, transmission usage</description>
+      <keywords>leading-lone-slash striding motionless-predicate fn:position PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6.58 4.95 16.47</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-013">
+      <description>Streaming outermost() - striding operand, focus-setting usage</description>
+      <keywords>AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5.95 7.58 5.95 5.95 17.47 17.47</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-outermost-014">
+      <description>Streaming outermost() - striding operand, focus-controlled usage</description>
+      <keywords>leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-outermost-015">
+      <description>Streaming outermost() - striding operand, focus-setting usage</description>
+      <keywords>leading-lone-slash striding PathExpr AdditiveExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47 "</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-outermost-016">
+      <description>Streaming outermost() - striding operand, focus-controlled usage</description>
+      <keywords>xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-017">
+      <description>Streaming outermost() - striding operand, focus-setting usage for inspection action</description>
+      <keywords>leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "true false true true true true false false true true true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-018">
+      <description>Streaming outermost() - striding operand, apply-templates usage</description>
+      <keywords>leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-020">
+      <description>Streaming outermost() - crawling operand, inspection usage</description>
+      <keywords>xsl:copy-of fn:count crawling-then-striding PathExpr leading-double-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-021">
+      <description>Streaming outermost() - crawling operand, absorption usage</description>
+      <keywords>leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>11</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-022">
+      <description>Streaming outermost() - crawling operand, transmission usage</description>
+      <keywords>striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Pride and PrejudiceJane AustenModern Library</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-023">
+      <description>Streaming outermost() - crawling operand, focus-setting usage</description>
+      <keywords>leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5.95 7.58 5.95 5.95 17.47 17.47</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-030">
+      <description>Streaming outermost() - climbing operand, inspection usage</description>
+      <keywords>striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-031">
+      <description>Streaming outermost() - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-outermost-032">
+      <description>Streaming outermost() - climbing operand, absorption usage</description>
+      <keywords>climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-033">
+      <description>Streaming outermost() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-outermost-034">
+      <description>Streaming outermost() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-035">
+      <description>Streaming outermost() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-outermost-100">
+      <description>Streaming outermost() - recursive data</description>
+      <keywords>striding-then-climbing attribute-axis leading-double-slash fn:outermost crawling-then-striding PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-17"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-100"/>
+      </test>
+      <result>
+         <assert>/out = "1"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-outermost-101">
+      <description>Streaming outermost() - recursive data</description>
+      <keywords>striding-then-climbing attribute-axis leading-double-slash PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2013-12-17"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-101"/>
+      </test>
+      <result>
+         <assert>/out = "1.1|1.2|1.3"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-outermost-102">
+      <description>Streaming outermost() - recursive data</description>
+      <keywords>leading-double-slash PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2013-12-17"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-102"/>
+      </test>
+      <result>
+         <assert>/out = "Section 1.1|Section 1.2|Section 1.3"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-outermost-103">
+      <description>Streaming outermost() - recursive data</description>
+      <keywords>leading-double-slash PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2013-12-17"/>
+      <environment ref="sf-outermost-A"/>
+      <test>
+         <initial-template name="r-103"/>
+      </test>
+      <result>
+         <assert>/out = "End of Section 1.1|End of Section 1.2|End of Section 1.3"</assert>
+      </result>
+   </test-case>  
+
+
+
+</test-set>

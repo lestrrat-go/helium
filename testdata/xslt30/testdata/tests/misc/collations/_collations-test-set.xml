@@ -1,0 +1,761 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="collations">
+   <description>Tests collations</description>
+   <environment name="collations-01">
+      <source role="." file="collations-01.xml"/>
+      <collation uri="http://www.w3.org/2013/collation/UCA?strength=secondary" />
+   </environment>
+   <environment name="collations-02">
+      <source role="." file="collations-02.xml"/>
+      <collation uri="http://www.w3.org/2013/collation/UCA?strength=secondary" />
+   </environment>
+   <environment name="collations-03">
+      <source role="." file="collations-03.xml"/>
+      <collation uri="http://www.w3.org/2013/collation/UCA?strength=secondary" />
+   </environment>
+   <environment name="collations-04">
+      <source role="." file="collations-04.xml"/>
+      <collation uri="http://www.w3.org/2013/collation/UCA?strength=secondary" />
+   </environment>
+   <environment name="collations-05">
+      <source role="." file="collations-05.xml"/>
+      <collation uri="http://www.w3.org/2013/collation/UCA?strength=secondary" />
+   </environment>
+   <environment name="collations-06">
+      <source role=".">
+         <content><![CDATA[<names>MacIntosh, MacAndrew, macIntosh, macintoshes, Macintoshes, macintosh, McIntosh, Macintosh</names>]]></content>
+      </source>
+      <collation uri="http://www.w3.org/2013/collation/UCA?strength=secondary" />
+   </environment>
+   
+   
+   <environment name="collationfunc001">
+      <source role=".">
+         <content><![CDATA[<!-- A required but useless input XML doc for a transformation -->
+<doc/>]]></content>
+      </source>
+   </environment>
+   
+
+   <test-case name="collations-0101">
+      <description>Sort strings using a case-blind collation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2018-01-11" change="Use standard UCA collation URI with secondary strength (for all tests)"/>
+      <modified by="Michael Kay" on="2018-01-11" change="Drop use of XML entities to define the collation (unnecessary dependency)"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <!-- Should work with a 2.0 process provided the case-insensitive collation is recognized -->
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="collations-0101.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0102">
+      <description>Sort strings in descending order using a case-blind collation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="collations-0102.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0103">
+      <description>Grouping using a case-blind collation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="collations-0103.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0104">
+      <description>Grouping using a case-blind collation as default collation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0104.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="collations-0104.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0105">
+      <description>Keys using a case-blind collation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>thOU thou Thou</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0106">
+      <description>Keys using a case-blind collation as default collation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>thOU thou Thou</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0107">
+      <description>Keys using a case-blind collation mixing explicit and default collation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0107.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>thOU thou Thou</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0108">
+      <description>eq operator using default collation to compare two equal words</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0108.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><eq>true</eq><ne>false</ne><gt>false</gt><lt>false</lt><ge>true</ge><le>true</le></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0109">
+      <description>compare() function using default collation to compare two equal words</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0109.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><eq>0</eq></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0110">
+      <description>compare() function using explicit collation to compare two equal words</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0110.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><eq>true</eq><ne>false</ne></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0111">
+      <description>startswith() function using explicit collation, default collation, and none</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0111.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="collations-0111.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0112">
+      <description>contains() function using explicit collation, default collation, and none</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0112.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="collations-0112.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0113">
+      <description>ends-with() function using explicit collation, default collation, and none</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0113.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="collations-0113.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0114">
+      <description>substring-before() function using explicit collation, default collation, and none</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0114.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="collations-0114.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0115">
+      <description>substring-after() function using explicit collation, default collation, and none</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0115.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="collations-0115.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0116">
+      <description>deep-equal() function using explicit collation, default collation, and none</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0116.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><th>true</th><th>true</th><th>false</th></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0117">
+      <description>index-of() function using explicit collation, default collation, and none</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0117.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><th>3 10 13</th><th>3 10 13</th><th/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0118">
+      <description>max() function using explicit collation, default collation, and none</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0118.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><th>tROUGH</th><th>tROUGH</th><th>touGH</th></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0119">
+      <description>min() function using explicit collation, default collation, and none</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0119.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><th>tHoRoUgH</th><th>tHoRoUgH</th><th>THOUGH</th></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0120">
+      <description>distinct-values() function using explicit collation, default collation, and none</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0120.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><th>10</th><th>10</th><th>14</th></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0121">
+      <description>Value comparison using default-collation at various levels, run-time comparison</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0121.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>true</one><two>true</two><three>true</three></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0122">
+      <description>General comparison using default-collation at various levels, run-time comparison</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0122.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>true</one><two>true</two><three>true</three></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0123">
+      <description>Value comparison using default-collation at various levels, compile-time comparison</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0123.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>true</one><two>true</two><three>true</three></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0124">
+      <description>General comparison using default-collation at various levels, run-time comparison</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0124.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>true</one><two>true</two><three>true</three></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0125">
+      <description>Generate error XTSE1220 (different collations for two keys).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0125.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE1220"/>
+      </result>
+   </test-case>
+   
+   <test-case name="collations-0126">
+      <description>General comparison using default-collation at xsl:stylesheet level, run-time comparison</description>
+      <created by="Michael Kay" on="2020-09-17"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0126.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>true</one><two>true</two><three>true</three></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="collations-0127">
+      <description>General comparison using default-collation at imported xsl:stylesheet level, run-time comparison</description>
+      <created by="Michael Kay" on="2020-09-17"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0127.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>true</one><two>true</two><three>true</three></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="collations-0128">
+      <description>General comparison using default-collation at xsl:stylesheet level, comparison within xsl:evaluate</description>
+      <created by="Michael Kay" on="2022-08-05"/>
+      <environment ref="collations-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0128.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>true</one><two>true</two><three>true</three></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0201">
+      <description>Testcase to verify that when collation attribute is used with xsl:sort, its value is used to determine the sorting order, and other attributes (lang, case-order) are ignored. Included cases: - no attributes specified; only @lang; only @case-order; both @lang and @case-order</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="Eliminate whitespace complications"/>
+      <environment ref="collations-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0201.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/x[1] = "1:22 * 2:18 * 3:20 * 4:12 * 5:14 * 6:11 * 7:9 * 8:15 * 9:1 * 10:6 * 11:19 * 12:5 * 13:13 * 14:17 * 15:16 * 16:2 * 17:4 * 18:21 * 19:3 * 20:8 * 21:10 * 22:7 * "</assert>
+            <assert>/out/x[2] = "1:22 * 2:18 * 3:20 * 4:12 * 5:14 * 6:11 * 7:9 * 8:15 * 9:1 * 10:6 * 11:19 * 12:5 * 13:13 * 14:17 * 15:16 * 16:2 * 17:4 * 18:21 * 19:3 * 20:8 * 21:10 * 22:7 * "</assert>
+            <assert>/out/x[3] = "1:22 * 2:18 * 3:20 * 4:12 * 5:14 * 6:11 * 7:9 * 8:15 * 9:1 * 10:6 * 11:19 * 12:5 * 13:13 * 14:17 * 15:16 * 16:2 * 17:4 * 18:21 * 19:3 * 20:8 * 21:10 * 22:7 * "</assert>
+            <assert>/out/x[4] = "1:22 * 2:18 * 3:20 * 4:12 * 5:14 * 6:11 * 7:9 * 8:15 * 9:1 * 10:6 * 11:19 * 12:5 * 13:13 * 14:17 * 15:16 * 16:2 * 17:4 * 18:21 * 19:3 * 20:8 * 21:10 * 22:7 * "</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0301">
+      <description>To test the xsl:sort element for primary and secondary sorting with attributes that affect collation</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="collations-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Alex MOore; Alex Milowski; ALex Moore; Chris Maden; Jeff Caruso; </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0401">
+      <description>Test to verify that xsl:key uses the default collation explicitly specified in the stylesheet element when no collation attribute is used</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="avoid whitespace complications"/>
+      <environment ref="collations-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0401.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '9'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0402">
+      <description>Test to verify that xsl:key uses the explicit collation specified in its collation attribute</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="avoid whitespace complications"/>
+      <environment ref="collations-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0402.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '9'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0403">
+      <description>Test to verify that xsl:key uses the implicit default collation when no collation attribute is used</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="avoid whitespace complications"/>
+      <environment ref="collations-04"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0403.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '9'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0501">
+      <description>Test to verify that xsl:key uses the explicit collation specified in its collation attribute</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="collations-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+Default collation:
+123789101112141516171819202122
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0502">
+      <description>Test to verify that xsl:for-each-group uses the implicit Unicode codepoint default collation</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="collations-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0502.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+Default collation:
+123789101112141516171819202122
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0503">
+      <description>Testcase to verify that xsl:for-each-group uses the collation explicitly specified in its collation attribute</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="collations-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0503.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+Unicode codepoint collation:
+123789101112141516171819202122
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="collations-0601">
+      <description>Test to verify the effect of case-order = upper-first|lower-first as per Erratum E26</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="collations-06"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="collations-0601.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="collations-1001">
+      <description>To verify that the implicit Unicode code point collation can be used with XPath functions that require collation.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="Was collation-001 (under fn)"/>
+      <environment ref="collationfunc001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-1001.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/Compare = "-1"</assert>
+            <assert>/out/Contains = "false"</assert>
+            <assert>/out/Starts-with = "false"</assert>
+            <assert>/out/Ends-with = "false"</assert>
+            <assert>/out/Subtring-before = ""</assert>
+            <assert>/out/Substring-after = ""</assert>
+            <assert>/out/Index-of = ""</assert>
+            <assert>/out/Distinct-values = "Strasse Straß"</assert>
+            <assert>/out/Deep-equal = "false"</assert>
+            <assert>/out/Max = "ä"</assert>
+            <assert>/out/Min = "ä"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="collations-1002">
+      <description>To verify that the Unicode code point collation can be passed as an argument and is used in XPath functions that require collation.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="Was collation-002 (under fn)"/>
+      <environment ref="collationfunc001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-1002.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/Compare = "-1"</assert>
+            <assert>/out/Contains = "false"</assert>
+            <assert>/out/Starts-with = "false"</assert>
+            <assert>/out/Ends-with = "false"</assert>
+            <assert>/out/Subtring-before = ""</assert>
+            <assert>/out/Substring-after = ""</assert>
+            <assert>/out/Index-of = ""</assert>
+            <assert>/out/Distinct-values = "Strasse Straß"</assert>
+            <assert>/out/Deep-equal = "false"</assert>
+            <assert>/out/Max = "ä"</assert>
+            <assert>/out/Min = "ä"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="collations-1003">
+      <description>To verify that the Unicode code point collation URI is the first recognized and used value from a list specified in a default-collation attribute.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="Was collation-003 (under fn)"/>
+      <environment ref="collationfunc001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-1003.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/Compare = "-1"</assert>
+            <assert>/out/Contains = "false"</assert>
+            <assert>/out/Starts-with = "false"</assert>
+            <assert>/out/Ends-with = "false"</assert>
+            <assert>/out/Subtring-before = ""</assert>
+            <assert>/out/Substring-after = ""</assert>
+            <assert>/out/Index-of = ""</assert>
+            <assert>/out/Distinct-values = "Strasse Straß"</assert>
+            <assert>/out/Deep-equal = "false"</assert>
+            <assert>/out/Max = "ä"</assert>
+            <assert>/out/Min = "ä"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="collations-1004">
+      <description>Testcase to verify that implicit default collation is captured by fn:default-collation</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="Was collation-004 (under fn)"/>
+      <environment ref="collationfunc001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-1004.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "http://www.w3.org/2005/xpath-functions/collation/codepoint"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="collations-1005">
+      <description>To verify that the first recognized collation URI value from a list specified in a default-collation attribute is returned by fn:default-collation.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2018-01-11" change="Was collation-005 (under fn)"/>
+      <environment ref="collationfunc001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-1005.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "http://www.w3.org/2005/xpath-functions/collation/codepoint"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="collations-1006">
+      <description>To verify that the default-collation attribute is used by various expressions.</description>
+      <created by="Michael Kay" on="2019-02-19"/>
+      <modified by="Michael Kay" on="2020-09-18" 
+         change="Since the test uses a UCA collation with fallback=no, error FOCH0002 is acceptable"/>
+      <environment ref="collationfunc001"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="collations-1006.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="FOCH0002"/>
+            <all-of>
+               <assert>/out/a = 'true'</assert>
+               <assert>/out/b = 'true'</assert>
+               <assert>/out/c = 'true'</assert>
+               <assert>/out/d = 'true'</assert>
+               <assert>/out/e = 'Ab aBC aBcD'</assert>
+            </all-of>
+         </any-of>        
+      </result>
+   </test-case>
+   
+</test-set>

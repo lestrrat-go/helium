@@ -1,0 +1,589 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-try">
+   <description>xsl:try/xsl:catch instruction with streaming</description>
+   
+   <environment name="si-try-A">
+     <stylesheet file="si-try-A.xsl"/>
+   </environment>
+   
+   <environment name="si-try-B">
+     <stylesheet file="si-try-B.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="si-try-001">
+      <description>Test of xsl:stream/xsl:try instruction with "treat as": count descendant nodes</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <modified by="Michael Kay" on="2014-08-12" change="change test to throw the expected error"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-001"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-try-002">
+      <description>Test of xsl:stream/xsl:try instruction with "treat as", filtered with motionless predicate</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-002"/>
+      </test>
+      <result>
+         <assert>count(/out/ITEM) = 4</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-003">
+      <description>Test of xsl:stream/xsl:try instruction with "treat as", applied to ancestor nodes</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-003"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-004">
+      <description>Test of xsl:stream/xsl:try instruction with "treat as", applied to grounded consuming items</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-004"/>
+      </test>
+      <result>
+         <assert>/out = "8.3 5.7 1.1 1.0 5.2 7.8 6.8 4.2 0.8 7.8 5.2 0.9 22.5 18.0 3.5 7.8 5.0 0.9"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-005">
+      <description>Test of xsl:stream/xsl:try instruction with "treat as", applied to attributes of ancestor nodes</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-005"/>
+      </test>
+      <result>
+         <assert>/out = "MHK MMP"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-006">
+      <description>Test of xsl:stream/xsl:try instruction with "treat as", applied to namespaces of ancestor nodes</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-006"/>
+      </test>
+      <result>
+         <assert>/out = "http://www.w3.org/XML/1998/namespace http://www.w3.org/XML/1998/namespace http://www.w3.org/XML/1998/namespace"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-try-007">
+      <description>xsl:stream/xsl:try with "treat as" with empty downwards selection</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-007"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-008">
+      <description>xsl:stream/xsl:try with "treat as" with empty downwards selection</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-008"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="si-try-009">
+      <description>xsl:stream/xsl:try with "treat as" with a striding expression</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <modified by="Michael Kay" on="2014-08-12" change="remove dependency on non-streamable union"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-009"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-010">
+      <description>xsl:stream/xsl:try with "treat as" with a crawling union</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-010"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="si-try-011">
+      <description>xsl:stream/xsl:try with simple motionless "treat as"</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-011"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "1 2 3 4 5 6 7 8 9 10"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-012">
+      <description>xsl:stream/xsl:try with "treat as" filtered grounded sequence</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-012"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-013">
+      <description>xsl:stream/xsl:try with "treat as" filtered crawling sequence</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-013"/>
+      </test>
+      <result>
+         <assert>starts-with(/out, "Pride and PrejudiceJane AustenModern Library")</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-014">
+      <description>xsl:stream/xsl:try with "treat as" with twice-filtered crawling sequence</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-014"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="si-try-015">
+      <description>xsl:stream/xsl:try with "treat as" applied to a non-existent element</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-015"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="si-try-016">
+      <description>xsl:stream/xsl:try with "treat as" applied to an existent attribute (can exit early)</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-016"/>
+      </test>
+      <result>
+         <assert>starts-with(/out, "0.01 3.06 15.11 4.61 3.81 6.40 10.52 -1.84 15.83 -6.68 1.28")</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-017">
+      <description>xsl:stream/xsl:try with "treat as" and a boolean filter</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-017"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-018">
+      <description>xsl:stream/xsl:try with "treat as" and both a positional and a boolean filter</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-018"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-020">
+      <description>xsl:stream/xsl:try with "treat as" on a sequence containing streamed nodes and atomic values</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-020"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-021">
+      <description>xsl:stream/xsl:try with "treat as" on a sequence containing streamed nodes and atomic values</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-021"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-022">
+      <description>xsl:stream/xsl:try with "treat as" on a sequence containing streamed nodes and atomic values</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-022"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-023">
+      <description>xsl:stream/xsl:try with "treat as" on a sequence containing streamed nodes and atomic values</description>
+      <created by="Michael Kay" on="2013-12-28"/>
+      <environment ref="si-try-A"/>
+      <test>
+         <initial-template name="c-023"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+      <test-case name="si-try-103">
+      <description>xsl:try with Basic Test of xsl:stream instruction with avg()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-103"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>9.06</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="si-try-104">
+      <description>xsl:try with Test of xsl:stream instruction with avg(), filtered with a motionless predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-104"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>8.2375</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="si-try-105">
+      <description>xsl:try with Test of xsl:stream instruction with avg(), filtered with a positional predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-105"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5.49</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="si-try-106">
+      <description>xsl:try with Test of xsl:stream instruction with avg(), filtered with a positional predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-106"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5.49</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="si-try-107">
+      <description>xsl:try with Test of xsl:stream instruction with avg(), filtered with a positional predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-107"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5.49</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-108">
+      <description>xsl:try with Test of xsl:stream instruction with avg(), filtered with data() to make the predicates motionless</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-108"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>420</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-109">
+      <description>xsl:try with Test of xsl:stream instruction with avg(), filtered with text() to make the predicates motionless</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-109"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>420</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-110">
+      <description>xsl:try with Test of xsl:stream instruction with avg(), filtered with number() to make the predicates motionless</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-110"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>420</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-111">
+      <description>xsl:try with avg() selecting nothing, returning the $zero case</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-111"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-112">
+      <description>xsl:try with avg() selecting both streamed nodes and literals</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-112"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>322.875</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-113">
+      <description>xsl:try with avg() selecting both streamed nodes and literals while also filtering</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-113"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>318.71</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-115">
+      <description>xsl:try with Test of xsl:stream instruction with avg() of a computed value</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-115"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>267.426</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-116">
+      <description>xsl:try with Test of xsl:stream instruction with avg() of a computed value</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-116"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>15</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-117">
+      <description>xsl:try with Test of xsl:stream instruction with avg() using copy-of to make it streamable</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-117"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>420</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-118">
+      <description>xsl:try with Test of xsl:stream instruction with avg() over attribute values</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-118"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>7</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-119">
+      <description>xsl:try with Test of xsl:stream instruction with avg() over attribute values, filtered</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-119"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>11</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-120">
+      <description>xsl:try with avg() over attribute values, computed</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-120"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>9</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-121">
+      <description>xsl:try with avg() over values that depend on a condition</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-121"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>8</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-122">
+      <description>xsl:try with avg() with a loop used to compute each value</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-122"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6.25</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-123">
+      <description>xsl:try with avg() over a crawling expression</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-123"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6.25</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-140">
+      <description>xsl:try with avg() over an empty grounded expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-140"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-141">
+      <description>xsl:try with avg() over an empty striding expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-141"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-142">
+      <description>xsl:try with avg() over an empty crawling expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-142"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-143">
+      <description>xsl:try with avg() over an empty grounded expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-try-B"/>
+      <test>
+         <initial-template name="s-143"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-try-200">
+      <description>xsl:try with xsl:apply-templates (see https://saxonica.plan.io/boards/3/topics/8400)</description>
+      <created by="Michael Kay after Martin Honnen" on="2022-02-12"/>
+      <environment>
+         <source file="si-try-200.xml" uri="si-try-200.xml" streaming="true" role="."/>
+      </environment>
+      <test>
+         <stylesheet file="si-try-200.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><section><title>s1</title></section><section><title>s2</title></section></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   
+</test-set>

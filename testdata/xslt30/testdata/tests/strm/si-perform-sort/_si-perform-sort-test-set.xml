@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="si-perform-sort">
+  <description>xsl:perform-sort instruction with streaming</description>
+
+
+  <dependencies>
+    <spec value="XSLT30+"/>
+    <feature value="streaming"/>
+  </dependencies>
+
+  <test-case name="si-perform-sort-001">
+    <description>Sort a grounded but consuming input sequence</description>
+    <created by="Michael Kay after Martin Honnen" on="2016-08-06"/>
+    <environment>
+      <source role="." file="si-perform-sort-001.xml" streaming="true"/>
+    </environment>
+    <test>
+      <stylesheet file="si-perform-sort-001.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/root/list/item[1] = 'a'</assert>
+        <assert>/root/list/item[2] = 'c'</assert>
+        <assert>/root/list/item[3] = 'x'</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-perform-sort-002">
+    <description>Sort an atomic input sequence</description>
+    <created by="Michael Kay after Martin Honnen" on="2016-08-06"/>
+    <environment>
+      <source role="." file="si-perform-sort-001.xml" streaming="true"/>
+    </environment>
+    <test>
+      <stylesheet file="si-perform-sort-002.xsl"/>
+    </test>
+    <result>
+        <assert>/root/list = 'a c x'</assert>
+    </result>
+  </test-case>
+
+
+</test-set>

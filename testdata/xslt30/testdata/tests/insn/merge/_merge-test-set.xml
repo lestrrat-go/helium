@@ -1,0 +1,1724 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="merge">
+   
+   <description>Tests the xsl:merge instruction</description>
+   
+   <environment name="merge001">
+      <source role="." file="merge001.xml"/>
+      <collection uri="log-files">
+         <source file="log-files/log-file1.xml" uri="log-files/log-file1.xml"/>
+         <source file="log-files/log-file2.xml" uri="log-files/log-file2.xml"/>
+      </collection>
+   </environment>
+   <environment name="merge002">
+      <source role="." file="merge001.xml"/>
+      <source file="log-file-1.xml" uri="log-file-1.xml"/>
+      <source file="log-file-2.xml" uri="log-file-2.xml"/>
+   </environment>
+   <environment name="merge004">
+      <source role="." file="merge004.xml"/>
+      <source file="school2.xml" uri="school2.xml"/>
+   </environment>
+   <environment name="merge008">
+      <source role="." file="merge008.xml"/>
+      <source file="america.xml" uri="america.xml"/>
+   </environment>
+   <environment name="merge010">
+      <source role="." file="merge010.xml"/>
+   </environment>
+   <environment name="merge011">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="merge015">
+      <source role="." file="merge015.xml"/>
+   </environment>
+   
+   <environment name="merge046">
+      <source file="log-file-1.xml" uri="log-file-1.xml"/>
+      <source file="log-file-2.xml" uri="log-file-2.xml"/>
+   </environment>
+   
+   <environment name="merge049">
+      <schema role="stylesheet-import"
+              file="books.xsd"/>
+   </environment>
+   
+   <environment name="merge917err">
+      <source role="." file="merge917err.xml"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+   </dependencies>
+
+   <test-case name="merge-001">
+      <description>xsl:merge test on a homogeneous collection of XML log files.</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment>
+         <collection uri="log-files">
+            <source file="log-files/log-file1.xml" uri="log-files/log-file1.xml"/>
+            <source file="log-files/log-file2.xml" uri="log-files/log-file2.xml"/>
+         </collection>
+      </environment>
+      <test>
+         <stylesheet file="merge-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<events><event timestamp="2009-08-20T12:01:01Z">Transaction T1234 started</event
+            ><event timestamp="2009-08-20T12:01:05Z">Transaction T1236 started</event
+            ><event timestamp="2009-08-20T12:01:08Z">Transaction T1235 started</event
+            ><event timestamp="2009-08-20T12:01:09Z">Transaction T1236 ended</event
+            ><event timestamp="2009-08-20T12:01:11Z">Transaction T1237 started</event
+            ><event timestamp="2009-08-20T12:01:12Z">Transaction T1235 ended</event
+            ><event timestamp="2009-08-20T12:01:15Z">Transaction T1234 ended</event
+            ><event timestamp="2009-08-20T12:01:17Z">Transaction T1237 ended</event></events>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="merge-002">
+      <description>xsl:merge test on two heterogeneous files.</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-002.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-003">
+      <description>xsl:merge test on two heterogeneous files. Testing merge-key, where order attribute requires run-time evaluation</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-003.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-004">
+      <description>xsl:merge test on two heterogeneous files- output using the current-grouping-key</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<events><group>2009-08-20T12:01:01Z</group><group>2009-08-20T12:01:08Z</group><group>2009-08-20T12:01:12Z</group><group>2009-08-20T12:01:15Z</group><group>2009-08-20T12:03:00Z</group></events>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="merge-005">
+      <description>
+         xsl:merge: xsl:merge-source that uses a path expression that selects more than one node in an attribute value template 
+         (test with context)
+      </description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment>
+         <source role="." file="merge001.xml"/>
+         <source file="log-file-3.xml" uri="log-file-2.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="merge-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<results><result><event timestamp="2009-08-20T12:01:01Z">Transaction T1234 started</event
+            ><event timestamp="2009-08-20T12:01:08Z">Transaction T1235 started</event
+            ><event timestamp="2009-08-20T12:01:12Z">Transaction T1235 ended</event
+            ><event timestamp="2009-08-20T12:01:15Z">Transaction T1234 ended</event
+            ></result><result><event timestamp="2009-08-20T12:01:15Z">Transaction T1234 ended</event
+            ><event timestamp="2009-08-20T12:01:12Z">Transaction T1235 ended</event
+            ><event timestamp="2009-08-20T12:01:08Z">Transaction T1235 started</event
+            ><event timestamp="2009-08-20T12:01:01Z">Transaction T1234 started</event
+            ></result></results>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="merge-006">
+      <description>xsl:merge: xsl:merge-source that uses a path expression that selects more than one node in an attribute value template</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge001"/>
+      <test>
+         <stylesheet file="merge-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<results><country>Argentina</country><country>Brazil</country><country>Cananda</country><country>Mexico</country><country>USA</country></results>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="merge-007">
+      <description>xsl:merge test with more than one xsl:merge-action child elements</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge001"/>
+      <test>
+         <stylesheet file="merge-007.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-008">
+      <description>Test xsl:merge-key with different languages.</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-09" change="XTDE2210 instead of XTSE2210"/>
+      <environment ref="merge001"/>
+      <test>
+         <stylesheet file="merge-008.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE2210"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-009">
+      <description>Different count of xsl:merge-key grandchildren of a xsl:merge-source to another xsl:merge-source.</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge001"/>
+      <test>
+         <stylesheet file="merge-009.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE2200"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-010">
+      <description>Test xsl:merge-key with the disallowed stable attribute.</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-09" change="XTSE0090 (not allowed attribute for XSLT instruction) instead of XTSE0010"/>
+      <environment ref="merge001"/>
+      <test>
+         <stylesheet file="merge-010.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-011">
+      <description>Testing disallowed merge-key, where data-type attribute requires run-time evaluation</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-09" change="XTDE2210 instead of XTSE2210"/>
+      <environment ref="merge001"/>
+      <test>
+         <stylesheet file="merge-011.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE2210"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-012">
+      <description>xsl:merge test with multiple merge keys</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge004"/>
+      <test>
+         <stylesheet file="merge-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-012.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-013">
+      <description>xsl:merge test - selects two anchor items in the same document</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2018-12-22" change="Fixed merge-013.out to contain self-closing tags (deep-equal the same with prev. version, but closer to expected output)"/>
+      <environment ref="merge004"/>
+      <test>
+         <stylesheet file="merge-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-013.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-014">
+      <description>xsl:merge test - selects two anchor items from two document</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2018-12-22" change="Fixed merge-014.out to contain self-closing tags (deep-equal the same with prev. version, but closer to expected output)"/>
+      <environment ref="merge004"/>
+      <test>
+         <stylesheet file="merge-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-014.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-015">
+      <description>xsl:merge test - selects three anchor items from two document</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2018-12-22" change="Fixed merge-015.out to contain self-closing tags (deep-equal the same with prev. version, but closer to expected output)"/>
+      <environment ref="merge004"/>
+      <test>
+         <stylesheet file="merge-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-015.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-016">
+      <description>xsl:merge test of merge-input with empty sequence at run-time</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge004"/>
+      <test>
+         <stylesheet file="merge-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<results/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="merge-017">
+      <description>The @select attribute of xsl:merge-key should be a singleton, but evaluated to be a sequence of items</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2018-12-22" change="For incomparable merge-keys, the error should be XTTE2230 instead of XTTE1020"/>
+      <modified by="Michael Kay" on="2023-03-06" change="Allow both error codes"/>     
+      <environment ref="merge004"/>
+      <test>
+         <stylesheet file="merge-017.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTTE1020"/>
+            <error code="XTTE2230"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="merge-018">
+      <description>Test xsl:merge - perform sort with a xsl:merge-input</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge008"/>
+      <test>
+         <stylesheet file="merge-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-018.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-019">
+      <description>Sequence of merge-input is text, but the data-type attribute of xsl:merge-key is number</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge008"/>
+      <test>
+         <stylesheet file="merge-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<results><country>Holland</country><country>UK</country><country>Italy</country><country>Germany</country><country>France</country></results>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="merge-020">
+      <description>Test xsl:merge-key with different languages.</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-09" change="XTDE2210 instead of XTSE2220, corrected invalid sequence type to function(*)."/>
+      <environment ref="merge008"/>
+      <test>
+         <stylesheet file="merge-020.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE2210"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-021">
+      <description>Test xsl:merge-input with keys that have different order attributes.</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2018-12-22" 
+         change="XTDE2210 instead of XTSE2220, updated description, the order attributes are different."/>
+      <modified by="Michael Kay" on="2023-03-06" 
+         change="Revert previous change, the order attributes are effectively the same."/>
+      <modified by="Michael Kay" on="2023-11-17" 
+         change="Allow either error code, since the 3.0 spec has in effect been corrected in 4.0."/>
+      
+      <environment ref="merge008"/>
+      <test>
+         <stylesheet file="merge-021.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE2210"/>
+            <error code="XTDE2220"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="merge-022">
+      <description>Test xsl:merge-key context: visibility of variable defined in xsl:merge-input</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2018-05-12" 
+         change="Change expected error; xsl:merge-input is no longer a valid element, so the original error no longer applies"/>
+      <environment ref="merge008"/>
+      <test>
+         <stylesheet file="merge-022.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-023">
+      <description>xsl:merge-keys in corresponding merge-inputs not comparable</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge008"/>
+      <test>
+         <stylesheet file="merge-023.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE2230"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-024">
+      <description>xsl:merge test of intersection</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge010"/>
+      <test>
+         <stylesheet file="merge-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<results><out>20</out><out>21</out><out>22</out><out>23</out><out>24</out><out>25</out><out>26</out><out>27</out><out>28</out><out>29</out><out>30</out></results>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="merge-025">
+      <description>xsl:merge test of union</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge011"/>
+      <test>
+         <stylesheet file="merge-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-025.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-026">
+      <description>xsl:merge-source test with no xsl:merge-key child elements</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge011"/>
+      <test>
+         <stylesheet file="merge-026.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-027">
+      <description>xsl:merge-input test with select attribute and sequence constructor content</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment ref="merge011"/>
+      <test>
+         <stylesheet file="merge-027.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-028">
+      <description>xsl:merge: xsl:merge-source that uses a path expression that selects more than one node in an attribute value template</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <environment>
+         <source role="." file="merge015.xml"/>
+         <source file="log-file-3.xml" uri="log-file-3.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="merge-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-028.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-029">
+      <description>xsl:merge: live use case, see http://stackoverflow.com/questions/10271639/xslt-merge-challenge</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2018-12-22" change="Replaced CDATA XML with standard XML file (same data, no indentation)"/>
+      <modified by="Michael Kay" on="2019-03-06" change="Revert changes to .xsl file, which appear to have been made for diagnostic purposes"/>
+      <test>
+         <stylesheet file="merge-029.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml file="merge-029.out" />
+      </result>
+   </test-case>
+
+   <test-case name="merge-030">
+      <description>xsl:merge test with zero xsl:merge-source child elements</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <test>
+         <stylesheet file="merge-030.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-031">
+      <description>xsl:merge-source test with zero xsl:merge-input child elements</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <test>
+         <stylesheet file="merge-031.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-032a">
+      <description>xsl:merge-key test with select attribute has non-empty content</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-02-21" change="change expected error code (obsolete)"/>
+      <modified by="Abel Braaksma" on="2018-12-22" change="Error XTSE2190 doesn't exist anymore, correct error is XTSE3200"/>
+      <modified by="Abel Braaksma" on="2019-02-28" change="Bug #30407. See merge-032b/c. Renamed to merge-032a. Fixed other errors (sort-before-merge could raise XTSE0020, absence of select attrib could raise XTSE0010) so that XTSE3200 can be raised"/>
+      <test>
+         <stylesheet file="merge-032a.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3200"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-032b">
+      <description>Bug #30407. xsl:merge-source without select attribute, from original merge-032a</description>
+      <created by="Abel Braaksma" on="2019-02-28"/>
+      <test>
+         <stylesheet file="merge-032b.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-032c">
+      <description>Bug #30407. xsl:merge-srouce with wrong value for sort-before-merge, from original merge-032a</description>
+      <created by="Abel Braaksma" on="2019-02-28"/>
+      <test>
+         <stylesheet file="merge-032c.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-033">
+      <description>xsl:merge-source is in the wrong place</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <test>
+         <stylesheet file="merge-033.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-034">
+      <description>xsl:merge-source with more than one xsl:merge-input child element - error</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <test>
+         <stylesheet file="merge-034.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-035">
+      <description>xsl:merge with a disallowed child element</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <test>
+         <stylesheet file="merge-035.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-036">
+      <description>xsl:merge-source with a disallowed child element</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <test>
+         <stylesheet file="merge-036.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-037">
+      <description>xsl:merge-input with xsl:merge-key not at as last child node</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <test>
+         <stylesheet file="merge-037.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="merge-038">
+      <description>Testing a sequence of more than one item is not allowed as the @select attr of merge-key</description>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2018-12-22" change="XTTE1020 is no longer the correct error here, when a merge-key cannot be compared, the errors should be XTTE2230"/>
+      <modified by="Michael Kay" on="2023-03-06" change="I beg to differ. Allow both error codes"/>
+      <environment ref="merge917err"/>   
+      <test>
+         <stylesheet file="merge-038.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTTE1020"/>
+            <error code="XTTE2230"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-039">
+      <description>xsl:merge test on a homogeneous collection of XML log files, using for-each-source</description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <modified by="Michael Kay" on="2014-09-30" change="add streaming dependency"/>
+      <environment>
+         <collection uri="log-files">
+            <source file="log-files/log-file1.xml" uri="log-files/log-file1.xml"/>
+            <source file="log-files/log-file2.xml" uri="log-files/log-file2.xml"/>
+         </collection>
+      </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-039.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<events><event timestamp="2009-08-20T12:01:01Z">Transaction T1234 started</event
+            ><event timestamp="2009-08-20T12:01:05Z">Transaction T1236 started</event
+            ><event timestamp="2009-08-20T12:01:08Z">Transaction T1235 started</event
+            ><event timestamp="2009-08-20T12:01:09Z">Transaction T1236 ended</event
+            ><event timestamp="2009-08-20T12:01:11Z">Transaction T1237 started</event
+            ><event timestamp="2009-08-20T12:01:12Z">Transaction T1235 ended</event
+            ><event timestamp="2009-08-20T12:01:15Z">Transaction T1234 ended</event
+            ><event timestamp="2009-08-20T12:01:17Z">Transaction T1237 ended</event></events>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-040">
+      <description>xsl:merge test on two heterogeneous files, using for-each-source</description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <modified by="Michael Kay" on="2014-09-30" change="add streaming dependency"/>
+      <environment ref="merge002"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-040.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-002.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-041">
+      <description>
+      	xsl:merge test on two heterogeneous files. 
+      	Testing merge-key, where order attribute requires run-time evaluation.
+      	Mixing different ways of selecting different sources.
+      	Also tests use of xml:base affecting URI resolution.
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <modified by="Michael Kay" on="2014-09-30" change="add streaming dependency"/>
+      <environment ref="merge002"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-041.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-003.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-042">
+      <description>Error - can't specify both for-each-item and for-each-source</description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <modified by="Michael Kay" on="2017-02-21" change="more specific error code"/>
+      <modified by="Abel Braaksma" on="2018-12-22" change="XTSE0020 is no longer valid, for this specific scenario, the spec has XTSE3195 now"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-042.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3195"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-043">
+      <description>
+      	Error - for-each-source expected type is string
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-043.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-044">
+      <description>
+         xsl:merge: current-merge-group with source name argument
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-044.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/events/group[1][@at="2009-08-20T12:01:01Z"]/one/event = "Transaction T1234 started"</assert>
+           <assert>/events/group[1][@at="2009-08-20T12:01:01Z"]/two/record/message = "Temperature 15.4C"</assert>
+           <assert>/events/group[2][@at="2009-08-20T12:01:08Z"]/one/event = "Transaction T1235 started"</assert>
+           <assert>/events/group[2][@at="2009-08-20T12:01:08Z"]/two = ""</assert>
+           <assert>/events/group[3][@at="2009-08-20T12:01:12Z"]/one/event = "Transaction T1235 ended"</assert>
+           <assert>/events/group[3][@at="2009-08-20T12:01:12Z"]/two = ""</assert>
+           <assert>/events/group[4][@at="2009-08-20T12:01:15Z"]/one/event = "Transaction T1234 ended"</assert>
+           <assert>/events/group[4][@at="2009-08-20T12:01:15Z"]/two = ""</assert>
+           <assert>/events/group[5][@at="2009-08-20T12:03:00Z"]/one = ""</assert>
+           <assert>/events/group[5][@at="2009-08-20T12:03:00Z"]/two/record/message = "Temperature 18.2C"</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="merge-045">
+      <description>
+         xsl:merge: current-merge-group with source name argument; unknown source name
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-045.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3490"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-046">
+      <description>xsl:merge: current-merge-group with source name argument; invalid source name</description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <modified by="Abel Braaksma" on="2018-12-22" change="XTSE0020 can be thrown for the name attribute, but the code as written may also hiccup statically on XTDE3490, which should be raised on fn:current-merge-group"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <modified by="Abel Braaksma" on="2019-02-23" change="Change environment reference, original merge002 contained context node, which forces apply-templates invocation, while the goal of the test is call-template invocation"/>
+      <environment ref="merge046"/>
+      <test>
+         <stylesheet file="merge-046.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0020"/>
+            <error code="XTDE3490"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-046a">
+      <description>xsl:merge: xsl:merge-source/@name not an NCName</description>
+      <created by="Abel Braaksma" on="2018-12-22"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <modified by="Abel Braaksma" on="2019-02-23" change="Change environment reference, original merge002 contained context node, which forces apply-templates invocation, while the goal of the test is call-template invocation"/>
+      <environment ref="merge046"/>
+      <test>
+         <stylesheet file="merge-046a.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-046b">
+      <description>xsl:merge: fn:current-merge-group with invalid source name argument, not an NCName, but must raise XTDE3490</description>
+      <created by="Abel Braaksma" on="2018-12-22"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <modified by="Abel Braaksma" on="2019-02-23" change="Change environment reference, original merge002 contained context node, which forces apply-templates invocation, while the goal of the test is call-template invocation"/>
+      <environment ref="merge046"/>
+      <test>
+         <stylesheet file="merge-046b.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE3490"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-047">
+      <description>
+         xsl:merge: dynamic argument to current-merge-group()
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-047.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/events/group[1][@name="g1"][@at="2009-08-20T12:01:01Z"]/record/message = "Temperature 15.4C"</assert>
+           <assert>/events/group[2][@name="g0"][@at="2009-08-20T12:01:08Z"]/event = "Transaction T1235 started"</assert>
+           <assert>/events/group[3][@name="g1"][@at="2009-08-20T12:01:12Z"] = ""</assert>
+           <assert>/events/group[4][@name="g0"][@at="2009-08-20T12:01:15Z"]/event = "Transaction T1234 ended"</assert>
+           <assert>/events/group[5][@name="g1"][@at="2009-08-20T12:03:00Z"]/record/message = "Temperature 18.2C"</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="merge-048">
+      <description>
+         xsl:merge: dynamic argument to current-merge-group(); unknown source name
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-048.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3490"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-049">
+      <description>
+         xsl:merge: merge two documents with validation=strict
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <modified by="Michael Kay" on="2015-07-08" change="Bug 28762 means merging on position() no longer makes sense"/>
+      <modified by="Michael Kay" on="2017-03-03" change="Label as schema-aware"/>
+      <modified by="Abel Braaksma" on="2018-12-23" change="Making the test valid for non-schema-aware processors: XTSE1650" />
+      <environment ref="merge049"/>
+      <test>
+         <stylesheet file="merge-049.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <all-of>
+              <assert>count(/books/ok) = 3</assert>
+              <assert>count(/books/bad) = 0</assert>
+            </all-of>  
+            <error code="XTSE1650"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-050">
+      <description>
+         xsl:merge: merge two documents with validation failure
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <modified by="Abel Braaksma" on="2018-12-23" change="Making the test valid for non-schema-aware processors: XTSE1650" />
+      <environment ref="merge049"/>
+      <test>
+         <stylesheet file="merge-050.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTTE1510"/>
+            <error code="XTSE1650"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-051">
+      <description>
+         xsl:merge: merge two documents with validation by type
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <modified by="Michael Kay" on="2017-03-03" change="Label as schema-aware"/>
+      <modified by="Michael Kay" on="2017-06-22" change="Fix bug 30131"/>
+      <environment ref="merge049"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-051.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>count(/books/ok) = 4</assert>
+           <assert>count(/books/bad) = 0</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="merge-052">
+      <description>
+         xsl:merge: merge two documents with validation by type, failure
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <modified by="Abel Braaksma" on="2018-12-23" change="Making the test valid for non-schema-aware processors: XTSE1650" />
+      <environment ref="merge049"/>
+      <test>
+         <stylesheet file="merge-052.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTTE1540"/>
+            <error code="XTSE1650"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-053">
+      <description>
+         xsl:merge: merge two documents with validation; both validation and type specified, error.
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <modified by="Abel Braaksma" on="2018-12-23" change="Making the test valid for non-schema-aware processors: XTSE1650 can also be raised before XTSE1505 is encountered" />
+      <environment ref="merge049"/>
+      <test>
+         <stylesheet file="merge-053.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE1505"/>
+            <error code="XTSE1650"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-054">
+      <description>
+         xsl:merge: merge two documents with validation; validation specified without for-each-source, error.
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <modified by="Abel Braaksma" on="2018-12-23" change="Making the test valid for non-schema-aware processors: XTSE1650" />
+      <environment ref="merge049"/>
+      <test>
+         <stylesheet file="merge-054.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0020"/>
+            <error code="XTSE1650"/>
+         </any-of>
+      </result>
+   </test-case>   
+   
+   <test-case name="merge-055">
+      <description>
+         xsl:merge: current-merge-group() not available in called template.
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-055.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE3480"/>
+      </result>
+   </test-case> 
+   
+   <test-case name="merge-056">
+      <description>
+         xsl:merge: current-merge-key() not available in called template.
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-056.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE3510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-057">
+      <description>
+         xsl:merge: current-merge-group() used within a pattern.
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-057.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3470"/>
+      </result>
+   </test-case>  
+   
+   <test-case name="merge-058">
+      <description>
+         xsl:merge: current-merge-key() used within a pattern.
+      </description>
+      <created by="Michael Kay" on="2014-04-10"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-058.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3500"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-059">
+      <description>Test xsl:merge-source with sort-before-merge=" no ".</description>
+      <created by="Debbie Lockett" on="2014-08-13"/>
+      <environment ref="merge008"/>
+      <test>
+         <stylesheet file="merge-059.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-018.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-060">
+      <description>Test xsl:merge-source with sort-before-merge="true" and "false".</description>
+      <created by="Debbie Lockett" on="2014-08-13"/>
+      <environment ref="merge008"/>
+      <test>
+         <stylesheet file="merge-060.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-018.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-061">
+      <description>Test xsl:merge-source with sort-before-merge="1" and "0".</description>
+      <created by="Debbie Lockett" on="2014-08-13"/>
+      <environment ref="merge008"/>
+      <test>
+         <stylesheet file="merge-061.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-018.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-062">
+      <description>xsl:merge test on two heterogeneous files, using for-each-source and streamable defaulted.</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <modified by="Michael Kay" on="2014-09-30" change="add streaming dependency"/>
+      <environment ref="merge002"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-062.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-002.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-063">
+      <description>xsl:merge test on two heterogeneous files, using for-each-source, and streamable=" yes " and " 1 ".</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <modified by="Michael Kay" on="2014-09-30" change="add streaming dependency"/>
+      <environment ref="merge002"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-063.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="merge-002.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-064">
+      <description>xsl:merge test on two heterogeneous files, using for-each-source and streamable="No" (not allowed).</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-064.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-065a">
+      <description>xsl:merge test using accumulators.</description>
+      <created by="Michael Kay" on="2015-08-12"/>
+      <modified by="Michael Kay" on="2017-01-15" change="Streamable and non-streamable variants"/>
+      <modified by="Michael Kay" on="2021-01-05" change="Use base-uri rather than document-uri"/>
+      <environment ref="merge002"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-065.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/events/group[1]/item[1][ends-with(., 'log-file-1.xml - events')]</assert>
+           <assert>/events/group[1]/item[2][ends-with(., 'log-file-2.xml - log/day')]</assert>
+           <assert>/events/group[1]/event[@timestamp="2009-08-20T12:01:01Z"]</assert>
+           <assert>/events/group[1]/record[message='Temperature 15.4C']/time</assert>
+           <assert>/events/group[5]/item[1][ends-with(., 'log-file-2.xml - log/day')]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-065b">
+      <description>xsl:merge test using accumulators.</description>
+      <created by="Michael Kay" on="2015-08-12"/>
+      <modified by="Michael Kay" on="2017-01-15" change="Streamable and non-streamable variants"/>
+      <modified by="Michael Kay" on="2017-01-28" change="Add use-accumulators attribute"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-065.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/events/group[1]/item[1][ends-with(., 'log-file-1.xml - events')]</assert>
+            <assert>/events/group[1]/item[2][ends-with(., 'log-file-2.xml - log/day')]</assert>
+            <assert>/events/group[1]/event[@timestamp="2009-08-20T12:01:01Z"]</assert>
+            <assert>/events/group[1]/record[message='Temperature 15.4C']/time</assert>
+            <assert>/events/group[5]/item[1][ends-with(., 'log-file-2.xml - log/day')]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-066">
+      <description>xsl:merge test using more complex accumulators.</description>
+      <created by="Michael Kay" on="2016-11-04"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Added timezone to $ORIGIN - bug 30083"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-066.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/events/group[1]/interval[@in='log-1'] = "P231DT12H1M1S"</assert>
+            <assert>/events/group[1]/interval[@in='log-2'] = "P231DT12H1M1S"</assert>
+            <assert>/events/group[2]/interval[@in='log-1'] = "PT7S"</assert>
+            <assert>/events/group[3]/interval[@in='log-1'] = "PT4S"</assert>
+            <assert>/events/group[4]/interval[@in='log-1'] = "PT3S"</assert>
+            <assert>/events/group[5]/interval[@in='log-2'] = "PT1M59S"</assert>
+            <assert>count(/events/group) = 5</assert>
+            <assert>count(/events/group/interval[@in='log-1'] ) = 4</assert>
+            <assert>count(/events/group/interval[@in='log-2'] ) = 2</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-067">
+      <description>xsl:merge test using an inapplicable accumulator.</description>
+      <created by="Michael Kay" on="2016-11-07"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-067.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE3362"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-070">
+      <description>Merge two real-life data files for Swedish cities, using Swedish collation.</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <modified by="Michael Kay" on="2021-06-09" change="Strip spaces and hyphens from sort key to improve interoperability of results"/>
+      <!-- Failing on Saxon-CS because it claims cities-SE.xml is not correctly sorted: this depends on the relative
+         order of "Akersberga" and "Akers Styckebruk", which I don't think is well-defined in the spec, either
+         for English or Swedish collation -->
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-070.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/weather/city[@name="Arsta"][@lon="18.051399"][@lat="59.297798"][@temp="273.95"][@wind="5.14"]</assert>
+            <assert>/weather/city[@name="Vasteras"][@lon="16.552759"][@lat="59.616169"][@temp="276.21"][@wind="9.25"]</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="merge-071">
+      <description>Merge two real-life data files for Swedish cities, using Swedish collation.</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-071.xsl"/>
+         <param name="collation" select="'http://www.w3.org/2013/collation/UCA?lang=sv;caseFirst=upper;alternate=shifted'"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/weather/city[@name="Arsta"][@lon="18.051399"][@lat="59.297798"][@temp="273.95"][@wind="5.14"]</assert>
+            <assert>/weather/city[@name="Vasteras"][@lon="16.552759"][@lat="59.616169"][@temp="276.21"][@wind="9.25"]</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="merge-072">
+      <description>Merge failure, using the wrong collation.</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-071.xsl"/>
+         <param name="collation" select="'http://www.w3.org/2013/collation/UCA?lang=de;caseFirst=upper;alternate=shifted'"/>
+      </test>
+      <result>
+         <error code="XTDE2220"/>   
+      </result>
+   </test-case>
+   
+   <test-case name="merge-073">
+      <description>Merge success, using a different collation with sort-before-merge.</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-073.xsl"/>
+         <param name="collation" select="'http://www.w3.org/2013/collation/UCA?lang=de;caseFirst=upper;alternate=shifted'"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/weather/city[@name="Arsta"][@lon="18.051399"][@lat="59.297798"][@temp="273.95"][@wind="5.14"]</assert>
+            <assert>/weather/city[@name="Vasteras"][@lon="16.552759"][@lat="59.616169"][@temp="276.21"][@wind="9.25"]</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="merge-074">
+      <description>default-collation not used by xsl:merge (bug 29117)</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-074.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE2220"/>  
+      </result>
+   </test-case>
+   
+   <test-case name="merge-075">
+      <description>Incompatible collations used for different merge sources</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-075.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE2210"/>  
+      </result>
+   </test-case>
+   
+   <test-case name="merge-076">
+      <description>Use current-merge-group#1</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <modified by="Michael Kay" on="2021-06-09" change="Strip spaces and hyphens from sort key to improve interoperability of results"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-076.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/weather/city[@name="Arsta"][@lon="18.051399"][@lat="59.297798"][@temp="273.95"][@wind="5.14"]</assert>
+            <assert>/weather/city[@name="Vasteras"][@lon="16.552759"][@lat="59.616169"][@temp="276.21"][@wind="9.25"]</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="merge-077">
+      <description>Use current-merge-group#1 with bad source name</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-077.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE3490"/>   
+      </result>
+   </test-case>
+   
+   <test-case name="merge-078">
+      <description>Composite merge key.</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <modified by="Michael Kay" on="2021-06-09" change="Strip spaces and hyphens from sort key to improve interoperability of results"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-078.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/weather/city[@country="SE"][@name="Arsta"][@lon="18.051399"][@lat="59.297798"][@temp="273.95"][@wind="5.14"]</assert>
+            <assert>/weather/city[@country="SE"][@name="Vasteras"][@lon="16.552759"][@lat="59.616169"][@temp="276.21"][@wind="9.25"]</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="merge-079">
+      <description>Failure to access outside snapshot.</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <modified by="Michael Kay" on="2021-06-09" change="Strip spaces and hyphens from sort key to improve interoperability of results"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-079.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/weather/city[@name="Arsta"][@lon="18.051399"][@lat="59.297798"][@temp=""][@wind=""]</assert>
+            <assert>/weather/city[@name="Vasteras"][@lon="16.552759"][@lat="59.616169"][@temp=""][@wind=""]</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="merge-080">
+      <description>Merge a single file (another way of doing group-adjacent).</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <modified by="Michael Kay" on="2021-06-09" change="Strip spaces and hyphens from sort key to improve interoperability of results"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-080.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/duplicates/city-name/@name = 'Anderstorp'</assert>
+            <assert>/duplicates/city-name/@name = 'As'</assert>
+            <assert>/duplicates/city-name/@name = 'Brevik'</assert>
+            <assert>/duplicates/city-name/@name = 'Bua'</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="merge-081">
+      <description>No failure to access outside snapshot when not streaming.</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <modified by="Michael Kay" on="2021-06-09" change="Strip spaces and hyphens from sort key to improve interoperability of results"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-081.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/weather/city[@name="Arsta"][@lon="18.051399"][@lat="59.297798"][@temp="273.95"][@wind="5.14"]</assert>
+            <assert>/weather/city[@name="Vasteras"][@lon="16.552759"][@lat="59.616169"][@temp="276.21"][@wind="9.25"]</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="merge-082">
+      <description>Use position() in xsl:merge-key/@select both with streaming and non-streaming.</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <modified by="Michael Kay" on="2017-06-22" change="Fix bug 30131"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-082.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/weather/city[@pos="1"][@name1="Abborrberget"][@name2="Arsta"]
+                    [@lon="14.8"][@lat="60.150002"][@temp="273.95"][@wind="5.14"]</assert>
+            <assert>/weather/city[@pos="1053"][@name1="Östra Vi"][@name2=""]
+                    [@lon="18.316669"][@lat="57.633331"][@temp=""][@wind=""]</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="merge-083">
+      <description>Use position() in xsl:merge-action.</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <modified by="Michael Kay" on="2021-06-09" change="Strip spaces and hyphens from sort key to improve interoperability of results"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-083.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/weather/city[@name="Arsta"][@pos="47"][@lon="18.051399"][@lat="59.297798"][@temp="273.95"][@wind="5.14"]</assert>
+            <assert>/weather/city[@name="Vasteras"][@pos="966"][@lon="16.552759"][@lat="59.616169"][@temp="276.21"][@wind="9.25"]</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="merge-084">
+      <description>Use last() in declared-streamable xsl:merge-action (bug 29120).</description>
+      <created by="Michael Kay" on="2015-09-10"/>
+      <modified by="Michael Kay" on="2021-06-09" change="Strip spaces and hyphens from sort key to improve interoperability of results"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-084.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/weather/city[@name="Arsta"][@pos="47"][@lon="18.051399"][@lat="59.297798"][@temp="273.95"][@wind="5.14"]</assert>
+            <assert>/weather/city[@name="Vasteras"][@pos="966"][@lon="16.552759"][@lat="59.616169"][@temp="276.21"][@wind="9.25"]</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="merge-085">
+      <description>xsl:merge allows xsl:fallback as last child.</description>
+      <created by="Michael Kay" on="2015-12-28"/>
+      <environment>
+         <collection uri="log-files">
+            <source file="log-files/log-file1.xml" uri="log-files/log-file1.xml"/>
+            <source file="log-files/log-file2.xml" uri="log-files/log-file2.xml"/>
+         </collection>
+      </environment>
+      <test>
+         <stylesheet file="merge-085.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<events><event timestamp="2009-08-20T12:01:01Z">Transaction T1234 started</event
+            ><event timestamp="2009-08-20T12:01:05Z">Transaction T1236 started</event
+            ><event timestamp="2009-08-20T12:01:08Z">Transaction T1235 started</event
+            ><event timestamp="2009-08-20T12:01:09Z">Transaction T1236 ended</event
+            ><event timestamp="2009-08-20T12:01:11Z">Transaction T1237 started</event
+            ><event timestamp="2009-08-20T12:01:12Z">Transaction T1235 ended</event
+            ><event timestamp="2009-08-20T12:01:15Z">Transaction T1234 ended</event
+            ><event timestamp="2009-08-20T12:01:17Z">Transaction T1237 ended</event></events>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-086">
+      <description>xsl:fallback can appear only after xsl:merge-action child elements</description>
+      <created by="Michael Kay" on="2015-12-28"/>
+      <environment ref="merge001"/>
+      <test>
+         <stylesheet file="merge-086.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-087">
+      <description>xsl:call-template clears current-merge-group</description>
+      <created by="Michael Kay" on="2016-02-29"/>
+      <environment ref="merge001"/>
+      <test>
+         <stylesheet file="merge-087.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE3480"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-088">
+      <description>xsl:apply-templates clears current-merge-group</description>
+      <created by="Michael Kay" on="2016-02-29"/>
+      <environment ref="merge001"/>
+      <test>
+         <stylesheet file="merge-088.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE3480"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-089">
+      <description>Nested xsl:merge (bug 29697)</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-06-26"/>
+      <environment>
+         <source role="." file="merge-089.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="merge-089.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/root/group[@key='a']/nested-group[@key='1'][value = 1 and value = 2]</assert>
+            <assert>/root/group[@key='a']/nested-group[@key='2'][value = 3]</assert>
+            <assert>/root/group[@key='b']/nested-group[@key='1'][value = 4 and value = 5]</assert>
+            <assert>/root/group[@key='b']/nested-group[@key='2'][value = 6]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-090">
+      <description>xsl:merge with no dependencies (Saxon bug 2815)</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-06-26"/>
+      <environment>
+         <source role="." file="merge-090.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="merge-090.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/Personenliste/Person/@Firma="Company A"</assert>
+            <assert>/Personenliste/Person[Vorname = "John" and Nachname = "Doe"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-091">
+      <description>xsl:merge Just another test</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-07-14"/>
+      <modified by="Michael Kay" on="2016-08-17" change="add streaming dependency"/>
+      <modified by="Michael Kay" on="2016-08-19" change="remove indent=yes"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-091.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><subjects><subject name="C#"><media type="cast"><title>cast 1</title></media><media type="book"><title>book 1</title></media></subject
+            ><subject name="VB"><media type="cast"><title>cast 2</title></media></subject
+            ><subject name="XQuery"><media type="cast"><title>cast 3</title></media><media type="book"><title>book 2</title></media></subject
+            ><subject name="XSLT"><media type="cast"><title>cast 4</title></media><media type="cast"><title>cast 5</title></media
+            ><media type="book"><title>book 3</title></media><media type="book"><title>book 4</title></media></subject
+            ></subjects></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-092">
+      <description>Merge keys are evaluated with singleton focus</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-21"/>
+      <test>
+         <stylesheet file="merge-092.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><group key="1"><foo>foo 1</foo><bar>bar 1</bar><bar>bar 2</bar><foo>foo 2</foo><baz>baz 1</baz><foo>foo a</foo><bar>bar a</bar><bar>bar b</bar><foo>foo b</foo><baz>baz a</baz></group></root>
+]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-093">
+      <description>A random example from StackOverflow</description>
+      <created by="Michael Kay" on="2017-06-27"/>
+      <test>
+         <stylesheet file="merge-093.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Notifications><BatchId>1123213333</BatchId
+            ><Notification><NotifId>1</NotifId><EmailNotification><SenderAddress>abc@def.ghi</SenderAddress><Subject>SBJ2</Subject><MsgText>notif 1</MsgText></EmailNotification></Notification
+            ><Notification><NotifId>2</NotifId><EmailNotification><SenderAddress>jkl.mno@pqr</SenderAddress><Subject>SBJ2</Subject><MsgText>notif 2</MsgText></EmailNotification></Notification
+            ></Notifications>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-094">
+      <description>xsl:merge test on two heterogeneous files; not streamable because select expression is crawling</description>
+      <created by="Michael Kay" on="2018-01-08"/>
+      <environment ref="merge002"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-094.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-095">
+      <description>xsl:merge test on two heterogeneous files; not streamable because sort-before-merge="yes"</description>
+      <created by="Michael Kay" on="2018-01-08"/>
+      <environment ref="merge002"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-095.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-096">
+      <description>current-merge-group() called in arguments of function call - Saxon bug 3884</description>
+      <created by="Michael Kay" on="2018-08-24"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-096.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/root/data/foo[1]/value = "foo 1, 1"</assert>
+            <assert>/root/data/foo[2]/value = "foo 2, 1"</assert>
+            <assert>/root/data/foo[3]/value = "foo 1, 2"</assert>
+            <assert>/root/data/*[6][self::bar]/value = "bar 1, 1"</assert>
+            <assert>/root/data/*[11][self::foo]/value = "foo 3, 2"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-097">
+      <description>Saxon bug 3883. With streamable="no", the output contains 8 item elements.
+         See https://saxonica.plan.io/issues/3883 for reasoning. No snapshot of the nodes is taken.</description>
+      <created by="Michael Kay" on="2018-08-24"/>
+      <modified by="Abel Braaksma" on="2019-02-28" change="Added dependency XP31 because of presence of fn:sort"/>
+      <dependencies>
+         <feature value="XPath_3.1" satisfied="true"/>
+         <!--Note, this test (and variations 097s, 097sf) rely on Saxon-format collection URIs
+             in the form (/my/dir?select="*.xml) and is therefore not interoperable: MHK 2021-06-09 -->
+      </dependencies>
+      <test>
+         <stylesheet file="merge-097.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(//item) = 8</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-097s">
+      <description>Saxon bug 3883.  With streamable="yes", the output contains 4 item elements.
+         See https://saxonica.plan.io/issues/3883 for reasoning. A snapshot is taken of each node.</description>
+      <created by="Michael Kay" on="2018-08-24"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-097.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(//item) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-097sf">
+      <description>Saxon bug 3883.  With streamable="yes", the output contains 4 item elements.
+      A snapshot is taken of each node even though we are falling back to use a non-streaming processor.</description>
+      <created by="Michael Kay" on="2018-08-24"/>
+      <dependencies>
+         <feature value="streaming"/>
+         <feature value="streaming-fallback"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-097.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(//item) = 4</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-098">
+      <description>Saxon bug 4275. Merging two streamed selections from the same input document.</description>
+      <created by="Michael Kay after Martin Honnen" on="2019-08-12"/>
+      <modified by="Michael Kay" on="2021-01-05" change="Use base-uri rather than document-uri"/>
+      <environment>
+         <source role="." file="merge098.xml" streaming="true"/>
+      </environment>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-098.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/AllEmployeeData/Employee) = 3</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-099">
+      <description>Saxon bug 4314. current-merge-group() called on rhs of bang operator.</description>
+      <created by="Michael Kay after Martin Honnen" on="2019-09-22"/>
+      <modified by="Michael Kay" on="2019-12-05" change="Tests with assert-xml should not use indent='yes'"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <stylesheet file="merge-099.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><result>10</result><result>10</result><result>10</result><result>35</result><result>35</result><result>35</result><result>10</result><result>10</result><result>10</result></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="merge-100">
+      <description>
+         xsl:merge: current-merge-group() not available in called function.
+      </description>
+      <created by="Michael Kay" on="2019-09-22"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-100.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE3480"/>
+      </result>
+   </test-case> 
+   
+   <test-case name="merge-101">
+      <description>
+         xsl:merge: current-merge-key() not available in called function.
+      </description>
+      <created by="Michael Kay" on="2019-09-22"/>
+      <environment ref="merge002"/>
+      <test>
+         <stylesheet file="merge-101.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE3510"/>
+      </result>
+   </test-case>
+
+</test-set>

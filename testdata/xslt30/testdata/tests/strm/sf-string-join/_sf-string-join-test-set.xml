@@ -1,0 +1,59 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-string-join">
+   <description>Tests the xsl:stream instruction with string-join()</description>
+   
+   <environment name="sf-string-join-A">
+     <stylesheet file="sf-string-join-001.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+
+
+   <test-case name="st-string-join-001">
+      <description>Test of xsl:stream instruction using string-join</description>
+      <keywords>striding leading-lone-slash PathExpr</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-string-join-A"/>
+      <test>
+         <initial-template name="j-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Pride and Prejudice, Wuthering Heights, Tess of the d'Urbervilles, Jude the Obscure, The Big Over Easy, The Eyre Affair</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="st-string-join-002">
+      <description>Test of xsl:stream instruction using string-join: first argument motionless, second argument consuming</description>
+      <keywords>striding-then-climbing leading-lone-slash PathExpr positional-predicate SimpleMapExpr RangeExpr</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-string-join-A"/>
+      <test>
+         <initial-template name="j-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1MMP2MMP3MMP4MMP5MMP6MMP7MMP8MMP9MMP10</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="st-string-join-003">
+      <description>Test of xsl:stream instruction using string-join: first arg consuming, second arg omitted</description>
+      <keywords>striding leading-lone-slash PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-28"/>
+      <environment ref="sf-string-join-A"/>
+      <test>
+         <initial-template name="j-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Pride and PrejudiceWuthering HeightsTess of the d'UrbervillesJude the ObscureThe Big Over EasyThe Eyre Affair</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+
+
+
+</test-set>

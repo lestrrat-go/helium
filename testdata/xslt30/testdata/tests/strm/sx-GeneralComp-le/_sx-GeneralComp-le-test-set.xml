@@ -1,0 +1,745 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sx-GeneralComp-le">
+   <description>"&lt;=" operator with streaming</description>
+   
+   <environment name="sx-gc-le-A">
+     <stylesheet file="sx-gc-le-A.xsl"/>
+   </environment>
+   
+   <environment name="sx-gc-le-B">
+     <stylesheet file="sx-gc-le-B.xsl"/>
+   </environment>
+   
+   <environment name="transactions-with-schema">
+      <source uri="http://xslt.w3.org/transactions" file="../docs/big-transactions.xml" 
+         streaming="true" validation="strict" role="."/>
+      <schema role="source-reference"
+         file="../docs/transactions.xsd"
+         xsd-version="1.0"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sx-gc-le-003">
+      <description>Basic Test of xsl:stream instruction with "&gt;="</description>
+      <keywords>GeneralComp striding PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-003"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-gc-le-004">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with a motionless predicate</description>
+      <keywords>GeneralComp striding PathExpr motionless-predicate</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-004"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-gc-le-005">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with a positional predicate</description>
+      <keywords>GeneralComp striding PathExpr positional-predicate fn:position</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-005"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-gc-le-006">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with a positional predicate</description>
+      <keywords>GeneralComp striding fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-006"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-gc-le-007">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with a positional predicate</description>
+      <keywords>GeneralComp striding fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-007"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-008">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with data() to make the predicates motionless</description>
+      <keywords>striding-then-grounded predicate GeneralComp PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-008"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-009">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with text() to make the predicates motionless</description>
+      <keywords>striding motionless-predicate text-nodes childless-nodes GeneralComp PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-009"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-010">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with number() to make the predicates motionless</description>
+      <keywords>striding-then-grounded predicate GeneralComp fn:number PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-010"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-011">
+      <description>"&gt;=" selecting nothing, returning the $zero case</description>
+      <keywords>GeneralComp striding empty-sequence PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-011"/>
+      </test>
+      <result>
+         <assert>/out = 'false'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-012">
+      <description>"&gt;=" selecting both streamed nodes and literals</description>
+      <keywords>ParenthesizedExpr _IMPROVE:fix-description striding-then-grounded fn:number PathExpr GeneralComp</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-012"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-013">
+      <description>"&gt;=" selecting both streamed nodes and literals while also filtering</description>
+      <keywords>GeneralComp fn:tail striding-then-grounded ParenthesizedExpr fn:number PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-013"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-015">
+      <description>Test of xsl:stream instruction with "&gt;=" of a computed value</description>
+      <keywords>GeneralComp ForExpr leading-double-slash fn:number fn:outermost crawling-then-striding PathExpr SimpleMapExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-015"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-016">
+      <description>Test of xsl:stream instruction with "&gt;=" of a computed value</description>
+      <keywords>striding climbing MultiplicativeExpr GeneralComp PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-016"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-017">
+      <description>Test of xsl:stream instruction with "&gt;=" using copy-of to make it streamable</description>
+      <keywords>striding-then-grounded predicate GeneralComp fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-017"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-018">
+      <description>Test of xsl:stream instruction with "&gt;=" over attribute values</description>
+      <keywords>striding-then-climbing attribute-axis childless-nodes GeneralComp PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-018"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-019">
+      <description>Test of xsl:stream instruction with "&gt;=" over attribute values, filtered</description>
+      <keywords>striding-then-climbing childless-nodes ContextItemExpr GeneralComp xs:decimal PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-019"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-020">
+      <description>"&gt;=" over attribute values, computed</description>
+      <keywords>striding-then-grounded GeneralComp AxisStep attribute-axis PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-020"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-021">
+      <description>"&gt;=" over values that depend on a condition</description>
+      <keywords>striding-then-grounded IfExpr AdditiveExpr attribute-axis AxisStep GeneralComp PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-021"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-022">
+      <description>"&gt;=" with a loop used to compute each value</description>
+      <keywords>xs:NMTOKENS striding GeneralComp xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-022"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-023">
+      <description>"&gt;=" over a crawling expression</description>
+      <keywords>striding xs:NMTOKENS ContextItemExpr GeneralComp leading-lone-slash xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-023"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-024">
+      <description>"le" with a mix of untypedAtomic and numeric values</description>
+      <keywords>xs:NMTOKENS ContextItemExpr GeneralComp striding variable-reference sequence-comparison leading-lone-slash xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2014-05-12"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-024"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-025">
+      <description>"le" with a mix of untypedAtomic and numeric values. True result</description>
+      <keywords>xs:NMTOKENS striding GeneralComp variable-reference sequence-comparison leading-lone-slash xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2014-05-12"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-025"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>  
+   
+   <test-case name="sx-gc-le-026">
+      <description>"le" with a mix of untypedAtomic and numeric values. Error result</description>
+      <keywords>xs:NMTOKENS striding GeneralComp sequence-comparison FORG0001 leading-lone-slash xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2014-05-12"/>
+      <modified by="Michael Kay" on="2021-03-16" 
+         change="processor may detect result=true (109 lt 13.22e1) before it detects the error"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-026"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out='true'</assert>
+            <error code="FORG0001"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-027">
+      <description>"le" comparing the incomparable. Error result</description>
+      <keywords>xs:NMTOKENS striding XPTY0004 leading-lone-slash xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2014-05-12"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-027"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>  
+   
+   <test-case name="sx-gc-le-028">
+      <description>"le" comparing double to decimal. Success result</description>
+      <keywords>xs:NMTOKENS striding GeneralComp leading-lone-slash xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2014-05-12"/>
+      <environment ref="sx-gc-le-A"/>
+      <test>
+         <initial-template name="s-028"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-100">
+      <description>General comparison over a streamed schema-aware document</description>
+      <created by="Michael Kay" on="2021-03-28"/>
+      <environment ref="transactions-with-schema"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sx-gc-le-100.xsl"/>
+      </test>
+      <result>
+         <assert>out/@result='true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-101">
+      <description>General comparison over a streamed schema-aware document</description>
+      <created by="Michael Kay" on="2021-03-28"/>
+      <environment ref="transactions-with-schema"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="sx-gc-le-101.xsl"/>
+      </test>
+      <result>
+         <assert>out/@result='true'</assert>
+      </result>
+   </test-case>
+   
+    <test-case name="sx-gc-le-103">
+      <description>Basic Test of xsl:stream instruction with "&gt;="</description>
+      <keywords>GeneralComp striding PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-003"/>
+      </test>
+       <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-gc-le-104">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with a motionless predicate</description>
+      <keywords>GeneralComp striding PathExpr motionless-predicate</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-004"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-gc-le-105">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with a positional predicate</description>
+      <keywords>GeneralComp striding PathExpr positional-predicate fn:position</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-005"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-gc-le-106">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with a positional predicate</description>
+      <keywords>GeneralComp striding fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-006"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sx-gc-le-107">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with a positional predicate</description>
+      <keywords>GeneralComp striding fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-007"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-108">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with data() to make the predicates motionless</description>
+      <keywords>striding-then-grounded predicate GeneralComp PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-008"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-109">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with text() to make the predicates motionless</description>
+      <keywords>striding motionless-predicate text-nodes childless-nodes GeneralComp PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-009"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-110">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with number() to make the predicates motionless</description>
+      <keywords>striding-then-grounded predicate GeneralComp fn:number PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-010"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-111">
+      <description>"&gt;=" selecting nothing, returning the $zero case</description>
+      <keywords>GeneralComp striding empty-sequence PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-011"/>
+      </test>
+      <result>
+         <assert>/out = 'false'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-112">
+      <description>"&gt;=" selecting both streamed nodes and literals</description>
+      <keywords>ParenthesizedExpr _IMPROVE:fix-description striding-then-grounded fn:number PathExpr GeneralComp</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-012"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-113">
+      <description>"&gt;=" selecting both streamed nodes and literals while also filtering</description>
+      <keywords>GeneralComp fn:tail striding-then-grounded ParenthesizedExpr fn:number PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-013"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-115">
+      <description>Test of xsl:stream instruction with "&gt;=" of a computed value</description>
+      <keywords>GeneralComp ForExpr leading-double-slash fn:number fn:outermost crawling-then-striding PathExpr SimpleMapExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-015"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-116">
+      <description>Test of xsl:stream instruction with "&gt;=" of a computed value</description>
+      <keywords>striding climbing MultiplicativeExpr GeneralComp PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-016"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-117">
+      <description>Test of xsl:stream instruction with "&gt;=" using copy-of to make it streamable</description>
+      <keywords>striding-then-grounded predicate GeneralComp fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-017"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-118">
+      <description>Test of xsl:stream instruction with "&gt;=" over attribute values</description>
+      <keywords>striding-then-climbing attribute-axis childless-nodes GeneralComp PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-018"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-119">
+      <description>Test of xsl:stream instruction with "&gt;=" over attribute values, filtered</description>
+      <keywords>striding-then-climbing childless-nodes ContextItemExpr GeneralComp xs:decimal PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-019"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-120">
+      <description>"&gt;=" over attribute values, computed</description>
+      <keywords>striding-then-grounded GeneralComp AxisStep attribute-axis PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-020"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-121">
+      <description>"&gt;=" over values that depend on a condition</description>
+      <keywords>striding-then-grounded IfExpr AdditiveExpr attribute-axis AxisStep GeneralComp PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-021"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-122">
+      <description>"&gt;=" with a loop used to compute each value</description>
+      <keywords>xs:NMTOKENS striding GeneralComp xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-022"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-123">
+      <description>"&gt;=" over a crawling expression</description>
+      <keywords>striding xs:NMTOKENS ContextItemExpr GeneralComp leading-lone-slash xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-023"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-124">
+      <description>"le" with a mix of untypedAtomic and numeric values</description>
+      <keywords>xs:NMTOKENS ContextItemExpr GeneralComp striding variable-reference sequence-comparison leading-lone-slash xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2014-05-12"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-024"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-125">
+      <description>"le" with a mix of untypedAtomic and numeric values. True result</description>
+      <keywords>xs:NMTOKENS striding GeneralComp variable-reference sequence-comparison leading-lone-slash xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2014-05-12"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-025"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>  
+   
+   <test-case name="sx-gc-le-126">
+      <description>"le" with a mix of untypedAtomic and numeric values. Error result</description>
+      <keywords>xs:NMTOKENS striding GeneralComp sequence-comparison FORG0001 leading-lone-slash xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2014-05-12"/>
+      <modified by="Michael Kay" on="2021-03-16" 
+         change="processor may detect result=true (109 lt 13.22e1) before it detects the error"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-026"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out='true'</assert>
+            <error code="FORG0001"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-127">
+      <description>"le" comparing the incomparable. Error result</description>
+      <keywords>xs:NMTOKENS striding XPTY0004 leading-lone-slash xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2014-05-12"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-027"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>  
+   
+   <test-case name="sx-gc-le-128">
+      <description>"le" comparing double to decimal. Success result</description>
+      <keywords>xs:NMTOKENS striding GeneralComp leading-lone-slash xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2014-05-12"/>
+      <environment ref="sx-gc-le-B"/>
+      <test>
+         <initial-template name="s-028"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>    
+
+  
+
+   <test-case name="sx-gc-le-901">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with predicate that atomizes.</description>
+      <keywords>_IMPROVE:fix-description fn:position fn:last striding-then-roaming XTSE3430 PathExpr positional-predicate GeneralComp consuming-predicate</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <test>
+         <stylesheet file="sx-gc-le-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-gc-le-902">
+      <description>Test of xsl:stream instruction with "&gt;=", filtered with predicate that uses last().</description>
+      <keywords>consuming-predicate _IMPROVE:fix-description striding-then-roaming GeneralComp PathExpr XTSE3430</keywords>
+      <created by="Michael Kay" on="2013-12-14"/>
+      <test>
+         <stylesheet file="sx-gc-le-902.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+
+</test-set>

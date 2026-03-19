@@ -1,0 +1,1194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-LRE">
+   <description>Literal result elements with streaming</description>
+   
+   
+   <environment name="si-lre-A">
+     <stylesheet file="si-lre-A.xsl"/>
+   </environment>
+   
+   <environment name="si-lre-B">
+     <schema file="../docs/loans.xsd" role="stylesheet-import" />
+     <stylesheet file="si-lre-B.xsl"/>
+   </environment>
+   
+   <environment name="si-lre-C">
+     <stylesheet file="si-lre-C.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   
+   
+   <test-case name="si-lre-001">
+      <description>Use literal result element: atomic values, consuming</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><value>-15.00</value><value>-5.00</value><value>-2.33</value><value>-248.05</value></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-002">
+      <description>Use literal result element: atomic values, consuming and non-consuming</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e>-15.00</e><e>-5.00</e><e>-2.33</e><e>-248.05</e><e>101</e><e>102</e></out>]]></assert-xml>      
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-003">
+      <description>Use literal result element: climbing posture</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-003"/>
+      </test>
+      <result>
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-004">
+      <description>Use literal result element: climbing posture</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-004"/>
+      </test>
+      <result>
+         <assert>/out = "-15.00 -5.00 -2.33 -248.05 101 102"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-005">
+      <description>Use literal result element: striding posture, element nodes</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-005"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-006">
+      <description>Use literal result element: striding posture, text nodes</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-006"/>
+      </test>
+      <result>
+         <assert>/out = "4.956.584.954.9516.4716.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-007">
+      <description>Use literal result element: striding posture, text nodes plus atomic values</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-007"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t>4.95</t><t>6.58</t><t>4.95</t><t>4.95</t><t>16.47</t><t>16.47</t><t>101</t><t>102</t></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-008">
+      <description>Use literal result element: striding posture, element nodes plus grounded elements</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t>100.00</t><t>101.00</t><t>4.95</t><t>6.58</t><t>4.95</t><t>4.95</t><t>16.47</t><t>16.47</t></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-009">
+      <description>Use literal result element: descendant text nodes</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-009"/>
+      </test>
+      <result>
+         <assert>/out = "4.956.584.954.9516.4716.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-010">
+      <description>Use literal result element: descendant text nodes plus atomic values</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-010"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><t>100</t><t>101</t><t>4.95</t><t>6.58</t><t>4.95</t><t>4.95</t><t>16.47</t><t>16.47</t></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-011">
+      <description>Use literal result element: whole document unchanged</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-011"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/head</assert>
+           <assert>/out/doc/BOOKLIST/BOOKS</assert>
+           <assert>/out/doc/BOOKLIST/CATEGORIES</assert>
+           <assert>/out/tail</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-022">
+      <description>Use literal result element: validation="strip" (non-schema-aware)</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-022"/>
+      </test>
+      <result>
+         <assert>/out/* instance of element(*, xs:untyped)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-023">
+      <description>Use literal result element: validation="preserve" (non-schema-aware)</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-023"/>
+      </test>
+      <result>
+         <assert>/out/* instance of element(*, xs:untyped)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-024">
+      <description>Use literal result element: validation="lax" (non-schema-aware)</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-024"/>
+      </test>
+      <result>
+         <assert>/out/* instance of element(*, xs:untyped)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-025">
+      <description>Use literal result element: copy-namespaces=yes, argument grounded and consuming</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-025"/>
+      </test>
+      <result>
+         <assert>count(in-scope-prefixes(/out/*)) = 2</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-026">
+      <description>Use literal result element: copy-namespaces=no, argument grounded and consuming</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-026"/>
+      </test>
+      <result>
+         <any-of>            
+            <assert>deep-equal(in-scope-prefixes(/out/*), ("xml", "gml"))</assert>
+            <assert>deep-equal(in-scope-prefixes(/out/*), ("gml", "xml"))</assert>
+         </any-of>   
+      </result>
+   </test-case>
+   
+   
+   <test-case name="si-lre-029">
+      <description>Use literal result element: uses a streamable attribute set</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-029"/>
+      </test>
+      <result>
+         <assert>/out/*[@x='1' and @y='2']</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-040">
+      <description>Use literal result element: with on-empty (nothing selected)</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-040"/>
+      </test>
+      <result>
+         <assert>/out/a</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-041">
+      <description>Use literal result element: with on-empty</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-041"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out/a</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-042">
+      <description>Use literal result element: with on-empty</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-042"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out/a</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-043">
+      <description>Use literal result element: with on-empty</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-043"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out/a</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-044">
+      <description>Use literal result element: with on-empty</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-044"/>
+      </test>
+      <result>
+         <assert>/out/a</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-045">
+      <description>Use literal result element: with on-empty</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-045"/>
+      </test>
+      <result>
+         <assert>/out/a</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-046">
+      <description>Use literal result element: with on-empty</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-046"/>
+      </test>
+      <result>
+         <assert>/out/a</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-047">
+      <description>Use literal result element: with on-empty (empty element constructed)</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-047"/>
+      </test>
+      <result>
+         <assert>/out/a</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-048">
+      <description>Use literal result element: with on-empty (empty document constructed)</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-A"/>
+      <test>
+         <initial-template name="cy-048"/>
+      </test>
+      <result>
+         <assert>/out/a</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="si-lre-101">
+      <description>Use literal result element: schema-aware, validation=strict</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-101"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+  <test-case name="si-lre-102">
+      <description>Use literal result element: schema-aware, validation=lax</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-102"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-lre-103">
+      <description>Use literal result element: schema-aware, validation=strip</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-103"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-lre-104">
+      <description>Use literal result element: schema-aware, validation=preserve</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-104"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-lre-105">
+      <description>Use literal result element: schema-aware, validation by type</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-105"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-lre-106">
+      <description>Use literal result element: schema-aware, validation=strict, no element declaration available</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-106"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+  
+  <test-case name="si-lre-107">
+      <description>Use literal result element: schema-aware, validation=lax, no element declaration available</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-107"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-lre-108">
+      <description>Use literal result element: schema-aware, validation by type, invalid (wrong namespace)</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-108"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+  
+  <test-case name="si-lre-109">
+      <description>Use literal result element: schema-aware, validation=strict, no element declaration available, caught</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-109"/>
+      </test>
+      <result>
+         <assert>/out = "XTTE1510"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-lre-110">
+      <description>Use literal result element: schema-aware, validation by type, invalid, caught</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-110"/>
+      </test>
+      <result>
+         <assert>/out = "XTTE1540"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-111">
+      <description>Use literal result element: schema-aware, validation=strict, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-111"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+  <test-case name="si-lre-112">
+      <description>Use literal result element: schema-aware, validation=lax, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-112"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-lre-113">
+      <description>Use literal result element: schema-aware, validation=strip, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-113"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-lre-114">
+      <description>Use literal result element: schema-aware, validation=preserve, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-114"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+  
+  <test-case name="si-lre-115">
+      <description>Use literal result element: schema-aware, validation by type, argument is grounded and consuming</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-115"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-116">
+      <description>Use literal result element: schema-aware, validate attribute by type, success</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-116"/>
+      </test>
+      <result>
+         <assert>/out/myroot = "2.1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-117">
+      <description>Use literal result element: schema-aware, validate attribute by type, failure</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-117"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-118">
+      <description>Use literal result element: schema-aware, validation; on-empty must be empty or valid</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <modified by="Michael Kay" on="2015-08-11" change="Rewrite test to do what it says on the tin"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-118"/>
+      </test>
+      <result>
+         <assert>/out/processingDate = '2015-08-11'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-119">
+      <description>Use literal result element: schema-aware, validation; on-empty must be empty or valid</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <modified by="Michael Kay" on="2015-08-11" change="Rewrite test to do what it says on the tin"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-119"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-120">
+      <description>Use literal result element: schema-aware, validation; on-empty must be empty or valid</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <modified by="Michael Kay" on="2015-08-11" change="Rewrite test to do what it says on the tin"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-120"/>
+      </test>
+      <result>
+         <assert>/out/PoolIdentifier = '29'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-121">
+      <description>Use literal result element: schema-aware, validation; on-empty must be empty or valid</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <modified by="Michael Kay" on="2015-08-11" change="Rewrite test to do what it says on the tin"/>
+      <environment ref="si-lre-B"/>
+      <dependencies>
+        <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <initial-template name="cy-121"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-203">
+      <description>Basic Test of xsl:stream instruction with literal result element</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-003"/>
+      </test>
+      <result>
+         <assert>string-join(/out/a/PRICE, ' ') = '4.95 6.58 4.95 4.95 16.47 16.47'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-lre-204">
+      <description>Test of xsl:stream instruction with literal result element, filtered with a motionless predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-004"/>
+      </test>
+      <result>
+         <assert>string-join(/out/a/PRICE, ' ') = '6.58 4.95 4.95 16.47'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-lre-205">
+      <description>Test of xsl:stream instruction with literal result element, filtered with a positional predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-005"/>
+      </test>
+      <result>
+         <assert>string-join(/out/a/PRICE, ' ') = '4.95 6.58 4.95'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-lre-206">
+      <description>Test of xsl:stream instruction with literal result element, filtered with a positional predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-006"/>
+      </test>
+      <result>
+         <assert>string-join(/out/a/PRICE, ' ') = '4.95 6.58 4.95'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-lre-207">
+      <description>Test of xsl:stream instruction with literal result element, filtered with a positional predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-007"/>
+      </test>
+      <result>
+         <assert>string-join(/out/a/PRICE, ' ') = '4.95 6.58 4.95'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-208">
+      <description>Test of xsl:stream instruction with literal result element, filtered with data() to make the predicates motionless</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-008"/>
+      </test>
+      <result>
+         <assert>/out/a = '352 430 480 528 346 384'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-209">
+      <description>Test of xsl:stream instruction with literal result element, filtered with text() to make the predicates motionless</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-009"/>
+      </test>
+      <result>
+         <assert>/out/a = '352430480528346384'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-210">
+      <description>Test of xsl:stream instruction with literal result element, filtered with number() to make the predicates motionless</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-010"/>
+      </test>
+      <result>
+         <assert>/out/a = '352 430 480 528 346 384'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-211">
+      <description>literal result element selecting nothing, returning the $zero case</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-011"/>
+      </test>
+      <result>
+         <assert>/out/a = ''</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-212">
+      <description>literal result element selecting both streamed nodes and literals</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-012"/>
+      </test>
+      <result>
+         <assert>/out/a = '352 430 480 528 346 384 31 32'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-213">
+      <description>literal result element selecting both streamed nodes and literals while also filtering</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-013"/>
+      </test>
+      <result>
+         <assert>/out/a = '430 480 528 346 384 31 32'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-215">
+      <description>Test of xsl:stream instruction with literal result element of a computed value</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-015"/>
+      </test>
+      <result>
+         <assert>/out/a = '52.041 40.56 22.848 36.504 1417.5 35.1'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-216">
+      <description>Test of xsl:stream instruction with literal result element of a computed value</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-016"/>
+      </test>
+      <result>
+         <assert>/out/a = '0.02 6.12 30.22 9.22'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-217">
+      <description>Test of xsl:stream instruction with literal result element using copy-of to make it streamable</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-017"/>
+      </test>
+      <result>
+         <assert>string-join(/out/a/PAGES, ' ') = '352 430 480 528 346 384'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-218">
+      <description>Test of xsl:stream instruction with literal result element over attribute values</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-018"/>
+      </test>
+      <result>
+         <assert>/out/a/@value = '4.61'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-219">
+      <description>Test of xsl:stream instruction with literal result element over attribute values, filtered</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-019"/>
+      </test>
+      <result>
+         <assert>/out/a = ''</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-220">
+      <description>literal result element over attribute values, computed</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-020"/>
+      </test>
+      <result>
+         <assert>starts-with(/out/a, '0.01 1.28 20.46 2.78 4.21 9.85 4.74 1.46 5.62 17.42 6.35 13.29 16.6 1.33 3.81 0.46 13.71 3.76 2.42 2.52 0.07 15.64')</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-221">
+      <description>literal result element over values that depend on a condition</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-021"/>
+      </test>
+      <result>
+         <assert>starts-with(/out/a, '0.01 3.06 15.11 4.61 3.81 6.4 10.52 -1.84 15.83 -6.68 1.28 3.29 -2.37 6.21 -3.64 22.39 11.51 4.86 13.44 20.81 20.46 8.45 16.55 18.56 19.42 12.89')</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-222">
+      <description>literal result element with a loop used to compute each value</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-022"/>
+      </test>
+      <result>
+         <assert>/out/a = '8.3 5.7 1.1 1 5.2 7.8 6.8 4.2 0.8 7.8 5.2 0.9 22.5 18 3.5 7.8 5 0.9'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-223">
+      <description>literal result element over a crawling expression</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-023"/>
+      </test>
+      <result>
+         <assert>/out/a = '8.3 5.7 1.1 1 5.2 7.8 6.8 4.2 0.8 7.8 5.2 0.9 22.5 18 3.5 7.8 5 0.9'</assert>
+      </result>
+   </test-case>
+   
+      <test-case name="si-lre-240">
+      <description>literal result element over an empty grounded expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-040"/>
+      </test>
+      <result>
+         <assert>/out/a = ''</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-241">
+      <description>literal result element over an empty striding expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-041"/>
+      </test>
+      <result>
+         <assert>/out/a = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-242">
+      <description>literal result element over an empty crawling expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-042"/>
+      </test>
+      <result>
+         <assert>/out/a = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-243">
+      <description>literal result element over an empty grounded expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-043"/>
+      </test>
+      <result>
+         <assert>/out/a = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-246">
+      <description>literal result element; complex content</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-046"/>
+      </test>
+      <result>
+         <assert>/out/a = "[4.95][6.58][4.95][4.95][16.47][16.47]"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-247">
+      <description>literal result element; attribute is consuming</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-047"/>
+      </test>
+      <result>
+         <assert>/out/a[@name='Jane_Austen'] = 'value'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-248">
+      <description>literal result element; attribute is consuming</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-048"/>
+      </test>
+      <result>
+         <assert>/out/a[@namespace = 'http://jane_austen.com/'] = "value"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-249">
+      <description>literal result element; attribute is consuming and sequence-valued</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-049"/>
+      </test>
+      <result>
+         <assert>/out/a/@prices = '4.95 6.58 4.95 4.95 16.47 16.47'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-250">
+      <description>literal result element; value is consuming; on-empty</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-050"/>
+      </test>
+      <result>
+         <assert>/out/a = '4.95 6.58 4.95 4.95 16.47 16.47'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-251">
+      <description>literal result element; value is consuming; on-empty</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-051"/>
+      </test>
+      <result>
+         <assert>empty(/out/a)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-252">
+      <description>literal result element; on-empty expression is consuming, but not activated</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-052"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out/a = '1 2 3 4 5 6 7 8 9 10'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-253">
+      <description>literal result element; on-empty expression is consuming, and is activated</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <modified by="Michael Kay" on="2015-08-13" change="Correct test to produce expected results"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-053"/>
+      </test>
+      <result>
+         <assert>/out/TITLE = 'Pride and Prejudice'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-254">
+      <description>literal result element; select is consuming, on-empty is climbing</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-054"/>
+      </test>
+      <result>
+         <assert>exists(out/e) and empty(out/a)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-255">
+      <description>literal result element; select is consuming, on-empty is multiple elements</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <modified by="Michael Kay" on="2015-08-13" change="No longer a type error"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-055"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><n1>1</n1><n2>2</n2></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-257">
+      <description>literal result element; content cannot include function items; error</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <modified by="Michael Kay" on="2017-02-18" change="corrected expected error code"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-057"/>
+      </test>
+      <result>
+         <error code="XTDE0450"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-258">
+      <description>literal result element; content cannot include function items; error - caught</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <modified by="Michael Kay" on="2018-06-26" change="Added XTDE0450 which is the correct error code, but left FOTY0013 for old times sake"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-058"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-259">
+      <description>literal result element; content is "."</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-lre-C"/>
+      <test>
+         <initial-template name="s-059"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/in/BOOKLIST/BOOKS[@OWNER="MHK"]/ITEM[1]/TITLE="Pride and Prejudice"</assert>
+           <assert>/out/in/BOOKLIST/CATEGORIES/@DESC eq "Miscellaneous categories"</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+
+   
+   <test-case name="si-lre-901">
+      <description>Use literal result element, uses non-streamable attribute set</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <test>
+         <stylesheet file="si-lre-901.xsl"/>
+         <initial-template name="cy-901"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-902">
+      <description>Use literal result element, uses non-streamable attribute set</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <test>
+         <stylesheet file="si-lre-902.xsl"/>
+         <initial-template name="cy-902"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-903">
+      <description>Use literal result element, uses attribute set that claims wrongly to be streamable</description>
+      <created by="Michael Kay" on="2014-01-09"/>
+      <test>
+         <stylesheet file="si-lre-903.xsl"/>
+         <initial-template name="cy-903"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-904">
+      <description>Use literal result element: uses a streamable attribute set with streamable=" true "</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <test>
+         <stylesheet file="si-lre-904.xsl"/>
+         <initial-template name="cy-904"/>
+      </test>
+      <result>
+         <assert>/out/*[@x='1' and @y='2']</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-905">
+      <description>Use literal result element: uses a streamable attribute set with streamable="1"</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <test>
+         <stylesheet file="si-lre-905.xsl"/>
+         <initial-template name="cy-905"/>
+      </test>
+      <result>
+         <assert>/out/*[@x='1' and @y='2']</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-lre-906">
+      <description>Use literal result element, using an attribute set with streamable="Yes" (not allowed)</description>
+      <created by="Debbie Lockett" on="2014-08-14"/>
+      <test>
+         <stylesheet file="si-lre-906.xsl"/>
+         <initial-template name="cy-906"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>     
+    
+   
+</test-set>

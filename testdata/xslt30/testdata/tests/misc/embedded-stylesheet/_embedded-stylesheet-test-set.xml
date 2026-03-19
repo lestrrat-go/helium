@@ -1,0 +1,392 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="embedded-stylesheet">
+   <description>Tests embedded-stylesheet</description>
+   
+   <dependencies>
+      <!-- 
+         (ABr, 2015-04-06, Bug 28417)
+         Added dependency to signify that a processor must be able to interpret 
+         an xsl-stylesheet PI as defined by http://www.w3.org/TR/xml-stylesheet/ 
+      -->
+      <feature value="xsl-stylesheet-processing-instruction"/>
+   </dependencies>
+
+   <environment name="embed020">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <body>
+  	<price>15</price>
+  	<price>20</price>
+  	<price>25</price>
+  	<price>10</price>
+  </body>
+</doc>]]></content>
+      </source>
+   </environment>
+   
+
+   <test-case name="embedded-stylesheet-001">
+      <description>
+         Test case to verify that in a embedded standard stylesheet module, standard attribute (xsl:xpath-default-namespace) 
+         appearing on ancestors of the outermost element of the stylesheet module has no effect.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="embed001.xml" defines-stylesheet="true"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <assert-xml><![CDATA[<out><item xmlns:xsl="http://www.w3.org/1999/XSL/Transform" attr="atr3"><subitem>c</subitem></item></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-002">
+      <description>
+         Test case to verify that in a embedded standard stylesheet module, standard attribute (xsl:use-when) 
+         appearing on ancestors of the outermost element of the stylesheet module has no effect.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="embed002.xml" defines-stylesheet="true"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <assert-xml><![CDATA[<out>Hello Goodbye</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-003">
+      <description>
+         Test case to verify that in a embedded standard stylesheet module, standard attribute (xsl:version) 
+         appearing on ancestors of the outermost element of the stylesheet module has no effect.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="embed003.xml" defines-stylesheet="true"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <assert-xml><![CDATA[<out>Hello Goodbye</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-004">
+      <description>
+         Test case to verify that in a embedded standard stylesheet module, standard attribute (xsl:exclude-result-prefixes) 
+         appearing on ancestors of the outermost element of the stylesheet module have no effect.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="embed004.xml" defines-stylesheet="true"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:foo="http://www.foo.com">Hello Goodbye</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-005">
+      <description>
+         Test case in which an embedded standard stylesheet imports a standalone standard stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="embed006.xml" defines-stylesheet="true"/>
+         <stylesheet file="standalone_standard.xsl" role="secondary"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <assert-xml><![CDATA[<out><pre>28</pre></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-006">
+      <description>
+         Test case in which an embedded standard stylesheet includes a standalone standard stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="embed007.xml" defines-stylesheet="true"/>
+         <stylesheet file="standalone_standard.xsl" role="secondary"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <assert-xml><![CDATA[<out><pre>28</pre></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-007">
+      <description>
+         Test case in which an embedded standard stylesheet imports a standalone simplified stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="embed010.xml" defines-stylesheet="true"/>
+         <stylesheet file="standalone_simplified.xsl" role="secondary"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <assert-xml><![CDATA[<out><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Summary</title></head><body><p>Total Amount: 100</p></body></html></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-008">
+      <description>
+         Test case in which an embedded standard stylesheet includes a standalone simplified stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2019-12-17" change="Drop serialization requirement"/>
+      <environment>
+         <source role="." file="embed011.xml" defines-stylesheet="true"/>
+         <stylesheet file="standalone_simplified.xsl" role="secondary"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>         
+      </dependencies>
+      <test/>
+      <result>
+         <all-of>
+            <assert>/*:html[namespace-uri()="http://www.w3.org/1999/xhtml"]/*:head</assert>
+            <assert>/*:html/*:body/*:p = "Total Amount: 100"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-009">
+      <description>
+         Test case to verify that it is not intrinsically an error for an embedded stylesheet 
+         to import the same module more than once.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="embed012.xml" defines-stylesheet="true"/>
+         <stylesheet file="standalone_standard.xsl" role="secondary"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <assert-xml><![CDATA[<out><pre>28</pre></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-010">
+      <description>
+         Test case in which an included stylesheet declares an exclude-result-prefixes attribute, 
+         but the embedded stylesheet that includes it does not declare any exclude-result-prefixes attribute. 
+         This is to verify that the values of the standard attribute exclude-result-prefixes that apply to an 
+         element in the included stylesheet module are those that were defined on their own xsl:stylesheet element, 
+         not those on the main (Embedded) stylesheet module.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-12-14" change="Fixed whitespace"/>
+      <environment>
+         <source role="." file="embed014.xml" defines-stylesheet="true"/>
+         <stylesheet file="embed015a.xsl" role="secondary"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <assert-xml file="embedded-stylesheet-010.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-011">
+      <description>
+         Test case in which an imported stylesheet declares an exclude-result-prefixes attribute, 
+         but the embedded stylesheet that imports has an exclude-result-prefixes attribute with a 
+         different value. This is to verify that the values of the standard attribute exclude-result-prefixes 
+         that apply to an element in the imported stylesheet module are those that were defined on their 
+         own xsl:stylesheet element, not those on the main (Embedded) stylesheet module.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="embed015.xml" defines-stylesheet="true"/>
+         <stylesheet file="embed015a.xsl" role="secondary"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <assert-xml><![CDATA[<out><in xmlns:huh="http://unknown.com" att="att2"/><inc1 xmlns:foo="http://foo.test.com"/><inc2 xmlns:foo="http://foo.test.com" att="att2"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-012">
+      <description>
+         Test case in which an embedded stylesheet has declared an xpath-default-namespace, but the stylesheet 
+         it imports has declared a different xpath-default-namespace. This is to verify that the values of the 
+         standard attribute xpath-default-namespace that apply to an element in the embedded stylesheet module 
+         are those that were defined on their own xsl:stylesheet element, not those on the imported stylesheet module.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="embed016.xml" defines-stylesheet="true"/>
+         <stylesheet file="def.xsl" role="secondary"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <assert-xml file="embedded-stylesheet-012.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-013">
+      <description>
+         Test case in which an embedded stylesheet has declared an xpath-default-namespace, but the stylesheet 
+         it includes has declared a different xpath-default-namespace. This is to verify that the values of the 
+         standard attribute xpath-default-namespace that apply to an element in the embedded stylesheet module are 
+         those that were defined on their own xsl:stylesheet element, not those on the included stylesheet module.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2019-12-17" change="broke up result assertions for ease of analysis"/>
+      <environment>
+         <source role="." file="embed017.xml" defines-stylesheet="true"/>
+         <stylesheet file="def.xsl" role="secondary"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <all-of>
+            <assert>/out/elem[1] = "1  Matched Item element: Inside main stylesheet"</assert>
+            <assert>/out/elem[2] = "2  Matched Item element: Inside main stylesheet"</assert>
+            <assert>/out/elem[3] = "3  Matched Item element: Inside main stylesheet"</assert>
+            <assert>/out/str[1] = "1  Matched Str element: Inside main stylesheet"</assert>
+            <assert>/out/str[2] = "2  Matched Str element: Inside main stylesheet"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-014">
+      <description>
+         Test case to verify that the values of the standard attribute use-when that apply to an element in an 
+         included stylesheet module are those that were defined on their own xsl:stylesheet element, not those 
+         on the stylesheet module that includes them, where the including stylesheet is an embedded stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="embed018.xml" defines-stylesheet="true"/>
+         <stylesheet file="use-when.xsl" role="secondary"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <assert-xml><![CDATA[<out>
+<print_a>From the main stylesheet</print_a>
+<print_a>From the main stylesheet</print_a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-015">
+      <description>
+         Test case to verify that the values of the standard attribute use-when that apply to an element in 
+         an imported stylesheet module are those that were defined on their own xsl:stylesheet element, not 
+         those on the stylesheet module that imports it, where the main stylesheet is an embedded stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role="." file="embed019.xml" defines-stylesheet="true"/>
+         <stylesheet file="use-when.xsl" role="secondary"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test/>
+      <result>
+         <assert-xml><![CDATA[<out>
+<print_a>From the main stylesheet</print_a>
+<print_a>From the main stylesheet</print_a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-016">
+      <description>
+         Test case in which a standalone standard stylesheet imports a standalone simplified stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="embed020"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="embedded-stylesheet-016.xsl"/>
+         <stylesheet file="standalone_simplified.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Summary</title></head><body><p>Total Amount: 70</p></body></html>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-017">
+      <description>
+         Test case in which a standalone standard stylesheet includes a standalone simplified stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="embed020"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="embedded-stylesheet-017.xsl"/>
+         <stylesheet file="standalone_simplified.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Summary</title></head><body><p>Total Amount: 70</p></body></html>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="embedded-stylesheet-018">
+      <description>
+         Test case to verify that an static error is raised if the xsl:stylesheet element contains any text node children.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="embedded-stylesheet-018.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0120"/>
+      </result>
+   </test-case>
+</test-set>

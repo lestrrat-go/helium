@@ -1,0 +1,966 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="use-package">
+  <description>Tests xsl:use-package in XSLT 3.0</description>
+
+  <environment name="use-package-env-001">
+    <package file="use-package-base-001.xsl" role="secondary"
+      uri="http://www.w3.org/xslt30tests/use-package-base-001" package-version="1.0.0"/>
+  </environment>
+
+  <environment name="use-package-env-002">
+    <package file="use-package-base-002.xsl" role="secondary"
+      uri="http://www.w3.org/xslt30tests/use-package-base-002" package-version="1.0.0"/>
+  </environment>
+
+  <environment name="use-package-env-003">
+    <package file="use-package-base-003.xsl" role="secondary"
+      uri="http://www.w3.org/xslt30tests/use-package-base-003" package-version="1.0.0"/>
+  </environment>
+
+  <environment name="use-package-env-004">
+    <package file="use-package-base-004a.xsl" role="secondary"
+      uri="http://www.w3.org/xslt30tests/use-package-base-004" package-version="1.0.0"/>
+    <package file="use-package-base-004b.xsl" role="secondary"
+      uri="http://www.w3.org/xslt30tests/use-package-base-004" package-version="2.0.0"/>
+    <package file="use-package-base-004c.xsl" role="secondary"
+      uri="http://www.w3.org/xslt30tests/use-package-base-004" package-version="3.5.4"/>
+    <package file="use-package-base-004d.xsl" role="secondary"
+      uri="http://www.w3.org/xslt30tests/use-package-base-004" package-version="2.0.0-alpha"/>
+    <package file="use-package-base-004e.xsl" role="secondary"
+      uri="http://www.w3.org/xslt30tests/use-package-base-004" package-version="2.0.0-beta"/>
+  </environment>
+
+  <environment name="use-package-xml-to-json">
+    <source file="use-package-150.xml" role="."/>
+    <package file="use-package-xml-to-json.xsl" role="secondary"
+      uri="http://www.w3.org/2013/XSLT/xml-to-json" package-version="1.0"/>
+  </environment>
+
+  <environment name="use-package-xml-to-json-with-streaming">
+    <source file="use-package-150.xml" role="." streaming="true"/>
+    <package file="use-package-xml-to-json.xsl" role="secondary"
+      uri="http://www.w3.org/2013/XSLT/xml-to-json" package-version="1.0"/>
+    <param name="STREAMABLE" as="xs:boolean" static="yes" select="true()"/>
+  </environment>
+
+  <environment name="use-package-160">
+    <source file="use-package-160.xml" role="."/>
+    <package file="use-package-160-variables.xsl" role="secondary"
+      uri="http://www.160.com/generalVariables" package-version="0.1"/>
+    <package file="use-package-160-functions.xsl" role="secondary"
+      uri="http://www.160.com/generalFunctions" package-version="0.1"/>
+    <package file="use-package-160-logger.xsl" role="secondary" uri="http://www.160.com/logger"
+      package-version="0.1"/>
+    <package file="use-package-160-runner.xsl" role="secondary" uri="http://www.160.com/runner"
+      package-version="0.1"/>
+    <package file="use-package-160-common.xsl" role="secondary" uri="http://www.160.com/common"
+      package-version="0.1"/>
+  </environment>
+
+  <environment name="use-package-170">
+    <source file="use-package-170.xml" role="."/>
+    <package file="use-package-170c.xsl" role="secondary" uri="urn:170c" package-version="1.0"/>
+    <package file="use-package-170b.xsl" role="secondary" uri="urn:170b" package-version="1.0"/>
+  </environment>
+
+  <dependencies>
+    <spec value="XSLT30+"/>
+  </dependencies>
+
+  <test-case name="use-package-001">
+    <description>Successful use of a public function defined in a library package</description>
+    <created by="Michael Kay" on="2013-07-08"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-001"/>
+    <test>
+      <package file="use-package-001.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/ok</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-002">
+    <description>Successful use of a final function defined in a library package</description>
+    <created by="Michael Kay" on="2013-07-08"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-001"/>
+    <test>
+      <package file="use-package-002.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/ok</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-003">
+    <description>Unsuccessful use of a private function defined in a library package</description>
+    <created by="Michael Kay" on="2013-07-08"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-001"/>
+    <test>
+      <package file="use-package-003.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XPST0017"/>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-004">
+    <description>Successful use of a public variable defined in a library package</description>
+    <created by="Michael Kay" on="2013-10-17"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-003"/>
+    <test>
+      <package file="use-package-004.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/ok</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-005">
+    <description>Successful use of a final variable defined in a library package</description>
+    <created by="Michael Kay" on="2013-10-17"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-003"/>
+    <test>
+      <package file="use-package-005.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/ok</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-006">
+    <description>Unsuccessful use of a private variable defined in a library package</description>
+    <created by="Michael Kay" on="2013-10-17"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-003"/>
+    <test>
+      <package file="use-package-006.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XPST0008"/>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-007">
+    <description>Variable defined in a library package are private by default</description>
+    <created by="Michael Kay" on="2016-10-20"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment>
+      <package file="use-package-base-007.xsl" role="secondary"
+        uri="http://www.w3.org/xslt30tests/use-package-base-007" package-version="1.0.0"/>
+    </environment>
+    <test>
+      <package file="use-package-007.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XPST0008"/>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-101">
+    <description>Decimal formats are local to a package</description>
+    <created by="Michael Kay" on="2013-07-17"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-002"/>
+    <test>
+      <package file="use-package-101.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/out/@p = '1~234.5 1!234.5'</assert>
+        <assert>/out/@q = '1^234.5 1$234.5'</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-102">
+    <description>Keys are local to a package</description>
+    <created by="Michael Kay" on="2013-07-17"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-002"/>
+    <test>
+      <package file="use-package-102.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/out/@p = 'one'</assert>
+        <assert>/out/@q = 'three'</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-103">
+    <description>Namespace aliases are local to a package</description>
+    <created by="Michael Kay" on="2013-07-17"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-002"/>
+    <test>
+      <package file="use-package-103.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>namespace-uri(/out/*:test[1]) = 'http://www.w3.org/xslt30tests/use-package-103'</assert>
+        <assert>namespace-uri(/out/*:test[2]) = 'http://www.w3.org/xslt30tests/use-package-base-002'</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-104">
+    <description>Decimal formats are local to a package</description>
+    <created by="Michael Kay" on="2013-07-18"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-002"/>
+    <test>
+      <package file="use-package-104.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="FODF1280"/>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-105">
+    <description>Keys are local to a package</description>
+    <created by="Michael Kay" on="2013-07-18"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-002"/>
+    <test>
+      <package file="use-package-105.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XTDE1260"/>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-106">
+    <description>Character maps are local to a package</description>
+    <created by="Michael Kay" on="2013-07-18"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-002"/>
+    <test>
+      <package file="use-package-106.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XTSE1590"/>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-107">
+    <description>The unnamed output format is local to a package</description>
+    <created by="Michael Kay" on="2013-07-18"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-002"/>
+    <test>
+      <package file="use-package-107.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/out = 'zzz'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-108">
+    <description>The unnamed output format is local to a package</description>
+    <created by="Michael Kay" on="2013-07-18"/>
+    <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+    <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+    <modified by="Abel Braaksma" on="2019-02-02"
+      change="Use of exclude-result-prefixes was not taken into account in expected test result, see also variant -108b"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <modified by="Michael Kay" on="2019-03-05"
+      change="Revert the change (now) dated 2019-02-02; the target namespace of xsl:namespace-alias appears in the result even if it is an excluded namespace"/>
+    <environment ref="use-package-env-002"/>
+    <test>
+      <package file="use-package-108.xsl" role="principal"/>
+      <initial-template name="main"/>
+      <output serialize="yes"/>
+    </test>
+    <result>
+      <serialization-matches><![CDATA[<out xmlns:p="[^"]*">ZZZZZZ</out>]]></serialization-matches>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-108b">
+    <description>Namespace aliases and xsl:output declarations are local to a package (definition in principal package does not override library pkg)</description>
+    <created by="Abel Braaksma" on="2019-02-02"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <modified by="Michael Kay" on="2010-02-18"
+      change="Add NS declaration for xmlns:p, see W3C test bug 30404"/>
+    <test>
+      <package file="use-package-108b.xsl" role="principal"/>
+      <package file="use-package-108b-package.xsl" role="secondary"
+        uri="http://www.w3.org/xslt30tests/use-package-008b" package-version="1.0.0"/>
+      <output serialize="yes"/>
+    </test>
+    <result>
+      <serialization-matches><![CDATA[^<aliased:out xmlns:(aliased|p)="http://www.w3.org/xslt30tests/use-package-base-002" xmlns:(p|aliased)="http://www.w3.org/xslt30tests/use-package-base-002">ZZZZZZ</aliased:out>$]]></serialization-matches>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-150">
+    <description>Simple call of xml-to-json package extracted from the spec</description>
+    <created by="Michael Kay" on="2016-08-23"/>
+    <modified by="Michael Kay" on="2016-09-20" change="add expected result"/>
+    <modified by="Abel Braaksma" on="2019-02-20"
+      change="Fix JSON package name URI in environment use-package-xml-to-json so that package can be discovered properly (package name must match)"/>
+    <environment ref="use-package-xml-to-json"/>
+    <dependencies>
+      <feature value="higher_order_functions"/>
+    </dependencies>
+    <test>
+      <stylesheet file="use-package-150.xsl" role="principal"/>
+    </test>
+    <result>
+      <assert>/out = '{"desc":"Distances between several cities, in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-151">
+    <description>Call xml-to-json package extracted from the spec, with option indent=true()</description>
+    <created by="Michael Kay" on="2016-10-06"/>
+    <modified by="Abel Braaksma" on="2019-02-20"
+      change="Fix JSON package name URI in environment use-package-xml-to-json so that package can be discovered properly (package name must match)"/>
+    <environment ref="use-package-xml-to-json"/>
+    <dependencies>
+      <feature value="higher_order_functions"/>
+    </dependencies>
+    <test>
+      <stylesheet file="use-package-150.xsl" role="principal"/>
+      <initial-mode name="local-indent"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>contains(/out, " {")</assert>
+        <assert>contains(/out, " [")</assert>
+        <assert>replace(/out, "\s*([,:\{\}\[\]])\s*", "$1") =
+               '{"desc":"Distances between several cities,in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-152">
+    <description>Simple call of xml-to-json package extracted from the spec, with streaming</description>
+    <created by="Michael Kay" on="2016-10-06"/>
+    <modified by="Michael Kay" on="2017-02-15" change="add streaming dependency"/>
+    <modified by="Abel Braaksma" on="2019-02-20"
+      change="Fix JSON package name URI in environment use-package-xml-to-json-with-streaming so that package can be discovered properly (package name must match)"/>
+    <environment ref="use-package-xml-to-json-with-streaming"/>
+    <dependencies>
+      <feature value="streaming"/>
+      <feature value="higher_order_functions"/>
+    </dependencies>
+    <test>
+      <stylesheet file="use-package-150.xsl" role="principal"/>
+    </test>
+    <result>
+      <assert>/out = '{"desc":"Distances between several cities, in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-160">
+    <description>A more complex package hierarchy</description>
+    <created by="Michael Kay after Mark Dunn" on="2017-07-17"/>
+    <environment ref="use-package-160"/>
+    <test>
+      <stylesheet file="use-package-160a.xsl" role="principal"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<output><log>Oxford</log><city>Oxford</city></output>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-161">
+    <description>A more complex package hierarchy</description>
+    <created by="Michael Kay after Mark Dunn" on="2017-07-17"/>
+    <environment ref="use-package-160"/>
+    <test>
+      <stylesheet file="use-package-160b.xsl" role="principal"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<output><log>Oxford</log><city>Oxford</city></output>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-170">
+    <description>A more complex package hierarchy</description>
+    <created by="Michael Kay after Toshihito Makita" on="2017-07-17"/>
+    <modified by="Michael Kay" on="2017-08-15" change="corrected expected result"/>
+    <environment ref="use-package-170"/>
+    <test>
+      <stylesheet file="use-package-170a.xsl" role="principal"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<fo:block xmlns:fo="http://www.w3.org/1999/XSL/Format" color="red"
+            ><fo:inline>ph:Phrase text</fo:inline><fo:inline>ph:Bold text</fo:inline></fo:block>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-171">
+    <description>Variant of -170 with a mode explicitly accepted</description>
+    <created by="Michael Kay after Toshihito Makita" on="2017-07-17"/>
+    <modified by="Michael Kay" on="2017-08-15" change="corrected expected result"/>
+    <environment ref="use-package-170"/>
+    <test>
+      <stylesheet file="use-package-171a.xsl" role="principal"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<fo:block xmlns:fo="http://www.w3.org/1999/XSL/Format" color="red"
+            ><fo:inline>ph:Phrase text</fo:inline><fo:inline>ph:Bold text</fo:inline></fo:block>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-172">
+    <description>Variant of -170 with multiple layers of template rule overriding</description>
+    <created by="Michael Kay" on="2017-07-17"/>
+    <environment ref="use-package-170"/>
+    <test>
+      <stylesheet file="use-package-172a.xsl" role="principal"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<fo:block xmlns:fo="http://www.w3.org/1999/XSL/Format" color="red"
+            ><fo:inline>right:Phrase text</fo:inline><fo:inline>right:Bold text</fo:inline></fo:block>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-173">
+    <description>Variant of -170 with multiple layers of template rule overriding and next-match</description>
+    <created by="Michael Kay" on="2017-07-17"/>
+    <environment ref="use-package-170"/>
+    <test>
+      <stylesheet file="use-package-173a.xsl" role="principal"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<fo:block xmlns:fo="http://www.w3.org/1999/XSL/Format" color="red"
+            ><fo:inline>one:<fo:inline>two:<fo:inline>ph:Phrase text</fo:inline></fo:inline
+            ></fo:inline><fo:inline>one:<fo:inline>two:<fo:inline>ph:Bold text</fo:inline
+            ></fo:inline></fo:inline></fo:block>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-174">
+    <description>Saxon bug 3367</description>
+    <created by="Michael Kay after Jiri Dolejsi" on="2017-08-08"/>
+    <environment>
+      <package file="use-package-174a.xsl" role="secondary" uri="http://www.ctk.cz/A/"/>
+      <package file="use-package-174b.xsl" role="secondary" uri="http://www.ctk.cz/B/"/>
+    </environment>
+    <test>
+      <stylesheet file="use-package-174c.xsl" role="principal"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>Prague</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-175">
+    <description>Diamond structure: package D imported by two different routes with different overrides</description>
+    <created by="Michael Kay" on="2018-11-08"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment>
+      <package file="use-package-175a.xsl" role="principal" uri="urn:175a"/>
+      <package file="use-package-175d.xsl" role="secondary" uri="urn:175d"/>
+      <package file="use-package-175b.xsl" role="secondary" uri="urn:175b"/>
+      <package file="use-package-175c.xsl" role="secondary" uri="urn:175c"/>
+    </environment>
+    <test>
+      <package file="use-package-175a.xsl" role="principal"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/out/bb/b = "bbbbb"</assert>
+        <assert>/out/cc/c = "ccccc"</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-176">
+    <description>Diamond structure: different versions of package D imported by different routes</description>
+    <created by="Michael Kay" on="2018-11-08"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment>
+      <package file="use-package-176a.xsl" role="principal" uri="urn:176a"/>
+      <package file="use-package-176d1.xsl" role="secondary" uri="urn:176d" package-version="1.0.1"/>
+      <package file="use-package-176d2.xsl" role="secondary" uri="urn:176d" package-version="2.0.1"/>
+      <package file="use-package-176b.xsl" role="secondary" uri="urn:176b"/>
+      <package file="use-package-176c.xsl" role="secondary" uri="urn:176c"/>
+    </environment>
+    <test>
+      <package file="use-package-176a.xsl" role="principal"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/out/bb/b = "bbbbb"</assert>
+        <assert>/out/cc/c = "ccccc"</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+
+  <test-case name="use-package-201">
+    <description>Testing package versioning - version 1.0.0</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-004"/>
+    <test>
+      <package file="use-package-201.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = '1.0.0'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-202">
+    <description>Testing package versioning - version 2.0.0</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-004"/>
+    <test>
+      <package file="use-package-202.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('2.0.0')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-203a">
+    <description>Testing package versioning - version 1.0.0,2.0.0, version resolution: support highest version</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <modified by="Abel Braaksma" on="2019-02-26"
+      change="Fix for bug #30106, add version-resolution dependency, renamed to use-package-203a and added -203b and -204c"/>
+    <environment ref="use-package-env-004"/>
+    <dependencies>
+      <package_version_resolution value="highest_version" satisfied="true"/>
+    </dependencies>
+    <test>
+      <package file="use-package-203.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('2.0.0')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-203b">
+    <description>Testing package versioning - version 1.0.0,2.0.0, version resolution: support lowest version</description>
+    <created by="Abel Braaksma" on="2019-02-26"/>
+    <environment ref="use-package-env-004"/>
+    <dependencies>
+      <package_version_resolution value="lowest_version" satisfied="true"/>
+    </dependencies>
+    <test>
+      <package file="use-package-203.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('1.0.0')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-203c">
+    <description>Testing package versioning - version 1.0.0,2.0.0, version resolution: support any version</description>
+    <created by="Abel Braaksma" on="2019-02-26"/>
+    <environment ref="use-package-env-004"/>
+    <dependencies>
+      <package_version_resolution value="unspecified" satisfied="true"/>
+    </dependencies>
+    <test>
+      <package file="use-package-203.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('1.0.0','2.0.0')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-204a">
+    <description>Testing package versioning - version 1.5 to 2.5, version resolution: support highest version</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <modified by="Abel Braaksma" on="2019-02-26"
+      change="Fix for bug #30106, add version-resolution dependency, renamed to use-package-204a and added -204b and -204c"/>
+    <environment ref="use-package-env-004"/>
+    <dependencies>
+      <package_version_resolution value="highest_version" satisfied="true"/>
+    </dependencies>
+    <test>
+      <package file="use-package-204.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('2.0.0')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-204b">
+    <description>Testing package versioning - version 1.5 to 2.5, , version resolution: support lowest version</description>
+    <created by="Abel Braaksma" on="2019-02-26"/>
+    <environment ref="use-package-env-004"/>
+    <dependencies>
+      <package_version_resolution value="lowest_version" satisfied="true"/>
+    </dependencies>
+    <test>
+      <package file="use-package-204.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('2.0.0-alpha')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-204c">
+    <description>Testing package versioning - version 1.5 to 2.5, , version resolution: support any version</description>
+    <created by="Abel Braaksma" on="2019-02-26"/>
+    <environment ref="use-package-env-004"/>
+    <dependencies>
+      <package_version_resolution value="unspecified" satisfied="true"/>
+    </dependencies>
+    <test>
+      <package file="use-package-204.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('2.0.0','2.0.0-alpha','2.0.0-beta')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-205">
+    <description>Testing package versioning - version to 1.5</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-004"/>
+    <test>
+      <package file="use-package-205.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('1.0.0')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-206a">
+    <description>Testing package versioning - version 1.5+, version resolution: support highest version</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <modified by="Abel Braaksma" on="2019-02-26"
+      change="Fix for bug #30106, add version-resolution dependency, renamed to use-package-206a and added -206b and -206c"/>
+    <environment ref="use-package-env-004"/>
+    <dependencies>
+      <package_version_resolution value="highest_version" satisfied="true"/>
+    </dependencies>
+    <test>
+      <package file="use-package-206.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('3.5.4')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-206b">
+    <description>Testing package versioning - version 1.5+, version resolution: support lowest version</description>
+    <created by="Abel Braaksma" on="2019-02-26"/>
+    <environment ref="use-package-env-004"/>
+    <dependencies>
+      <package_version_resolution value="lowest_version" satisfied="true"/>
+    </dependencies>
+    <test>
+      <package file="use-package-206.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('2.0.0-alpha')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-206c">
+    <description>Testing package versioning - version 1.5+, version resolution: support any version</description>
+    <created by="Abel Braaksma" on="2019-02-26"/>
+    <environment ref="use-package-env-004"/>
+    <dependencies>
+      <package_version_resolution value="unspecified" satisfied="true"/>
+    </dependencies>
+    <test>
+      <package file="use-package-206.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('2.0.0','2.0.0-alpha','2.0.0-beta','3.5.4')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-207">
+    <description>Testing package versioning - version 3.5.*</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-004"/>
+    <test>
+      <package file="use-package-207.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('3.5.4')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-208">
+    <description>Testing package versioning - version 2.0.0-alpha</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-004"/>
+    <test>
+      <package file="use-package-208.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('2.0.0-alpha')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-209">
+    <description>Testing package versioning - version 2.0.0-arable-environment.27 to
+         2.0.0-gamma</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-004"/>
+    <test>
+      <package file="use-package-209.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('2.0.0-beta')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-210a">
+    <description>Testing package versioning - version 2.0.0-a to 2.0.0-gamma, version resolution: support highest version</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <modified by="Abel Braaksma" on="2019-02-26"
+      change="Fix for bug #30106, add version-resolution dependency, renamed to use-package-210a and added -210b and -210c"/>
+    <environment ref="use-package-env-004"/>
+    <dependencies>
+      <package_version_resolution value="highest_version" satisfied="true"/>
+    </dependencies>
+    <test>
+      <package file="use-package-210.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('2.0.0-beta')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-210b">
+    <description>Testing package versioning - version 2.0.0-a to 2.0.0-gamma, version resolution: support lowest version</description>
+    <created by="Abel Braaksma" on="2019-02-26"/>
+    <environment ref="use-package-env-004"/>
+    <dependencies>
+      <package_version_resolution value="lowest_version" satisfied="true"/>
+    </dependencies>
+    <test>
+      <package file="use-package-210.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('2.0.0-alpha')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-210c">
+    <description>Testing package versioning - version 2.0.0-a to 2.0.0-gamma, version resolution: support any version</description>
+    <created by="Abel Braaksma" on="2019-02-26"/>
+    <modified by="Michael Kay" on="2019-03-05" change="made test name unique"/>
+    <environment ref="use-package-env-004"/>
+    <dependencies>
+      <package_version_resolution value="unspecified" satisfied="true"/>
+    </dependencies>
+    <test>
+      <package file="use-package-210.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = ('2.0.0-alpha','2.0.0-beta')</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-211">
+    <description>Testing package versioning - version 2.7.0-a to 5.0.0-gamma</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-004"/>
+    <test>
+      <package file="use-package-211.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = '3.5.4'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-212">
+    <description>Testing package versioning - zero-truncated version 2.0</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-004"/>
+    <test>
+      <package file="use-package-212.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert>/package-version = '2.0.0'</assert>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-291">
+    <description>Testing package versioning - invalid NCName suffix:
+         2.0.0-alpha:beta</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-004"/>
+    <test>
+      <package file="use-package-291.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XTSE0020"/>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-292">
+    <description>Testing package versioning - invalid version: TotallyInvalid</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-004"/>
+    <test>
+      <package file="use-package-292.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XTSE0020"/>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-293">
+    <description>Testing package versioning - invalid version: -3.6</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-004"/>
+    <test>
+      <package file="use-package-293.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XTSE0020"/>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-294">
+    <description>Testing package versioning - invalid version: -alpha</description>
+    <created by="John Lumley" on="2014-10-09"/>
+    <modified by="Abel Braaksma" on="2019-02-19"
+      change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+    <environment ref="use-package-env-004"/>
+    <test>
+      <package file="use-package-294.xsl" role="principal"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XTSE0020"/>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-295">
+    <description>Call on abstract function not allowed. Saxon bug 4252.</description>
+    <created by="Michael Kay after Max Toro" on="2019-07-13"/>
+    <test>
+      <package file="use-package-295a.xsl" role="principal"/>
+      <package file="use-package-295b.xsl" role="secondary"/>
+    </test>
+    <result>
+      <error code="XTDE3052"/>
+    </result>
+  </test-case>
+
+  <test-case name="use-package-296">
+    <description>Missing attribute xsl:use-package/@name</description>
+    <created by="Michael Kay after Max Toro" on="2019-09-28"/>
+    <test>
+      <package file="use-package-296.xsl" role="principal"/>
+    </test>
+    <result>
+      <error code="XTSE0010"/>
+    </result>
+  </test-case>
+
+
+
+
+
+
+</test-set>

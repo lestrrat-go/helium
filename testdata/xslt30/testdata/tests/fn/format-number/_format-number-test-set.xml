@@ -1,0 +1,1173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="format-number">
+   <description>Tests format-number</description>
+   <environment name="numberformat01">
+      <source role=".">
+         <content><![CDATA[<doc>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="numberformat80">
+      <source role=".">
+         <content><![CDATA[ 
+
+<doc>
+  <foo test="true"/>
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="format-number-001">
+      <description>FileName: NUMBERFORMAT01 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>087,504.481200</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-002">
+      <description>FileName: NUMBERFORMAT02 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,235,464.8812</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-003">
+      <description>FileName: NUMBERFORMAT03 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-102,136.4812</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-004">
+      <description>FileName: NUMBERFORMAT04 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>87,504.4812</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-005">
+      <description>FileName: NUMBERFORMAT05 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>48.57%</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-006">
+      <description>FileName: NUMBERFORMAT06 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>485.7&#8240;</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-007">
+      <description>FileName: NUMBERFORMAT07 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>¤95.4857</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-008">
+      <description>FileName: NUMBERFORMAT08 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>PREFIX185.2812SUFFIX</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-009">
+      <description>FileName: NUMBERFORMAT09 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>000.931|486</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-010">
+      <description>FileName: NUMBERFORMAT11 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>+26,931.4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-011">
+      <description>FileName: NUMBERFORMAT12 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-26,931.4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-012">
+      <description>FileName: NUMBERFORMAT13 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-26,931.4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-013">
+      <description>FileName: NumberFormat14 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>off-the-scale</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-014">
+      <description>FileName: NumberFormat15 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>non-numeric</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-015">
+      <description>FileName: NUMBERFORMAT16 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>485.7m</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-016">
+      <description>FileName: NUMBERFORMAT17 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-26,931.4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-017">
+      <description>FileName: NUMBERFORMAT18 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>_26,931.4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-018">
+      <description>FileName: NUMBERFORMAT19 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>_26,931.4  -42,857.1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-019">
+      <description>FileName: NUMBERFORMAT20 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-019.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:foo="http://foo.com">1*234!567</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-020">
+      <description>FileName: NUMBERFORMAT21 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-26.931,4  _42,857.1  -73,816.9</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-021">
+      <description>FileName: NUMBERFORMAT22 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-26.931,4  _42,857.1  -73,816.9</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-022">
+      <description>FileName: NUMBERFORMAT23 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-26.931,4  _42,857.1  -73,816.9</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-023">
+      <description>FileName: NUMBERFORMAT24 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-26.931,4  _42,857.1  -73,816.9</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-024">
+      <description>FileName: NUMBERFORMAT26 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>7 654 321,4857</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-025">
+      <description>FileName: NUMBERFORMAT27 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>All three should be the same...
+087,504.481200
+087,504.481200
+087,504.481200</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-026">
+      <description>FileName: NUMBERFORMAT28 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-87,504.4812</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-027">
+      <description>FileName: NUMBERFORMAT29 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>_26,931.4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-028">
+      <description>FileName: NUMBERFORMAT30 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>All three should have two prefixes...
+--26,931.4
+_zzz-26,931.4
+__26,931.4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-029">
+      <description>FileName: NUMBERFORMAT31 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>26,931.4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-030">
+      <description>FileName: NUMBERFORMAT32 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>48.57c</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-031">
+      <description>FileName: numberformat34 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-031.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>#&#1636;,&#1632;&#1635;&#1632;,&#1634;&#1632;&#1633;.&#1632;&#1637;&#1632;&#1638;&#1632;&#1632;0</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-032">
+      <description>FileName: NUMBERFORMAT35 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-032.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>9876,543,21.00</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-033">
+      <description>FileName: NUMBERFORMAT36 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>239236.59</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-034">
+      <description>FileName: NumberFormat37 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-034.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Infinity</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-035">
+      <description>FileName: NumberFormat38 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>NaN</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-036">
+      <description>FileName: NumberFormat39 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-Infinity</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-037">
+      <description>FileName: NumberFormat40 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-huge</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-038">
+      <description>FileName: NUMBERFORMAT41 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<foo>not a number, -13.2</foo>
+<baz>not a number, -13.2</baz></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-039">
+      <description>FileName: NUMBERFORMAT42 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-039.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>not a number, 3.2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-040">
+      <description>FileName: NumberFormat43 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-040.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<one>not a number, -13.2</one>
+<sub>not a number, -13.2</sub></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-041">
+      <description>FileName: NumberFormat44 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-041.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<main>not a number, -13.2</main>
+<sub>not a number, -13.2</sub></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-042">
+      <description>FileName: NumberFormat45 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-042.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<one>012.345,67, -98.765,432</one>
+<sub>012.345,67, -98.765,432</sub></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-043">
+      <description>FileName: NumberFormat46 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-043.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<one>012.345,67, -98.765,432</one>
+<sub>012.345,67, -98.765,432</sub></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-044">
+      <description>Test format-number() applied to large numbers (test how good the rounding is) Bug report from Pedro Christian against Saxon 7.8</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2013-01-31" change="see bug 20460"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-044.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="format-number-044.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-045">
+      <description>format-number() against an empty sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-045.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>NaN</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-046">
+      <description>Purpose: Conflicting decimal formats are not an error if overridden by another one of higher import precedence.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-046.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>000.931</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-047">
+      <description>Purpose: Test formatting of a high-precision decimal value.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <maximum_number_of_decimal_digits value="60"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-047.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>123456789012345678901234567890.1234567890123456789</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-048">
+      <description>Purpose: Test formatting of a high-precision integer value.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <maximum_number_of_decimal_digits value="60"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-048.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12 34 56 78 90 12 34 56 78 90 12 34 56 78 90 12 34 56 78 90 12 34 56 78 90 00 00.0</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-049">
+      <description>Purpose: Test that a trailing decimalpoint is removed.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-049.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1234;
+    1234</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-050">
+      <description>Use non-BMP characters as separators</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-050.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1&#110001;234&#110001;567&#110001;890&#110000;123</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-051">
+      <description>Use Osmanya digits (non-BMP) in formatted output</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-051.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>&#66721;&#66722;&#66723;&#66724;&#66725;&#66726;&#66727;&#66728;&#66729;&#66720;.&#66721;&#66722;&#66723;&#66724;&#66725;&#66726;</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-052">
+      <description>Check that overflow isn't an error</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-052.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1234567890.123</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-053">
+      <description>Test use of multiple non-conflicting named decimal formats. See Saxon bug http://dev.saxonica.com/community/issues/1571</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-053.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3.931,486</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-054">
+      <description>Test use of multiple non-conflicting unnamed decimal formats. See Saxon bug http://dev.saxonica.com/community/issues/1571</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-054.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3.931,486</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-055">
+      <description>Test overriding of a single attribute of a decimal format, while inheriting other attributes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-055.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>~1931,49</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-056">
+      <description>FileName: NUMBERFORMAT25 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-056.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1300"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-057">
+      <description>FileName: NUMBERFORMAT25 Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-09" change="XTDE1310 is xslt2.0 error code (FODF1310 for xslt3.0)"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-057.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE1310"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-057n">
+      <description>http://www.w3.org/TR/2011/WD-xpath-functions-30-20110614/#ERRFODF1310</description>
+      <created by="Abel Braaksma" on="2013-12-09"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-057.xsl"/>
+      </test>
+      <result>
+         <error code="FODF1310"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-058">
+      <description>Purpose: Test use of conflicting decimal formats.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-058.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1290"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-059">
+      <description>Purpose: test error condition: same symbol used in two different roles.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-059.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1300"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-060">
+      <description>Purpose: test error condition: no digit or zero-digit in picture.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-09" change="XTDE1310 is xslt2.0 error code (FODF1310 for xslt3.0)"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-060.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE1310"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-060n">
+      <description>Purpose: test error condition: no digit or zero-digit in picture. (3.0)</description>
+      <created by="Abel Braaksma" on="2013-12-09"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-060.xsl"/>
+      </test>
+      <result>
+         <error code="FODF1310"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-061">
+      <description>Purpose: test error condition: decimal separator must be single character.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-061.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-062">
+      <description>test format-number() with two arguments</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat80"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-062.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o>12.34</o>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-063">
+      <description>Test format-number with three arguments</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat80"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-063.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o>0.012,34</o>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-064">
+      <description>test duplicate xsl:decimal-format elements: OK because compatible</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat80"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-064.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>012,340</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-065">
+      <description>test duplicate unnamed xsl:decimal-format elements: OK because compatible</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat80"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-065.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>012,340</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-066">
+      <description>test format-number() with grouping separator</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat80"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-066.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>123,456,789.34</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-067">
+      <description>test format-number() forcing minWholePartSize to one</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="numberformat80"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-067.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a int="0"/><a decimal="0"/><a double="0"/><a float="0"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="format-number-068">
+      <description>FileName: numberformat934err Document: http://www.w3.org/TR/xslt DocVersion: 19991116 Section: 12.3</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-068.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE1295"/>
+      </result>
+   </test-case>
+   
+   <test-case name="format-number-069a">
+      <description>exponent-separator (XPath 3.1)</description>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="XPath_3.1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-069.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "1.2346E2"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="format-number-069b">
+      <description>exponent-separator (not XPath 3.1)</description>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="XPath_3.1" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-069.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XXX"/>
+      </result>
+   </test-case>
+   
+   <test-case name="format-number-069c">
+      <description>exponent-separator (not XSLT 3.0)</description>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-069.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+   
+   <test-case name="format-number-070">
+      <description>format-number bug with function inlining (Saxon bug 4688)</description>
+      <created by="Michael Kay after Andy Yar" on="2020-08-17"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<root>
+      <value1>58</value1>
+      <value2>64</value2>
+   </root>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="format-number-070.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/root/format1 = '058'</assert>
+            <assert>/root/format2 = '0000000064'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+</test-set>

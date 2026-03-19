@@ -1,0 +1,112 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-xml-to-json">
+   <description>xml-to-json() function with streaming</description>
+   <keywords>streaming streamability-analysis xml-to-json</keywords>
+
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-xml-to-json-001">
+      <description>Basic test of xsl:source-document instruction with xml-to-json(), no options</description>
+      <created by="Michael Kay" on="2016-10-06"/>
+      <test>
+         <stylesheet file="sf-xml-to-json-001.xsl"/>
+      </test>
+      <result>
+         <assert>/json = '{"desc":"Distances between several cities, in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="sf-xml-to-json-002">
+      <description>Basic test of xsl:source-document instruction with xml-to-json(), this time with indenting</description>
+      <created by="Michael Kay" on="2016-10-06"/>
+      <modified by="Michael Kay" on="2019-05-08" change="set streamable='yes' on xsl:source-document. Same change to several other tests."/>
+      <test>
+         <stylesheet file="sf-xml-to-json-002.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>contains(/json, " {")</assert>
+            <assert>contains(/json, " [")</assert>
+            <assert>replace(/json, "\s*([,:\{\}\[\]])\s*", "$1") =
+               '{"desc":"Distances between several cities,in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'</assert>
+         </all-of>
+      </result>       
+   </test-case>
+   
+   <test-case name="sf-xml-to-json-003">
+      <description>Basic test of xsl:source-document instruction with xml-to-json(), this time passing an element node rather than a document</description>
+      <created by="Michael Kay" on="2016-10-06"/>
+      <test>
+         <stylesheet file="sf-xml-to-json-003.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>contains(/json, " {")</assert>
+            <assert>contains(/json, " [")</assert>
+            <assert>replace(/json, "\s*([,:\{\}\[\]])\s*", "$1") =
+               '{"desc":"Distances between several cities,in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'</assert>
+         </all-of>
+      </result>       
+   </test-case>
+   
+   <test-case name="sf-xml-to-json-004">
+      <description>Test of xsl:source-document instruction with xml-to-json(), error passing more than one node</description>
+      <created by="Michael Kay" on="2016-10-06"/>
+      <test>
+         <stylesheet file="sf-xml-to-json-004.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>       
+   </test-case>
+   
+   <test-case name="sf-xml-to-json-005">
+      <description>Test of xsl:source-document instruction with xml-to-json(), select single node using a complex predicate</description>
+      <created by="Michael Kay" on="2016-10-06"/>
+      <test>
+         <stylesheet file="sf-xml-to-json-005.xsl"/>
+      </test>
+      <result>
+         <assert>/json = '{"to":"London","distance":322}'</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="sf-xml-to-json-006">
+      <description>Streaming xml-to-json() taking input from principal source document</description>
+      <created by="Michael Kay" on="2019-05-08"/>
+      <environment>
+         <source file="sf-xml-to-json-A.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="sf-xml-to-json-006.xsl"/>
+      </test>
+      <result>
+         <assert>/json = '{"desc":"Distances between several cities, in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'</assert>
+      </result>       
+   </test-case>
+   
+   <test-case name="sf-xml-to-json-007">
+      <description>Streaming xml-to-json() taking input from principal source document, with options map</description>
+      <created by="Michael Kay" on="2019-05-08"/>
+      <environment>
+         <source file="sf-xml-to-json-A.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="sf-xml-to-json-007.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>contains(/json, " {")</assert>
+            <assert>contains(/json, " [")</assert>
+            <assert>replace(/json, "\s*([,:\{\}\[\]])\s*", "$1") =
+               '{"desc":"Distances between several cities,in kilometers.","updated":"2014-02-04T18:50:45","uptodate":true,"author":null,"cities":{"Brussels":[{"to":"London","distance":322},{"to":"Paris","distance":265},{"to":"Amsterdam","distance":173}],"London":[{"to":"Brussels","distance":322},{"to":"Paris","distance":344},{"to":"Amsterdam","distance":358}],"Paris":[{"to":"Brussels","distance":265},{"to":"London","distance":344},{"to":"Amsterdam","distance":431}],"Amsterdam":[{"to":"Brussels","distance":173},{"to":"London","distance":358},{"to":"Paris","distance":431}]}}'</assert>
+         </all-of>
+      </result>       
+   </test-case>
+
+   
+
+</test-set>

@@ -1,0 +1,2166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-for-each-group">
+   <description>xsl:for-each with streaming</description>
+   
+   <environment name="si-for-each-group-A">
+     <stylesheet file="si-for-each-group-A.xsl"/>
+   </environment>
+   
+   <environment name="si-for-each-group-B">
+     <stylesheet file="si-for-each-group-B.xsl"/>
+   </environment>
+   
+   <environment name="si-for-each-group-C">
+     <stylesheet file="si-for-each-group-C.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   
+   <test-case name="si-group-001">
+      <description>Streamed grouping - group-adjacent - with xsl:sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/batch[1]/transaction/@value/number(), (13.24, 8.12))</assert>
+            <assert>deep-equal(/out/batch[2]/transaction/@value/number(), (-15.00))</assert>
+            <assert>deep-equal(/out/batch[3]/transaction/@value/number(), (6.00))</assert>
+            <assert>deep-equal(/out/batch[4]/transaction/@value/number(), (0.50, 2.33, 4.44))</assert>
+            <assert>deep-equal(/out/batch[5]/transaction/@value/number(), (-5.00))</assert>
+            <assert>deep-equal(/out/batch[6]/transaction/@value/number(), (8.99))</assert>
+            <assert>deep-equal(/out/batch[7]/transaction/@value/number(), (16.00))</assert>
+            <assert>deep-equal(/out/batch[8]/transaction/@value/number(), (-2.33, 5.60, 4.32))</assert>
+            <assert>deep-equal(/out/batch[9]/transaction/@value/number(), (6.78, 12.20, -248.05))</assert>
+            <assert>deep-equal(/out/batch[10]/transaction/@value/number(), (12.00, 13.99))</assert>
+            <assert>deep-equal(/out/batch[11]/transaction/@value/number(), (14.20))</assert>
+            <assert>count(/out/batch) = 11</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-002">
+      <description>Streamed grouping - group-adjacent - with xsl:copy-of</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/batch[1]/transaction/@value/number(), (13.24, 8.12))</assert>
+            <assert>deep-equal(/out/batch[2]/transaction/@value/number(), (-15.00))</assert>
+            <assert>deep-equal(/out/batch[3]/transaction/@value/number(), (6.00))</assert>
+            <assert>deep-equal(/out/batch[4]/transaction/@value/number(), (0.50, 2.33, 4.44))</assert>
+            <assert>deep-equal(/out/batch[5]/transaction/@value/number(), (-5.00))</assert>
+            <assert>deep-equal(/out/batch[6]/transaction/@value/number(), (8.99))</assert>
+            <assert>deep-equal(/out/batch[7]/transaction/@value/number(), (16.00))</assert>
+            <assert>deep-equal(/out/batch[8]/transaction/@value/number(), (-2.33, 5.60, 4.32))</assert>
+            <assert>deep-equal(/out/batch[9]/transaction/@value/number(), (6.78, 12.20, -248.05))</assert>
+            <assert>deep-equal(/out/batch[10]/transaction/@value/number(), (12.00, 13.99))</assert>
+            <assert>deep-equal(/out/batch[11]/transaction/@value/number(), (14.20))</assert>
+            <assert>count(/out/batch) = 11</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-003">
+      <description>Streamed grouping - group-adjacent - with xsl:value-of</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/batch[1][@date = "2006-02-13"] = "13.24 8.12"</assert>
+            <assert>/out/batch[2][@date = "2006-02-15"] = "-15.00"</assert>
+            <assert>/out/batch[3][@date = "2006-02-16"] = "6.00"</assert>
+            <assert>/out/batch[4][@date = "2006-02-17"] = "0.50 2.33 4.44"</assert>
+            <assert>/out/batch[5][@date = "2006-02-20"] = "-5.00"</assert>
+            <assert>/out/batch[6][@date = "2006-02-21"] = "8.99"</assert>
+            <assert>/out/batch[7][@date = "2006-02-22"] = "16.00"</assert>
+            <assert>/out/batch[8][@date = "2006-02-23"] = "-2.33 5.60 4.32"</assert>
+            <assert>/out/batch[9][@date = "2006-02-24"] = "6.78 12.20 -248.05"</assert>
+            <assert>/out/batch[10][@date = "2006-02-25"] = "12.00 13.99"</assert>
+            <assert>/out/batch[11][@date = "2006-02-26"] = "14.20"</assert>           
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-004">
+      <description>Streamed grouping - group-adjacent - with AVT</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/batch[1][@date = "2006-02-13"]/transactions/@amounts = "13.24 8.12"</assert>
+            <assert>/out/batch[2][@date = "2006-02-15"]/transactions/@amounts = "-15.00"</assert>
+            <assert>/out/batch[3][@date = "2006-02-16"]/transactions/@amounts = "6.00"</assert>
+            <assert>/out/batch[4][@date = "2006-02-17"]/transactions/@amounts = "0.50 2.33 4.44"</assert>
+            <assert>/out/batch[5][@date = "2006-02-20"]/transactions/@amounts = "-5.00"</assert>
+            <assert>/out/batch[6][@date = "2006-02-21"]/transactions/@amounts = "8.99"</assert>
+            <assert>/out/batch[7][@date = "2006-02-22"]/transactions/@amounts = "16.00"</assert>
+            <assert>/out/batch[8][@date = "2006-02-23"]/transactions/@amounts = "-2.33 5.60 4.32"</assert>
+            <assert>/out/batch[9][@date = "2006-02-24"]/transactions/@amounts = "6.78 12.20 -248.05"</assert>
+            <assert>/out/batch[10][@date = "2006-02-25"]/transactions/@amounts = "12.00 13.99"</assert>
+            <assert>/out/batch[11][@date = "2006-02-26"]/transactions/@amounts = "14.20"</assert>           
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-005">
+      <description>Streamed grouping - group-adjacent - with count()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/batch[1][@date = "2006-02-13"]/size = "2"</assert>
+            <assert>/out/batch[2][@date = "2006-02-15"]/size = "1"</assert>
+            <assert>/out/batch[3][@date = "2006-02-16"]/size = "1"</assert>
+            <assert>/out/batch[4][@date = "2006-02-17"]/size = "3"</assert>
+            <assert>/out/batch[5][@date = "2006-02-20"]/size = "1"</assert>
+            <assert>/out/batch[6][@date = "2006-02-21"]/size = "1"</assert>
+            <assert>/out/batch[7][@date = "2006-02-22"]/size = "1"</assert>
+            <assert>/out/batch[8][@date = "2006-02-23"]/size = "3"</assert>
+            <assert>/out/batch[9][@date = "2006-02-24"]/size = "3"</assert>
+            <assert>/out/batch[10][@date = "2006-02-25"]/size = "2"</assert>
+            <assert>/out/batch[11][@date = "2006-02-26"]/size = "1"</assert>           
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-006">
+      <description>Streamed grouping - group-adjacent - with sum()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/batch[1][@date = "2006-02-13"]/total = 21.36</assert>
+            <assert>/out/batch[2][@date = "2006-02-15"]/total = -15.00</assert>
+            <assert>/out/batch[3][@date = "2006-02-16"]/total = 6.00</assert>
+            <assert>/out/batch[4][@date = "2006-02-17"]/total = 7.27</assert>
+            <assert>/out/batch[5][@date = "2006-02-20"]/total = -5.00</assert>
+            <assert>/out/batch[6][@date = "2006-02-21"]/total = 8.99</assert>
+            <assert>/out/batch[7][@date = "2006-02-22"]/total = 16.00</assert>
+            <assert>/out/batch[8][@date = "2006-02-23"]/total = 7.59</assert>
+            <assert>/out/batch[9][@date = "2006-02-24"]/total = -229.07</assert>
+            <assert>/out/batch[10][@date = "2006-02-25"]/total = 25.99</assert>
+            <assert>/out/batch[11][@date = "2006-02-26"]/total = 14.20</assert>           
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-007">
+      <description>Streamed grouping - group-adjacent - composite grouping key</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><batch year="2006" week="7"><total>19.63</total></batch><batch year="2006" week="8"><total>-161.3</total></batch></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-008">
+      <description>Streamed grouping - group-adjacent - composite grouping key - min and max using xsl:iterate</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <modified by="Michael Kay" on="2014-01-31" change="reorder xsl:on-completion, see bug 24179"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-008.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><batch year="2006" week="7"><min>-15</min><max>13.24</max></batch><batch year="2006" week="8"><min>-248.05</min><max>16</max></batch></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-009">
+      <description>Streamed grouping - group-adjacent - composite grouping key - classic "adjacent bullets" use case</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><head>Heading</head><p>One</p><p>Two</p><p>Three</p
+         ><list><li>point one</li><li>point two</li><li>point three</li></list><p>Four</p></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-010">
+      <description>Streamed grouping - group-adjacent - multi-level grouping</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-010.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/week[1][@nr="7"]/day[1][@date="2006-02-13"]/transaction[1][@value="13.24"]</assert>
+           <assert>/out/week[1][@nr="7"]/day[1][@date="2006-02-13"]/transaction[2][@value="8.12"]</assert>
+           <assert>/out/week[1][@nr="7"]/day[2][@date="2006-02-15"]/transaction[1][@value="-15.00"]</assert>
+           <assert>/out/week[1][@nr="7"]/day[3][@date="2006-02-16"]/transaction[1][@value="6.00"]</assert>
+           <assert>/out/week[2][@nr="8"]/day[1][@date="2006-02-20"]/transaction[1][@value="-5.00"]</assert>
+           <assert>/out/week[2][@nr="8"]/day[7][@date="2006-02-26"]/transaction[1][@value="14.20"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-011">
+      <description>Streamed grouping - group-adjacent - with xsl:apply-templates selecting the current group</description>
+      <created by="Michael Kay" on="2013-03-26"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-011.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/batch[1][@date = "2006-02-13"] = "[13.24][8.12]"</assert>
+            <assert>/out/batch[2][@date = "2006-02-15"] = "[-15.00]"</assert>
+            <assert>/out/batch[3][@date = "2006-02-16"] = "[6.00]"</assert>
+            <assert>/out/batch[4][@date = "2006-02-17"] = "[0.50][2.33][4.44]"</assert>
+            <assert>/out/batch[5][@date = "2006-02-20"] = "[-5.00]"</assert>
+            <assert>/out/batch[6][@date = "2006-02-21"] = "[8.99]"</assert>
+            <assert>/out/batch[7][@date = "2006-02-22"] = "[16.00]"</assert>
+            <assert>/out/batch[8][@date = "2006-02-23"] = "[-2.33][5.60][4.32]"</assert>
+            <assert>/out/batch[9][@date = "2006-02-24"] = "[6.78][12.20][-248.05]"</assert>
+            <assert>/out/batch[10][@date = "2006-02-25"] = "[12.00][13.99]"</assert>
+            <assert>/out/batch[11][@date = "2006-02-26"] = "[14.20]"</assert>           
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-012">
+      <description>Streamed grouping - group-adjacent - with xsl:for-each selecting the current group</description>
+      <created by="Michael Kay" on="2013-03-26"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-012.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/batch[1][@date = "2006-02-13"] = "[13.24][8.12]"</assert>
+            <assert>/out/batch[2][@date = "2006-02-15"] = "[-15.00]"</assert>
+            <assert>/out/batch[3][@date = "2006-02-16"] = "[6.00]"</assert>
+            <assert>/out/batch[4][@date = "2006-02-17"] = "[0.50][2.33][4.44]"</assert>
+            <assert>/out/batch[5][@date = "2006-02-20"] = "[-5.00]"</assert>
+            <assert>/out/batch[6][@date = "2006-02-21"] = "[8.99]"</assert>
+            <assert>/out/batch[7][@date = "2006-02-22"] = "[16.00]"</assert>
+            <assert>/out/batch[8][@date = "2006-02-23"] = "[-2.33][5.60][4.32]"</assert>
+            <assert>/out/batch[9][@date = "2006-02-24"] = "[6.78][12.20][-248.05]"</assert>
+            <assert>/out/batch[10][@date = "2006-02-25"] = "[12.00][13.99]"</assert>
+            <assert>/out/batch[11][@date = "2006-02-26"] = "[14.20]"</assert>           
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-013">
+      <description>Streamed grouping - group-adjacent - composite grouping key - min and max using xsl:iterate 
+      with position() and xsl:break</description>
+      <created by="Michael Kay" on="2013-03-29"/>
+      <modified by="Michael Kay" on="2014-01-31" change="reorder xsl:on-completion, see bug 24179"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-013.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><batch year="2006" week="7"><min>8.12</min><max>13.24</max></batch><batch year="2006" week="8"><min>-5</min><max>8.99</max></batch></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-014">
+      <description>Streamed grouping - group-adjacent - as a direct child of xsl:stream</description>
+      <created by="Michael Kay" on="2013-03-29"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-014.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><batch year="2006" week="7"><total>19.63</total></batch><batch year="2006" week="8"><total>-161.3</total></batch></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-015">
+      <description>Streamed grouping - group-adjacent - with xsl:sequence;
+        using only the first item in every group</description>
+      <created by="Michael Kay" on="2013-03-29"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-015.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/first[1]/transaction/@value/number(), (13.24))</assert>
+            <assert>deep-equal(/out/first[2]/transaction/@value/number(), (-15.00))</assert>
+            <assert>deep-equal(/out/first[3]/transaction/@value/number(), (6.00))</assert>
+            <assert>deep-equal(/out/first[4]/transaction/@value/number(), (0.50))</assert>
+            <assert>deep-equal(/out/first[5]/transaction/@value/number(), (-5.00))</assert>
+            <assert>deep-equal(/out/first[6]/transaction/@value/number(), (8.99))</assert>
+            <assert>deep-equal(/out/first[7]/transaction/@value/number(), (16.00))</assert>
+            <assert>deep-equal(/out/first[8]/transaction/@value/number(), (-2.33))</assert>
+            <assert>deep-equal(/out/first[9]/transaction/@value/number(), (6.78))</assert>
+            <assert>deep-equal(/out/first[10]/transaction/@value/number(), (12.00))</assert>
+            <assert>deep-equal(/out/first[11]/transaction/@value/number(), (14.20))</assert>
+            <assert>count(/out/first) = 11</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-015a">
+      <description>Streamed grouping - group-adjacent - with xsl:sequence;
+         using only the first item in every group. Same as si-group-015, but modified
+         to use "." in place of current-group()[1]
+      </description>
+      <created by="Michael Kay" on="2016-10-10"/>
+      <test>
+         <stylesheet file="si-group-015a.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/first[1]/transaction/@value/number(), (13.24))</assert>
+            <assert>deep-equal(/out/first[2]/transaction/@value/number(), (-15.00))</assert>
+            <assert>deep-equal(/out/first[3]/transaction/@value/number(), (6.00))</assert>
+            <assert>deep-equal(/out/first[4]/transaction/@value/number(), (0.50))</assert>
+            <assert>deep-equal(/out/first[5]/transaction/@value/number(), (-5.00))</assert>
+            <assert>deep-equal(/out/first[6]/transaction/@value/number(), (8.99))</assert>
+            <assert>deep-equal(/out/first[7]/transaction/@value/number(), (16.00))</assert>
+            <assert>deep-equal(/out/first[8]/transaction/@value/number(), (-2.33))</assert>
+            <assert>deep-equal(/out/first[9]/transaction/@value/number(), (6.78))</assert>
+            <assert>deep-equal(/out/first[10]/transaction/@value/number(), (12.00))</assert>
+            <assert>deep-equal(/out/first[11]/transaction/@value/number(), (14.20))</assert>
+            <assert>count(/out/first) = 11</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-016">
+      <description>Streamed grouping - group-adjacent - with xsl:sequence;
+        using only the first item in every group</description>
+      <created by="Michael Kay" on="2013-03-29"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-016.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/first[1]/transaction/@value/number(), (13.24))</assert>
+            <assert>deep-equal(/out/first[2]/transaction/@value/number(), (-15.00))</assert>
+            <assert>deep-equal(/out/first[3]/transaction/@value/number(), (6.00))</assert>
+            <assert>deep-equal(/out/first[4]/transaction/@value/number(), (0.50))</assert>
+            <assert>deep-equal(/out/first[5]/transaction/@value/number(), (-5.00))</assert>
+            <assert>deep-equal(/out/first[6]/transaction/@value/number(), (8.99))</assert>
+            <assert>deep-equal(/out/first[7]/transaction/@value/number(), (16.00))</assert>
+            <assert>deep-equal(/out/first[8]/transaction/@value/number(), (-2.33))</assert>
+            <assert>deep-equal(/out/first[9]/transaction/@value/number(), (6.78))</assert>
+            <assert>deep-equal(/out/first[10]/transaction/@value/number(), (12.00))</assert>
+            <assert>deep-equal(/out/first[11]/transaction/@value/number(), (14.20))</assert>
+            <assert>count(/out/first) = 11</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-017">
+      <description>Streamed grouping - group-adjacent - non-streamable because there
+        are two references to the grouping variable</description>
+      <created by="Michael Kay" on="2013-03-29"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-017.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+      <test-case name="si-group-018">
+      <description>Streamed grouping - group-adjacent - using position() to number groups</description>
+      <created by="Michael Kay" on="2013-03-29"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-018.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/batch[1][@date="2006-02-13" and @nr="1" and @size="2"]</assert>
+            <assert>/out/batch[2][@date="2006-02-15" and @nr="2" and @size="1"]</assert>
+            <assert>/out/batch[3][@date="2006-02-16" and @nr="3" and @size="1"]</assert>
+            <assert>/out/batch[4][@date="2006-02-17" and @nr="4" and @size="3"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-019">
+      <description>Streamed grouping - group-adjacent - no reference to group contents</description>
+      <created by="Michael Kay" on="2013-12-10"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-019.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/g) = 11</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-020">
+      <description>Streamed grouping - group-adjacent - position() reference to group contents only</description>
+      <created by="Michael Kay" on="2013-12-10"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-020.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/g) = 11</assert>
+            <assert>every $i in 1 to 11 satisfies /out/g[$i]/@pos = string($i)</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-021">
+      <description>Streamed grouping - group-adjacent - inspection reference to first-in-group contents only</description>
+      <created by="Michael Kay" on="2013-12-10"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-021.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/g[1]/@val = "13.24"</assert>
+            <assert>/out/g[2]/@val = "-15.00"</assert>
+            <assert>/out/g[3]/@val = "6.00"</assert>
+            <assert>/out/g[4]/@val = "0.50"</assert>
+            <assert>/out/g[5]/@val = "-5.00"</assert>
+            <assert>/out/g[6]/@val = "8.99"</assert>
+            <assert>/out/g[7]/@val = "16.00"</assert>
+            <assert>/out/g[8]/@val = "-2.33"</assert>
+            <assert>/out/g[9]/@val = "6.78"</assert>
+            <assert>/out/g[10]/@val = "12.00"</assert>
+            <assert>/out/g[11]/@val = "14.20"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-022">
+      <description>Streamed grouping - group-adjacent - with xsl:sequence;
+        using only the second item in every group</description>
+      <created by="Michael Kay" on="2014-01-27"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-022.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/second[1]/transaction/@value/number(), (8.12))</assert>
+            <assert>deep-equal(/out/second[2]/transaction, ())</assert>
+            <assert>deep-equal(/out/second[3]/transaction, ())</assert>
+            <assert>deep-equal(/out/second[4]/transaction/@value/number(), (2.33))</assert>
+            <assert>count(/out/second) = 11</assert>
+            <assert>count(/out/second/transaction) = 5</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-023">
+      <description>Streamed grouping - group-adjacent - with xsl:sequence;
+        using only the positive items in every group</description>
+      <created by="Michael Kay" on="2014-01-27"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-023.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/credits[1]/transaction[1]/@value/number(), (13.24))</assert>
+            <assert>deep-equal(/out/credits[1]/transaction[2]/@value/number(), (8.12))</assert>
+            <assert>empty(/out/credits[2]/transaction)</assert>
+            <assert>empty(/out/credits/transaction[number(@value) lt 0])</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-024">
+      <description>Streamed grouping - group-adjacent - group on attribute values</description>
+      <created by="Michael Kay" on="2014-01-31"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-024.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/group[1][@date="2006-02-13"][@values="13.24 8.12"]</assert>
+            <assert>/out/group[2][@date="2006-02-15"][@values="-15.00"]</assert>
+            <assert>/out/group[3][@date="2006-02-16"][@values="6.00"]</assert>
+            <assert>/out/group[4][@date="2006-02-17"][@values="0.50 2.33 4.44"]</assert>
+            <assert>/out/group[5][@date="2006-02-20"][@values="-5.00"]</assert>
+            <assert>/out/group[6][@date="2006-02-21"][@values="8.99"]</assert>
+            <assert>/out/group[7][@date="2006-02-22"][@values="16.00"]</assert>
+            <assert>/out/group[8][@date="2006-02-23"][@values="-2.33 5.60 4.32"]</assert>
+            <assert>/out/group[9][@date="2006-02-24"][@values="6.78 12.20 -248.05"]</assert>
+            <assert>/out/group[10][@date="2006-02-25"][@values="12.00 13.99"]</assert>
+            <assert>/out/group[11][@date="2006-02-26"][@values="14.20"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-025">
+      <description>Streamed grouping - group-adjacent - group on text nodes</description>
+      <created by="Michael Kay" on="2014-01-31"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-025.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/group[1][@price="4.95"][@count="1"]</assert>
+            <assert>/out/group[2][@price="6.58"][@count="1"]</assert>
+            <assert>/out/group[3][@price="4.95"][@count="2"]</assert>
+            <assert>/out/group[4][@price="16.47"][@count="2"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-026">
+      <description>Streamed grouping - group-adjacent - population is grounded and consuming</description>
+      <created by="Michael Kay" on="2014-01-31"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-026.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/group[1][@dates="2006-02-13"][@values="13.24"]</assert>
+            <assert>/out/group[2][@dates="2006-02-13"][@values="8.12"]</assert>
+            <assert>/out/group[3][@dates="2006-02-15"][@values="-15.00"]</assert>
+            <assert>/out/group[4][@dates="2006-02-16"][@values="6.00"]</assert>
+            <assert>/out/group[5][@dates="2006-02-17 2006-02-17 2006-02-17"][@values="0.50 2.33 4.44"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-027">
+      <description>
+      	Streamed grouping - group-adjacent - access to context item post-descent.
+      	See spec bug 26513
+      </description>
+      <created by="Michael Kay" on="2014-08-03"/>
+      <test>
+         <stylesheet file="si-group-027.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/g[1]/start/@value = '13.24'</assert>
+            <assert>/out/g[1]/group/@values = '13.24 8.12'</assert>
+            <assert>/out/g[1]/end/@value = '13.24'</assert>
+            <assert>/out/g[2]/start/@value = '-15.00'</assert>
+            <assert>/out/g[2]/group/@values = '-15.00'</assert>
+            <assert>/out/g[2]/end/@value = '-15.00'</assert>
+            <assert>/out/g[3]/start/@value = '6.00'</assert>
+            <assert>/out/g[3]/group/@values = '6.00 0.50 2.33 4.44'</assert>
+            <assert>/out/g[3]/end/@value = '6.00'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-028">
+      <description>
+      	Streamed grouping - group-adjacent - access to context item mid-descent.
+      </description>
+      <created by="Michael Kay" on="2014-08-03"/>
+      <test>
+         <stylesheet file="si-group-028.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/group[1]/@values="13.24 8.12 13.24"</assert>
+   			<assert>/out/group[2]/@values="-15.00 -15.00"</assert>
+   			<assert>/out/group[3]/@values="6.00 0.50 6.00 2.33 4.44"</assert>
+   			<assert>/out/group[4]/@values="-5.00 -5.00"</assert>
+   			<assert>/out/group[5]/@values="8.99 16.00 8.99"</assert>
+   			<assert>/out/group[6]/@values="-2.33 -2.33"</assert>
+   			<assert>/out/group[7]/@values="5.60 4.32 5.60 6.78 12.20"</assert>
+   			<assert>/out/group[8]/@values="-248.05 -248.05"</assert>
+   			<assert>/out/group[9]/@values="12.00 13.99 12.00 14.20"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-029">
+      <description>
+      	Streamed grouping - group-adjacent - grounded - test case from Martin Honnen.
+      </description>
+      <created by="Michael Kay" on="2015-01-16"/>
+      <environment>
+        <source file="si-group-029.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-029.xsl"/>
+      </test>
+      <result>
+            <assert-xml><![CDATA[<root
+    ><group key="a"><record><foo>a</foo><bar>1</bar></record><record><foo>a</foo><bar>2</bar></record></group
+    ><group key="b"><record><foo>b</foo><bar>3</bar></record></group
+    ><group key="a"><record><foo>a</foo><bar>4</bar></record><record><foo>a</foo><bar>5</bar></record></group
+    ></root>]]></assert-xml> 
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-030">
+      <description>
+      	Streamed grouping - group-starting-with - pattern not motionless - test case from Martin Honnen.
+      </description>
+      <created by="Michael Kay" on="2015-01-17"/>
+      <environment>
+        <source file="si-group-029.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-030.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-031">
+      <description>
+         Streamed grouping - test case for xsl:copy from Martin Honnen.
+         See also bug 29482.
+      </description>
+      <created by="Michael Kay after Martin Honnen" on="2016-02-18"/>
+      <modified by="Abel Braaksma" on="2016-03-11" change="Added comment explaining resolution of bug 29482, see XSL"/>
+      <modified by="Michael Kay" on="2016-11-10" change="Resolution of bug 29482 says this is not streamable"/>
+      <environment>
+         <source file="si-group-031.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-031.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-032">
+      <description>
+         Streamed grouping - group-starting-with - variant of si-group-031 using xsl:element instead of xsl:copy
+      </description>
+      <created by="Michael Kay after Martin Honnen" on="2016-02-18"/>
+      <environment>
+         <source file="si-group-031.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-032.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-result-document uri="product0.xml">
+               <assert>count(/product-list/product) = 10</assert>
+            </assert-result-document>
+            <assert-result-document uri="product1.xml">
+               <assert>count(/product-list/product) = 10</assert>
+            </assert-result-document>
+            <assert-result-document uri="product9.xml">
+               <assert>count(/product-list/product) = 10</assert>
+            </assert-result-document>
+            <assert-result-document uri="product10.xml">
+               <assert>count(/product-list/product) = 5</assert>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-033">
+      <description>
+         Streamed grouping - group-ending-with - using snapshots of text nodes
+      </description>
+      <created by="Michael Kay after Martin Honnen" on="2016-04-19"/>
+      <environment>
+         <source file="si-group-033.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<note
+><group><para>customer name :</para><para>mr. Joe Someone</para></group
+><group><para>calling from :</para><para>1234567</para></group
+><group><para>device model :</para><para>ABC-123</para></group><group><para>issue:</para><para>some info</para><para>some more info</para><para>and even more info</para></group
+><group><para>solution :</para><para>some solutions</para><para>and some more solutions</para></group></note>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-034">
+      <description>
+         Streamed grouping - select is grounded and consuming - value of position() 
+      </description>
+      <created by="Michael Kay after Martin Honnen" on="2016-06-11"/>
+      <environment>
+         <source file="si-group-034.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-034.xsl"/>
+      </test>
+      <result>
+         <assert>deep-equal(//@group-nr/xs:integer(.), 1 to 5)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-035">
+      <description>
+         Streamed grouping - Saxon bug 2832
+      </description>
+      <created by="Michael Kay after Martin Honnen" on="2016-06-12"/>
+      <modified by="Michael Kay" on="2016-08-18" change="drop indent=yes"/>
+      <environment>
+         <source file="si-group-035.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc><a>a</a><b>1,2,3</b><c>c</c><d>d</d><b>4,5</b><f>f</f><g>g1,g2</g><h>h</h></doc>]]></assert-xml>      
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-036">
+      <description>
+         Streamed grouping - Saxon bug 2841
+      </description>
+      <created by="Michael Kay after Martin Honnen" on="2016-07-18"/>
+      <modified by="Michael Kay" on="2016-08-18" change="drop indent=yes"/>
+      <environment>
+         <source file="si-group-036.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><subjects><subject name="XSLT"><book><title>book 1</title></book><book><title>book 3</title></book></subject><subject name="XQuery"><book><title>book 2</title></book></subject><subject name="C#"><book><title>book 4</title></book></subject></subjects></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-037">
+      <description>
+         Streamed grouping - group-adjacent with composite keys - Saxon bug 2852
+      </description>
+      <created by="Michael Kay after Martin Honnen" on="2016-07-25"/>
+      <environment>
+         <source file="si-group-037.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-037.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>normalize-space(/root/p[1]) eq "Some text broken tags in my content which is really annoying."</assert>
+            <assert>normalize-space(/root/p[2]) eq "Testing the code with some other samples."</assert>
+            <assert>normalize-space(/root/p[3]) eq "Testing adjacent elements of different name."</assert>
+            <assert>/root/p[1]/span[@class='italic'] = 'broken tags'</assert>
+            <assert>/root/p[1]/span[@class='italic'] = 'really annoying'</assert>
+            <assert>/root/p[2]/span[@class='class1'] = 'the code'</assert>
+            <assert>/root/p[2]/span[not(@class)] = ' with '</assert>
+            <assert>/root/p[3]/b[@class = 'foo'] = 'adjacent '</assert>
+            <assert>/root/p[3]/i[@class = 'foo'] = 'elements'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-038">
+      <description>Streamed grouping - group-adjacent - motionless access to first item after consuming the group</description>
+      <created by="Michael Kay" on="2016-07-26"/>
+      <test>
+         <stylesheet file="si-group-038.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/group[1][key/@date="2006-02-13"][first/@value="13.24"]</assert>
+            <assert>/out/group[2][key/@date="2006-02-15"][first/@value="-15.00"]</assert>
+            <assert>/out/group[3][key/@date="2006-02-16"][first/@value="6.00"]</assert>
+            <assert>/out/group[4][key/@date="2006-02-17"][first/@value="0.50"]</assert>
+            <assert>/out/group[5][key/@date="2006-02-20"][first/@value="-5.00"]</assert>
+            <assert>/out/group[6][key/@date="2006-02-21"][first/@value="8.99"]</assert>
+            <assert>/out/group[7][key/@date="2006-02-22"][first/@value="16.00"]</assert>
+            <assert>/out/group[8][key/@date="2006-02-23"][first/@value="-2.33"]</assert>
+            <assert>/out/group[9][key/@date="2006-02-24"][first/@value="6.78"]</assert>
+            <assert>/out/group[10][key/@date="2006-02-25"][first/@value="12.00"]</assert>
+            <assert>/out/group[11][key/@date="2006-02-26"][first/@value="14.20"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-039">
+      <description>Streamed grouping - group-by</description>
+      <created by="Michael Kay after Dak Tapaal" on="2016-08-23"/>
+      <modified by="Michael Kay" on="2016-09-19" change="provide expected results"/>
+      <environment>
+         <source role="." file="si-group-039.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-039.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-result-document uri="si-group-039.out">
+               <all-of>
+                  <assert>count(/RootNode/Groups/Formatted-Group) eq 2</assert>
+                  <assert>deep-equal(/RootNode/Groups/Formatted-Group[@groupId='G1']/specifics/specific/string(), ("Subgroup1","Subgroup2","Subgroup3","Subgroup4"))</assert>
+                  <assert>deep-equal(/RootNode/Groups/Formatted-Group[@groupId='G2']/specifics/specific/string(), ("Subgroup1","Subgroup2","Subgroup5","Subgroup6"))</assert>
+               </all-of>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-040">
+      <description>Streamed grouping - group-adjacent</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-09-18"/>
+      <environment>
+         <source role="." file="si-group-040.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-040.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/root[1]/item-chunk/item) = 10</assert>
+            <assert>count(/out/root[2]/item-chunk/item) = 10</assert>
+            <assert>count(/out/root[3]/item-chunk/item) = 10</assert>
+            <assert>count(/out/root[4]/item-chunk/item) = 5</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-041">
+      <description>Streamed grouping - position() within current-group()</description>
+      <created by="Michael Kay" on="2016-10-10"/>
+      <test>
+         <stylesheet file="si-group-041.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>deep-equal(/out/group!number(), (12,1,1,123,1,1,1,123,123,12,1))</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-042">
+      <description>Streamed grouping - filter current-group() by position() (using xsl:copy-of)</description>
+      <created by="Michael Kay" on="2016-10-10"/>
+      <test>
+         <stylesheet file="si-group-042.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>empty(/out/group/transaction[2])</assert>
+            <assert>/out/group[1]/transaction/@value="8.12"</assert>
+            <assert>/out/group[2]/transaction/@value="2.33"</assert>
+            <assert>/out/group[3]/transaction/@value="5.60"</assert>
+            <assert>/out/group[4]/transaction/@value="12.20"</assert>
+            <assert>/out/group[5]/transaction/@value="13.99"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-043">
+      <description>Streamed grouping - filter current-group() by position() (using xsl:sequence)</description>
+      <created by="Michael Kay" on="2016-10-10"/>
+      <test>
+         <stylesheet file="si-group-043.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>empty(/out/group/transaction[2])</assert>
+            <assert>/out/group[1]/transaction/@value="8.12"</assert>
+            <assert>/out/group[2]/transaction/@value="2.33"</assert>
+            <assert>/out/group[3]/transaction/@value="5.60"</assert>
+            <assert>/out/group[4]/transaction/@value="12.20"</assert>
+            <assert>/out/group[5]/transaction/@value="13.99"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-044">
+      <description>Streamed grouping - filter current-group() by position() (using xsl:for-each/xsl:copy-of)</description>
+      <created by="Michael Kay" on="2016-10-10"/>
+      <test>
+         <stylesheet file="si-group-044.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>empty(/out/group/transaction[2])</assert>
+            <assert>/out/group[1]/transaction/@value="8.12"</assert>
+            <assert>/out/group[2]/transaction/@value="2.33"</assert>
+            <assert>/out/group[3]/transaction/@value="5.60"</assert>
+            <assert>/out/group[4]/transaction/@value="12.20"</assert>
+            <assert>/out/group[5]/transaction/@value="13.99"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-045">
+      <description>Streamed grouping - filter current-group() by position() (using xsl:for-each/xsl:sequence)</description>
+      <created by="Michael Kay" on="2016-10-10"/>
+      <test>
+         <stylesheet file="si-group-045.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>empty(/out/group/transaction[2])</assert>
+            <assert>/out/group[1]/transaction/@value="8.12"</assert>
+            <assert>/out/group[2]/transaction/@value="2.33"</assert>
+            <assert>/out/group[3]/transaction/@value="5.60"</assert>
+            <assert>/out/group[4]/transaction/@value="12.20"</assert>
+            <assert>/out/group[5]/transaction/@value="13.99"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-046">
+      <description>Streamed grouping - conditional within for-each-group</description>
+      <created by="Michael Kay" on="2016-10-14"/>
+      <test>
+         <stylesheet file="si-group-046.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>every $t in /out/even satisfies count($t/transaction) eq 1</assert>
+            <assert>every $t in /out/odd satisfies count($t/transaction) lt 2</assert>
+            <assert>every $t in /out/* satisfies +$t/@position eq count($t/preceding-sibling::*) + 1</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-047">
+      <description>Streamed grouping - conditional within for-each-group</description>
+      <created by="Michael Kay" on="2016-10-14"/>
+      <test>
+         <stylesheet file="si-group-047.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/*/local-name(), tokenize("odd odd even odd even odd even odd even odd even", " "))</assert>
+            <assert>deep-equal(/out/*/count(*), (2,1,1,3,1,1,1,3,3,2,1))</assert>
+            <assert>every $t in /out/* satisfies +$t/@position eq count($t/preceding-sibling::*) + 1</assert>
+            <assert>every $t in /out/*/value satisfies +$t/@position eq count($t/preceding-sibling::*) + 1</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-048">
+      <description>Streamed grouping - grounded population</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-10-16"/>
+      <environment>
+         <source file="si-group-048.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-048.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/Entries/Entry[1][Year='2005'][Month='DEC'][Reason='Blemish on Card']</assert>
+            <assert>/Entries/Entry[2][Year='2005'][Month='DEC'][Reason='Damaged']</assert>
+            <assert>/Entries/Entry[3][Year='2006'][Month='JAN'][Reason='Lost']</assert>
+            <assert>/Entries/Entry[4][Year='2006'][Month='JAN'][Reason='Stolen']</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-049">
+      <description>Streamed grouping - variable evaluated once per group</description>
+      <created by="Michael Kay" on="2016-10-16"/>
+      <test>
+         <stylesheet file="si-group-049.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/date[1][@tomorrow='2006-02-14'][values='13.24 8.12']</assert>
+            <assert>/out/date[2][@tomorrow='2006-02-16'][values='-15']</assert>
+            <assert>/out/date[3][@tomorrow='2006-02-17'][values='6']</assert>
+            <assert>/out/date[4][@tomorrow='2006-02-18'][values='0.5 2.33 4.44']</assert>
+            <assert>/out/date[5][@tomorrow='2006-02-21'][values='-5']</assert>
+            <assert>/out/date[6][@tomorrow='2006-02-22'][values='8.99']</assert>
+            <assert>/out/date[7][@tomorrow='2006-02-23'][values='16']</assert>
+            <assert>/out/date[8][@tomorrow='2006-02-24'][values='-2.33 5.6 4.32']</assert>
+            <assert>/out/date[9][@tomorrow='2006-02-25'][values='6.78 12.2 -248.05']</assert>
+            <assert>/out/date[10][@tomorrow='2006-02-26'][values='12 13.99']</assert>
+            <assert>/out/date[11][@tomorrow='2006-02-27'][values='14.2']</assert>           
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-050">
+      <description>Streamed grouping - with serialization. Test uses serialization because
+      that's where Saxon 9.7 breaks - see Saxon bug 2998.</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-10-19"/>
+      <environment>
+         <source file="si-group-050.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-050.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches><![CDATA[<Orders><Order><OrderNumber>100</OrderNumber><Date>116256</Date></Order><Order><OrderNumber>101</OrderNumber><Date>116257</Date></Order><Order><OrderNumber>102</OrderNumber><Date>116286</Date></Order><Order><OrderNumber>102</OrderNumber><Date>116286</Date></Order></Orders>]]></serialization-matches> 
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-051">
+      <description>Streamed grouping - reference to current-grouping-key() within a nested xsl:source-document instruction.</description>
+      <created by="Michael Kay" on="2016-12-20"/>
+      <environment>
+         <source file="si-group-051.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-051.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/Orders/group[@number="100"]/value="-15.00"</assert>
+            <assert>/Orders/group[@number="101"]/value="6.00"</assert>
+            <assert>/Orders/group[@number="102"]/value="-5.00"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-051-ns">
+      <description>As -051 with streaming disabled.</description>
+      <created by="Michael Kay" on="2018-06-26"/>
+      <environment>
+         <source file="si-group-051.xml" role="." streaming="false"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-051.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/Orders/group[@number="100"]/value="-15.00"</assert>
+            <assert>/Orders/group[@number="101"]/value="6.00"</assert>
+            <assert>/Orders/group[@number="102"]/value="-5.00"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-052">
+      <description>Streamed grouping - unstreamable reference to current-group() within a nested xsl:source-document instruction.</description>
+      <created by="Michael Kay" on="2016-12-20"/>
+      <environment>
+         <source file="si-group-051.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-052.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-053">
+      <description>Streamed grouping - use predicate on current-group() with group-ending-with. Saxon bug 3258.</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-13"/>
+      <environment>
+         <source file="si-group-053.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-053.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/chapter/pageset[1]/page) = 2</assert>
+            <assert>count(/chapter/pageset[2]/page) = 1</assert>
+            <assert>count(/chapter/pageset[3]/page) = 2</assert>
+            <assert>count(/chapter/pageset) = 3</assert>
+            <assert>empty(//pb)</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-053-ns">
+      <description>As -053 with streaming disabled</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-06-26"/>
+      <environment>
+         <source file="si-group-053.xml" role="." streaming="false"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-053.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/chapter/pageset[1]/page) = 2</assert>
+            <assert>count(/chapter/pageset[2]/page) = 1</assert>
+            <assert>count(/chapter/pageset[3]/page) = 2</assert>
+            <assert>count(/chapter/pageset) = 3</assert>
+            <assert>empty(//pb)</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-054">
+      <description>Streamed grouping - access context item (not current-group()) within group action. Saxon bug 3255.</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-13"/>
+      <environment>
+         <source file="si-group-054.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-054.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<contents><unnumbered type="PT"><title>Title one</title></unnumbered
+               ><unnumbered type="PT"><title>Title Two</title></unnumbered
+               ><unnumbered type="PT"><title>Title Three</title></unnumbered
+               ><unnumbered type="PT"><title>Title Four</title></unnumbered
+               ></contents>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-054-ns">
+      <description>As -054 with streaming disabled</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-06-26"/>
+      <environment>
+         <source file="si-group-054.xml" role="." streaming="false"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-054.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<contents><unnumbered type="PT"><title>Title one</title></unnumbered
+               ><unnumbered type="PT"><title>Title Two</title></unnumbered
+               ><unnumbered type="PT"><title>Title Three</title></unnumbered
+               ><unnumbered type="PT"><title>Title Four</title></unnumbered
+               ></contents>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-055">
+      <description>Streamed grouping - access context item (not current-group()) within group action. Saxon bug 3256.</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-20"/>
+      <environment>
+         <source file="si-group-054.xml" role="." streaming="true"/> <!-- sic -->
+      </environment> 
+      <test>
+         <stylesheet file="si-group-055.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<contents><unnumbered type="PT"><title>Title one</title><unnumbered type="chapter" manid="01"
+               /><unnumbered type="chapter" manid="02"/><unnumbered type="chapter" manid="03"/></unnumbered><unnumbered type="PT"
+               ><title>Title Two</title><unnumbered type="chapter" manid="04"/><unnumbered type="chapter" manid="05"/><unnumbered type="chapter" manid="06"/></unnumbered><unnumbered type="PT"
+               ><title>Title Three</title><unnumbered type="chapter" manid="07"/><unnumbered type="chapter" manid="08"/><unnumbered type="chapter" manid="09"/><unnumbered type="chapter" manid="10"/></unnumbered><unnumbered type="PT"
+               ><title>Title Four</title><unnumbered type="chapter" manid="11"/><unnumbered type="chapter" manid="12"/><unnumbered type="chapter" manid="13"/><unnumbered type="chapter" manid="14"/><unnumbered type="chapter" manid="15"/></unnumbered></contents>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-055-ns">
+      <description>As -055 with streaming disabled</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-20"/>
+      <environment>
+         <source file="si-group-054.xml" role="." streaming="false"/> <!-- sic -->
+      </environment> 
+      <test>
+         <stylesheet file="si-group-055.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<contents><unnumbered type="PT"><title>Title one</title><unnumbered type="chapter" manid="01"
+               /><unnumbered type="chapter" manid="02"/><unnumbered type="chapter" manid="03"/></unnumbered><unnumbered type="PT"
+               ><title>Title Two</title><unnumbered type="chapter" manid="04"/><unnumbered type="chapter" manid="05"/><unnumbered type="chapter" manid="06"/></unnumbered><unnumbered type="PT"
+               ><title>Title Three</title><unnumbered type="chapter" manid="07"/><unnumbered type="chapter" manid="08"/><unnumbered type="chapter" manid="09"/><unnumbered type="chapter" manid="10"/></unnumbered><unnumbered type="PT"
+               ><title>Title Four</title><unnumbered type="chapter" manid="11"/><unnumbered type="chapter" manid="12"/><unnumbered type="chapter" manid="13"/><unnumbered type="chapter" manid="14"/><unnumbered type="chapter" manid="15"/></unnumbered></contents>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-056">
+      <description>Streamed grouping - access children of current-group() within group action. Variant of si-group-054.</description>
+      <created by="Michael Kay" on="2017-06-22"/>
+      <environment>
+         <source file="si-group-054.xml" role="." streaming="true"/> <!-- sic -->
+      </environment>
+      <test>
+         <stylesheet file="si-group-056.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<contents><unnumbered type="PT"><title>Title one</title><subtitle>Chapter Two</subtitle></unnumbered
+               ><unnumbered type="PT"><title>Title Two</title></unnumbered
+               ><unnumbered type="PT"><title>Title Three</title><subtitle>Chapter Eight</subtitle></unnumbered
+               ><unnumbered type="PT"><title>Title Four</title></unnumbered></contents>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-056-ns">
+      <description>As -056 with streaming disabled</description>
+      <created by="Michael Kay" on="2018-06-28"/>
+      <environment>
+         <source file="si-group-054.xml" role="." streaming="false"/> <!-- sic -->
+      </environment>
+      <test>
+         <stylesheet file="si-group-056.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<contents><unnumbered type="PT"><title>Title one</title><subtitle>Chapter Two</subtitle></unnumbered
+               ><unnumbered type="PT"><title>Title Two</title></unnumbered
+               ><unnumbered type="PT"><title>Title Three</title><subtitle>Chapter Eight</subtitle></unnumbered
+               ><unnumbered type="PT"><title>Title Four</title></unnumbered></contents>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-057">
+      <description>Streamed grouping - test existence of current-group()[2].</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-26"/>
+      <environment>
+         <source file="si-group-057.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-057.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<Element><group><h1><title>Name1</title></h1
+               ><para/></group><group><h1><title>Name2</title></h1
+               ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
+               ><para>Test3</para><para>Test4</para></group></Element>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-057-ns">
+      <description>As -057 with streaming disabled</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-26"/>
+      <environment>
+         <source file="si-group-057.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-057.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<Element><group><h1><title>Name1</title></h1
+               ><para/></group><group><h1><title>Name2</title></h1
+               ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
+               ><para>Test3</para><para>Test4</para></group></Element>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-058">
+      <description>Streamed grouping - test existence of current-group()[2].</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-26"/>
+      <environment>
+         <source file="si-group-057.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-058.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<Element><group><h1><title>Name1</title></h1
+               ><para/></group><group><h1><title>Name2</title></h1
+               ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
+               ><para>Test3</para><para>Test4</para></group></Element>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-058-ns">
+      <description>As -058 with streaming disabled.</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-06-28"/>
+      <environment>
+         <source file="si-group-057.xml" role="." streaming="false"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-058.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<Element><group><h1><title>Name1</title></h1
+               ><para/></group><group><h1><title>Name2</title></h1
+               ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
+               ><para>Test3</para><para>Test4</para></group></Element>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-059">
+      <description>Streamed grouping - test existence of current-group()[2].</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-06-26"/>
+      <environment>
+         <source file="si-group-057.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-059.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<Element><group><h1><title>Name1</title></h1
+               ><para/></group><group><h1><title>Name2</title></h1
+               ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
+               ><para>Test3</para><para>Test4</para></group></Element>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-059-ns">
+      <description>As -059 with streaming disabled</description>
+      <created by="Michael Kay after Martin Honnen" on="2018-06-28"/>
+      <environment>
+         <source file="si-group-057.xml" role="." streaming="false"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-059.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<Element><group><h1><title>Name1</title></h1
+               ><para/></group><group><h1><title>Name2</title></h1
+               ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
+               ><para>Test3</para><para>Test4</para></group></Element>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-059a">
+      <description>Streamed grouping - conditional within xsl:for-each-group (variant of -059 with different source document).</description>
+      <created by="Michael Kay" on="2017-07-06"/>
+      <environment>
+         <source file="si-group-059.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-059.xsl"/>
+         <param name="STREAMABLE" static="yes" select="true()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<Element><para>Test0</para><group><h1><title>Name1</title></h1
+               ><para/></group><group><h1><title>Name2</title></h1
+               ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
+               ><para>Test3</para><para>Test4</para></group></Element>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-059a-ns">
+      <description>As -059a with streaming disabled.</description>
+      <created by="Michael Kay" on="2018-06-28"/>
+      <environment>
+         <source file="si-group-059.xml" role="." streaming="false"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-059.xsl"/>
+         <param name="STREAMABLE" static="yes" select="false()"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<Element><para>Test0</para><group><h1><title>Name1</title></h1
+               ><para/></group><group><h1><title>Name2</title></h1
+               ><para>Test1</para><para>Test2</para></group><group><h1><title>Name3</title></h1
+               ><para>Test3</para><para>Test4</para></group></Element>]]></assert-xml>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-060">
+      <description>Streamed grouping - average of attribute values in group.</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-07-13"/>
+      <modified by="Michael Kay" on="2017-08-08" change="add expected results"/>
+      <environment>
+         <source file="si-group-060.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-060.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/p[1] = 'Milano, Italia, 5.26'</assert>
+            <assert>/out/p[2] = 'Padova, Italia, 0.81'</assert>
+            <assert>/out/p[3] = 'Paris, France, 7.4'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-061">
+      <description>Streamed grouping - average of attribute values in group.</description>
+      <created by="Michael Kay after Martin Honnen" on="2017-07-13"/>
+      <environment>
+         <source file="si-group-060.xml" role="." streaming="true"/> <!-- sic -->
+      </environment>
+      <test>
+         <stylesheet file="si-group-061.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/p[1] = 'Milano, Italia, 5.23, 5.29'</assert>
+            <assert>/out/p[2] = 'Padova, Italia, 0.69, 0.93'</assert>
+            <assert>/out/p[3] = 'Paris, France, 7.2, 7.6'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-062">
+      <description>Non-streamable xsl:source-document instruction within a streamable template</description>
+      <created by="Michael Kay" on="2018-06-28"/>
+      <environment>
+         <source file="si-group-051.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-062.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/Orders/group[@number="100"]/value="-15.00"</assert>
+            <assert>/Orders/group[@number="101"]/value="6.00"</assert>
+            <assert>/Orders/group[@number="102"]/value="-5.00"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-063">
+      <description>position() used in predicate of starts-with match pattern</description>
+      <created by="Michael Kay after Martin Honnen" on="2019-11-11"/>
+      <environment>
+         <source file="si-group-063.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-063.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-064">
+      <description>last() used in a grounded-consuming context (in apply-templates) (see section 19.7 of the XSLT 3.0 specification)</description>
+      <created by="Michael Kay after Martin Honnen" on="2019-11-12"/>
+      <environment>
+         <source file="si-group-064.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-064.xsl"/>
+      </test>
+      <result>
+        <all-of>
+          <assert>deep-equal(/Members/Member[Name/fname='Fred']/* ! local-name(),
+            ('Name', 'Locations_1', 'Locations_2', 'Payments_1', 'Payments_2'))</assert>
+          <assert>deep-equal(/Members/Member[Name/fname='Jack']/* ! local-name(),
+            ('Name', 'Locations_1', 'Locations_2', 'Payments_1', 'Payments_2'))</assert>
+        </all-of>     
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-065">
+      <description>last() used in a grounded-consuming context (in for-each) (see section 19.7 of the XSLT 3.0 specification)</description>
+      <created by="Michael Kay after Martin Honnen" on="2019-11-12"/>
+      <environment>
+         <source file="si-group-064.xml" role="." streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-065.xsl"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>deep-equal(/Members/Member[Name/fname='Fred']/* ! local-name(),
+             ('Name', 'Locations_1', 'Locations_2', 'Payments_1', 'Payments_2'))</assert>
+           <assert>deep-equal(/Members/Member[Name/fname='Jack']/* ! local-name(),
+             ('Name', 'Locations_1', 'Locations_2', 'Payments_1', 'Payments_2'))</assert>
+         </all-of>       
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-101">
+      <description>Streamed grouping - group-starting-with </description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-101.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/batch[1]/transaction/@value/xs:decimal(.), (13.24, 8.12))</assert>
+            <assert>deep-equal(/out/batch[2]/transaction/@value/xs:decimal(.), (-15.00, 6.00, 0.50, 2.33, 4.44))</assert>
+            <assert>deep-equal(/out/batch[3]/transaction/@value/xs:decimal(.), (-5.00, 8.99, 16.00))</assert>
+            <assert>deep-equal(/out/batch[4]/transaction/@value/xs:decimal(.), (-2.33, 5.60, 4.32, 6.78, 12.20))</assert>
+            <assert>deep-equal(/out/batch[5]/transaction/@value/xs:decimal(.), (-248.05, 12.00, 13.99, 14.20))</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-102">
+      <description>Streamed grouping - group-starting-with - extracting the first item in the group</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-102.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/batch[1]/transaction/@value/xs:decimal(.), (13.24))</assert>
+            <assert>deep-equal(/out/batch[2]/transaction/@value/xs:decimal(.), (-15.00))</assert>
+            <assert>deep-equal(/out/batch[3]/transaction/@value/xs:decimal(.), (-5.00))</assert>
+            <assert>deep-equal(/out/batch[4]/transaction/@value/xs:decimal(.), (-2.33))</assert>
+            <assert>deep-equal(/out/batch[5]/transaction/@value/xs:decimal(.), (-248.05))</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-201">
+      <description>Streamed grouping - group-ending-with </description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-201.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/batch[1]/transaction/@value/xs:decimal(.), (13.24, 8.12, -15.00))</assert>
+            <assert>deep-equal(/out/batch[2]/transaction/@value/xs:decimal(.), (6.00, 0.50, 2.33, 4.44, -5.00))</assert>
+            <assert>deep-equal(/out/batch[3]/transaction/@value/xs:decimal(.), (8.99, 16.00, -2.33))</assert>
+            <assert>deep-equal(/out/batch[4]/transaction/@value/xs:decimal(.), (5.60, 4.32, 6.78, 12.20, -248.05))</assert>
+            <assert>deep-equal(/out/batch[5]/transaction/@value/xs:decimal(.), (12.00, 13.99, 14.20))</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-202">
+      <description>Streamed grouping - group-ending-with - extracting the first item in the group</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-202.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>deep-equal(/out/batch[1]/transaction/@value/xs:decimal(.), (13.24))</assert>
+            <assert>deep-equal(/out/batch[2]/transaction/@value/xs:decimal(.), (6.00))</assert>
+            <assert>deep-equal(/out/batch[3]/transaction/@value/xs:decimal(.), (8.99))</assert>
+            <assert>deep-equal(/out/batch[4]/transaction/@value/xs:decimal(.), (5.60))</assert>
+            <assert>deep-equal(/out/batch[5]/transaction/@value/xs:decimal(.), (12.00))</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-203">
+      <description>Streamed grouping - group-starting-with and group-ending-with nested</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-07-02"/>
+      <modified by="Michael Kay" on="2016-08-18" change="drop indent=yes"/>
+      <test>
+         <stylesheet file="si-group-203.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Root
+            ><Group><Item><Id>Item 2</Id></Item><Item><Id>Item 3</Id></Item></Group
+            ><Group/><Group><Item><Id>Item 7</Id></Item></Group><Group/></Root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-204">
+      <description>Streamed grouping - nested group-by within xsl:fork.</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-08-08"/>
+      <environment>
+         <source role="." file="si-group-204.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-204.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-result-document uri="account01826370.xml">
+               <all-of>
+                  <assert>count(/transactions[@account="01826370"]/year[@value="2016"]/transaction) = 2</assert>
+                  <assert>count(/transactions[@account="01826370"]/year[@value="2015"]/transaction) = 1</assert>
+                  <assert>count(/transactions[@account="01826370"]/year[@value="2014"]/transaction) = 0</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="account92741838.xml">
+               <all-of>
+                  <assert>count(/transactions[@account="92741838"]/year[@value="2016"]/transaction) = 1</assert>
+                  <assert>count(/transactions[@account="92741838"]/year[@value="2015"]/transaction) = 1</assert>
+                  <assert>count(/transactions[@account="92741838"]/year[@value="2014"]/transaction) = 0</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="account43861562.xml">
+               <all-of>
+                  <assert>count(/transactions[@account="43861562"]/year[@value="2016"]/transaction) = 0</assert>
+                  <assert>count(/transactions[@account="43861562"]/year[@value="2015"]/transaction) = 0</assert>
+                  <assert>count(/transactions[@account="43861562"]/year[@value="2014"]/transaction) = 2</assert>
+               </all-of>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-205">
+      <description>Streamed grouping - nested group-by within xsl:fork.
+         As si-group-204, but the groups are straight copies of the input.
+         This is the classic "coloured widgets" use case where it should be
+         possible to directly stream events from the input file to one
+         of the output files.
+      </description>
+      <created by="Michael Kay after Martin Honnen" on="2016-08-24"/>
+      <environment>
+         <source role="." file="si-group-204.xml" streaming="true"/>
+      </environment>
+      <test>
+         <stylesheet file="si-group-205.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-result-document uri="account01826370.xml">
+               <all-of>
+                  <assert>count(/transactions[@account="01826370"]/transaction) = 3</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="account92741838.xml">
+               <all-of>
+                  <assert>count(/transactions[@account="92741838"]/transaction) = 2</assert>
+               </all-of>
+            </assert-result-document>
+            <assert-result-document uri="account43861562.xml">
+               <all-of>
+                  <assert>count(/transactions[@account="43861562"]/transaction) = 2</assert>
+               </all-of>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-901">
+      <description>Streamed grouping - group-adjacent - grouping key is not motionless</description>
+      <created by="Michael Kay" on="2014-01-31"/>
+      <modified by="Michael Kay" on="2014-04-07" change="drop use of group binding variables"/>
+      <test>
+         <stylesheet file="si-group-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-A01">
+      <description>Use xsl:for-each-group within xsl:stream</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <environment ref="si-for-each-group-A"/>
+      <test>
+         <initial-template name="feg-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction value="-15.00" date="2006-02-15"
+            /><transaction value="-5.00" date="2006-02-20"
+            /><transaction value="-2.33" date="2006-02-23"
+            /><transaction value="-248.05" date="2006-02-24"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-A02">
+      <description>Use xsl:for-each-group within xsl:stream, with position() numbering</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <environment ref="si-for-each-group-A"/>
+      <test>
+         <initial-template name="feg-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction nr="1" value="-15.00" date="2006-02-15"
+            /><transaction nr="2" value="-5.00" date="2006-02-20"
+            /><transaction nr="3" value="-2.33" date="2006-02-23"
+            /><transaction nr="4" value="-248.05" date="2006-02-24"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-A03">
+      <description>Use xsl:for-each-group within xsl:stream, with positional selection</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <environment ref="si-for-each-group-A"/>
+      <test>
+         <initial-template name="feg-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction nr="1" value="13.24" date="2006-02-13"
+            /><transaction nr="2" value="8.12" date="2006-02-13"
+            /><transaction nr="3" value="-15.00" date="2006-02-15"
+            /><transaction nr="4" value="6.00" date="2006-02-16"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-A04">
+      <description>Use xsl:for-each-group over atomized nodes</description>
+      <created by="Michael Kay" on="2013-12-04"/>
+      <environment ref="si-for-each-group-A"/>
+      <test>
+         <initial-template name="feg-004"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction nr="1">0.50</transaction><transaction nr="2">2.33</transaction><transaction nr="3">4.44</transaction></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-A05">
+      <description>Crawling selection, inspection body</description>
+      <created by="Michael Kay" on="2013-12-04"/>
+      <modified by="Michael Kay" on="2015-08-13" change="correct whitespace in expected result"/>
+      <environment ref="si-for-each-group-A"/>
+      <test>
+         <initial-template name="feg-005"/>
+      </test>
+      <result>
+         <assert>/out = "1:BOOKLIST2:BOOKS3:ITEM4:TITLE5:AUTHOR6:PUBLISHER"</assert>
+      </result>   
+   </test-case>
+   
+   <!--<test-case name="si-group-A06">
+      <description>Crawling selection, inspection body</description>
+      <created by="Michael Kay" on="2013-12-04"/>
+      <environment ref="si-for-each-group-A"/>
+      <test>
+         <initial-template name="feg-006"/>
+      </test>
+      <result>
+         <assert>/out = "1 2 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 2 3 3 3"</assert>
+      </result>
+   </test-case>-->
+   
+   <test-case name="si-group-A08">
+      <description>Use parent axis within xsl:for-each-group</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-A"/>
+      <test>
+         <initial-template name="feg-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>account account account account</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-A09">
+      <description>Use ancestor axis within xsl:for-each-group</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-A"/>
+      <test>
+         <initial-template name="feg-009"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>account account account account</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-A10">
+      <description>Use subsequence() within xsl:for-each-group/@select</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-A"/>
+      <test>
+         <initial-template name="feg-010"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>count(/out/transaction) = 4</assert>
+           <assert>/out/transaction[1]/@value = "13.24"</assert>
+           <assert>/out/transaction[4]/@value = "6.00"</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-A11">
+      <description>Select attribute nodes within xsl:for-each-group/@select.</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-A"/>
+      <test>
+         <initial-template name="feg-011"/>
+      </test>
+      <result>
+           <assert>/out = "13.24 8.12 6.00 0.50 2.33 4.44 8.99 16.00 5.60 4.32 6.78 12.20 12.00 13.99 14.20"</assert>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-A12">
+      <description>Iterate over ancestors in xsl:for-each-group/@select; also tests outermost()</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-A"/>
+      <test>
+         <initial-template name="feg-012"/>
+      </test>
+      <result>
+           <assert-xml><![CDATA[<out xmlns="http://loan.shark.com/"><myroot/><ACERequest version="2.1"/><Deal/><Pool id="22"/><Loan/></out>]]></assert-xml>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-B01">
+      <description>Use xsl:for-each-group within xsl:stream</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <environment ref="si-for-each-group-B"/>
+      <test>
+         <initial-template name="feg-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction value="-15.00" date="2006-02-15"
+            /><transaction value="-5.00" date="2006-02-20"
+            /><transaction value="-2.33" date="2006-02-23"
+            /><transaction value="-248.05" date="2006-02-24"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-B02">
+      <description>Use xsl:for-each-group within xsl:stream, with position() numbering</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <environment ref="si-for-each-group-B"/>
+      <test>
+         <initial-template name="feg-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction nr="1" value="-15.00" date="2006-02-15"
+            /><transaction nr="2" value="-5.00" date="2006-02-20"
+            /><transaction nr="3" value="-2.33" date="2006-02-23"
+            /><transaction nr="4" value="-248.05" date="2006-02-24"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-B03">
+      <description>Use xsl:for-each-group within xsl:stream, with positional selection</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <environment ref="si-for-each-group-B"/>
+      <test>
+         <initial-template name="feg-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction nr="1" value="13.24" date="2006-02-13"
+            /><transaction nr="2" value="8.12" date="2006-02-13"
+            /><transaction nr="3" value="-15.00" date="2006-02-15"
+            /><transaction nr="4" value="6.00" date="2006-02-16"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-B04">
+      <description>Use xsl:for-each-group over atomized nodes</description>
+      <created by="Michael Kay" on="2013-12-04"/>
+      <environment ref="si-for-each-group-B"/>
+      <test>
+         <initial-template name="feg-004"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction nr="1">0.50</transaction><transaction nr="2">2.33</transaction><transaction nr="3">4.44</transaction></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-B05">
+      <description>Crawling selection, inspection body</description>
+      <created by="Michael Kay" on="2013-12-04"/>
+      <modified by="Michael Kay" on="2015-08-13" change="correct whitespace in expected result"/>
+      <environment ref="si-for-each-group-B"/>
+      <test>
+         <initial-template name="feg-005"/>
+      </test>
+      <result>
+         <assert>/out = "1:BOOKLIST2:BOOKS3:ITEM4:TITLE5:AUTHOR6:PUBLISHER"</assert>
+      </result>   
+   </test-case>
+   
+   <!--<test-case name="si-group-B06">
+      <description>Crawling selection, inspection body</description>
+      <created by="Michael Kay" on="2013-12-04"/>
+      <environment ref="si-for-each-group-B"/>
+      <test>
+         <initial-template name="feg-006"/>
+      </test>
+      <result>
+         <assert>/out = "1 2 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 2 3 3 3"</assert>
+      </result>
+   </test-case>-->
+   
+   <test-case name="si-group-B08">
+      <description>Use parent axis within xsl:for-each-group</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-B"/>
+      <test>
+         <initial-template name="feg-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>account account account account</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-B09">
+      <description>Use ancestor axis within xsl:for-each-group</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-B"/>
+      <test>
+         <initial-template name="feg-009"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>account account account account</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-B10">
+      <description>Use subsequence() within xsl:for-each-group/@select</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-B"/>
+      <test>
+         <initial-template name="feg-010"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>count(/out/transaction) = 4</assert>
+           <assert>/out/transaction[1]/@value = "13.24"</assert>
+           <assert>/out/transaction[4]/@value = "6.00"</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-B11">
+      <description>Select attribute nodes within xsl:for-each-group/@select.</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-B"/>
+      <test>
+         <initial-template name="feg-011"/>
+      </test>
+      <result>
+           <assert>/out = "13.24 8.12 6.00 0.50 2.33 4.44 8.99 16.00 5.60 4.32 6.78 12.20 12.00 13.99 14.20"</assert>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-B12">
+      <description>Iterate over ancestors in xsl:for-each-group/@select; also tests outermost()</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-B"/>
+      <test>
+         <initial-template name="feg-012"/>
+      </test>
+      <result>
+           <assert-xml><![CDATA[<out xmlns="http://loan.shark.com/"><myroot/><ACERequest version="2.1"/><Deal/><Pool id="22"/><Loan/></out>]]></assert-xml>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-C01">
+      <description>Use xsl:for-each-group within xsl:stream</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <environment ref="si-for-each-group-C"/>
+      <test>
+         <initial-template name="feg-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction value="-15.00" date="2006-02-15"
+            /><transaction value="-5.00" date="2006-02-20"
+            /><transaction value="-2.33" date="2006-02-23"
+            /><transaction value="-248.05" date="2006-02-24"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-C02">
+      <description>Use xsl:for-each-group within xsl:stream, with position() numbering</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <environment ref="si-for-each-group-C"/>
+      <test>
+         <initial-template name="feg-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction nr="1" value="-15.00" date="2006-02-15"
+            /><transaction nr="2" value="-5.00" date="2006-02-20"
+            /><transaction nr="3" value="-2.33" date="2006-02-23"
+            /><transaction nr="4" value="-248.05" date="2006-02-24"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-C03">
+      <description>Use xsl:for-each-group within xsl:stream, with positional selection</description>
+      <created by="Michael Kay" on="2012-12-04"/>
+      <environment ref="si-for-each-group-C"/>
+      <test>
+         <initial-template name="feg-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction nr="1" value="13.24" date="2006-02-13"
+            /><transaction nr="2" value="8.12" date="2006-02-13"
+            /><transaction nr="3" value="-15.00" date="2006-02-15"
+            /><transaction nr="4" value="6.00" date="2006-02-16"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-C04">
+      <description>Use xsl:for-each-group over atomized nodes</description>
+      <created by="Michael Kay" on="2013-12-04"/>
+      <environment ref="si-for-each-group-C"/>
+      <test>
+         <initial-template name="feg-004"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><transaction nr="1">0.50</transaction><transaction nr="2">2.33</transaction><transaction nr="3">4.44</transaction></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-C05">
+      <description>Crawling selection, inspection body</description>
+      <created by="Michael Kay" on="2013-12-04"/>
+      <modified by="Michael Kay" on="2015-08-13" change="correct whitespace in expected result"/>
+      <environment ref="si-for-each-group-C"/>
+      <test>
+         <initial-template name="feg-005"/>
+      </test>
+      <result>
+         <assert>/out = "1:BOOKLIST2:BOOKS3:ITEM4:TITLE5:AUTHOR6:PUBLISHER"</assert>
+      </result>   
+   </test-case>
+   
+   <!--<test-case name="si-group-C06">
+      <description>Crawling selection, inspection body</description>
+      <created by="Michael Kay" on="2013-12-04"/>
+      <environment ref="si-for-each-group-C"/>
+      <test>
+         <initial-template name="feg-006"/>
+      </test>
+      <result>
+         <assert>/out = "1 2 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 2 3 3 3"</assert>
+      </result>
+   </test-case>-->
+   
+   <test-case name="si-group-C08">
+      <description>Use parent axis within xsl:for-each-group</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-C"/>
+      <test>
+         <initial-template name="feg-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>account account account account</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-C09">
+      <description>Use ancestor axis within xsl:for-each-group</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-C"/>
+      <test>
+         <initial-template name="feg-009"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>account account account account</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-C10">
+      <description>Use subsequence() within xsl:for-each-group/@select</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-C"/>
+      <test>
+         <initial-template name="feg-010"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>count(/out/transaction) = 4</assert>
+           <assert>/out/transaction[1]/@value = "13.24"</assert>
+           <assert>/out/transaction[4]/@value = "6.00"</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-C11">
+      <description>Select attribute nodes within xsl:for-each-group/@select.</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-C"/>
+      <test>
+         <initial-template name="feg-011"/>
+      </test>
+      <result>
+           <assert>/out = "13.24 8.12 6.00 0.50 2.33 4.44 8.99 16.00 5.60 4.32 6.78 12.20 12.00 13.99 14.20"</assert>  
+      </result>
+   </test-case>
+   
+   <test-case name="si-group-C12">
+      <description>Iterate over ancestors in xsl:for-each-group/@select; also tests outermost()</description>
+      <created by="Michael Kay" on="2013-11-28"/>
+      <environment ref="si-for-each-group-C"/>
+      <test>
+         <initial-template name="feg-012"/>
+      </test>
+      <result>
+           <assert-xml><![CDATA[<out xmlns="http://loan.shark.com/"><myroot/><ACERequest version="2.1"/><Deal/><Pool id="22"/><Loan/></out>]]></assert-xml>  
+      </result>
+   </test-case>
+
+   
+   
+</test-set>

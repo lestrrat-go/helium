@@ -1,0 +1,126 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sx-ArithmeticExpr">
+   <description>Arithmetic expressions with streaming</description>
+   
+   <environment name="sx-arithmetic-A">
+     <stylesheet file="sx-arithmetic-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sx-arithmetic-001">
+      <description>Streaming arithmetic expression</description>
+      <created by="Michael Kay" on="2015-02-24"/>
+      <environment ref="sx-arithmetic-A"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert>/out = "6.95"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-arithmetic-002">
+      <description>Streaming arithmetic expression</description>
+      <created by="Michael Kay" on="2015-02-24"/>
+      <environment ref="sx-arithmetic-A"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert>/out = "6.95"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-arithmetic-003">
+      <description>Streaming arithmetic expression</description>
+      <created by="Michael Kay" on="2015-02-24"/>
+      <environment ref="sx-arithmetic-A"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/a[1] = "15.24"</assert>
+           <assert>/out/a[2] = "10.12"</assert>
+           <assert>/out/a[3] = "-13"</assert>
+           <assert>/out/a[4] = "8"</assert>
+           <assert>/out/a[5] = "2.5"</assert>
+           <assert>/out/a[last()] = "16.2"</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="sx-arithmetic-004">
+      <description>Streaming arithmetic expression</description>
+      <created by="Michael Kay" on="2015-02-24"/>
+      <environment ref="sx-arithmetic-A"/>
+      <test>
+         <initial-template name="r-004"/>
+      </test>
+      <result>
+         <assert>not(has-children(/out))</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-arithmetic-005">
+      <description>Streaming arithmetic expression</description>
+      <created by="Michael Kay" on="2015-02-24"/>
+      <environment ref="sx-arithmetic-A"/>
+      <test>
+         <initial-template name="r-005"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/a[1] = "23.24"</assert>
+           <assert>/out/a[2] = "18.12"</assert>
+           <assert>/out/a[3] = "-5.00"</assert>
+           <assert>/out/a[4] = "16.00"</assert>
+           <assert>/out/a[5] = "10.50"</assert>
+           <assert>/out/a[last()] = "24.20"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-arithmetic-006">
+      <description>Streaming arithmetic expression</description>
+      <created by="Michael Kay" on="2015-02-24"/>
+      <environment ref="sx-arithmetic-A"/>
+      <test>
+         <initial-template name="r-006"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>7.95</a><a>7.58</a><a>5.95</a><a>5.95</a><a>17.47</a><a>17.47</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-arithmetic-007">
+      <description>Streaming arithmetic expression (Saxon bug 2320)</description>
+      <created by="Michael Kay" on="2015-02-24"/>
+      <environment ref="sx-arithmetic-A"/>
+      <test>
+         <initial-template name="r-007"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>7.95</a><a>6.58</a><a>4.95</a><a>4.95</a><a>16.47</a><a>16.47</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-arithmetic-008">
+      <description>Streaming arithmetic expression</description>
+      <created by="Michael Kay" on="2015-02-24"/>
+      <modified by="Michael Kay" on="2017-02-04" change="corrected expected results"/>
+      <environment ref="sx-arithmetic-A"/>
+      <test>
+         <initial-template name="r-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>7</a><a>9</a><a>7</a><a>7</a><a>18</a><a>18</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+</test-set>

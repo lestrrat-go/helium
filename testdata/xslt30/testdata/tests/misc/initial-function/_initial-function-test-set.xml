@@ -1,0 +1,621 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="initial-function">
+   <description>Tests Call Function XSLT invocation</description>
+   <dependencies>
+      <spec value="XSLT30+"/>
+   </dependencies>
+
+   <test-case name="initial-function-001">
+      <description>test initial-function</description>
+      <created by="John Lumley" on="2014-08-19"/>
+      <modified by="John Lumley" on="2014-09-24" change="Dependency changed from XT20+ to XT30+ [Bug 26891]"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-001.xsl"/>
+         <initial-function xmlns:my="http://my.net/" name="my:foo">
+            <param select="1234"/>
+            <param select="5678"/>
+         </initial-function>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<simple-data>5678Simple Data1234</simple-data>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+
+   <test-case name="initial-function-002">
+      <description>test initial-function returning sequence</description>
+      <created by="John Lumley" on="2014-08-19"/>
+      <modified by="John Lumley" on="2014-09-24"
+         change="Dependency changed from XT20+ to XT30+ [Bug 26891]"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-001.xsl"/>
+         <initial-function xmlns:my="http://my.net/" name="my:bar">
+            <param select="1234"/>
+            <param select="5678"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-count>2</assert-count>
+            <assert-deep-eq>1234,5678</assert-deep-eq>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="initial-function-100a">
+      <description>Test return type of initial function, which should typically not be a document node</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2016-02-14" change="see bug 29456"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-100.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:test">
+            <param select="xs:anyURI('http://testme')" as="xs:anyURI"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-type>xs:anyURI</assert-type>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-100b">
+      <description>Test return type of initial function, which should typically not be a document node</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-100.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:test">
+            <param select="986572" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-type>xs:integer</assert-type>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-100c">
+      <description>Test return type of initial function, which should typically not be a document node</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2016-02-14" change="see bug 29456"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-100.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:test">
+            <param select="xs:double(986572)" as="xs:double"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-type>xs:double</assert-type>
+      </result>
+   </test-case>
+   
+   <test-case name="initial-function-100d">
+      <description>Test return type of initial function, which should typically not be a document node</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2016-02-14" change="see bug 29456"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-100.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:test">
+            <param select="xs:decimal(986572)" as="xs:decimal"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-type>xs:decimal</assert-type>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-100e">
+      <description>Test return type of initial function, which should typically not be a document node</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-100.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:test">
+            <param select="'one', 'two'" as="xs:string*"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-type>xs:string*</assert-type>
+            <assert-count>2</assert-count>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-100f">
+      <description>Test return type of initial function, which should typically not be a document node</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2016-02-14" change="see bug 29456"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-100.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:test">
+            <param select="xs:float(1e-10)" as="xs:float"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-type>xs:float</assert-type>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-100g">
+      <description>Test return type of initial function, which should typically not be a document node</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2016-02-14" change="see bug 29456"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-100.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:test">
+            <param select="xs:token('sometoken')" as="xs:token"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-type>xs:token</assert-type>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-100h">
+      <description>Test return type of initial function, which should typically not be a document node</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-100.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:test">
+            <param select="QName('urn:foo', 'bar')" as="xs:QName"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-type>xs:QName</assert-type>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-100i">
+      <description>Test return type of initial function, which should typically not be a document node</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-100.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:test">
+            <param select="1 + 2 + 3 + 4" as="item()"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-type>xs:integer</assert-type>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-101a">
+      <description>Test different naming schemes and influence of static expressions in the name</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:square1">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-eq>144</assert-eq>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-101b">
+      <description>Test different naming schemes and influence of static expressions in the name</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:square2">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-eq>144</assert-eq>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-101c">
+      <description>Test different naming schemes and influence of static expressions in the name</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:square3">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-eq>144</assert-eq>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-101d">
+      <description>Test different naming schemes and influence of static expressions in the name</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:square4">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-eq>144</assert-eq>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-101e">
+      <description>Test different naming schemes and influence of static expressions in the name</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:square5">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-eq>144</assert-eq>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-101f">
+      <description>Test different naming schemes and influence of static expressions in the name: name with static param</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <param name="function-name" static="yes" select="'f:dynamically-statically-defined-name'" />
+         <initial-function xmlns:f="urn:functions" name="f:dynamically-statically-defined-name">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-eq>144</assert-eq>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-101g">
+      <description>Test different naming schemes and influence of static expressions in the name: name with static param</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <param name="function-name" static="yes" select="'Q{urn:test}myfunction'" />
+         <initial-function name="f:myfunction" xmlns:f="urn:test">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-eq>144</assert-eq>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-101h">
+      <description>Test different naming schemes and influence of static expressions in the name: name with static param</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <param name="function-name" static="yes" select="'Q{urn:test}myfunction'" />
+         <initial-function xmlns:someweirdprefixtest="urn:test" name="someweirdprefixtest:myfunction">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <assert-eq>144</assert-eq>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-102a">
+      <description>Test different naming schemes and influence of static expressions in the name, error scenario function not found</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <initial-function xmlns:f="http:functions" name="f:square1">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <error code="XTDE0041"/>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-102b">
+      <description>Test different naming schemes and influence of static expressions in the name, error scenario, invalid argument</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <modified by="Michael Kay" on="2018-09-25" change="Change expected error code from FORG0001 to XPTY0004"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:square2">
+            <param select="'s12'" as="xs:string"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-102c">
+      <description>Test different naming schemes and influence of static expressions in the name, error scenario, overflow (or not)</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <initial-function xmlns:f="urn:functions" name="f:square3">
+            <param select="9223372036854775807" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="FOAR0002"/>
+            <assert-eq>85070591730234615847396907784232501249</assert-eq>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-102d">
+      <description>Test different naming schemes and influence of static expressions in the name, error scenario, no prefix</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <initial-function name="square4">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <error code="XTDE0041"/>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-102e">
+      <description>Test different naming schemes and influence of static expressions in the name, error, unprefixed names are always in no namespace</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <t:initial-function xmlns:t="http://www.w3.org/2012/10/xslt-test-catalog" xmlns="urn:functions" name="square5">
+            <t:param select="12" as="xs:integer"/>
+         </t:initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <error code="XTDE0041"/>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-102f">
+      <description>Test different naming schemes and influence of static expressions in the name, error scenario: setting the @name attribute to an already existing name through static param</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <param name="function-name" static="yes" select="'f:square1'" />
+         <initial-function xmlns:f="urn:functions" name="f:square1">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <error code="XTSE0770"/>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-102g">
+      <description>Test different naming schemes and influence of static expressions in the name, error scenario: correct name, higher and wrong arity</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <param name="function-name" static="yes" select="'f:new'" />
+         <initial-function xmlns:f="urn:functions" name="f:new">
+            <param select="12" as="xs:integer"/>
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <error code="XTDE0041"/>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-102h">
+      <description>Test different naming schemes and influence of static expressions in the name, error scenario: correct name, lower and wrong arity</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <param name="function-name" static="yes" select="'f:new'" />
+         <initial-function xmlns:f="urn:functions" name="f:new">
+            <param select="12" as="xs:integer"/>
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <error code="XTDE0041"/>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-102i">
+      <description>Test different naming schemes and influence of static expressions in the name, error scenario: interesting edge case, what happens if we set the name to a reserved name and namespace?</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <param name="function-name" static="yes" select="'{http://www.w3.org/1999/XSL/Transform}current'" />
+         <initial-function xmlns:f="http://www.w3.org/1999/XSL/Transform" name="f:current">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0020"/>
+            <error code="XTSE0080"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-102j">
+      <description>Test different naming schemes and influence of static expressions in the name, error scenario: interesting edge case, what happens if we set the name to a reserved name and namespace?</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <param name="function-name" static="yes" select="'{http://www.w3.org/2001/XMLSchema}string'" />
+         <initial-function xmlns:f="http://www.w3.org/2001/XMLSchema" name="f:string">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0020"/>
+            <error code="XTSE0080"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-102k">
+      <description>Test different naming schemes and influence of static expressions in the name, error scenario: create a static syntax error</description>
+      <created by="Abel Braaksma" on="2015-11-19"/>
+      <modified by="Michael Kay" on="2017-03-28" change="Initial function must be public (bug 30082)"/>
+      <test>
+         <stylesheet file="initial-function-101.xsl"/>
+         <param name="function-name" static="yes" select="'-not a valid name-'" />
+         <initial-function xmlns:f="urn:functions" name="f:square1">
+            <param select="12" as="xs:integer"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0020"/>
+            <error code="XTSE0740"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="initial-function-901">
+      <description>test initial-function to non-existent stylesheet function</description>
+      <created by="John Lumley" on="2014-08-19"/>
+      <modified by="John Lumley" on="2014-09-24"
+         change="Dependency changed from XT20+ to XT30+ [Bug 26891]"/>
+      <test>
+         <stylesheet file="initial-function-001.xsl"/>
+         <initial-function xmlns:my="http://my.net/" name="my:nonsuch">
+            <param select="1234"/>
+            <param select="5678"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <error code="XTDE0041"/>
+      </result>
+   </test-case>
+   
+   <test-case name="initial-function-902">
+      <description>test initial-function to stylesheet function with wrong arity - too
+         small</description>
+      <created by="John Lumley" on="2014-08-19"/>
+      <modified by="John Lumley" on="2014-09-24"
+         change="Dependency changed from XT20+ to XT30+ [Bug 26891]"/>
+      <test>
+         <stylesheet file="initial-function-001.xsl"/>
+         <initial-function xmlns:my="http://my.net/" name="my:bar">
+            <param select="1234"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <error code="XTDE0041"/>
+      </result>
+   </test-case>
+   
+   <test-case name="initial-function-903">
+      <description>test initial-function to stylesheet function with wrong arity - too
+         large</description>
+      <created by="John Lumley" on="2014-08-19"/>
+      <modified by="John Lumley" on="2014-09-24"
+         change="Dependency changed from XT20+ to XT30+ [Bug 26891]"/>
+      <test>
+         <stylesheet file="initial-function-001.xsl"/>
+         <initial-function xmlns:my="http://my.net/" name="my:bar">
+            <param select="1234"/>
+            <param select="5678"/>
+            <param select="5678"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <error code="XTDE0041"/>
+      </result>
+   </test-case>
+   
+   <test-case name="initial-function-904">
+      <description>test initial-function calling xsl:result-document</description>
+      <created by="Michael Kay" on="2015-10-24"/>
+      <modified by="Michael Kay" on="2018-09-25" change="Original intent of the test is unclear, but as written it produces XTDE0041 not XTDE1480"/>
+      <test>
+         <stylesheet file="initial-function-001.xsl"/>
+         <initial-function xmlns:my="http://my.net/" name="my:nonsuch">
+            <param select="1234"/>
+            <param select="5678"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <error code="XTDE0041"/>
+      </result>
+   </test-case>
+   
+   <test-case name="initial-function-905">
+      <description>test initial-function calling private stylesheet function</description>
+      <created by="Michael Kay" on="2017-03-28"/>
+      <test>
+         <stylesheet file="initial-function-001.xsl"/>
+         <initial-function xmlns:my="http://my.net/" name="my:private">
+            <param select="1234"/>
+            <param select="5678"/>
+         </initial-function>
+         <output tree="no" serialize="no"/>
+      </test>
+      <result>
+         <error code="XTDE0041"/>
+      </result>
+   </test-case>
+
+
+
+</test-set>

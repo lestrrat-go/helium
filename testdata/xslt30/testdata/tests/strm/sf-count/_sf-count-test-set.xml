@@ -1,0 +1,386 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-count">
+   <description>count() function with streaming</description>
+   
+   <environment name="sf-count-A">
+     <stylesheet file="sf-count-001.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-count-001">
+      <description>Test of xsl:stream instruction with count(): count descendant nodes</description>
+      <keywords>crawling descendant-or-self-axis PathExpr</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <stylesheet file="sf-count-001.xsl"/>
+         <initial-template name="c-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-count-002">
+      <description>Test of xsl:stream instruction with count(), filtered with motionless predicate</description>
+      <keywords>striding predicate motionless-predicate PathExpr</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-003">
+      <description>Test of xsl:stream instruction with count(), applied to ancestor nodes</description>
+      <keywords>striding PathExpr SimpleMapExpr ancestor-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-004">
+      <description>Test of xsl:stream instruction with count(), applied to grounded consuming items</description>
+      <keywords>PathExpr SimpleMapExpr fn:tokenize grounded</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-004"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>18</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-005">
+      <description>Test of xsl:stream instruction with count(), applied to attributes of ancestor nodes</description>
+      <keywords>PathExpr motionless-predicate SimpleMapExpr ancestor-axis climbing-childless attribute-nodes</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <modified by="Michael Kay" on="2014-06-29" change="correct expected results"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-005"/>
+      </test>
+      <result>
+         <assert>/out = '2'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-006">
+      <description>Test of xsl:stream instruction with count(), applied to namespaces of ancestor nodes</description>
+      <keywords>PathExpr striding motionless-predicate ancestor-axis namespace-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-006"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-count-007">
+      <description>count() with empty downwards selection</description>
+      <keywords>AxisStep striding</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-007"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-008">
+      <description>count() with empty downwards selection</description>
+      <keywords>PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-count-009">
+      <description>count() with a striding(?) union</description>
+      <keywords>UnionExpr crawling</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-009"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-010">
+      <description>count() with a crawling union</description>
+      <keywords>UnionExpr crawling-then-crawling descendant-axis</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-010"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>144</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-count-011">
+      <description>simple motionless count()</description>
+      <keywords>grounded motionless RangeExpr</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-011"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert-xml><![CDATA[<out>10</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-012">
+      <description>count() filtered grounded sequence</description>
+      <keywords>crawling childless-nodes fn:data fn:remove grounded PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-012"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-013">
+      <description>count() filtered crawling sequence</description>
+      <keywords>_IMPROVE:fix-description striding fn:remove PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-013"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-014">
+      <description>count() with twice-filtered crawling sequence</description>
+      <keywords>_IMPROVE:fix-description fn:remove striding motionless-predicate PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-015">
+      <description>count() applied to a non-existent element</description>
+      <keywords>empty-sequence striding PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-015"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-count-016">
+      <description>count() applied to an existent attribute (can exit early)</description>
+      <keywords>striding-then-climbing attribute-axis childless-nodes PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>100000</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-017">
+      <description>count() and a boolean filter</description>
+      <keywords>striding PathExpr motionless-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-017"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-018">
+      <description>count() and both a positional and a boolean filter</description>
+      <keywords>striding positional-predicate motionless-predicate PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-018"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-100">
+      <description>count() on a sequence containing streamed nodes and atomic values</description>
+      <keywords>mixed-sequence grounded striding PathExpr empty-sequence</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-100"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-101">
+      <description>count() on a sequence containing streamed nodes and atomic values</description>
+      <keywords>mixed-sequence striding grounded PathExpr empty-sequence</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-101"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-102">
+      <description>count() on a sequence containing streamed nodes and atomic values</description>
+      <keywords>mixed-sequence striding grounded PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-102"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>100001</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-103">
+      <description>count() on a sequence containing streamed nodes and atomic values</description>
+      <keywords>striding grounded PathExpr mixed-sequence</keywords>
+      <created by="Michael Kay" on="2013-11-18"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-103"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>100001</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-104">
+      <description>count() applied to grounded element nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-104"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-count-105">
+      <description>count() applied to grounded text nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-105"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-106">
+      <description>count() applied to grounded attribute nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-106"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-107">
+      <description>count() applied to constructed attribute nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-107"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-108">
+      <description>count() applied to constructed element nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-108"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-109">
+      <description>count() applied to constructed text nodes</description>
+      <created by="Michael Kay" on="2019-05-03"/>
+      <environment ref="sf-count-A"/>
+      <test>
+         <initial-template name="c-109"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-count-901">
+      <description>Test of xsl:stream instruction with count(), filtered with non-motionless predicate.</description>
+      <keywords>PathExpr striding consuming-predicate XTSE3430</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="sf-count-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>   
+</test-set>

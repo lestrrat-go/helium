@@ -1,0 +1,651 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="node">
+   <description>Tests node</description>
+   <environment name="node-01">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  test
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="node-02">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <!-- This is a comment -->
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="node-03">
+      <source role=".">
+         <content><![CDATA[ 
+<?a-pi some data?>
+<doc>
+  <!-- This is a comment -->
+    test
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="node-04">
+      <source role=".">
+         <content><![CDATA[ 
+<doc xmlns:ns1="http://xsl.lotus.com/ns1"
+     xmlns="http://xsl.lotus.com/ns2">
+  <ns1:a attrib1="test"/>
+  <b ns1:attrib2="test"/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="node-05">
+      <source role=".">
+         <content><![CDATA[<doc xmlns:ns1="http://xsl.lotus.com/ns1" 
+     xmlns="http://xsl.lotus.com/ns2">
+<ns1:a attrib1="test"/>
+<b ns1:attrib2="test"/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="node-06">
+      <source role=".">
+         <content><![CDATA[ 
+<doc xmlns:ns1="http://xsl.lotus.com/ns1"
+     xmlns="http://xsl.lotus.com/ns2">
+<ns1:a attrib1="test"/>
+<b ns1:attrib2="test"/>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="node-07">
+      <source role=".">
+         <content><![CDATA[<doc>
+<a>1</a>
+<b>2</b>
+<c>3</c>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="node-08">
+      <source role="." file="node-08.xml"/>
+   </environment>
+   <environment name="node-09">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>
+  <!-- This is a comment -->
+  Random content
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="node-10">
+      <source role=".">
+         <content><![CDATA[ 
+<?a-pi some data?>
+<doc>
+  <!-- This is a comment -->
+  test
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="node-11">
+      <source role="." file="node-11.xml"/>
+   </environment>
+   <environment name="node-12">
+      <source role="." file="node-12.xml"/>
+   </environment>
+   <environment name="node-13">
+      <source role=".">
+         <content><![CDATA[ 
+<!-- First comment -->
+<doc>
+  <!-- Second comment -->
+</doc>
+<!-- Third comment -->]]></content>
+      </source>
+   </environment>
+   <environment name="node-14">
+      <source role=".">
+         <content><![CDATA[ 
+<?a-pi some data?>
+<doc>
+  <?b-pi some data?>
+</doc>
+<?c-pi some data?>]]></content>
+      </source>
+   </environment>
+   <environment name="node-15">
+      <source role="." file="node-15.xml"/>
+   </environment>
+   <environment name="node-16">
+      <source role="." file="node-16.xml"/>
+   </environment>
+   <environment name="node-17">
+      <source role="." file="node-17.xml"/>
+   </environment>
+   <environment name="node-18">
+      <source role="." file="node-18.xml"/>
+   </environment>
+   <environment name="node-19">
+      <source role=".">
+         <content><![CDATA[ 
+<doc>test</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="node-20">
+      <source role=".">
+         <content><![CDATA[<doc>
+<node val="01">
+<node val="02">
+</node>
+<node val="03">
+</node>
+</node>
+<node val="04">
+</node>
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="node-0101">
+      <description>Test for text() node test. Should say "test"</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  test
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-0201">
+      <description>Test for comment() node test.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-02"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Found-comment<!-- This is a comment --></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-0301">
+      <description>Test for processing-instruction() node test. should say "Found-pi,,Found-pi" &lt;xsl:apply-templates select="./processing-instruction('*')"/&gt;</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Found-pi:a-pi<?a-pi some data?>Found-pi:a-pi<?a-pi some data?></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-0401">
+      <description>Test of 'local-name()'</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">a</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-0501">
+      <description>Test of 'namespace-uri()'</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-05"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">http://xsl.lotus.com/ns1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-0601">
+      <description>Test of 'name()', without arguments</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:baz1="http://xsl.lotus.com/ns1" xmlns:baz2="http://xsl.lotus.com/ns2">doc</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-0701">
+      <description>Processing Instructions and comments within a stylesheet are ignored. This template prints out 'Testing 1 2 3' This calls a named template</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-0701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+Testing 1 2 3 quos
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-0801">
+      <description>String value of the root node is the concatenation of the string values of all text node descendants of the root node in document order.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-08"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-0801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root>
+A
+B-C
+TextNode_between_F_and_G
+Yahoo
+SecondNode_after_H
+</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-0901">
+      <description>Test for value-of with comment() node test.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-09"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out> This is a comment </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1001">
+      <description>Test for value-of with processing-instruction() node test.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Found-pi...some data</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1101">
+      <description>Test for node tests in match patterns (and union in select). for child elements</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1101.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="node-1101.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="node-1102">
+      <description>Test for node() in match patterns. Default axis is child. Override built-in template</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1102.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="node-1102.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="node-1201">
+      <description>Test for node tests in select in for-each. for child elements</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1201.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="node-1201.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="node-1301">
+      <description>Test for access to comments hanging off the root.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+Comments on the root node:
+ First comment 
+ Third comment 
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1401">
+      <description>Test for access to PIs hanging off the root.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+Root-level processing instructions:
+a-pi
+c-pi
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1501">
+      <description>Test for 'attribute::*' in match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>
+      <environment ref="node-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center-attr-1 center-attr-2 center-attr-3 </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1502">
+      <description>Test for 'attribute::node()' in match pattern.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>
+      <environment ref="node-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1502.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>center-attr-1 center-attr-2 center-attr-3 </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1601">
+      <description>Test that 'namespace::node()' selects all namespaces.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-16"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1601.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="node-1601.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="node-1701">
+      <description>Test for node test in argument to count() function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-17"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1801">
+      <description>Test for 'parent::node()' in select.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-18"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>near-north, north, far-north, Root Node</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1802">
+      <description>Test for 'ancestor::node()' in select.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-18"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1802.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Root Node; far-north, north, near-north, </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1901">
+      <description>author MHK Purpose: Test for xsl:attribute producing a sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out v="1 2 3 4 5 6 7 8 9 10"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1902">
+      <description>author MHK Purpose: Test for xsl:comment with a select attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1902.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><!--test test test--></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1903">
+      <description>author MHK Purpose: Test for xsl:processing-instruction with a select attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1903.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><?test 1 2 3?></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1904">
+      <description>author MHK Purpose: Test for xsl:namespace with a select attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1904.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:prefix="http://uri.com/"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1905">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1905.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<b:blah xmlns:b="http://bb.com/"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-1906">
+      <description>test that multiple ?&gt; delimiters can be adjusted in the output</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="node-19"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-1906.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a xmlns:a="http://aa.com/" xmlns:b="http://bb.com/"><?pidl ----? >? >? >? >? >----? >?></a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-2001">
+      <description>Test "NodeOrder" operators - "is"</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="node-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-2001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>nodes: 01 01: true; nodes: 01 01: true; nodes: 01 02: false; nodes: 02 03: false; </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-2002">
+      <description>Test "NodeOrder" operators - "&lt;&lt;"; sibling nodes</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="node-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-2002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>nodes: 02 03: true; nodes: 03 02: false; nodes: 01 01: false; nodes: 01 01: false; </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-2003">
+      <description>Test "NodeOrder" operators - "&lt;&lt;"; parent-child nodes</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="node-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-2003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>nodes: 01 02: true; nodes: 02 01: false; </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-2004">
+      <description>Test "NodeOrder" operators - "&gt;&gt;"; sibling nodes</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="node-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-2004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>nodes: 03 02: true; nodes: 02 03: false; nodes: 01 01: false; nodes: 01 01: false; </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="node-2005">
+      <description>Test "NodeOrder" operators - "&gt;&gt;"; parent-child nodes</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="node-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="node-2005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>nodes: 02 01: true; nodes: 01 02: false; </out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

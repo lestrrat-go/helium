@@ -1,0 +1,1664 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="override">
+   <description>Tests xsl:override in XSLT 3.0</description>
+   
+   <environment name="override-f-A">
+      <package file="override-base-f-001.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/override-base-001" package-version="1.0.0"/>
+   </environment>
+   
+   <environment name="override-t-B">
+      <package file="override-base-t-001.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/override-base-101" package-version="1.0.0"/>
+   </environment>
+   
+   <environment name="override-t-B2">
+      <package file="override-base-t-001.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/override-base-101" package-version="1.0.0"/>
+      <package file="override-t-003.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/override-t-003" package-version="1.0.0"/>     
+   </environment>
+   
+   <environment name="override-v-C">
+      <package file="override-base-v-001.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/override-base-201" package-version="1.0.0"/>
+   </environment>
+   
+   <environment name="override-as-D">
+      <package file="override-base-as-001.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/override-base-301" package-version="1.0.0"/>
+   </environment>
+   
+   <environment name="override-misc-E">
+      <package file="override-base-misc-001.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/override-base-901" package-version="1.0.0"/>
+   </environment>
+   
+   <environment name="override-misc-F">
+      <package file="override-base-misc-002.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/override-base-misc-002" package-version="1.0.0"/>
+   </environment>
+   
+   <environment name="override-m-G">
+      <package file="override-base-m-001.xsl" role="secondary" uri="http://www.w3.org/xslt30tests/override-base-m-001" package-version="1.0.0"/>
+   </environment>
+
+   <dependencies>
+      <spec value="XSLT30+"/> 
+   </dependencies>
+
+   <test-case name="override-f-001">
+      <description>Successful override of a function</description>
+      <created by="Michael Kay" on="2013-07-08"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-001.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="override-f-002">
+      <description>Successful use of override of a function defined in a library package</description>
+      <created by="O'Neil Delpratt" on="2013-07-17"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="Michael Kay" on="2015-11-02" change="declare abstract components as absent"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-002.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-003">
+      <description>Unsuccessful use of override of a function defined in a library package. Parameter types are different</description>
+      <created by="O'Neil Delpratt" on="2013-07-17"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="O'Neil Delpratt" on="2018-02-05" change="Added higher order functions dependency"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-003.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3070"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-004">
+      <description>Unsuccessful use of override of a function as it is not defined in a library package.</description>
+      <created by="O'Neil Delpratt" on="2013-07-17"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="O'Neil Delpratt" on="2018-02-05" change="Added higher order functions dependency"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-004.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3058"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-005">
+      <description>Disallow text as a child of xsl:override.</description>
+      <created by="Michael Kay" on="2013-07-19"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="O'Neil Delpratt" on="2018-02-05" change="Added higher order functions dependency"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-005.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>  
+   
+   <test-case name="override-f-006">
+      <description>Disallow LRE as a child of xsl:override.</description>
+      <created by="Michael Kay" on="2013-07-19"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="O'Neil Delpratt" on="2018-02-05" change="Added higher order functions dependency"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-006.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case> 
+   
+   <test-case name="override-f-007">
+      <description>Disallow xsl:override as a child of xsl:override.</description>
+      <created by="Michael Kay" on="2013-07-19"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="O'Neil Delpratt" on="2018-02-05" change="Added higher order functions dependency"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-007.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-008">
+      <description>Empty xsl:override is allowed.</description>
+      <created by="Michael Kay" on="2013-07-19"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="Michael Kay" on="2015-11-02" change="declare abstract components as absent"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-008.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-009">
+      <description>Overridden function called from within a stylesheet function</description>
+      <created by="Michael Kay" on="2013-10-17"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-009.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-010">
+      <description>Overridden function called from within a global variable initializer</description>
+      <created by="Michael Kay" on="2013-10-17"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-010.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-011">
+      <description>Overridden function called from within a template rule</description>
+      <created by="Michael Kay" on="2013-10-17"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-011.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-012">
+      <description>Overridden function called from within a global variable in used package</description>
+      <created by="Michael Kay" on="2013-10-17"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-012.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-013">
+      <description>Overridden function called via function reference in used package</description>
+      <created by="Michael Kay" on="2015-02-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-013.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-014">
+      <description>Private function called via function reference in used package</description>
+      <created by="Michael Kay" on="2015-02-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-014.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-015">
+      <description>Partial function application of an overridden function</description>
+      <!-- Currently (2015-02-28) failing in Saxon because we're binding statically to the target function -->
+      <created by="Michael Kay" on="2015-02-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-015.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-016">
+      <description>A function call using xsl:original</description>
+      <created by="Michael Kay" on="2015-03-01"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-016.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-017">
+      <description>A named function reference using xsl:original</description>
+      <created by="Michael Kay" on="2015-03-01"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-017.xsl" role="principal"/>
+         <initial-template name="xsl:initial-template" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-018">
+      <description>Partial function application using xsl:original</description>
+      <created by="Michael Kay" on="2015-03-01"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-018.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-019">
+      <description>Two conflicting overrides of the same function</description>
+      <created by="Michael Kay" on="2015-08-28"/>
+      <modified by="O'Neil Delpratt" on="2018-02-05" change="Added higher order functions dependency"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-019.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0770"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-020">
+      <description>Override conflicts with locally-declared function</description>
+      <created by="Michael Kay" on="2015-08-28"/>
+      <modified by="Michael Kay" on="2017-02-19" change="add alternative error code"/>
+      <modified by="O'Neil Delpratt" on="2018-02-05" change="Added higher order functions dependency"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-020.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTSE0770"/>
+            <error code="XTSE3050"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-021">
+      <description>Unsuccessful use of override of a function defined in a library package. Determinism is different</description>
+      <created by="Michael Kay" on="2015-09-09"/>
+      <modified by="O'Neil Delpratt" on="2018-02-05" change="Added higher order functions dependency"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-021.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3070"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-022">
+      <description>Unsuccessful attempt to override a function outside xsl:override</description>
+      <created by="Michael Kay" on="2015-10-26"/>
+      <modified by="O'Neil Delpratt" on="2018-02-05" change="Added higher order functions dependency"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-022.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3050"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-023">
+      <description>Unsuccessful attempt to override a function outside xsl:override</description>
+      <created by="Michael Kay" on="2015-10-26"/>
+      <modified by="O'Neil Delpratt" on="2018-02-05" change="Added higher order functions dependency"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-023.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3050"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-024">
+      <description>Override a function called indirectly (from XML London workshop)</description>
+      <created by="Michael Kay" on="2016-06-05"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment>
+         <package file="override-f-024a.xsl" role="secondary" uri="http://london2016/override-f-024/package-1" package-version="1.0.0"/>
+      </environment>
+      <test>
+         <package file="override-f-024b.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert>/out = '52'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-025">
+      <description>Override a function that doesn't exist</description>
+      <created by="Michael Kay" on="2016-06-05"/>
+      <modified by="Michael Kay" on="2018-09-25" change="Remove secondary error from stylesheet, which disturbs the expected results"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment>
+         <package file="override-f-024a.xsl" role="secondary" uri="http://london2016/override-f-024/package-1" package-version="1.0.0"/>
+      </environment>
+      <test>
+         <package file="override-f-025.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3058"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-026">
+      <description>Override an abstract function</description>
+      <created by="Michael Kay" on="2016-06-05"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment>
+         <package file="override-f-026a.xsl" role="secondary" uri="http://london2016/graph-lib" package-version="1.0.0"/>
+      </environment>
+      <test>
+         <package file="override-f-026b.xsl" role="principal"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/results/a-is-cyclic = 'true'</assert>
+            <assert>/results/e-is-cyclic = 'false'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-027">
+      <description>Override a function, argument and result types are implicit</description>
+      <created by="Michael Kay" on="2016-06-05"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment>
+         <package file="override-f-027a.xsl" role="secondary" uri="http://london2016/override-f-027/package-1" package-version="1.0"/>
+      </environment>
+      <test>
+         <package file="override-f-027b.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert>/out = '51'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-028">
+      <description>Top level can use xsl:stylesheet rather than xsl:package</description>
+      <created by="Michael Kay" on="2016-06-06"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-028.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert>/out = 'xxx3'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-029">
+      <description>xsl:use=package can be reached via xsl:include</description>
+      <created by="Michael Kay" on="2016-06-06"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-029.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert>/out = 'xxx3'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-030">
+      <description>xsl:use-package cannot be reached via xsl:import</description>
+      <created by="Michael Kay" on="2016-06-06"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-f-A"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-030.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3008"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-031">
+      <description>Compatibility rules for union types</description>
+      <created by="Michael Kay" on="2016-06-24"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment>
+         <package file="override-f-031a.xsl" role="secondary" uri="http://london2016/override-f-031/package-1" package-version="1.0.0"/>
+      </environment>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <package file="override-f-031b.xsl" role="principal"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a = 'true'</assert>
+            <assert>/out/b = 'true'</assert>
+            <assert>/out/c = 'false'</assert>
+            <assert>/out/d = 'true'</assert>
+            <assert>/out/e = 'true'</assert>
+            <assert>/out/f = 'true'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-032">
+      <description>Overriding named function called from an inline function</description>
+      <created by="Michael Kay" on="2016-07-05"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-032a.xsl" role="principal"/>
+         <package file="override-f-032b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>/out = 4</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-033">
+      <description>Call an overridden functions from an overridden function</description>
+      <created by="Michael Kay" on="2017-09-07"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="override-f-033a.xsl" role="principal"/>
+         <package file="override-f-033b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>/out = "29"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-034">
+      <description>
+         Overriding function has different properties from overridden: try to confuse the optimizer.
+         See Saxon bug 3762.
+      </description>
+      <created by="Michael Kay" on="2018-04-26"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="override-f-034.xsl" role="principal"/>
+         <package file="override-base-f-002.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>/out = "3"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-035">
+      <description>Coercing a function from a used package. Also, see spec bug 30313.</description>
+      <created by="Michael Kay" on="2018-11-03"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-035.xsl" role="principal"/>
+         <package file="override-base-f-035.xsl" role="secondary"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "0 1 2 3 4 5 7 8 9 10"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-f-036">
+      <description>Use two packages; try to override a component from the wrong used package</description>
+      <created by="Michael Kay" on="2018-11-20"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-f-036.xsl" role="principal"/>
+         <package file="override-f-032b.xsl" role="secondary"/>
+         <package file="override-f-033b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <error code="XTSE3058"/>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="override-t-001">
+      <description>Successful override of a named template, when called from overriding package</description>
+      <created by="Michael Kay" on="2013-07-31"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-001.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '*xxxxx*'</assert>
+      </result>
+   </test-case>  
+   
+   <test-case name="override-t-002">
+      <description>Successful override of a named template, when called from base package</description>
+      <created by="Michael Kay" on="2013-07-31"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-002.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '*xxxxx*'</assert>
+      </result>
+   </test-case>   
+   
+   <test-case name="override-t-003">
+      <description>A top level package cannot, directly or indirectly, contain an abstract component, XTSE3080</description>
+      <created by="Michael Kay" on="2013-07-31"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="Abel Braaksma" on="2019-02-14" change="Updated description to reflect effect of test, added t-003b/c/d to for the original 'cannot call abstract component'"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-003.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3080"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-t-003a">
+      <description>Overriding an abstract template imported indirectly</description>
+      <created by="Michael Kay" on="2018-09-25"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B2"/>
+      <test>
+         <package file="override-t-003a.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert>/outa='*corn*'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-t-003b">
+      <description>Empty override with abstract template component set to hidden is allowed</description>
+      <created by="Abel Braaksma" on="2019-02-14"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-003b.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>xxxxx</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-t-003c">
+      <description>Cannot call an abstract component, XTDE3052</description>
+      <created by="Abel Braaksma" on="2019-02-14"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="override-t-003c.xsl" role="principal"/>
+         <package file="override-base-t-002.xsl" package-version="1.0.0" role="secondary" uri="http://www.w3.org/xslt30tests/override-base-102" />
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3052"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-t-003d">
+      <description>A top level package cannot, directly or indirectly, contain an abstract component, regardless whether it is referenced, XTSE3080</description>
+      <created by="Abel Braaksma" on="2019-02-14"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-003d.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3080"/>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="override-t-004">
+      <description>Illegal template override, parameter types do not match</description>
+      <created by="Michael Kay" on="2014-10-10"/>
+      <modified by="Michael Kay" on="2015-08-18" change="correct expected error code"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-004.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3070"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-t-005">
+      <description>Illegal template override, context item types do not match</description>
+      <created by="Michael Kay" on="2014-10-10"/>
+      <modified by="Michael Kay" on="2015-08-18" change="correct expected error code"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-005.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3070"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-t-006">
+      <description>Illegal template override, context item use does not match</description>
+      <created by="Michael Kay" on="2014-10-10"/>
+      <modified by="Michael Kay" on="2015-01-26" change="keyword change: prohibited -> absent"/>
+      <modified by="Michael Kay" on="2015-08-18" change="correct expected error code"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-006.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3070"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-t-007">
+      <description>A named template calling xsl:original</description>
+      <created by="Michael Kay" on="2015-03-01"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-007.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '*xxxxx*'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-t-008">
+      <description>Unsuccessful override of a named template, declared outside xsl:override</description>
+      <created by="Michael Kay" on="2015-10-26"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-008.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3050"/>
+      </result>
+   </test-case> 
+   
+   <test-case name="override-t-009">
+      <description>Unsuccessful override of a named template, declared outside xsl:override</description>
+      <created by="Michael Kay" on="2015-10-26"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-009.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3050"/>
+      </result>
+   </test-case> 
+   
+   <test-case name="override-t-010">
+      <description>Unsuccessful override of a named template, the implicit visibility of the template is private</description>
+      <created by="Michael Kay" on="2016-06-13"/>
+      <environment>
+         <package file="override-t-010a.xsl" uri="http://www.w3.org/xslts/override-t-010a" package-version="3.0" role="secondary"/>
+      </environment>
+      <test>
+         <stylesheet file="override-t-010b.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTSE3060"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-t-011">
+      <description>Successful override of a named template, override has an extra tunnel parameter (bug 29981)</description>
+      <created by="Michael Kay" on="2016-11-17"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-011.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '*xxxxxxx*'</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="override-t-012">
+      <description>Unsuccessful override of a named template, override declares a tunnel parameter with the wrong type</description>
+      <created by="Michael Kay" on="2016-11-17"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-012.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3070"/>
+      </result>
+   </test-case> 
+   
+   <test-case name="override-t-013">
+      <description>Unsuccessful override of a named template, override declares a tunnel parameter overriding a non-tunnel-parameter</description>
+      <created by="Michael Kay" on="2016-11-17"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-t-B"/>
+      <test>
+         <package file="override-t-013.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3070"/>
+      </result>
+   </test-case> 
+   
+   <test-case name="override-t-014">
+      <description>Two different overrides of selected components in the same library package</description>
+      <created by="Michael Kay" on="2017-11-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="override-t-014.xsl" role="principal"/>
+         <package file="override-t-014-lib.xsl" role="secondary"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ttt override="yes"/><uuu override="yes"/></out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="override-t-015">
+      <description>Two different overrides of selected components in different versions of the same library package</description>
+      <created by="Michael Kay" on="2017-11-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="override-t-015.xsl" role="principal"/>
+         <package file="override-t-015-lib-v1.xsl" role="secondary"/>
+         <package file="override-t-015-lib-v2.xsl" role="secondary"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><override><ttt/></override><override><uuu/></override></out>]]></assert-xml>
+      </result>
+   </test-case> 
+
+   <test-case name="override-v-001">
+      <description>Successful override of a public global variable</description>
+      <created by="Michael Kay" on="2013-10-18"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-v-C"/>
+      <test>
+         <package file="override-v-001.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-002">
+      <description>Reference from private variable to overridden public variable</description>
+      <created by="Michael Kay" on="2013-10-18"/>
+      <modified by="Michael Kay" on="2014-08-22" change="no xsl:stylesheet child of xsl:package"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-v-C"/>
+      <test>
+         <package file="override-v-002.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-003">
+      <description>An overridden public global variable using xsl:original</description>
+      <created by="Michael Kay" on="2015-03-01"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-v-C"/>
+      <test>
+         <package file="override-v-003.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-004">
+      <description>An overridden public global variable appearing in a match pattern</description>
+      <created by="Michael Kay" on="2015-03-01"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-v-C"/>
+      <test>
+         <package file="override-v-004.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/go/not-one</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-005">
+      <description>An overridden variable using a different union type with the same member types</description>
+      <created by="Michael Kay" on="2015-10-24"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <package file="override-v-005.xsl" role="principal"/>
+         <package file="override-base-v-002.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-006">
+      <description>An overridden variable using a different union type with different member types</description>
+      <created by="Michael Kay" on="2015-10-24"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <package file="override-v-006.xsl" role="principal"/>
+         <package file="override-base-v-002.xsl" role="secondary"/>
+      </test>
+      <result>
+         <error code="XTSE3070"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-007">
+      <description>An overridden variable using a different built-in type</description>
+      <created by="Michael Kay" on="2015-10-25"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="override-v-007.xsl" role="principal"/>
+         <package file="override-base-v-003.xsl" role="secondary"/>
+      </test>
+      <result>
+         <error code="XTSE3070"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-008">
+      <description>Overriding a variable with a required parameter</description>
+      <created by="Michael Kay" on="2015-10-25"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="override-v-008.xsl" role="principal"/>
+         <package file="override-base-v-003.xsl" role="secondary"/>
+         <param name="var" select="xs:int(23)"/>
+         <param name="req" select="xs:NCName('n')"/>
+      </test>
+      <result>
+         <assert>/out = '23'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-009">
+      <description>Overriding a variable with an optional parameter</description>
+      <created by="Michael Kay" on="2015-10-25"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="override-v-009.xsl" role="principal"/>
+         <package file="override-base-v-003.xsl" role="secondary"/>
+         <param name="var" select="xs:int(23)"/>
+         <param name="req" select="xs:NCName('n')"/>
+      </test>
+      <result>
+         <assert>/out = '23'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-010">
+      <description>Overriding a required parameter with an optional parameter. (But see bug 29242)</description>
+      <created by="Michael Kay" on="2015-10-25"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="override-v-010.xsl" role="principal"/>
+         <package file="override-base-v-003.xsl" role="secondary"/>
+         <param name="req" select="xs:NCName('abc')"/>
+      </test>
+      <result>
+         <assert>/out = 'abc'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-011">
+      <description>Overriding variable appearing outside xsl:override</description>
+      <created by="Michael Kay" on="2015-10-26"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="override-v-011.xsl" role="principal"/>
+         <package file="override-base-v-003.xsl" role="secondary"/>
+         <param name="req" select="xs:NCName('abc')"/>
+      </test>
+      <result>
+         <error code="XTSE3050"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-012">
+      <description>Overriding variable appearing outside xsl:override</description>
+      <created by="Michael Kay" on="2015-10-26"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="override-v-012.xsl" role="principal"/>
+         <package file="override-base-v-003.xsl" role="secondary"/>
+         <param name="req" select="xs:NCName('abc')"/>
+      </test>
+      <result>
+         <error code="XTSE3050"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-013">
+      <description>Overriding variable used in an inline function</description>
+      <created by="Michael Kay" on="2016-07-05"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-v-013a.xsl" role="principal"/>
+         <package file="override-v-013b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>/out = 4</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-014">
+      <description>Overriding variable used in an inline function that has a closure</description>
+      <created by="Michael Kay" on="2016-09-05"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <dependencies>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <package file="override-v-014a.xsl" role="principal"/>
+         <package file="override-v-014b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert>/out = 12</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-v-015">
+      <description>Overriding a param, calling in a non-default mode. Saxon issue 3338.</description>
+      <created by="Michael Kay after Mark Dunn" on="2016-09-05"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><a foo="bar">Lorem Ipsum</a></doc>]]></content>
+         </source>
+      </environment>
+      <test>
+         <package file="override-v-015a.xsl" role="principal"/>
+         <package file="override-v-015b.xsl" role="secondary"/>
+         <initial-mode name="transform"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<override-success><doc><a foo="bar">Lorem Ipsum</a></doc></override-success>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-as-001">
+      <description>Successful override of a public attribute-set</description>
+      <created by="Michael Kay" on="2015-02-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-as-D"/>
+      <test>
+         <package file="override-as-001.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><x pub1="pub1o" pub2="pub2o"/><y abs1="abs1o" abs2="abs2o"/><z final1="final1"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-as-002">
+      <description>Successful override of a public attribute-set with use-attribute-sets="xsl:original"</description>
+      <created by="Michael Kay" on="2015-02-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-as-D"/>
+      <test>
+         <package file="override-as-002.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><x base1="base1"
+      priv1="priv1"
+      pub1="pub1o"
+      pub2="pub2"
+      pub3="pub3o"/><y abs1="abs1o" abs2="abs2o"/><z final1="final1"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-as-003">
+      <description>Override of a public attribute-set creates a circularity</description>
+      <created by="Michael Kay" on="2015-02-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-as-D"/>
+      <test>
+         <package file="override-as-003.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE0640"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-as-004">
+      <description>Attempt to override a private attribute-set</description>
+      <created by="Michael Kay" on="2015-02-28"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-as-D"/>
+      <test>
+         <package file="override-as-004.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3060"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-as-005">
+      <description>Two private attribute sets with the same name in different packages</description>
+      <created by="Michael Kay" on="2015-02-28"/>
+      <modified by="Michael Kay" on="2015-08-18" change="correct expected results"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-as-D"/>
+      <test>
+         <package file="override-as-005.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><x base1="base1" priv1="priv1" pub1="pub1" pub2="pub2"/><y priv8="priv8" priv9="priv9"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-001">
+      <description>Successful override of a template rule in a public mode</description>
+      <created by="Michael Kay" on="2015-08-30"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-001.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><aa><b>22</b></aa></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-002">
+      <description>Unsuccessful override of a template rule in a final mode</description>
+      <created by="Michael Kay" on="2015-08-30"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-002.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3060"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-003">
+      <description>Unsuccessful override of a template rule in a private mode</description>
+      <created by="Michael Kay" on="2015-08-30"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-003.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3060"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-004">
+      <description>Unsuccessful override of a template rule in the unnamed mode</description>
+      <created by="Michael Kay" on="2015-08-30"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-004.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3440"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-005">
+      <description>Within override, template referring to its own mode</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-005.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><aa><b>22</b></aa></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-006">
+      <description>Within override, template using next-match</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-006.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><aa><a><b>22</b></a></aa></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-007">
+      <description>Within override, template using next-match indirectly</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-007.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><aa><a><b>22</b></a></aa></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-008">
+      <description>Within override, two matching templates; last one wins</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-008.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a2><a1><a><b>22</b></a></a1></a2></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-009">
+      <description>Within override, two matching templates; explicit priority</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-009.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a1><a2><a><b>22</b></a></a2></a1></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-010">
+      <description>Within override, default-mode attribute</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-010.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a1><a2><b>22</b></a2></a1></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-011">
+      <description>Within override, overriding template has a match pattern and a name but the name is unknown</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-011.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3058"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-012">
+      <description>Within override, overriding template has a match pattern and a name; it overrides both</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-012.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a1><beta/><beta/></a1></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-013">
+      <description>Within override, cannot override the xsl:mode declaration itself</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-013.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-014">
+      <description>Within override, override a template in two modes at once</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-014.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a1><a><b>22</b></a></a1><a1/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-015">
+      <description>Within override, two overriding templates passing each other tunnel parameters</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-015.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><x1><a><b1 T="55"><b>22</b></b1></a></x1></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-016">
+      <description>Within override, cannot override a template rule in a mode accepted as final</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <modified by="Michael Kay" on="2019-07-17" 
+         change="Previously this expected XTSE3060. I don't believe that is correct. Error 3060 should be raised only when the
+                visibility of the component (mode) in the used package is final, not when the visibility in the used package is
+                public and the visibility in the using package is final. xsl:accept only affects the visibility in the using package"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-016.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>exists(/out/x1)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-017">
+      <description>Unsuccessful attempt to redeclare a mode defined in a used package</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-017.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3050"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-018">
+      <description>Unsuccessful attempt to add a template rule to a mode from a used package outwith xsl:override</description>
+      <created by="Michael Kay" on="2015-10-21"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-018.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3050"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-019">
+      <description>Two overriding templates passing each other tunnel parameters, in separate xsl:override elements</description>
+      <created by="Michael Kay" on="2015-10-25"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-019.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><x1><a><b1 T="55"><b>22</b></b1></a></x1></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-020">
+      <description>Use a public mode in a used package without overriding any template rules</description>
+      <created by="Michael Kay" on="2015-10-25"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-m-G"/>
+      <test>
+         <package file="override-m-020.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a><b/></a></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-m-021">
+      <description>Use a public mode in a used package without overriding any template rules</description>
+      <created by="Michael Kay after Martin Honnen" on="2016-08-26"/>
+      <environment>
+         <package file="override-m-021-base.xsl" role="secondary" uri="http://example.com/override-m-021-base" package-version="1.0"/>
+         <source role="." file="override-m-021.xml"/>
+      </environment>
+      <test>
+         <package file="override-m-021.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root><list><item><bar>foo 1</bar><list><item><bar>foo 2</bar></item></list></item></list></root>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="override-misc-001">
+      <description>Cannot override a key</description>
+      <created by="Michael Kay" on="2015-03-01"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-misc-E"/>
+      <test>
+         <package file="override-misc-001.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-misc-002">
+      <description>Cannot override an accumulator</description>
+      <created by="Michael Kay" on="2015-03-01"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-misc-E"/>
+      <test>
+         <package file="override-misc-002.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-misc-003">
+      <description>Cannot override a decimal format</description>
+      <created by="Michael Kay" on="2015-03-01"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-misc-E"/>
+      <test>
+         <package file="override-misc-003.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="override-misc-004">
+      <description>Keys in different packages can have the same name</description>
+      <created by="Michael Kay" on="2015-03-01"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-misc-E"/>
+      <test>
+         <package file="override-misc-004.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a><x>y</x></a><b><e>x</e></b></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-misc-005">
+      <description>Accumulators in different packages can have the same name</description>
+      <created by="Michael Kay" on="2015-03-01"/>
+      <modified by="Michael Kay" on="2014-08-22" change="spec change, @new-value->@select"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-misc-E"/>
+      <test>
+         <package file="override-misc-005.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>-3</a><b>3</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-misc-006">
+      <description>Decimal formats in different packages can have the same name</description>
+      <created by="Michael Kay" on="2015-03-01"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-misc-E"/>
+      <test>
+         <package file="override-misc-006.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>123!456:78</a><b>123.456,78</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="override-misc-007">
+      <description>Streamed accumulators in different packages can have the same name</description>
+      <created by="Michael Kay" on="2015-03-01"/>
+      <modified by="Michael Kay" on="2015-08-22" change="spec change, @new-value->@select"/>
+      <modified by="Michael Kay" on="2017-09-11" change="add dependency on streaming"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'main' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <environment ref="override-misc-F"/>
+      <dependencies>
+         <feature value="streaming"/>
+      </dependencies>
+      <test>
+         <package file="override-misc-007.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a><count nodes="78"/><acc value="78"/></a><b><count nodes="78"/><acc value="-78"/></b></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+      
+  
+
+
+</test-set>

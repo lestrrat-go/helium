@@ -1,0 +1,212 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="copy-of">
+   <description>Tests the XSLT 3.0 copy-of() function</description>
+
+   <environment name="copy-of-01">
+      <source role="." file="copy-of-001.xml"/>
+   </environment>
+
+
+   <test-case name="copy-of-001">
+      <description>Use copy-of() to copy an element node. No arguments.</description>
+      <keywords>focus-dependent fn:copy-of</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="copy-of-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="copy-of-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="copy-of-001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="copy-of-002">
+      <description>Use copy-of() to copy an element node. One argument.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="copy-of-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="copy-of-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="copy-of-002.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="copy-of-003">
+      <description>Use copy-of() to copy a comment node; and check different node identity</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="copy-of-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="copy-of-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="copy-of-004">
+      <description>Use copy-of() to copy a processing instruction; and check it has no siblings</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="copy-of-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="copy-of-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="copy-of-005">
+      <description>Use copy-of() to copy an attribute; and check it uses validation=preserve</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="copy-of-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="copy-of-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1 JANUARY 2010</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="copy-of-006">
+      <description>Use copy-of() to copy a text node; and check the result of generate-id()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="copy-of-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="copy-of-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="copy-of-007">
+      <description>Use copy-of() to copy a document node; and check the result of deep-equal()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="copy-of-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="copy-of-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="copy-of-008">
+      <description>Use copy-of() applied to an empty sequence</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="copy-of-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="copy-of-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="copy-of-009">
+      <description>Use copy-of() to copy a namespace-sensitive attribute node</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="copy-of-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="copy-of-009.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0950"/>
+      </result>
+   </test-case>
+
+   <test-case name="copy-of-010">
+      <description>Use copy-of() applied to sequence of length > 1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-04-28" change="no longer an error in current spec"/>
+      <environment ref="copy-of-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="copy-of-010.xsl"/>
+      </test>
+      <result>
+         <assert>count(/out/*:subelem) = 2</assert>
+      </result>
+   </test-case>
+
+   <test-case name="copy-of-011">
+      <description>Use copy-of() applied to an atomic value</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-10-15" change="Bug 29141, Test now succeeds: spec has changed and allows atomic items"/>
+      <environment ref="copy-of-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="copy-of-011.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '17'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="copy-of-012">
+      <description>Use copy-of() with no arguments when there is no context item</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="copy-of-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="copy-of-012.xsl"/>
+      </test>
+      <result>
+         <error code="XPDY0002"/>
+      </result>
+   </test-case>
+   
+   <test-case name="copy-of-013">
+      <description>Use copy-of() with arguments including atomic values and function items (see bug 29141)</description>
+      <created by="Michael Kay" on="2015-10-09"/>
+      <modified by="Debbie Lockett" on="2017-02-23" change="add HOF dependency"/>
+      <environment ref="copy-of-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="higher_order_functions"/>
+      </dependencies>
+      <test>
+         <stylesheet file="copy-of-013.xsl"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+</test-set>

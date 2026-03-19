@@ -1,0 +1,901 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="evaluate">
+   
+   <description>Tests xsl:evaluate, tests are dependent on the evaluation feature in 26.6 of the spec</description>
+   
+   <environment name="eval003">
+      <source role="." file="eval003.xml"/>
+   </environment>
+   <environment name="eval004">
+      <source role="." file="eval004.xml"/>
+   </environment>
+   <environment name="eval005">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="eval007">
+      <source role=".">
+         <content><![CDATA[<add>$p1 + $p2</add>]]></content>
+      </source>
+   </environment>
+   <environment name="eval011">
+      <source role=".">
+         <content><![CDATA[ 
+<document>
+<data>Saxon is great</data> 
+</document>]]></content>
+      </source>
+   </environment>
+   <environment name="eval012">
+      <source role=".">
+         <content><![CDATA[ 
+<document xmlns="http://saxon097.uri/">
+<path>following-sibling::data</path>
+<data>Saxon is great</data> 
+</document>]]></content>
+      </source>
+   </environment>
+   <environment name="eval014">
+      <source role=".">
+         <content><![CDATA[ 
+<a xmlns="http://a.uri/">
+  <b xmlns="http://b.uri/">
+    <c xmlns="http://c.uri/">
+      <d xmlns="http://d.uri/">42</d>
+    </c>
+  </b>
+</a>]]></content>
+      </source>
+   </environment>
+   <environment name="eval021">
+      <source role=".">
+         <content><![CDATA[<sales>
+<sale qty="10" price="15.00"/>
+<sale qty="2" price="12.00"/>
+<sale qty="1" price="10.00"/>
+</sales>]]></content>
+      </source>
+   </environment>
+   <dependencies>
+      <feature value="dynamic_evaluation"/>
+      <spec value="XSLT30+"/>
+   </dependencies>
+
+   <test-case name="evaluate-001">
+      <description>Test xsl:evaluate, with an argument that is a string literal containing a call to a stylesheet function. See bug 1952318</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-01-14" change="Make my:f public so calls from xsl:evaluate are allowed"/>
+      <test>
+         <stylesheet file="evaluate-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>42</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-002">
+      <description>Test xsl:evaluate with union expressions. Originally a bug in Saxon 7.8. Test was formerly saxon007</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="evaluate-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/*[1][self::z][. = "STATIC setting1=[value1]"]</assert>
+            <assert>/out/*[2][self::z][. = "STATIC setting2=[value2]"]</assert>
+            <assert>/out/*[3][self::a][. = "DYNAMIC(A-all) setting1=[value1]"]</assert>
+            <assert>/out/*[4][self::a][. = "DYNAMIC(A-all) setting2=[value2]"]</assert>
+            <assert>/out/*[5][self::a][. = "DYNAMIC(B) count=2"]</assert>
+            <assert>/out/*[6][self::b][. = "DYNAMIC(B-for) setting1=[value1]"]</assert>
+            <assert>/out/*[7][self::b][. = "DYNAMIC(B-for) setting2=[value2]"]</assert>
+            <assert>/out/*[8][self::d][. = "DYNAMIC(B-top) setting1=[value1]"]</assert>
+            <assert>/out/*[9][self::d][. = "DYNAMIC(B-top) setting2=[value2]"]</assert>
+            <assert>/out/*[10][self::d][. = "DYNAMIC(B-1) setting1=[value1]"]</assert>
+            <assert>/out/*[11][self::d][. = "DYNAMIC(B-2) setting2=[value2]"]</assert>
+            <assert>/out/*[12][self::e][. = "DYNAMIC(C) count=2"]</assert>
+            <assert>/out/*[13][self::f][. = "DYNAMIC(C-for) setting1=[value1]"]</assert>
+            <assert>/out/*[14][self::f][. = "DYNAMIC(C-for) setting2=[value2]"]</assert>
+            <assert>/out/*[15][self::g][. = "DYNAMIC(C-top) setting1=[value1]"]</assert>
+            <assert>/out/*[16][self::g][. = "DYNAMIC(C-top) setting1=[value2]"]</assert>
+            <assert>/out/*[17][self::h][. = "DYNAMIC(D) setting1=[value1]"]</assert>
+            <assert>/out/*[18][self::h][. = "DYNAMIC(D) setting1=[value2]"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-003">
+      <description>Test xsl:evaluate within a predicate. Originally a bug in Saxon 7.8. Test was formerly saxon056</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="evaluate-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><td>SVC board vhdl code consolidation</td><td>IOgen template incorporation</td></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-004">
+      <description>A more complex test of xsl:evaluate with multiple variables. Test was formerly saxon076</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-10" change="xsl:evaluate occured in xslt3.0 spec, set stylesheet @version to 3.0"/>
+      <test>
+         <stylesheet file="evaluate-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out id="c"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-005">
+      <description>Test xsl:evaluate with local range variables. Test was formerly saxon082.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="evaluate-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1 1 2 2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-006">
+      <description>Test availability of functions within xsl:evaluate. Test was formerly saxon083.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-09-14" change="Bug#26796: Remove redundant Java namespace, fix function call"/>
+      <modified by="Michael Kay" on="2017-01-13" change="Bug 30044 - can't call private functions"/>
+      <test>
+         <stylesheet file="evaluate-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>true</a><a>ab</a><a>1</a><a>3</a><a>25</a><a>1728</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-007">
+      <description>test current() occurring within xsl:evaluate. Now allowed</description>
+      <created by="Michael Kay" on="2012-11-07"/>      
+      <modified by="Michael Kay" on="2013-06-19" change="remove unnecessary Saxon namespace"/>
+      <modified by="Abel Braaksma" on="2014-09-14" change="Bug#26796: Remove redundant Java namespace"/>
+      <modified by="Abel Braaksma" on="2014-09-15" change="Bug#26800: Use of fn:current is not allowed in xsl:evaluate, fixed to catch the error"/>
+      <modified by="Michael Kay" on="2017-01-14" change="Changed expected error code from XPST0017 to XTDE3160"/>
+      <test>
+         <stylesheet file="evaluate-007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3160"/>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-008">
+      <description>test call on polymorphic extension function occurring within xsl:evaluate. Bug 2859861</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2012-12-05" change="fix bug 23203"/>
+      <modified by="Abel Braaksma" on="2014-09-14" change="Bug#26796: make test somewhat meaningful when ext. function is not available, by using xsl:evaluate to the equiv. function"/>
+      <test>
+         <stylesheet file="evaluate-008.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Result xmlns:Math="java:java.lang.Math">1</Result>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-009">
+      <description>Test that imported schema types are available with schema-aware=yes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Result><value>true</value></Result>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-010">
+      <description>Test designed to exercise any caching done by the implementation</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-09-15" change="Bug#26796, avoiding confusion on the saxon namespace"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-010.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Result><out>http://www.w3.org/?0</out><out>http://example.com/#1</out
+            ><out>http://www.w3.org/?2</out><out>http://example.com/?3</out><out>http://www.w3.org/?4</out
+            ><out>http://example.com/?0</out><out>http://www.w3.org/?1</out><out>http://example.com/?2</out
+            ><out>http://www.w3.org/#3</out><out>http://example.com/?4</out></Result>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-011">
+      <description>test format-number() occurring within xsl:evaluate. Not allowed (decimal format not declared)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-10" change="xsl:evaluate occured in xslt3.0 spec, set stylesheet @version to 3.0"/>
+      <test>
+         <stylesheet file="evaluate-011.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FODF1280"/>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-012">
+      <description>Test that imported schema types are not available with schema-aware=no</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-01-14" change="Changed expected error code from XPST0051 to XTDE3160"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-012.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3160"/>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-013">
+      <description>Test that imported schema types are available with schema-aware absent</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-01-14" change="Changed expected error code from XPST0051 to XTDE3160"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-013.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3160"/>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-014">
+      <description>Test error if incorrect effective value for schema-aware</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-014.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE0030"/>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-015">
+      <description>
+         Complex test of xsl:evaluate. Includes a test where the expression to be evaluated itself calls xsl:evaluate, and inherits the context. 
+         Test was formerly saxon013</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-09-15" change="Bug#26796, removed dependency on saxon:evaluate-node, by rewriting it as a stylesheet function with similar semantics"/>
+      <modified by="Michael Kay" on="2014-11-13" change="Added exclude-result-prefixes so the results now match the expected"/>
+      <modified by="Michael Kay" on="2017-01-14" change="Make eval:node public so calls from xsl:evaluate are allowed"/>
+      <environment ref="eval003"/>
+      <test>
+         <stylesheet file="evaluate-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ans>4</ans><ans>1</ans><ans>eval003.xml</ans><ans>eval003.xml</ans><ans>17</ans><ans>4</ans><ans>1 4 9</ans></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-016">
+      <description>Basic test of xsl:evaluate. Test was formerly saxon014</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-10" change="xsl:evaluate occured in xslt3.0 spec, set stylesheet @version to 3.0"/>
+      <environment ref="eval004"/>
+      <test>
+         <stylesheet file="evaluate-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><city name="Salzburg" country="Austria"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-017">
+      <description>Test of xsl:evaluate calling an external Java function. Test was formerly saxon037</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-09-14" change="Bug#26796: fixed incorrect dependency on saxon namespace in xsl:otherwise"/>
+      <modified by="Michael Kay" on="2014-11-13" change="Added exclude-result-prefixes so the results now match the expected"/>
+      <environment ref="eval005"/>
+     <test>
+         <stylesheet file="evaluate-017.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>OK</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-018">
+      <description>Test xsl:evaluate with variables. Test was formerly saxon070</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-10" change="xsl:evaluate occured in xslt3.0 spec, set stylesheet @version to 3.0"/>
+      <environment ref="eval007"/>
+      <test>
+         <stylesheet file="evaluate-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>13</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-018a">
+      <description>Test xsl:evaluate with variables specified using @with-params.</description>
+      <created by="Michael Kay" on="2015-03-30"/>
+      <environment ref="eval007"/>
+      <test>
+         <stylesheet file="evaluate-018a.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>13</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-018b">
+      <description>Test xsl:evaluate with variables specified using @with-params+child xsl:with-param.</description>
+      <created by="Michael Kay" on="2015-03-30"/>
+      <environment ref="eval007"/>
+      <test>
+         <stylesheet file="evaluate-018b.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>13</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-018c">
+      <description>Test xsl:evaluate with variables specified duplicated on with-params attribute and xsl:with-param child.</description>
+      <created by="Michael Kay" on="2015-03-30"/>
+      <modified by="Michael Kay" on="2015-05-07" change="corrected result"/>
+      <environment ref="eval007"/>
+      <test>
+         <stylesheet file="evaluate-018c.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>49</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-018d">
+      <description>Test xsl:evaluate with variables not matching the type required by xsl:with-param, detected dynamically.</description>
+      <created by="Michael Kay" on="2018-11-19"/>
+      <modified by="Michael Kay" on="2022-12-15" change="force the type error to be detected by not having static and dynamic
+                                                         parameters with the same name"/>
+      <environment ref="eval007"/>
+      <test>
+         <stylesheet file="evaluate-018d.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XPTY0004"/>
+            <error code="XTTE0590"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-019">
+      <description>test that xsl:evaluate doesn't use the default namespace (bug in 8.7 and previous releases) Test was formerly saxon096</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="eval011"/>
+      <test>
+         <stylesheet file="evaluate-019.xsl"/>
+      </test>
+      <result>
+         <all-of xmlns:h="http://www.w3.org/1999/xhtml">
+            <assert>/h:html/h:body/h:p[1] = "normal xpath/xslt : Saxon is great"</assert>
+            <assert>/h:html/h:body/h:p[2] = "evaluate : Saxon is great"</assert>
+            <assert>/h:html/h:body/h:p[3] = "evaluate without namespaces : Saxon is great"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-020">
+      <description>test that xsl:evaluate-node() does use the default namespace from the source document Test was formerly saxon097</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-10" change="xsl:evaluate occured in xslt3.0 spec, set stylesheet @version to 3.0"/>
+      <environment ref="eval012"/>
+      <test>
+         <stylesheet file="evaluate-020.xsl"/>
+      </test>
+      <result>
+         <assert>//*:p = "evaluate-node : Saxon is great"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-021">
+      <description>test that xsl:evaluate uses the xpath-default-namespace. Test was formerly saxon098</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="eval012"/>
+      <test>
+         <stylesheet file="evaluate-021.xsl"/>
+      </test>
+      <result>
+         <assert>//*:p = "evaluate : Saxon is great"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-022">
+      <description>test type error occurring within xsl:evaluate. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-10" change="xsl:evaluate occured in xslt3.0 spec, set stylesheet @version to 3.0"/>
+      <modified by="Abel Braaksma" on="2014-09-14" change="Bug#26796: Remove redundant Java namespace, fix ext. function call to use one from the standard math namespace"/>
+      <modified by="Michael Kay" on="2017-02-21" change="Make function public; drop obsolete error code XTTE0790"/>
+      <environment ref="eval012"/>
+      <test>
+         <stylesheet file="evaluate-022.xsl"/>
+      </test>
+      <result>
+         <error code="XPTY0004"/>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-023">
+      <description>test type error occurring on result of xsl:evaluate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-09-15" change="Bug#26801: fixing the error code (currently allowing both XPTY0004 and XTTE0780, but I think the former should be removed)"/>
+      <!-- MHK 2019-12-09: I can't see any justification for XTTE0780: that is specific to xsl:function -->
+      <environment ref="eval012"/>
+      <test>
+         <stylesheet file="evaluate-023.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XPTY0004"/>
+            <error code="XTTE0780"/>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-024">
+      <description>xsl:evaluate fails with absent context item</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2014-09-15" change="Removed redundant, unused code"/>
+      <environment ref="eval012"/>
+      <test>
+         <stylesheet file="evaluate-024.xsl"/>
+      </test>
+      <result>
+         <error code="XPDY0002"/>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-025">
+      <description>xsl:evaluate fails with absent context item</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-10" change="xsl:evaluate occured in xslt3.0 spec, set stylesheet @version to 3.0"/>
+      <modified by="Abel Braaksma" on="2014-09-15" change="Removed redundant, unused code"/>
+      <environment ref="eval012"/>
+      <test>
+         <stylesheet file="evaluate-025.xsl"/>
+      </test>
+      <result>
+         <error code="XPDY0002"/>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-025a">
+      <description>xsl:evaluate fails with dynamically absent context item</description>
+      <created by="Michael Kay" on="2023-11-10"/>
+      <environment ref="eval012"/>
+      <test>
+         <stylesheet file="evaluate-025a.xsl"/>
+      </test>
+      <result>
+         <error code="XPDY0002"/>
+      </result>
+   </test-case>
+   
+
+   <test-case name="evaluate-026">
+      <description>xsl:evaluate fails with context item as sequence of items</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-10" change="xsl:evaluate occured in xslt3.0 spec, set stylesheet @version to 3.0"/>
+      <modified by="Abel Braaksma" on="2014-09-15" change="Removed redundant, unused code"/>
+      <modified by="Abel Braaksma" on="2014-09-15" change="Bug#26801: fixing the error code, should be XTTE3210 instead of XPTY0004"/>
+      <environment ref="eval012"/>
+      <test>
+         <stylesheet file="evaluate-026.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE3210"/>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-027">
+      <description>Test to supply a namespace context to xsl:evaluate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2013-12-10" change="xsl:evaluate occured in xslt3.0 spec, set stylesheet @version to 3.0"/>
+      <modified by="Abel Braaksma" on="2014-09-15" change="Bug#26796: Remove redundant Java and Saxon namespace"/>
+      <environment ref="eval014"/>
+      <test>
+         <stylesheet file="evaluate-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns="http://www.w3.org/1999/xhtml">42</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-028">
+      <description>Test xsl:evaluate in predicate. Formerly saxon041.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="eval021"/>
+      <test>
+         <stylesheet file="evaluate-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><gt0>true</gt0><gt15>true</gt15><gt1500>false</gt1500></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-029">
+      <description>Test xsl:evaluate in predicate. Formerly saxon042.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="eval021"/>
+      <test>
+         <stylesheet file="evaluate-029.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><gt0>true</gt0><gt15>false</gt15><gt1500>false</gt1500></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="evaluate-030">
+      <description>Test use of base-uri attribute of xsl:evaluate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="eval021"/>
+      <test>
+         <stylesheet file="evaluate-030.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://www.w3.org/base</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-031">
+      <description>Test use of XPath 3.0 constructs within xsl:evaluate</description>
+      <created by="Michael Kay" on="2013-02-25"/>
+      <environment ref="eval021"/>
+      <test>
+         <stylesheet file="evaluate-031.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '9'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-032">
+      <description>Test use of schema-aware="yes"</description>
+      <created by="Michael Kay" on="2013-04-23"/>
+      <modified by="Michael Kay" on="2013-06-19" change="avoid schema clash with other tests"/>
+      <modified by="Abel Braaksma" on="2014-09-14" change="made test specific for schema-aware processors, per bug#26793"/>
+      <dependencies>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-032.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-033">
+      <description>Test use of schema-aware="no"</description>
+      <created by="Michael Kay" on="2013-04-23"/>
+      <modified by="Michael Kay" on="2013-06-19" change="avoid schema clash with other tests"/>
+      <modified by="Abel Braaksma" on="2014-09-14" change="made test specific for schema-aware processors, per bug#26793"/>
+      <dependencies>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-033.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'false'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-034">
+      <description>Test use of schema-aware="true"</description>
+      <created by="Debbie Lockett" on="2014-08-08"/>
+      <modified by="Abel Braaksma" on="2014-09-14" change="made test specific for schema-aware processors, per bug#26793"/>
+      <dependencies>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-034.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-035">
+      <description>Test use of schema-aware=" false "</description>
+      <created by="Debbie Lockett" on="2014-08-08"/>
+      <modified by="Abel Braaksma" on="2014-09-14" change="made test specific for schema-aware processors, per bug#26793"/>
+      <dependencies>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-035.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'false'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-036">
+      <description>Test use of schema-aware="1"</description>
+      <created by="Debbie Lockett" on="2014-08-08"/>
+      <modified by="Abel Braaksma" on="2014-09-14" change="made test specific for schema-aware processors, per bug#26793"/>
+      <dependencies>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-036.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-037">
+      <description>Test use of schema-aware="0"</description>
+      <created by="Debbie Lockett" on="2014-08-08"/>
+      <modified by="Abel Braaksma" on="2014-09-14" change="made test specific for schema-aware processors, per bug#26793"/>
+      <dependencies>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-037.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'false'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-038">
+      <description>Test use of schema-aware="TRUE" (not allowed)</description>
+      <created by="Debbie Lockett" on="2014-08-08"/>
+      <modified by="Abel Braaksma" on="2014-09-14" change="made test specific for schema-aware processors, per bug#26793"/>
+      <dependencies>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-038.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-039">
+      <description>Test designed to exercise any caching done by the implementation, uses schema-aware AVT attributes which evaluate to "true" and "false"</description>
+      <created by="Debbie Lockett" on="2014-08-08"/>
+      <modified by="Abel Braaksma" on="2014-09-14" change="made test specific for schema-aware processors, per bug#26793"/>
+      <modified by="Abel Braaksma" on="2014-09-15" change="Bug#26796, avoiding confusion on the saxon namespace"/>
+      <dependencies>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-039.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Result><out>http://www.w3.org/?0</out><out>http://example.com/#1</out
+            ><out>http://www.w3.org/?2</out><out>http://example.com/?3</out><out>http://www.w3.org/?4</out
+            ><out>http://example.com/?0</out><out>http://www.w3.org/?1</out><out>http://example.com/?2</out
+            ><out>http://www.w3.org/#3</out><out>http://example.com/?4</out></Result>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-040">
+      <description>Same as evaluate-039 but using @with-params</description>
+      <created by="Michael Kay" on="2015-03-30"/>
+      <dependencies>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-040.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Result><out>http://www.w3.org/?0</out><out>http://example.com/#1</out
+            ><out>http://www.w3.org/?2</out><out>http://example.com/?3</out><out>http://www.w3.org/?4</out
+            ><out>http://example.com/?0</out><out>http://www.w3.org/?1</out><out>http://example.com/?2</out
+            ><out>http://www.w3.org/#3</out><out>http://example.com/?4</out></Result>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-041">
+      <description>Param names in @with-params change on subsequent call</description>
+      <created by="Michael Kay" on="2015-05-07"/>
+      <test>
+         <stylesheet file="evaluate-041.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>every $o in /Result/out satisfies $o eq "21"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-042">
+      <description>Param names in @with-params change on subsequent call, leading to "undeclared variable" error</description>
+      <created by="Michael Kay" on="2015-05-07"/>
+      <test>
+         <stylesheet file="evaluate-042.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPST0008"/>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-043">
+      <description>Error: parameters in map should use QName keys, not strings. See bug 29351.</description>
+      <created by="Michael Kay" on="2015-12-22"/>
+      <test>
+         <stylesheet file="evaluate-043.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE3165"/>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-044">
+      <description>Call on stylesheet function within xsl:evaluate that needs type checking</description>
+      <created by="Michael Kay after John Lumley" on="2016-08-14"/>
+      <modified by="Michael Kay" on="2017-01-14" change="Make fox:a public so calls from xsl:evaluate are allowed"/>
+      <test>
+         <stylesheet file="evaluate-044.xsl"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/out = 'string'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-045">
+      <description>Call on stylesheet function within xsl:evaluate fails because function is private</description>
+      <created by="Michael Kay" on="2017-01-13"/>
+      <modified by="Michael Kay" on="2017-02-21" change="Correct name of initial template"/>
+      <test>
+         <stylesheet file="evaluate-045.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3160"/>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-046">
+      <description>Use xsl:evaluate, acumulators, and streaming, in a simple simulation of the XSLT preprocessing phrase</description>
+      <created by="Michael Kay" on="2017-01-14"/>
+      <environment>
+         <source role="." file="evaluate-046.xml" streaming="true"/>
+      </environment>
+      <dependencies>
+         <feature value="streaming" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-046.xsl"/>        
+      </test>
+      <result>
+         <all-of>
+            <assert>//*:variable[@name='parity'][@static='yes'][@select='17']</assert>
+            <assert>//*:variable[@name='streamable'][@static='yes'][@select='$parity gt 12']</assert>
+            <assert>//*:function/*:sequence[@select='$x - 1']</assert>
+            <assert>not(//*:function/*:sequence[@select='$x + 1'])</assert>
+            <assert>//*:mode[@streamable='true']</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-047">
+      <description>A call to document() is not allowed</description>
+      <created by="Michael Kay" on="2017-01-16"/>
+      <test>
+         <stylesheet file="evaluate-047.xsl"/>        
+      </test>
+      <result>
+         <error code="XTDE3160"/>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-048">
+      <description>A dynamic call to fn:document() may or may not succeed (spec bug 30049)</description>
+      <created by="Michael Kay" on="2017-08-17"/>
+      <modified by="Michael Kay" on="2023-03-06" change="change the URL, test was failing for the wrong reason"/>
+      <dependencies>
+         <feature value="dynamic_evaluation"/>
+         <feature value="higher_order_functions"/>
+         <feature value="XPath_3.1"/>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="evaluate-048.xsl"/>        
+      </test>
+      <result>
+         <any-of>
+            <assert>/out/*:html</assert>
+            <error code="XTDE3160"/>
+         </any-of>       
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-049">
+      <description>Default collation for xsl:evaluate</description>
+      <created by="Michael Kay" on="2018-09-07"/>
+      <test>
+         <stylesheet file="evaluate-049.xsl"/>        
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-050">
+      <description>Inferred context item type for xsl:evaluate</description>
+      <created by="Michael Kay" on="2022-08-02"/>
+      <test>
+         <stylesheet file="evaluate-050.xsl"/>        
+      </test>
+      <result>
+         <assert>/out = 'false'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-051">
+      <description>xsl:evaluate applied to an inline function (Saxon bug 6003)</description>
+      <created by="Michael Kay" on="2023-05-03"/>
+      <test>
+         <stylesheet file="evaluate-051.xsl"/>        
+      </test>
+      <result>
+         <assert>/out/in = '60'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="evaluate-052">
+      <description>xsl:evaluate applied to an inline function (Saxon bug 6004)</description>
+      <created by="Michael Kay" on="2023-05-03"/>
+      <environment>
+         <source role="." file="evaluate-052.xml"/>
+      </environment>
+      <test>
+         <stylesheet file="evaluate-052.xsl"/>        
+      </test>
+      <result>
+         <assert>/root/result = 'foo 1'</assert>
+      </result>
+   </test-case>
+</test-set>

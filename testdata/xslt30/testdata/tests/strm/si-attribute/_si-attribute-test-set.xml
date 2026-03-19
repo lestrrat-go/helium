@@ -1,0 +1,566 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-attribute">
+   <description>xsl:attribute instruction with streaming</description>
+   
+   <environment name="si-attribute-A">
+     <stylesheet file="si-attribute-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="si-attribute-003">
+      <description>Basic Test of xsl:stream instruction with xsl:attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-003"/>
+      </test>
+      <result>
+         <assert>/out/@a = '4.95 6.58 4.95 4.95 16.47 16.47'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-attribute-004">
+      <description>Test of xsl:stream instruction with xsl:attribute, filtered with a motionless predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-004"/>
+      </test>
+      <result>
+         <assert>/out/@a = '6.58 4.95 4.95 16.47'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-attribute-005">
+      <description>Test of xsl:stream instruction with xsl:attribute, filtered with a positional predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-005"/>
+      </test>
+      <result>
+         <assert>/out/@a = '4.95 6.58 4.95'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-attribute-006">
+      <description>Test of xsl:stream instruction with xsl:attribute, filtered with a positional predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-006"/>
+      </test>
+      <result>
+         <assert>/out/@a = '4.95 6.58 4.95'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="si-attribute-007">
+      <description>Test of xsl:stream instruction with xsl:attribute, filtered with a positional predicate</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-007"/>
+      </test>
+      <result>
+         <assert>/out/@a = '4.95 6.58 4.95'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-008">
+      <description>Test of xsl:stream instruction with xsl:attribute, filtered with data() to make the predicates motionless</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-008"/>
+      </test>
+      <result>
+         <assert>/out/@a = '352 430 480 528 346 384'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-009">
+      <description>Test of xsl:stream instruction with xsl:attribute, filtered with text() to make the predicates motionless</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-009"/>
+      </test>
+      <result>
+         <assert>/out/@a = '352430480528346384'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-010">
+      <description>Test of xsl:stream instruction with xsl:attribute, filtered with number() to make the predicates motionless</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-010"/>
+      </test>
+      <result>
+         <assert>/out/@a = '352 430 480 528 346 384'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-011">
+      <description>xsl:attribute selecting nothing, returning the $zero case</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-011"/>
+      </test>
+      <result>
+         <assert>/out/@a = ''</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-012">
+      <description>xsl:attribute selecting both streamed nodes and literals</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-012"/>
+      </test>
+      <result>
+         <assert>/out/@a = '352 430 480 528 346 384 31 32'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-013">
+      <description>xsl:attribute selecting both streamed nodes and literals while also filtering</description>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-013"/>
+      </test>
+      <result>
+         <assert>/out/@a = '430 480 528 346 384 31 32'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-015">
+      <description>Test of xsl:stream instruction with xsl:attribute of a computed value</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-015"/>
+      </test>
+      <result>
+         <assert>/out/@a = '52.041 40.56 22.848 36.504 1417.5 35.1'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-016">
+      <description>Test of xsl:stream instruction with xsl:attribute of a computed value</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-016"/>
+      </test>
+      <result>
+         <assert>/out/@a = '0.02 6.12 30.22 9.22'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-017">
+      <description>Test of xsl:stream instruction with xsl:attribute using copy-of to make it streamable</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-017"/>
+      </test>
+      <result>
+         <assert>/out/@a = '352 430 480 528 346 384'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-018">
+      <description>Test of xsl:stream instruction with xsl:attribute over attribute values</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-018"/>
+      </test>
+      <result>
+         <assert>/out/@a = '0.01 3.06 15.11 4.61'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-019">
+      <description>Test of xsl:stream instruction with xsl:attribute over attribute values, filtered</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-019"/>
+      </test>
+      <result>
+         <assert>/out/@a = ''</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-020">
+      <description>xsl:attribute over attribute values, computed</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-020"/>
+      </test>
+      <result>
+         <assert>starts-with(/out/@a, '0.01 1.28 20.46 2.78 4.21 9.85 4.74 1.46 5.62 17.42 6.35 13.29 16.6 1.33 3.81 0.46 13.71 3.76 2.42 2.52 0.07 15.64')</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-021">
+      <description>xsl:attribute over values that depend on a condition</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-021"/>
+      </test>
+      <result>
+         <assert>starts-with(/out/@a, '0.01 3.06 15.11 4.61 3.81 6.4 10.52 -1.84 15.83 -6.68 1.28 3.29 -2.37 6.21 -3.64 22.39 11.51 4.86 13.44 20.81 20.46 8.45 16.55 18.56 19.42 12.89')</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-022">
+      <description>xsl:attribute with a loop used to compute each value</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-022"/>
+      </test>
+      <result>
+         <assert>/out/@a = '8.3 5.7 1.1 1 5.2 7.8 6.8 4.2 0.8 7.8 5.2 0.9 22.5 18 3.5 7.8 5 0.9'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-023">
+      <description>xsl:attribute over a crawling expression</description>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-023"/>
+      </test>
+      <result>
+         <assert>/out/@a = '8.3 5.7 1.1 1 5.2 7.8 6.8 4.2 0.8 7.8 5.2 0.9 22.5 18 3.5 7.8 5 0.9'</assert>
+      </result>
+   </test-case>
+   
+      <test-case name="si-attribute-040">
+      <description>xsl:attribute over an empty grounded expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-040"/>
+      </test>
+      <result>
+         <assert>/out/@a = ''</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-041">
+      <description>xsl:attribute over an empty striding expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-041"/>
+      </test>
+      <result>
+         <assert>/out/@a = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-042">
+      <description>xsl:attribute over an empty crawling expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-042"/>
+      </test>
+      <result>
+         <assert>/out/@a = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-043">
+      <description>xsl:attribute over an empty grounded expression</description>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-043"/>
+      </test>
+      <result>
+         <assert>/out/@a = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-044">
+      <description>xsl:attribute; second operand is consuming</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-044"/>
+      </test>
+      <result>
+         <assert>/out/@a = "1J2J3J4J5J6J7J8J9J10"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-045">
+      <description>xsl:attribute; second operand is consuming, but unused</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-045"/>
+      </test>
+      <result>
+         <assert>/out/@a = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-046">
+      <description>xsl:attribute; complex content</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-046"/>
+      </test>
+      <result>
+         <assert>/out/@a = "[4.95][6.58][4.95][4.95][16.47][16.47]"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-047">
+      <description>xsl:attribute; name is consuming</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-047"/>
+      </test>
+      <result>
+         <assert>/out/@Jane_Austen = 'value'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-048">
+      <description>xsl:attribute; namespace is consuming</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-048"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/@*:a = "value"</assert>
+           <assert>namespace-uri(/out/@*:a) = "http://jane_austen.com/"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-057">
+      <description>xsl:attribute; content cannot include function items; error</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-057"/>
+      </test>
+      <result>
+         <error code="FOTY0013"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-058">
+      <description>xsl:attribute; content cannot include function items; error - caught</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-058"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-059">
+      <description>xsl:attribute; invalid attribute name; error</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-059"/>
+      </test>
+      <result>
+         <error code="XTDE0850"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-060">
+      <description>xsl:attribute; invalid attribute name; error; caught</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-060"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-061">
+      <description>xsl:attribute; invalid attribute name xmlns; error</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-061"/>
+      </test>
+      <result>
+         <error code="XTDE0855"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-062">
+      <description>xsl:attribute; invalid attribute name xmlns; error; caught</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-062"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-063">
+      <description>xsl:attribute; prefix not declared; error</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-063"/>
+      </test>
+      <result>
+         <error code="XTDE0860"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-064">
+      <description>xsl:attribute; prefix not declared; error; caught</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-064"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-065">
+      <description>xsl:attribute; disallowed namespace; error</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-065"/>
+      </test>
+      <result>
+         <error code="XTDE0865"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-066">
+      <description>xsl:attribute; disallowed namespace; error; caught</description>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-066"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-070">
+      <description>xsl:attribute; striding element nodes</description>
+      <created by="Michael Kay" on="2014-08-11"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-070"/>
+      </test>
+      <result>
+         <assert>/out/@a = "4.95|6.58|4.95|4.95|16.47|16.47"</assert>
+      </result>
+   </test-case>   
+   
+   <test-case name="si-attribute-071">
+      <description>xsl:attribute; crawling element nodes</description>
+      <created by="Michael Kay" on="2014-08-11"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-071"/>
+      </test>
+      <result>
+         <assert>/out/@a = "4.95|6.58|4.95|4.95|16.47|16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-072">
+      <description>xsl:attribute; crawling nested element nodes</description>
+      <created by="Michael Kay" on="2014-08-11"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-072"/>
+      </test>
+      <result>
+         <assert>/out/@a = "12345|1|2|3|4|5"</assert>
+      </result>
+   </test-case>  
+   
+   <test-case name="si-attribute-073">
+      <description>xsl:attribute; zero-length text nodes</description>
+      <created by="Michael Kay" on="2014-08-11"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-073"/>
+      </test>
+      <result>
+         <assert>/out/@a = "12345|1|2|3|4|5"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-attribute-074">
+      <description>xsl:attribute; adjacent text nodes</description>
+      <created by="Michael Kay" on="2014-08-11"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-074"/>
+      </test>
+      <result>
+         <assert>/out/@a = "~12345~"</assert>
+      </result>
+   </test-case>  
+   
+   <test-case name="si-attribute-075">
+      <description>xsl:attribute; mix in atomic values</description>
+      <created by="Michael Kay" on="2014-08-11"/>
+      <environment ref="si-attribute-A"/>
+      <test>
+         <initial-template name="s-075"/>
+      </test>
+      <result>
+         <assert>/out/@a = "1|2|3|12345|1|2|3"</assert>
+      </result>
+   </test-case>   
+   
+   
+   
+   
+   
+
+
+
+</test-set>

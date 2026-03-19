@@ -1,0 +1,560 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="si-iterate">
+  <description>xsl:iterate with streaming</description>
+
+  <environment name="si-iterate-A">
+    <stylesheet file="si-iterate-A.xsl"/>
+  </environment>
+
+  <environment name="citygml">
+    <source role="." file="../docs/citygml.xml" streaming="true"/>
+  </environment>
+
+  <environment name="ot">
+    <source role="." file="../docs/ot.xml" streaming="true"/>
+  </environment>
+
+  <dependencies>
+    <spec value="XSLT30+"/>
+    <feature value="streaming"/>
+  </dependencies>
+
+
+
+  <test-case name="si-iterate-001">
+    <description>Use xsl:iterate within xsl:stream</description>
+    <created by="Michael Kay" on="2012-12-04"/>
+    <environment ref="si-iterate-A"/>
+    <test>
+      <initial-template name="fe-001"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><transaction value="-15.00" date="2006-02-15"
+            /><transaction value="-5.00" date="2006-02-20"
+            /><transaction value="-2.33" date="2006-02-23"
+            /><transaction value="-248.05" date="2006-02-24"/></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-002">
+    <description>Use xsl:iterate within xsl:stream, with position() numbering</description>
+    <created by="Michael Kay" on="2012-12-04"/>
+    <environment ref="si-iterate-A"/>
+    <test>
+      <initial-template name="fe-002"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><transaction nr="1" value="-15.00" date="2006-02-15"
+            /><transaction nr="2" value="-5.00" date="2006-02-20"
+            /><transaction nr="3" value="-2.33" date="2006-02-23"
+            /><transaction nr="4" value="-248.05" date="2006-02-24"/></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-003">
+    <description>Use xsl:iterate within xsl:stream, with positional selection</description>
+    <created by="Michael Kay" on="2012-12-04"/>
+    <environment ref="si-iterate-A"/>
+    <test>
+      <initial-template name="fe-003"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><transaction nr="1" value="13.24" date="2006-02-13"
+            /><transaction nr="2" value="8.12" date="2006-02-13"
+            /><transaction nr="3" value="-15.00" date="2006-02-15"
+            /><transaction nr="4" value="6.00" date="2006-02-16"/></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-004">
+    <description>Use xsl:iterate over atomized nodes</description>
+    <created by="Michael Kay" on="2013-12-04"/>
+    <environment ref="si-iterate-A"/>
+    <test>
+      <initial-template name="fe-004"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><transaction nr="1">0.50</transaction><transaction nr="2">2.33</transaction><transaction nr="3">4.44</transaction></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-005">
+    <description>Crawling selection, inspection body</description>
+    <created by="Michael Kay" on="2013-12-04"/>
+    <modified by="Michael Kay" on="2015-08-12" change="fixed whitespace in expected result"/>
+    <environment ref="si-iterate-A"/>
+    <test>
+      <initial-template name="fe-005"/>
+    </test>
+    <result>
+      <assert>/out = "1:BOOKLIST 2:BOOKS 3:ITEM 4:TITLE 5:AUTHOR 6:PUBLISHER "</assert>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-006">
+    <description>Crawling selection, inspection body</description>
+    <created by="Michael Kay" on="2013-12-04"/>
+    <environment ref="si-iterate-A"/>
+    <test>
+      <initial-template name="fe-006"/>
+    </test>
+    <result>
+      <assert>/out = "1 2 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 3 4 4 4 4 4 4 4 4 4 4 4 2 3 3 3"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-008">
+    <description>Use parent axis within xsl:iterate</description>
+    <created by="Michael Kay" on="2013-11-28"/>
+    <environment ref="si-iterate-A"/>
+    <test>
+      <initial-template name="fe-008"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>account account account account</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-009">
+    <description>Use ancestor axis within xsl:iterate</description>
+    <created by="Michael Kay" on="2013-11-28"/>
+    <environment ref="si-iterate-A"/>
+    <test>
+      <initial-template name="fe-009"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out>account account account account</out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-010">
+    <description>Use subsequence() within xsl:iterate/@select</description>
+    <created by="Michael Kay" on="2013-11-28"/>
+    <environment ref="si-iterate-A"/>
+    <test>
+      <initial-template name="fe-010"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>count(/out/transaction) = 4</assert>
+        <assert>/out/transaction[1]/@value = "13.24"</assert>
+        <assert>/out/transaction[4]/@value = "6.00"</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-011">
+    <description>Select attribute nodes within xsl:iterate/@select.</description>
+    <created by="Michael Kay" on="2013-11-28"/>
+    <environment ref="si-iterate-A"/>
+    <test>
+      <initial-template name="fe-011"/>
+    </test>
+    <result>
+      <assert>/out = "13.24 8.12 6.00 0.50 2.33 4.44 8.99 16.00 5.60 4.32 6.78 12.20 12.00 13.99 14.20"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-012">
+    <description>Iterate over ancestors in xsl:iterate/@select; also tests outermost()</description>
+    <created by="Michael Kay" on="2013-11-28"/>
+    <environment ref="si-iterate-A"/>
+    <test>
+      <initial-template name="fe-012"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out xmlns="http://loan.shark.com/"><myroot/><ACERequest version="2.1"/><Deal/><Pool id="22"/><Loan/></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-013">
+    <description>Streaming xsl:iterate using xsl:break</description>
+    <created by="Michael Kay" on="2015-12-28"/>
+    <modified by="Michael Kay" on="2016-09-11"
+      change="add PI to end of document to check there is no early exit from parsing"/>
+    <environment>
+      <source role="." file="si-iterate-013.xml" streaming="true"/>
+    </environment>
+    <test>
+      <stylesheet file="si-iterate-013.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<root><header>...</header><item name="1">...</item><item name="2"
+            >...</item><item name="3">...</item><item name="4">...</item></root><?pi?>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-035">
+    <description>xsl:iterate instruction, streamed, binding parameter to a streamed node. See bug 30060.</description>
+    <created by="Michael Kay after Martin Honnen" on="2017-02-14"/>
+    <modified by="Michael Kay" on="2018-09-25" change="Simple typo fixed in the expected error code"/>
+    <test>
+      <stylesheet file="si-iterate-035.xsl"/>
+    </test>
+    <result>
+      <error code="XTSE3430"/>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-036">
+    <description>xsl:iterate instruction, streamed, binding parameter to copy of a streamed node. See bug 30060.</description>
+    <created by="Michael Kay after Martin Honnen" on="2017-02-14"/>
+    <test>
+      <stylesheet file="si-iterate-036.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/out/highest-paid-employees = "Employee a Employee c"</assert>
+        <assert>/out/lowest-paid-employees = "Employee b"</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-037">
+    <description>xsl:iterate instruction, building a histogram of the vocabulary used in the source document.</description>
+    <created by="Michael Kay" on="2017-06-12"/>
+    <environment ref="ot"/>
+    <dependencies>
+      <feature value="XPath_3.1"/>
+    </dependencies>
+    <test>
+      <stylesheet file="si-iterate-037.xsl"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>count(tokenize(p, '\s+')) = 202</assert>
+        <assert>ends-with(p, 'covfefe.')</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-094">
+    <description>Streaming xsl:iterate, with possibility of early exit. (From Martin Honnen)</description>
+    <created by="Michael Kay" on="2015-02-02"/>
+    <environment>
+      <source role="." streaming="true" file="si-iterate-094.xml"/>
+    </environment>
+    <test>
+      <stylesheet file="si-iterate-094.xsl"/>
+    </test>
+    <result early-exit-possible="true">
+      <all-of>
+        <assert-xml><![CDATA[<out><p>foo bar foobar</p><p>foobar baz foo</p></out>]]></assert-xml>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-095">
+    <description>within a streaming template, use xsl:iterate to process the subtree</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2014-05-08" change="conform to current streamability rules"/>
+    <test>
+      <stylesheet file="si-iterate-095.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>deep-equal(/out/loans/loan/number(@cumulativeValue),
+               (400000,750000,1150000,1500000,2100000,2600000,3400000,4150000,4350000,4525000))</assert>
+        <assert>deep-equal(/out/loans/loan/number(@value),
+               (400000,350000,400000,350000,600000,500000,800000,750000,200000,175000))</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-096">
+    <description>within a streaming template, use xsl:iterate and xsl:break to process the subtree</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2014-05-08" change="conform to current streamability rules"/>
+    <test>
+      <stylesheet file="si-iterate-096.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>deep-equal(/out/loans/loan/number(@cumulativeValue),
+               (400000,750000,1150000,1500000,2100000,2600000))</assert>
+        <assert>deep-equal(/out/loans/loan/number(@value),
+               (400000,350000,400000,350000,600000,500000))</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-097">
+    <description>within xsl:stream, use xsl:iterate and xsl:break to process the subtree</description>
+    <created by="Michael Kay" on="2013-12-17"/>
+    <modified by="Michael Kay" on="2014-05-08" change="conform to current streamability rules"/>
+    <test>
+      <stylesheet file="si-iterate-097.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result early-exit-possible="true">
+      <all-of>
+        <assert>deep-equal(/out/loans/loan/number(@cumulativeValue),
+               (400000,750000,1150000,1500000,2100000,2600000))</assert>
+        <assert>deep-equal(/out/loans/loan/number(@value),
+               (400000,350000,400000,350000,600000,500000))</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-098">
+    <description>within xsl:stream, use xsl:iterate over descendants</description>
+    <created by="Michael Kay" on="2014-02-08"/>
+    <modified by="Michael Kay" on="2014-05-08" change="conform to current streamability rules"/>
+    <modified by="Michael Kay" on="2018-01-12" change="fix whitespace issue in expected result"/>
+    <test>
+      <stylesheet file="si-iterate-098.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><n>Property</n><n>Property</n><n>Property</n><n>Property</n><n>Property</n></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-099">
+    <description>within xsl:stream, use xsl:iterate, with early exit. Saxon bug 2934</description>
+    <created by="Michael Kay after Martin Honnen" on="2017-02-05"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <test>
+      <stylesheet file="si-iterate-099.xsl"/>
+    </test>
+    <result early-exit-possible="true">
+      <assert>/out = "true"</assert>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-131">
+    <description>streaming xsl:iterate with a local variable</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2014-01-31" change="reorder xsl:on-completion, see bug 24179"/>
+    <modified by="Michael Kay" on="2014-05-08" change="conform to current streamability rules"/>
+    <environment ref="citygml"/>
+    <test>
+      <stylesheet file="si-iterate-131.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<result><polygons>2037</polygons><points>8148</points></result>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-132">
+    <description>streaming xsl:iterate with a reference to "." in the with-param</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2014-01-31" change="reorder xsl:on-completion, see bug 24179"/>
+    <modified by="Michael Kay" on="2014-05-08" change="conform to current streamability rules"/>
+    <environment ref="citygml"/>
+    <test>
+      <stylesheet file="si-iterate-132.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<result><polygons>2037</polygons><points>8148</points></result>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-133">
+    <description>streaming xsl:iterate with a downward navigation to child nodes</description>
+    <created by="Michael Kay" on="2012-11-07"/>
+    <modified by="Michael Kay" on="2014-01-31" change="reorder xsl:on-completion, see bug 24179"/>
+    <modified by="Michael Kay" on="2014-05-08" change="conform to current streamability rules"/>
+    <environment ref="citygml"/>
+    <test>
+      <stylesheet file="si-iterate-133.xsl"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<result><polygons>2849</polygons><points>4070</points></result>]]></assert-xml>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-134">
+    <description>streaming xsl:iterate with maps. From Saxon bug 2006.</description>
+    <created by="John Lumley" on="2014-08-05"/>
+    <modified by="Abel Braaksma" on="2014-10-21"
+      change="map:new no longer exists, renamed to map:merge"/>
+    <modified by="Michael Kay" on="2016-08-31"
+      change="Handling of duplicates by fn:merge() has changed"/>
+    <environment ref="citygml"/>
+    <test>
+      <stylesheet file="si-iterate-134.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/elements/e[@name="gml:pos"]/@count="4070"</assert>
+        <assert>/elements/e[@name="bldg:Building"]/@count="14"</assert>
+        <assert>/elements/e[@name="cityObjectMember"]/@count="15"</assert>
+        <assert>/elements/e[@name="app:TexCoordList"]/@count="295"</assert>
+        <assert>/elements/e[@name="bldg:boundedBy"]/@count="812"</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-135">
+    <description>streaming xsl:iterate with maps, sorting a grounded sequence. From Saxon bug 2006.</description>
+    <created by="John Lumley" on="2014-08-05"/>
+    <modified by="Abel Braaksma" on="2014-10-21"
+      change="map:new no longer exists, renamed to map:merge"/>
+    <modified by="Michael Kay" on="2016-08-31"
+      change="Handling of duplicates by fn:merge() has changed"/>
+    <environment ref="citygml"/>
+    <test>
+      <stylesheet file="si-iterate-135.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/elements/e[1][@name="CityModel" and @count="1"]</assert>
+        <assert>/elements/e[2][@name="app:Appearance" and @count="1"]</assert>
+        <assert>/elements/e[3][@name="app:GeoreferencedTexture" and @count="1"]</assert>
+        <assert>/elements/e[4][@name="app:ParameterizedTexture" and @count="295"]</assert>
+        <assert>/elements/e[5][@name="app:TexCoordList" and @count="295"]</assert>
+        <assert>/elements/e[6][@name="app:X3DMaterial" and @count="2"]</assert>
+        <assert>/elements/e[7][@name="app:appearanceMember" and @count="1"]</assert>
+        <assert>/elements/e[8][@name="app:borderColor" and @count="295"]</assert>
+        <assert>/elements/e[9][@name="app:diffuseColor" and @count="2"]</assert>
+        <assert>/elements/e[10][@name="app:imageURI" and @count="296"]</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-136">
+    <description>streaming xsl:iterate; example adapted from spec; lookahead to detect last item.</description>
+    <created by="Michael Kay" on="2015-10-25"/>
+    <test>
+      <stylesheet file="si-iterate-136.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/out/*[1][self::x][transaction/@value='13.24']</assert>
+        <assert>/out/*[2][self::x]</assert>
+        <assert>/out/*[3][self::x]</assert>
+        <assert>/out/*[4][self::x]</assert>
+        <assert>/out/*[last()][self::y][transaction/@value='14.20']</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-137">
+    <description>streaming xsl:iterate; two params; new value of the second depends on the old value of the first.</description>
+    <created by="Michael Kay" on="2016-12-20"/>
+    <test>
+      <stylesheet file="si-iterate-137.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>every $i in 1 to 12 satisfies deep-equal(/out/x[$i]/*, /out/z[$i+1]/*)</assert>
+        <assert>empty(/out/z[1]/*)</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-138">
+    <description>streaming xsl:iterate; two params; new value of the second depends on the old value of the first; and the first is consuming.</description>
+    <created by="Michael Kay" on="2016-12-20"/>
+    <test>
+      <stylesheet file="si-iterate-138.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <all-of>
+        <assert>/out/*[1][self::x][@one='1'][@two='0'][@value='']</assert>
+        <assert>/out/*[2][self::x][@one='2'][@two='1'][@value='']</assert>
+        <assert>/out/*[3][self::x][@one='3'][@two='2'][@value='']</assert>
+        <assert>/out/*[4][self::x][@one='4'][@two='3'][@value='']</assert>
+        <assert>/out/*[5][self::x][@one='5'][@two='4'][@value='6.00']</assert>
+        <assert>/out/*[6][self::x][@one='6'][@two='5'][@value='0.50']</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-139">
+    <description>streaming xsl:iterate over overlapping snapshots, with xsl:break</description>
+    <created by="Michael Kay after David Rudel" on="2017-09-05"/>
+    <modified by="Michael Kay" on="2020-03-23" change="add early-exit label"/>
+    <test>
+      <stylesheet file="si-iterate-139.xsl"/>
+    </test>
+    <result early-exit-possible="true">
+      <all-of>
+        <assert>every $i in 1 to 101 satisfies exists(/data/out[@c=$i])</assert>
+        <assert>empty(/data/out[@c &gt; 101])</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-140">
+    <description>streaming xsl:iterate, with xsl:break and early exit (Saxon bug #4493)</description>
+    <created by="Michael Kay after Martin Honnen" on="2020-03-23"/>
+    <environment>
+      <source role="." file="si-iterate-140.xml" streaming="true"/>
+    </environment>
+    <test>
+      <stylesheet file="si-iterate-140.xsl"/>
+    </test>
+    <result early-exit-possible="true">
+      <all-of>
+        <assert>count(/items/item) = 1</assert>
+        <assert>/items/item[@cat='bar'][value='item 6']</assert>
+      </all-of>
+    </result>
+  </test-case>
+
+
+  <test-case name="si-iterate-806">
+    <description>Use xsl:iterate within xsl:stream, //a/b is not guaranteed streamable in the spec, but streamable in Saxon</description>
+    <created by="Michael Kay" on="2012-12-04"/>
+    <modified by="Michael Kay" on="2014-05-08" change="conform to current streamability rules"/>
+    <test>
+      <stylesheet file="si-iterate-806.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <assert-xml><![CDATA[<out><title>Pride and Prejudice</title><title>Wuthering Heights</title
+            ><title>Tess of the d'Urbervilles</title><title>Jude the Obscure</title
+            ><title>The Big Over Easy</title><title>The Eyre Affair</title></out>]]></assert-xml>
+    </result>
+  </test-case>
+
+
+  <test-case name="si-iterate-904">
+    <description>Use xsl:iterate within xsl:stream, attempt multiple downward selections in a loop</description>
+    <created by="Michael Kay" on="2012-12-04"/>
+    <modified by="Michael Kay" on="2016-06-28" change="prevent the error being optimized away"/>
+    <test>
+      <stylesheet file="si-iterate-904.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XTSE3430"/>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-905">
+    <description>Use xsl:iterate within xsl:stream, attempt multiple downward selections in a loop</description>
+    <created by="Michael Kay" on="2012-12-04"/>
+    <test>
+      <stylesheet file="si-iterate-905.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XTSE3430"/>
+    </result>
+  </test-case>
+
+  <test-case name="si-iterate-907">
+    <description>Use xsl:iterate within xsl:stream. Uses xsl:sequence rather than xsl:copy-of, causing error.</description>
+    <created by="Michael Kay" on="2013-11-28"/>
+    <test>
+      <stylesheet file="si-iterate-907.xsl"/>
+      <initial-template name="main"/>
+    </test>
+    <result>
+      <error code="XTSE3430"/>
+    </result>
+  </test-case>
+
+
+</test-set>

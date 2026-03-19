@@ -1,0 +1,901 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sx-IfExpr">
+   <description>if() expression function with streaming</description>
+   
+   <environment name="sx-if-A">
+     <stylesheet file="sx-ifExpr-A.xsl"/>
+   </environment>
+   
+   <environment name="sx-if-B">
+     <stylesheet file="sx-ifExpr-B.xsl"/>
+   </environment>
+   
+   <environment name="sx-if-C">
+     <stylesheet file="sx-ifExpr-C.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sx-if-001">
+      <description>Streaming if() expression - grounded operand</description>
+      <keywords>choice-operand-group choices-motionless-motionless-consuming striding-then-grounded leading-lone-slash PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-002">
+      <description>Streaming if() expression - grounded operand</description>
+      <keywords>choice-operand-group choices-motionless-motionless-consuming leading-lone-slash striding-then-grounded fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-003">
+      <description>Streaming if() expression - grounded atomic operand</description>
+      <keywords>choice-operand-group choices-motionless-motionless-consuming striding-then-grounded leading-lone-slash fn:tokenize ContextItemExpr PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert>/out = "8.3 5.7 1.1 1.0 5.2 7.8 6.8 4.2 0.8 7.8 5.2 0.9 22.5 18.0 3.5 7.8 5.0 0.9"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-010">
+      <description>Streaming if() expression - striding operand, inspection usage</description>
+      <keywords>choice-operand-group choices-motionless-motionless-consuming striding leading-lone-slash PathExpr fn:count</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "6"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-011">
+      <description>Streaming if() expression - striding operand, absorption usage</description>
+      <keywords>choices-motionless-motionless-consuming striding leading-lone-slash PathExpr fn:sum choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "54.37"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-012">
+      <description>Streaming if() expression - striding operand, transmission usage</description>
+      <keywords>choices-motionless-motionless-consuming leading-lone-slash striding motionless-predicate fn:position PathExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>/out = "6.58 4.95 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-013">
+      <description>Streaming if() expression - striding operand, focus-setting usage</description>
+      <keywords>choices-motionless-motionless-consuming AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-014">
+      <description>Streaming if() expression - striding operand, focus-controlled usage</description>
+      <keywords>choices-motionless-motionless-consuming leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-015">
+      <description>Streaming if() expression - striding operand, focus-setting usage</description>
+      <keywords>choices-motionless-motionless-consuming leading-lone-slash striding PathExpr AdditiveExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47 "</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-016">
+      <description>Streaming if() expression - striding operand, focus-controlled usage</description>
+      <keywords>choices-motionless-motionless-consuming xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-017">
+      <description>Streaming if() expression - striding operand, focus-setting usage for inspection action</description>
+      <keywords>choices-motionless-motionless-consuming leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "true false true true true true false false true true true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-018">
+      <description>Streaming if() expression - striding operand, apply-templates usage</description>
+      <keywords>choices-motionless-motionless-consuming leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-020">
+      <description>Streaming if() expression - crawling operand, inspection usage</description>
+      <keywords>choices-motionless-motionless-consuming xsl:copy-of fn:count crawling PathExpr leading-double-slash choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "6"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-021">
+      <description>Streaming if() expression - crawling operand, absorption usage</description>
+      <keywords>choices-motionless-motionless-consuming leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "11"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-022">
+      <description>Streaming if() expression - crawling operand, transmission usage</description>
+      <keywords>choices-motionless-motionless-consuming striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-023">
+      <description>Streaming if() expression - crawling operand, focus-setting usage</description>
+      <keywords>choices-motionless-motionless-consuming leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-030">
+      <description>Streaming if() expression - climbing operand, inspection usage</description>
+      <keywords>choices-motionless-motionless-consuming striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST BOOKS ITEM"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-031">
+      <description>Streaming if() expression - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>choices-motionless-motionless-consuming leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST BOOKS ITEM ITEM ITEM ITEM ITEM ITEM"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-032">
+      <description>Streaming if() expression - climbing operand, absorption usage</description>
+      <keywords>choices-motionless-motionless-consuming climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-033">
+      <description>Streaming if() expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>choices-motionless-motionless-consuming climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-034">
+      <description>Streaming if() expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>choices-motionless-motionless-consuming climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-035">
+      <description>Streaming if() expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>choices-motionless-motionless-consuming crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>  
+   
+   <test-case name="sx-if-036">
+      <description>Streaming if() expression - operand of apply-templates</description>
+      <created by="Michael Kay" on="2016-12-18"/>
+      <environment ref="sx-if-A"/>
+      <test>
+         <initial-template name="r-036"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/price[1] = '4.95'</assert>
+            <assert>/out/price[2] = '6.58'</assert>
+            <assert>/out/price[3] = '4.95'</assert>
+            <assert>/out/price[4] = '4.95'</assert>
+            <assert>/out/price[5] = '16.47'</assert>
+            <assert>/out/price[6] = '16.47'</assert>
+         </all-of>
+      </result>
+   </test-case>  
+
+   <test-case name="sx-if-101">
+      <description>Streaming if() expression - grounded operand</description>
+      <keywords>choice-operand-group choices-motionless-consuming-consuming striding-then-grounded leading-lone-slash PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-102">
+      <description>Streaming if() expression - grounded operand</description>
+      <keywords>choice-operand-group choices-motionless-consuming-consuming leading-lone-slash striding-then-grounded fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-103">
+      <description>Streaming if() expression - grounded atomic operand</description>
+      <keywords>choice-operand-group striding-then-grounded leading-lone-slash fn:tokenize ContextItemExpr PathExpr SimpleMapExpr choices-motionless-consuming-consuming</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert>/out = "8.3 5.7 1.1 1.0 5.2 7.8 6.8 4.2 0.8 7.8 5.2 0.9 22.5 18.0 3.5 7.8 5.0 0.9"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-110">
+      <description>Streaming if() expression - striding operand, inspection usage</description>
+      <keywords>choices-motionless-consuming-consuming choice-operand-group striding leading-lone-slash PathExpr fn:count</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "6"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-111">
+      <description>Streaming if() expression - striding operand, absorption usage</description>
+      <keywords>choices-motionless-consuming-consuming striding leading-lone-slash PathExpr fn:sum choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "54.37"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-112">
+      <description>Streaming if() expression - striding operand, transmission usage</description>
+      <keywords>choices-motionless-consuming-consuming leading-lone-slash striding motionless-predicate fn:position PathExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>/out = "6.58 4.95 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-113">
+      <description>Streaming if() expression - striding operand, focus-setting usage</description>
+      <keywords>choices-motionless-motionless-consuming AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-114">
+      <description>Streaming if() expression - striding operand, focus-controlled usage</description>
+      <keywords>leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr choices-motionless-consuming-consuming choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-115">
+      <description>Streaming if() expression - striding operand, focus-setting usage</description>
+      <keywords>choices-motionless-consuming-consuming leading-lone-slash striding PathExpr AdditiveExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47 "</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-116">
+      <description>Streaming if() expression - striding operand, focus-controlled usage</description>
+      <keywords>choices-motionless-consuming-consuming xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-117">
+      <description>Streaming if() expression - striding operand, focus-setting usage for inspection action</description>
+      <keywords>choices-motionless-consuming-consuming leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "true false true true true true false false true true true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-118">
+      <description>Streaming if() expression - striding operand, apply-templates usage</description>
+      <keywords>choices-motionless-consuming-consuming leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-120">
+      <description>Streaming if() expression - crawling operand, inspection usage</description>
+      <keywords>choices-motionless-consuming-consuming xsl:copy-of fn:count crawling PathExpr leading-double-slash choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "6"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-121">
+      <description>Streaming if() expression - crawling operand, absorption usage</description>
+      <keywords>choices-motionless-consuming-consuming leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "11"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-122">
+      <description>Streaming if() expression - crawling operand, transmission usage</description>
+      <keywords>choices-motionless-consuming-consuming striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-123">
+      <description>Streaming if() expression - crawling operand, focus-setting usage</description>
+      <keywords>choices-motionless-consuming-consuming fn:outermost leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr crawling-then-striding choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-130">
+      <description>Streaming if() expression - climbing operand, inspection usage</description>
+      <keywords>choices-motionless-consuming-consuming striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis ancestor-or-self-axis choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST BOOKS ITEM"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-131">
+      <description>Streaming if() expression - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>choices-motionless-consuming-consuming leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis ancestor-or-self-axis choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST BOOKS ITEM ITEM ITEM ITEM ITEM ITEM"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-132">
+      <description>Streaming if() expression - climbing operand, absorption usage</description>
+      <keywords>choices-motionless-consuming-consuming climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-133">
+      <description>Streaming if() expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>choices-motionless-consuming-consuming climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis ancestor-axis choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-134">
+      <description>Streaming if() expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>choices-motionless-consuming-consuming climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis ancestor-axis choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-135">
+      <description>Streaming if() expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>choices-motionless-consuming-consuming crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis ancestor-axis choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-12-05"/>
+      <environment ref="sx-if-B"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>  
+
+   <test-case name="sx-if-201">
+      <description>Streaming if() expression - grounded operand</description>
+      <keywords>choices-consuming-motionless-motionless striding-then-grounded leading-lone-slash PathExpr fn:data choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-202">
+      <description>Streaming if() expression - grounded operand</description>
+      <keywords>choices-consuming-motionless-motionless leading-lone-slash striding-then-grounded fn:copy-of PathExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-203">
+      <description>Streaming if() expression - grounded atomic operand</description>
+      <keywords>choices-consuming-motionless-motionless striding-then-grounded leading-lone-slash fn:tokenize ContextItemExpr PathExpr SimpleMapExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert>/out = "0 0 0 0 0 0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-210">
+      <description>Streaming if() expression - striding operand, inspection usage</description>
+      <keywords>choices-consuming-motionless-motionless striding leading-lone-slash PathExpr fn:count choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-211">
+      <description>Streaming if() expression - striding operand, absorption usage</description>
+      <keywords>choices-consuming-motionless-motionless striding leading-lone-slash PathExpr fn:sum choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-212">
+      <description>Streaming if() expression - striding operand, transmission usage</description>
+      <keywords>choices-consuming-motionless-motionless leading-lone-slash striding motionless-predicate fn:position PathExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-213">
+      <description>Streaming if() expression - striding operand, focus-setting usage</description>
+      <keywords>choices-consuming-motionless-motionless AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-214">
+      <description>Streaming if() expression - striding operand, focus-controlled usage</description>
+      <keywords>choices-consuming-motionless-motionless leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-215">
+      <description>Streaming if() expression - striding operand, focus-setting usage</description>
+      <keywords>choices-consuming-motionless-motionless leading-lone-slash striding PathExpr AdditiveExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "1 "</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-216">
+      <description>Streaming if() expression - striding operand, focus-controlled usage</description>
+      <keywords>choices-consuming-motionless-motionless xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-217">
+      <description>Streaming if() expression - striding operand, focus-setting usage for inspection action</description>
+      <keywords>choices-consuming-motionless-motionless leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-218">
+      <description>Streaming if() expression - striding operand, apply-templates usage</description>
+      <keywords>choices-consuming-motionless-motionless leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "#0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-220">
+      <description>Streaming if() expression - crawling operand, inspection usage</description>
+      <keywords>choices-consuming-motionless-motionless xsl:copy-of fn:count crawling PathExpr leading-double-slash choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-221">
+      <description>Streaming if() expression - crawling operand, absorption usage</description>
+      <keywords>choices-consuming-motionless-motionless leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-222">
+      <description>Streaming if() expression - crawling operand, transmission usage</description>
+      <keywords>choices-consuming-motionless-motionless striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-223">
+      <description>Streaming if() expression - crawling operand, focus-setting usage</description>
+      <keywords>choices-consuming-motionless-motionless leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-230">
+      <description>Streaming if() expression - climbing operand, inspection usage</description>
+      <keywords>choices-consuming-motionless-motionless striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-231">
+      <description>Streaming if() expression - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>choices-consuming-motionless-motionless leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-232">
+      <description>Streaming if() expression - climbing operand, absorption usage</description>
+      <keywords>choices-consuming-motionless-motionless climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-233">
+      <description>Streaming if() expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>choices-consuming-motionless-motionless climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-if-234">
+      <description>Streaming if() expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>choices-consuming-motionless-motionless climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-if-235">
+      <description>Streaming if() expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>choices-consuming-motionless-motionless crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis choice-operand-group</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sx-if-C"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result early-exit-possible="true">
+         <assert>/out = "0"</assert>
+      </result>
+   </test-case>  
+
+
+
+</test-set>

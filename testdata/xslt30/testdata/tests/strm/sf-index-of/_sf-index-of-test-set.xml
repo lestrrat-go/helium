@@ -1,0 +1,135 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-index-of">
+   <description>Tests xsl:stream instruction introduced in XSLT 3.0 with xsl:result-document.</description>
+
+   <environment name="sf-index-of-A">
+     <stylesheet file="sf-index-of-001.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   
+
+   
+   <test-case name="sf-index-of-001">
+      <description>Streaming - calling index-of - first arg is a consuming attribute sequence</description>
+      <keywords>striding-then-climbing attribute-axis leading-lone-slash PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-22"/>
+      <environment ref="sf-index-of-A"/>
+      <test>
+         <initial-template name="i-001"/>
+      </test>
+      <result>
+         <assert>/out = '40 41 42'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-index-of-002">
+      <description>Streaming - calling index-of - first arg is motionless, second is consuming</description>
+      <keywords>striding grounded-variable leading-lone-slash PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-22"/>
+      <environment ref="sf-index-of-A"/>
+      <test>
+         <initial-template name="i-002"/>
+      </test>
+      <result>
+         <assert>/out = '5'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-index-of-003">
+      <description>Streaming - calling index-of - first arg is a consuming attribute sequence - empty case</description>
+      <keywords>empty-sequence striding-then-climbing attribute-axis leading-lone-slash PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-index-of-A"/>
+      <test>
+         <initial-template name="i-003"/>
+      </test>
+      <result>
+         <assert>/out = ''</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-index-of-050">
+      <description>index-of() - collation argument present</description>
+      <keywords>fn:string collation-argument striding-then-grounded leading-double-slash PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-index-of-A"/>
+      <test>
+         <initial-template name="i-050"/>
+      </test>
+      <result>
+         <assert>/out = '1'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-index-of-051">
+      <description>index-of() - collation argument present - unknown collation</description>
+      <keywords>striding-then-grounded collation-argument FOCH0002 leading-double-slash PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-index-of-A"/>
+      <test>
+         <initial-template name="i-051"/>
+      </test>
+      <result>
+         <error code="FOCH0002"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-index-of-052">
+      <description>index-of() - collation argument present - unknown collation - error is caught</description>
+      <keywords>striding-then-grounded leading-double-slash xsl:try error-handling specific-catch-clause FOCH0002 PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-index-of-A"/>
+      <test>
+         <initial-template name="i-052"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-index-of-053">
+      <description>index-of() - collation argument consumes streamed document</description>
+      <keywords>striding collation-argument PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-index-of-A"/>
+      <test>
+         <initial-template name="i-053"/>
+      </test>
+      <result>
+         <assert>/out = '1'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-index-of-054">
+      <description>index-of() - collation argument consumes streamed document, unknown collation</description>
+      <keywords>striding collation-argument PathExpr FOCH0002</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-index-of-A"/>
+      <test>
+         <initial-template name="i-054"/>
+      </test>
+      <result>
+         <error code="FOCH0002"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-index-of-055">
+      <description>index-of() - collation argument consumes streamed document, unknown collation, error is caught</description>
+      <keywords>striding collation-argument xsl:try error-handling specific-catch-clause FOCH0002 PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-index-of-A"/>
+      <test>
+         <initial-template name="i-055"/>
+      </test>
+      <result>
+         <assert>/out = 'caught'</assert>
+      </result>
+   </test-case>
+
+
+</test-set>

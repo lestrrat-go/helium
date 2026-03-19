@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sx-FunctionCall">
+   <description>Tests the xsl:stream instruction with calls to user-defined functions.</description>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+
+
+   <test-case name="sx-fcall-026">
+      <description>Test of xsl:stream instruction calling a function. Not streamable.</description>
+      <keywords>_WRONG:revisit-after-streamable-functions striding leading-lone-slash PathExpr motionless-predicate</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="sx-fcall-026.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+   <test-case name="sx-fcall-027">
+      <description>Test of xsl:stream instruction calling a function. Not streamable.</description>
+      <keywords>_WRONG:revisit-after-streamable-functions crawling leading-double-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="sx-fcall-027.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   
+
+
+</test-set>

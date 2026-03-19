@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="global-context-item">
+   <description>Tests xsl:global-context-item</description>
+   <environment name="glob-cxt-item-A">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+   </dependencies>
+
+   
+   <test-case name="glob-cxt-item-001">
+      <description>Test xsl:global-context-item with required type satisfied</description>
+      <created by="Michael Kay" on="2014-10-10"/>
+      <environment ref="glob-cxt-item-A"/>    
+      <test>
+         <package file="glob-cxt-item-001.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert>/out/doc = ""</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="glob-cxt-item-002">
+      <description>Test xsl:global-context-item with required type not satisfied</description>
+      <created by="Michael Kay" on="2014-10-10"/>
+      <modified by="Michael Kay" on="2015-08-24" change="Correct expected error code"/>
+      <environment ref="glob-cxt-item-A"/>    
+      <test>
+         <package file="glob-cxt-item-002.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTTE0590"/>
+      </result>
+   </test-case>
+   
+   <test-case name="glob-cxt-item-003">
+      <description>Test xsl:global-context-item with use="absent". The processor may either report
+      an error because a context item is supplied, or it may run the stylesheet with no context item,
+      in which case it fails dynamically with XPDY0002 because the context item is absent.</description>
+      <created by="Michael Kay" on="2014-10-10"/>
+      <modified by="Michael Kay" on="2015-01-26" change="keyword change: prohibited -> absent"/>
+      <modified by="Abel Braaksma" on="2018-02-04" change="Specification says that 'an error' should be raised but does not speficy which one. In line with xsl:context-item, I've added XTSE3088 as a sensible candidate next to XPDY0002, which implementers may choose not to use, as a context item *is* supplied here, yet is is forbidden"/>
+      <environment ref="glob-cxt-item-A"/>    
+      <test>
+         <package file="glob-cxt-item-003.xsl" role="principal"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XPDY0002"/>
+            <error code="XTSE3088"/>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="glob-cxt-item-004">
+      <description>It is a static error if more than one xsl:global-context-item declaration appears within a stylesheet module</description>
+      <created by="Michael Kay" on="2016-09-12"/>
+      <environment ref="glob-cxt-item-A"/>    
+      <test>
+         <package file="glob-cxt-item-004.xsl" role="principal"/>
+         <initial-mode name="m"/>
+      </test>
+      <result>
+         <error code="XTSE3087"/>
+      </result>
+   </test-case>
+   
+   <test-case name="glob-cxt-item-005">
+      <description>It is a static error if ... several modules within a single package contain inconsistent xsl:global-context-item declarations</description>
+      <created by="Michael Kay" on="2016-09-12"/>
+      <environment ref="glob-cxt-item-A"/>    
+      <test>
+         <package file="glob-cxt-item-005.xsl" role="principal"/>
+         <initial-mode name="m"/>
+      </test>
+      <result>
+         <error code="XTSE3087"/>
+      </result>
+   </test-case>
+   
+   <test-case name="glob-cxt-item-006">
+      <description>By implication: it is not a static error if ... several modules within a single package contain consistent xsl:global-context-item declarations</description>
+      <created by="Michael Kay" on="2016-09-12"/>   
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="glob-cxt-item-006.xsl" role="principal"/>
+      </test>
+      <result>
+         <assert>/out = '23'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="glob-cxt-item-006err">
+      <description>Error version of glob-ctx-item-006, XTDE0040 because xsl:initial-template is not public</description>
+      <created by="Abel Braaksma" on="2019-02-19"/>   
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make initial template 'xsl:initial-template' public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <package file="glob-cxt-item-006err.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTDE0040" />
+      </result>
+   </test-case>
+   
+   <test-case name="glob-cxt-item-007">
+      <description>It is a static error if ... several modules within a single package contain inconsistent xsl:global-context-item declarations</description>
+      <created by="Michael Kay" on="2016-09-12"/>
+      <environment ref="glob-cxt-item-A"/>    
+      <test>
+         <package file="glob-cxt-item-007.xsl" role="principal"/>
+         <initial-mode name="m"/>
+      </test>
+      <result>
+         <error code="XTSE3087"/>
+      </result>
+   </test-case>
+   
+   <test-case name="glob-cxt-item-008">
+      <description>By implication: it is not a static error if ... several modules within a single package contain consistent xsl:global-context-item declarations</description>
+      <created by="Michael Kay" on="2016-09-12"/>
+      <environment ref="glob-cxt-item-A"/>    
+      <test>
+         <package file="glob-cxt-item-008.xsl" role="principal"/>
+         <initial-mode name="m"/>
+      </test>
+      <result>
+         <assert>/out/doc</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="glob-cxt-item-009">
+      <description>If a valid xsl:global-context-item declaration appears within a library package, then it is ignored, 
+         unless it specifies use="required", in which case an error is signaled: [see ERR XTTE0590].</description>
+      <created by="Michael Kay" on="2016-09-12"/>
+      <modified by="Abel Braaksma" on="2019-02-04" change="Added name-URI of the library package to allow it to be discovered"/>
+      <environment ref="glob-cxt-item-A"/>    
+      <test>
+         <package file="glob-cxt-item-009b.xsl" uri="http://www.w3.org/xslt30-test/glob-cxt-item-009b" role="secondary"/>
+         <package file="glob-cxt-item-009.xsl" role="principal"/>
+         <initial-mode name="m"/>
+      </test>
+      <result>
+         <error code="XTTE0590"/>
+      </result>
+   </test-case>
+   
+   <test-case name="glob-cxt-item-010">
+      <description>If a valid xsl:global-context-item declaration appears within a library package, then it is ignored, 
+         unless it specifies use="required", in which case an error is signaled: [see ERR XTTE0590].</description>
+      <created by="Michael Kay" on="2016-09-12"/>
+      <modified by="Abel Braaksma" on="2019-02-04" change="Added name-URI of the library package to allow it to be discovered"/>
+      <environment ref="glob-cxt-item-A"/>    
+      <test>
+         <package file="glob-cxt-item-010b.xsl" uri="http://www.w3.org/xslt30-test/glob-cxt-item-010b" role="secondary" />
+         <package file="glob-cxt-item-010.xsl" role="principal"/>
+         <initial-mode name="m"/>
+      </test>
+      <result>
+         <assert>/out/doc</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="glob-cxt-item-011">
+      <description>[ERR XTSE3089] It is a static error if the as attribute is present when use="absent" is specified.
+      Also tests xsl:global-context-item as child of xsl:transform</description>
+      <created by="Michael Kay" on="2016-09-12"/>   
+      <test>
+         <stylesheet file="glob-cxt-item-011.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3089"/>
+      </result>
+   </test-case>
+   
+   <test-case name="glob-cxt-item-012">
+      <description>Test xsl:global-context-item with use="required", and no global context item supplied.</description>
+      <created by="Michael Kay" on="2017-08-30"/>
+      <test>
+         <stylesheet file="glob-cxt-item-012.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTDE3086"/> <!-- Error code from bug 30173 -->
+      </result>
+   </test-case>
+   
+   <test-case name="glob-cxt-item-013">
+      <description>Test xsl:global-context-item with use="absent", and xsl:copy used in a global variable.</description>
+      <created by="Michael Kay" on="2021-10-19"/>
+      <test>
+         <stylesheet file="glob-cxt-item-013.xsl" role="principal"/>
+      </test>
+      <result>
+         <error code="XTTE0945"/> 
+      </result>
+   </test-case>
+   
+   
+
+</test-set>

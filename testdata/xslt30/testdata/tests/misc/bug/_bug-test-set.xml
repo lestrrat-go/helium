@@ -1,0 +1,1959 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="bug">
+   <description>A collection of miscellaneous tests garnered from interesting bug reports</description>
+
+   <environment name="bug-03">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+
+   <environment name="bug-05">
+      <source role="." file="bug-05.xml"/>
+   </environment>
+
+   <environment name="bug-12">
+      <source role=".">
+         <content><![CDATA[<source_document/>]]></content>
+      </source>
+   </environment>
+
+   <environment name="bug-14">
+      <source role=".">
+         <content><![CDATA[<bar>
+  baz
+</bar>]]></content>
+      </source>
+   </environment>
+
+   <environment name="bug-18">
+      <source role=".">
+         <content><![CDATA[<foo xmlns="http://pre.uri/" />]]></content>
+      </source>
+   </environment>
+
+
+   <environment name="bug-21">
+      <source role=".">
+         <content><![CDATA[<document>
+  <element_1 att_1="bob"> jim </element_1>
+  <element_2 att_1="joe"> jack </element_2>
+</document>
+]]></content>
+      </source>
+   </environment>
+
+   <environment name="bug-25">
+      <source role=".">
+         <content><![CDATA[<list>
+<item month="May"/>
+<item month="Dec"/>
+<item month="Jan"/>
+<item month="Apr"/>
+<item month="Nov"/>
+</list>]]></content>
+      </source>
+   </environment>
+
+   <environment name="bug-27">
+      <source role=".">
+         <content><![CDATA[<xxx>
+   <ref file="xbug45a.xml" />
+   <ref file="xbug45b.xml" />
+</xxx>
+]]></content>
+      </source>
+      <source file="xbug45a.xml" uri="xbug45a.xml"/>
+      <source file="xbug45b.xml" uri="xbug45b.xml"/>
+   </environment>
+
+   <environment name="bug-31">
+      <source role="." file="bug-31.xml"/>
+   </environment>
+
+   <environment name="bug-47">
+      <source role="." file="bug-47.xml"/>
+   </environment>
+
+   <environment name="bug-53">
+      <source role=".">
+         <content><![CDATA[<a>
+<b z="z"/>
+<b z="z"/>
+<b z="z"/>
+</a>]]></content>
+      </source>
+   </environment>
+
+   <environment name="bug-58">
+      <source role=".">
+         <content><![CDATA[<a>
+  <b>
+    <c id="11"/><c id="12"/><c id="13"/>
+  </b>
+  <b>
+    <c id="21"/><c id="22"/><c id="23"/>
+  </b>
+  <b>
+    <c id="31"/><c id="32"/><c id="33"/>
+  </b>
+</a>  ]]></content>
+      </source>
+   </environment>
+
+   <test-case name="bug-0101">
+      <description>test fix for bug 5.3/001</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="bug-01.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a a-foo="a-bar"/><b b-foo="b-bar"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-0201">
+      <description>test fix for bug 768422</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc element="e" attribute="a">jump</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>jump</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-0301">
+      <description>BUG: Saxon 5.3/003 DESCRIPTION: The attribute
+         &lt;b&gt;[xsl:]exclude-result-prefixes="#default"&lt;/b&gt; has no effect.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:z="http://z.uri/" changed="2004-04-06"><z:a a-foo="a-bar"
+            /><z:b xmlns="http://abc.uri/" b-foo="b-bar"/><c xmlns="http://abc.uri/" c-foo="c-bar"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-0302">
+      <description>BUG: Saxon 5.3/003 DESCRIPTION: The attribute
+         &lt;b&gt;[xsl:]exclude-result-prefixes="#default"&lt;/b&gt; has no effect. NOTE: Expected
+         results changed 2011-06-01 as a consequence of erratum XT.E37: see member bugzilla
+         931</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns="http://abc.uri/" xmlns:z="http://z.uri/" changed="2004-04-06"><z:a a-foo="a-bar"/><z:b b-foo="b-bar"/><c c-foo="c-bar"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-0303">
+      <description>BUG: Saxon 5.2/020 DESCRIPTION: xsl:namespace-alias must come before the relevant
+         xsl:template elements</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0303.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"
+            ><xsl:variable name="temp" select="3"/></xsl:stylesheet>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-0304">
+      <description>BUG: Saxon 5.3/007 DESCRIPTION: The HTML output method occasionally applies URL
+         escaping to an attribute that is not a URL, for example (with the Microsoft JVM) it does so
+         with &lt;h2 style="clear: all"&gt;.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2019-12-03" change="Accept HTML5 serialization"/>
+      <environment ref="bug-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="serialization" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0304.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches><![CDATA[<h2 style=["']clear: all["']></h2>]]></serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="bug-0305">
+      <description>BUG: Saxon 5.3.2/001 DESCRIPTION: test recovery action when outputting element
+         nodes into attributes, comments, and PIs</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0305.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc spec-changed="2004-12-01" test="attribute !! value">
+    +<!--Comment  !!  text-->+
+    +<?pi pi  !!  text?>+
+    </doc>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-0401">
+      <description>BUG: Saxon 5.3/004 DESCRIPTION: The priorities of the components in a union
+         pattern may be calculated incorrectly, for example in the pattern "text() | *" both
+         components are given priority +0.5 instead of -0.5.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<nos><no>CBS 4230</no></nos>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<src>OK</src>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-0501">
+      <description>BUG: Saxon 5.2/021 DESCRIPTION: Every element should have a namespace node for
+         the "xml" namespace. It doesn't. for reproducible results</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>xml=http://www.w3.org/XML/1998/namespace;
+xsl=http://www.w3.org/1999/XSL/Transform;
+axsl=http://www.w3.org/1999/XSL/TransformAlias;
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-0502">
+      <description> BUG: Saxon 5.3/009 DESCRIPTION: The parent of a namespace node is the element on
+         which the namespace was declared, not the element on whose namespace axis the namespace
+         node lies.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-05"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0502.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>normalize-space(/out/element[1]) = normalize-space("xsl:stylesheet:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:stylesheet)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:stylesheet)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:stylesheet)")</assert>
+            <assert>normalize-space(/out/element[2]) = normalize-space("xsl:import:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:import)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:import)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:import)")</assert>
+            <assert>normalize-space(/out/element[3]) = normalize-space("xsl:template:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:template)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:template)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:template)")</assert>
+            <assert>normalize-space(/out/element[4]) = normalize-space("axsl:output:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: axsl:output)
+               xml = http://www.w3.org/XML/1998/namespace (owner: axsl:output)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: axsl:output)")</assert>
+            <assert>normalize-space(/out/element[5]) = normalize-space("xsl:template:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:template)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:template)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:template)")</assert>
+            <assert>normalize-space(/out/element[6]) = normalize-space("xsl:param:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:param)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:param)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:param)")</assert>
+            <assert>normalize-space(/out/element[7]) = normalize-space("xsl:param:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:param)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:param)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:param)")</assert>
+            <assert>normalize-space(/out/element[8]) = normalize-space("xsl:value-of:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:value-of)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:value-of)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:value-of)")</assert>
+            <assert>normalize-space(/out/element[9]) = normalize-space("xsl:text:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:text)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:text)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:text)")</assert>
+            <assert>normalize-space(/out/element[10]) = normalize-space("xsl:copy-of:
+               = java:useless.uri (owner: xsl:copy-of)
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:copy-of)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:copy-of)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:copy-of)")</assert>
+            <assert>normalize-space(/out/element[11]) = normalize-space("xsl:template:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:template)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:template)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:template)")</assert>
+            <assert>normalize-space(/out/element[12]) = normalize-space("xsl:param:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:param)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:param)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:param)")</assert>
+            <assert>normalize-space(/out/element[13]) = normalize-space("xsl:param:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:param)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:param)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:param)")</assert>
+            <assert>normalize-space(/out/element[14]) = normalize-space("xsl:text:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:text)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:text)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:text)")</assert>
+            <assert>normalize-space(/out/element[15]) = normalize-space("xsl:value-of:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:value-of)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:value-of)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:value-of)")</assert>
+            <assert>normalize-space(/out/element[16]) = normalize-space("xsl:if:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:if)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:if)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:if)")</assert>
+            <assert>normalize-space(/out/element[17]) = normalize-space("xsl:text:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:text)
+               saxon = http://icl.com.saxon (owner: xsl:text)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:text)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:text)")</assert>
+            <assert>normalize-space(/out/element[18]) = normalize-space("xsl:value-of:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:value-of)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:value-of)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:value-of)")</assert>
+            <assert>normalize-space(/out/element[19]) = normalize-space("xsl:text:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:text)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:text)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:text)")</assert>
+            <assert>normalize-space(/out/element[20]) = normalize-space("xsl:apply-templates:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:apply-templates)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:apply-templates)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:apply-templates)")</assert>
+            <assert>normalize-space(/out/element[21]) = normalize-space("xsl:text:
+               axsl = http://www.w3.org/1999/XSL/TransformAlias (owner: xsl:text)
+               xml = http://www.w3.org/XML/1998/namespace (owner: xsl:text)
+               xsl = http://www.w3.org/1999/XSL/Transform (owner: xsl:text)")</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="bug-0601">
+      <description>Preprocessor for the Schematron XML Schema Language. BUG: Saxon 5.3/005 and
+         5.3/008 DESCRIPTION: 5.3/005: If xml:namespace-alias is used in an included or imported
+         stylesheet module, it is ignored. 5.3/008: When xsl:copy-of is used to copy a result tree
+         fragment to the final tree, no attempt is made to remove redundant namespace
+         declarations.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-12-11" change="Removed whitespace from expected result"/>
+      <environment>
+         <source role="." file="bug-06.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0601.xsl"/>
+         <stylesheet file="bug-0601a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml file="bug-0601.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-0701">
+      <description>BUG: Saxon 5.3.1/002 DESCRIPTION: Text content may be lost when xsl:copy-of is
+         used to copy from a result tree fragment to an output destination defined with
+         method="html" indent="yes". </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28416, allowing an alternative rendition of the serialized outcome"/>
+      <modified by="Abel Braaksma" on="2015-04-07" change="Bug 28416, fixed as proposed by MKay, by removing whitespace issues in result generation"/>
+      <modified by="Michael Kay" on="2020-02-17" change="Alternate result for processors generating HTML5 by default"/>
+     <environment>
+         <source role=".">
+            <content><![CDATA[<page-items>
+
+  <title>This is my title</title>
+
+</page-items>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0701.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+          <any-of>
+            <assert-serialization method="html" file="bug-0701.out"/>
+            <assert-serialization method="html" file="bug-0701a.out"/>
+          </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="bug-0801">
+      <description>BUG: Saxon 5.3.1/003 DESCRIPTION: Under certain conditions passing a parameter in
+         xsl:with-param that is a node-set-expression containing a variable reference will fail when
+         the parameter value is referenced. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<data>
+  <item>
+    <para name="x"/>
+  </item>
+</data>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<para name="x"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-0901">
+      <description>BUG: Saxon 5.3.1/004 DESCRIPTION: When a template calls itself recursively within
+         an xsl:for-each instruction, tail recursion is invoked but doesn't work correctly. The
+         effect is that the loop is obeyed only once and with the wrong current node.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="bug-09.xml"/>
+         <resource file="xteixlite.dtd" uri="xteixlite.dtd" media-type="application/xml-dtd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-0901.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1001">
+      <description>BUG: Saxon 5.3.1/005 DESCRIPTION: A union expression whose operands are
+         individual attribute nodes of the same element is evaluated incorrectly. For example
+         count(@a | @b) returns 1. The attributes are wrongly regarded as duplicate
+         nodes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-12-10" change="Removed whitespace from expected result"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc><x a="1" b="2"/><y a="3" b="4" c="5"/><z c="2" b="3" a="1"/></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-1001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1101">
+      <description>BUG: Saxon 5.3.1/006 DESCRIPTION: When a namespace is excluded from the result
+         tree using xsl:exclude-result-prefixes, but is then used on a literal result element, the
+         request to exclude it should be ignored, to ensure that the result is well-formed XML
+         following the Namespace rules. Currently the request to exclude the namespace is ignored if
+         the namespace is used on the element containing the xsl:exclude-result-prefixes attribute,
+         but not if it is used on an inner element.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-12-10" change="Removed whitespace from expected result"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1101.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-1101.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1201">
+      <description>BUG 5.3.1/007 DESCRIPTION: When a number is converted to a string, XPath requires
+         that "after the decimal point there must be as many, but only as many, more digits as are
+         needed to uniquely distinguish the number from all other IEEE 754 numeric values". Saxon
+         may display more digits than this. NOTE: the rules have changed in XPath 2.0</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<bug-or-feature>2.39;
+  1000000000000001;
+</bug-or-feature>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1202">
+      <description> BUG: Saxon 5.3.1/009 DESCRIPTION: disable-output-escaping="yes" has no effect
+         when writing to a result tree fragment. Test whether disable-output-escaping is "sticky" </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="bug-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="disabling_output_escaping"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1202.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches><![CDATA[<a>Enable escaping here &lt;fred/&gt;</a>]]></serialization-matches>
+            <serialization-matches><![CDATA[<b>Disable escaping here <fred/></b>]]></serialization-matches>
+            <serialization-matches><![CDATA[<c>Enable escaping here &lt;fred/&gt;</c>]]></serialization-matches>
+            <serialization-matches><![CDATA[<p>Enable escaping here &lt;fred/&gt;</p>]]></serialization-matches>
+            <serialization-matches><![CDATA[<q>Disable escaping here &lt;fred/&gt;</q>]]></serialization-matches>
+            <serialization-matches><![CDATA[<r>Enable escaping here &lt;fred/&gt;</r>]]></serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="bug-1203">
+      <description>disable-output-escaping affected by optimization. Saxon bug 2312.</description>
+      <created by="Michael Kay" on="2015-02-06"/>
+      <modified by="Michael Kay" on="2015-03-20" change="add dependency, see bug 28247"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="disabling_output_escaping"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1203.xsl"/>
+         <initial-template name="main"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches><![CDATA[<a>&gt;</a>]]></serialization-matches>
+            <serialization-matches><![CDATA[<b>&gt;</b>]]></serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1301">
+      <description>BUG: not a bug, as it turned out. Tests numeric sorting.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2019-12-03" change="Drop dependency on serialization"/>
+      <environment>
+         <source role="." file="bug-13.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1301.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>//tr[1][td[1]='Aluminum' and td[2]='13' and td[3]='26.98154']</assert>
+            <assert>//tr[2][td[1]='Gallium' and td[2]='31' and td[3]='69.723']</assert>
+            <assert>//tr[3][td[1]='Actinium' and td[2]='89' and td[3]='227']</assert>
+            <assert>//tr[4][td[1]='Americium' and td[2]='95' and td[3]='243']</assert>
+         </all-of>      
+      </result>
+   </test-case>
+
+   <test-case name="bug-1401">
+      <description>test that exclude-result-prefixes is ignored if the prefix is actually used BUG:
+         Saxon 5.3.1/006 DESCRIPTION: When a namespace is excluded from the result tree using
+         xsl:exclude-result-prefixes, but is then used on a literal result element, the request to
+         exclude it should be ignored, to ensure that the result is well-formed XML following the
+         Namespace rules. Currently the request to exclude the namespace is ignored if the namespace
+         is used on the element containing the xsl:exclude-result-prefixes attribute, but not if it
+         is used on an inner element.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns="http://www.abc.com"><foo/><b:foo xmlns:b="http://www.def.com"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1402">
+      <description>Test that xsl:message output containing XML markup is handled
+         correctly</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1402.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-xml><![CDATA[<a/>]]></assert-xml>
+            <assert-message>
+               <assert-xml><![CDATA[It's (<b name="fred" desc="bill">super</b>)]]></assert-xml>
+            </assert-message>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1403">
+      <description>BUG: Saxon 5.3.2/002 DESCRIPTION: If an element node is output while
+         instantiating the content of xsl:attribute, no error is reported, the tag is output
+         incorrectly in escaped form.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1403.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a a="It's (super)"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1404">
+      <description>BUG: Saxon 5.3.2/003 DESCRIPTION: If an element node is output while
+         instantiating the content of xsl:comment or xsl:processing-instruction, the element node
+         and its content should be ignored. The element node is ignored but its content is
+         output.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1404.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a><!--It's ( super )--></a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1405">
+      <description>BUG: Saxon 5.3.2/005 DESCRIPTION: If an element node is output when the output
+         method is text, the markup should be suppressed but this is not done correctly. test
+         generating elements and other nodes with method="text"</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="serialization" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1405.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <assert-serialization method="text" file="bug25.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1406">
+      <description> BUG: Saxon 5.3.2/009 DESCRIPTION: If the output method is not specified
+         explicitly, special characters such as "&lt;" that are output before the first element
+         start tag are not escaped. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment ref="bug-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="serialization" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1406.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches><![CDATA[This text contains escaped characters &lt; and &gt;]]></serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1501">
+      <description>test copying an attribute in non-default namespace (5.3.2/004) test generates two
+         attributes with same prefix but different URI; one prefix must change</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<in>
+<foo x:aaa="apple" xmlns:x="http://test1.uri/"/>
+<bar x:aaa="orange" xmlns:x="http://test2.uri/"/>
+</in>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ok>true</ok></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1601">
+      <description>BUG: Saxon 5.3.2/004 DESCRIPTION: If an attribute node is copied using xsl:copy
+         or xsl:copy-of, and it is in a non-default namespace, the result file may contain a
+         reference to a namespace that is not declared.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<in>
+<foo x:aaa="5" xmlns:x="http://test1.uri/"/>
+<bar x:aaa="5" xmlns:x="http://test2.uri/"/>
+</in>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><ok>true</ok></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1701">
+      <description>BUG: Saxon 5.3.2/012 DESCRIPTION: The count() function, when applied to a
+         node-set expressed as a filter expression, may give the wrong answer: specifically, it
+         gives the number of nodes before applying the predicates.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2015-03-20" change="Fix bug 26606"/>
+      <modified by="Michael Kay" on="2019-12-03" change="Drop dependency on serialization"/>
+      <environment>
+         <source role="." file="bug-17.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1701.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>//tr[2][td[1]='Brazil'][td[2]='3'][td[3]='2'][td[4]='0'][td[5]='1'][td[6]='6'][td[7]='3']</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1801">
+      <description>BUG: Saxon 5.3.2/014 DESCRIPTION: When an element is output to the result tree,
+         and its name uses the default namespace prefix and a null namespace URI, but where the
+         result tree contains an ancestor element in which the default namespace prefix is assigned
+         to a non-null namespace URI, a namespace undeclaration (xmlns="") should be output, but
+         isn't.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-18"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<foo xmlns="http://pre.uri/"><bar xmlns:pre="http://pre.uri/" xmlns=""/></foo>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1802">
+      <description>BUG: Saxon 5.3.2/014 DESCRIPTION: When an element is output to the result tree,
+         and its name uses the default namespace prefix and a null namespace URI, but where the
+         result tree contains an ancestor element in which the default namespace prefix is assigned
+         to a non-null namespace URI, a namespace undeclaration (xmlns="") should be output, but
+         isn't.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-18"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1802.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<foo xmlns="http://pre.uri/"><bar xmlns=""/></foo>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-1901">
+      <description>BUG: Turned out not to be a bug Create output document template Generate glossary
+         Process one gi-def for glossary output</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-12-10" change="Removed whitespace from expected result"/>
+      <modified by="Tim Mills" on="2012-12-10" change="Removed meta tag from expected result"/>
+      <environment>
+         <source role="." file="bug-19.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-1901.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-1901.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2001">
+      <description>BUG: Saxon 5.3.2/016 DESCRIPTION: A null pointer exception occurs if a local
+         variable is declared within the template-body of a global variable
+         declaration.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="bug-20.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>one+two;
+	two+three</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2101">
+      <description>BUG: 5.3.2/020 DESCRIPTION: When Saxon is used with Xerces (or any other SAX2
+         parser that does not internalize strings by default), attribute names used in a match
+         pattern may go unrecognized.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-21"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<bob>
+  <bob att_2="bob"> jim </bob>
+  <bob att_2="joe"> jack </bob>
+</bob>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2102">
+      <description>BUG: Saxon 5.3.2/002 DESCRIPTION: Conversion of a result-tree-fragment to a
+         boolean is done incorrectly. The result should always be true; Saxon returns false if the
+         result of converting the result tree fragment to a string is zero-length. result of RTF to
+         boolean conversion (should always be true)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-21"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a one="true" two="true"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2201">
+      <description>nspace.xsl XSLT 1.0 - http://www.CraneSoftwrights.com/training BUG: Saxon
+         5.3.2/018 DESCRIPTION: In a location path using the namespace axis with a name test, for
+         example namespace::x, all the namespace nodes are returned in the result, whether or not
+         their name matches "x".</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2019-12-03" change="Drop unused entity declaration"/>     
+      <environment>
+         <source role="." file="bug-22.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+         <feature value="serialization" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2201.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <assert-serialization method="text" file="bug36.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2301">
+      <description>BUG: Saxon 5.3.2/025 DESCRIPTION: When an attribute node is matched against the
+         pattern "@prefix:*", a null pointer exception occurs.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc xmlns:a="http://uri1.uri/"><foo a:a="1" b="2"/></doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:a="http://uri1.uri/"><a>prefix matched</a><b>default matched</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2401">
+      <description>BUG: proved not to be a bug at all</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2012-12-11"
+         change="use assertions to remove dependency on HTML serialization, see bug 20342"/>
+      <environment>
+         <source role="." file="bug-24.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2401.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/HTML/HEAD/TITLE = "About Author and Credits"</assert>
+            <assert>/HTML/BODY/H2 = "Credits"</assert>
+            <assert>/HTML/BODY/TABLE/TR[1]/TD[1]/B = "Acquisitions Editor"</assert>
+            <assert>/HTML/BODY/TABLE/TR[1]/TD[2] = "John Osborne"</assert>
+            <assert>/HTML/BODY/TABLE/TR[2]/TD[1]/B = "Development Editor"</assert>
+            <assert>/HTML/BODY/TABLE/TR[2]/TD[2] = "Terri Varveris"</assert>
+            <assert>/HTML/BODY/TABLE/TR[5]/TD[1]/B = "Copy Editors"</assert>
+            <assert>/HTML/BODY/TABLE/TR[5]/TD[2] = "Amy EoffAmanda KaufmanNicole LeClercVictoria Lee"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2501">
+      <description>BUG: Saxon 5.3.2/027 DESCRIPTION: When the current() function is used within the
+         select expression of xsl:sort, it gives the wrong answer (the relevant node will be the
+         context node, but not the current node). This results in an incorrect sort
+         sequence.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-25"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:m="urn:non-null-namespace">
+* <item month="Jan"/>
+* <item month="Apr"/>
+* <item month="May"/>
+* <item month="Nov"/>
+* <item month="Dec"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2502">
+      <description> BUG: Saxon 5.4/002 DESCRIPTION: A call to "document('foo.xml', /)" fails with
+         the message "No base URI available for resolving relative URI". The same error occurs with
+         any other second argument that refers to the root node of the principal source document. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-25"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2502.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><list>
+<item month="May"/>
+<item month="Dec"/>
+<item month="Jan"/>
+<item month="Apr"/>
+<item month="Nov"/>
+</list></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2601">
+      <description>BUG: not a bug after all</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<module identifier="level1">
+   <module identifier="level2">
+      <module identifier="level3">
+      </module>
+   </module>
+</module>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2601.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-2601.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2701">
+      <description>BUG: Saxon DESCRIPTION: Documents loaded from URI's in a node-set</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-27"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2701.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-2701.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2702">
+      <description>BUG: Saxon 5.4/003 DESCRIPTION: If a top-level element with a non-null namespace
+         URI appears in the stylesheet, and its namespace is designated as an extension element
+         namespace, and Saxon does not recognize the namespace URI as one that identifies an
+         extension element implementation, then Saxon will reject the element with an error. It
+         should ignore it, because a top-level element can never be an extension element. Test
+         top-level elements are ignored</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-27"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2702.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>OK</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2703">
+      <description>BUG: Saxon 5.4/007 DESCRIPTION: When the parent axis is used on the right-hand
+         side of a "/" operator, the node-set returned will never include the root node. For
+         example, if the current node is the document element, the expression "./.." will return an
+         empty node-set. (The problem does not occur if this is simplified to "..")</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-27"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2703.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><out>1</out><out>1</out></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2801">
+      <description>BUG: Not actually a bug. Correct answer is 1000000000000</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<a1>
+	10
+	<a2>
+		100
+		<a3>
+		    1000
+		</a3>
+	</a2>
+</a1>
+
+]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1.0E12</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-2901">
+      <description>Written by Santiago Pericas-Geertsen BUG: Saxon 5.4/007 DESCRIPTION: When the
+         parent axis is used on the right-hand side of a "/" operator, the node-set returned will
+         never include the root node. For example, if the current node is the document element, the
+         expression "./.." will return an empty node-set. (The problem does not occur if this is
+         simplified to "..")</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="bug-29.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-2901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>1;</a><b>1;</b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-3001">
+      <description>BUG: Saxon DESCRIPTION: from
+         http://www.zvon.org/xxl/XSLTreference/OutputExamples/example_8_87_frame.html</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <environment>
+         <source role="." file="bug-30.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="serialization" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-3001.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <assert-serialization method="text" file="bug51.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-3101">
+      <description>XML Remote Processor Security Check Helper Stylesheet Author: Dimitre Novatchev
+         (dnovatchev@yahoo.com) BUG: DESCRIPTION This is the only output produced</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-3101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>20</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-3102">
+      <description>XML Remote Processor Security Check Helper Stylesheet Author: Dimitre Novatchev
+         (dnovatchev@yahoo.com) BUG: DESCRIPTION Same as bug52 but without the explicit call on
+         saxon:node-set()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-3102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:saxon="http://icl.com/saxon">20</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-3201">
+      <description>BUG: Saxon 5.4.1/007 DESCRIPTION: disable-output-escaping does not work correctly
+         when applied to text output before the first start tag, unless xsl:output is used to set
+         the output method explicitly.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="disabling_output_escaping"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-3201.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches><![CDATA[<output-escaping>content</output-escaping>]]></serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="bug-3301">
+      <description>BUG: Saxon 5.4.1/009 DESCRIPTION: An IndexOutOfBoundException occurs if the
+         nesting depth of any element within a document (that is, the number of ancestors) exceeds
+         100.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="bug-33.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-3301.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-3301.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-3401">
+      <description>test nesting depth &gt; 100</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="bug-34.xml"/>
+      </environment>
+
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-3401.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-3401.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-3501">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2019-12-03" change="Drop serialization requirement"/>
+      <environment>
+         <source role="." file="bug-35.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-3501.xsl"/>
+      </test>
+      <result>
+         <!-- It's not clear what this test was intended to demonstrate, and the results are complex, so just test that it doesn't fail -->
+         <assert>true()</assert>
+      </result>
+   </test-case>
+
+   <test-case name="bug-3601">
+      <description>BUG: not actually a bug DESCRIPTION: tests xsl:namespace-alias everything between
+         the x:template tags is outputted to the new stylesheet Create the include
+         lines???</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-12-10" change="Removed whitespace from expected result"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<INCLUDES><INCLUDE>include1.xsl</INCLUDE><INCLUDE>include2.xsl</INCLUDE></INCLUDES>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-3601.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-3601.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-3701">
+      <description>BUG: Saxon 5.5/001 DESCRIPTION: An error occurs when a filter expression using
+         the key() function is used as an argument to another function call within an XPath
+         predicate.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-12-10" change="Removed whitespace from expected result"/>
+      <environment>
+         <source role="." file="bug-37.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-3701.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-3701.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-3801">
+      <description> BUG: Saxon 5.5/002 DESCRIPTION: When the cdata-section-elements attribute of
+         xsl:output is used, disable-output-escaping on xsl:text or xsl:value-of does not always
+         work correctly.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2012-12-11" change="use assert-serialization, see bug 20343"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="disabling_output_escaping"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-3801.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <assert-serialization file="bug-3801.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-3901">
+      <description>Should get one of these Should be 1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<Nodes><Black number="1" at="R4"/><Black number="2" at="R4"/></Nodes>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-3901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><title>Reproducing Bugzilla#6284: predicate/global variable/position()</title>
+<duplicate>found a duplicate at 1</duplicate>
+<last>1</last></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-4001">
+      <description>BUG 5.5/tba DESCRIPTION: Escaping of ] ] &gt; works incorrectly</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-08-10" change="Make this a serialization test as originally intended"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>text ]]&gt; more text</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="serialization" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-4001.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches><![CDATA[<doc>text \]\]&gt; more text</doc>]]></serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="bug-4101">
+      <description>BUG 6.0/001 DESCRIPTION: Invalid attribute prefix generated by
+         xsl:copy-of</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<root xmlns='http://namespace.com/'><body attribute='value'/></root>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-4101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root xmlns="http://namespace.com/"><body attribute="value"/></root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-4201">
+      <description>BUG 6.0/006 DESCRIPTION: Zero-length text nodes are created in an empty
+         element</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<icon face="f_S" occs="1" type="it_B" key="i113"></icon>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-4201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out note="output changed in 7.9"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-4301">
+      <description>BUG: 6.0/006 DESCRIPTION: With TinyTree model, descendants axis gives wrong
+         answer if there are no descendants or following siblings</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="bug-43.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-4301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc><message>icon 2 has content </message></doc>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-4401">
+      <description>BUG: 6.0.1/003 DESCRIPTION: Keys on match="@*" not working</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>
+      <environment>
+         <source role="." file="bug-44.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-4401.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-4401.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-4501">
+      <description> From Jeni Tennison, 12 Jan 2001 I have a weird problem with recursion in Saxon
+         6.1. In the following stylesheet, if there's nothing after the recursive call to the named
+         template, then the elements that are produced are not nested, as they should be. If I add
+         &lt;xsl:comment&gt;end match&lt;/xsl:comment&gt; after the recursive call it works fine.
+         content removed for brevity</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="bug-45.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-4501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<match><match><match/></match></match>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-4601">
+      <description>BUG 6.1/010: //abc:xyz returns no nodes when used with tinytree
+         model</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="bug-46.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-4601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<c xmlns="http://www.w3.org/1999/xhtml">9 def nodes in bib namespace.</c>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-4701">
+      <description>BUG 6.1/020: null pointer exception occurs when reporting ambiguous rule
+         match</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-47"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="recover"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-4701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-4702">
+      <description>BUG 6.1/020: null pointer exception occurs when reporting ambiguous rule
+         match</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-47"/>
+      <dependencies>
+         <spec value="XSLT10 XSLT20"/>
+         <on-multiple-match value="error"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-4701.xsl"/>
+      </test>
+      <result>
+         <error code="XTRE0540"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-4703">
+      <description>BUG 6.1/020: null pointer exception occurs when reporting ambiguous rule
+         match</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-47"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+         <on-multiple-match value="error"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-4701.xsl"/>
+      </test>
+      <result>
+         <error code="XTRE0540"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-4801">
+      <description> BUG (reported but not reproduced) that number('123abc') returns 123 rather than
+         NaN. Appears to depend on the Java VM in use. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-4801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<testing>NaN</testing>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-4901">
+      <description>BUG (reported but not reproduced) name() doesn't work on attribute
+         nodes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2020-04-21" change="make expected results independent of attribute order"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc fred="1" bill="2" jane="3" mary="4"/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-4901.xsl"/>
+      </test>
+      <result>
+        <all-of>
+          <assert>/testing/m = "4"</assert>
+          <assert>/testing/a = "fred"</assert>
+          <assert>/testing/a = "bill"</assert>
+          <assert>/testing/a = "jane"</assert>
+          <assert>/testing/a = "mary"</assert>
+        </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="bug-5001">
+      <description>BUG: Handle a zero-length comment</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc fred="1" bill="2" jane="3" mary="4" xanthe="">
+<?pi?>
+<!--next comment is a short one-->
+text
+<!---->
+</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-5001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><doc fred="1" bill="2" jane="3" mary="4" xanthe="">
+<?pi?>
+<!--next comment is a short one-->
+text
+<!---->
+</doc>[next comment is a short one][]</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-5101">
+      <description>Tests elimination of a bug that was in the original SAX distribution, whereby a
+         namespace declared on a parent element was used in an attribute of a child element before
+         being redeclared</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="bug-51.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-5101.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-5101.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-5201">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc att="x"/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-5201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ok/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-5301">
+      <description>Saxon 6.5 can't parse this XPath expression</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-53"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-5301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-5302">
+      <description>Saxon 6.5 can't handle variables within attribute sets</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-53"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-5302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o a="1"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-5401">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<source><AAA><BBB><CCC/><ZZZ/></BBB><XXX><DDD><EEE/><FFF><HHH/><GGG><JJJ><QQQ/></JJJ><JJJ/></GGG><HHH/></FFF></DDD></XXX><CCC><DDD/></CCC></AAA></source>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-5401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<all><element>BBB</element><element>CCC</element><element>ZZZ</element><element>EEE</element><element>HHH</element></all>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-5501">
+      <description>Bug reported as
+         https://sourceforge.net/forum/forum.php?thread_id=637041&amp;forum_id=94027 Apparent cause
+         is an error in the optimization of constant [true()] predicates</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[ 
+<a> 
+<b>0</b> 
+<b>1</b> 
+<b>2</b> 
+<b>3</b> 
+<b>4</b> 
+</a> ]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-5501.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-5501.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-5601">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>[𐌀]</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="serialization" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-5601.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <assert-serialization method="text" file="bug89.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-5701">
+      <description>need to run this with -T option to demonstrate the bug NullPointerException when
+         using -T option</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<doc>x</doc>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-5701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><x/><x/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-5801">
+      <description>(not actually a bug, just a suspected one)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-58"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-5801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<c id="22"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-5802">
+      <description>./(a,b) should sort (a,b) into document order</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="bug-58"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-5802.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><c id="11"/><c id="33"/><c id="11"/><c id="33"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-5901">
+      <description> </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim Mills" on="2012-12-10" change="Removed whitespace from expected result"/>
+      <environment>
+         <source role="." file="bug-59.xml"/>
+         <source file="xbug93cat.xml" uri="xbug93cat.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-5901.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-5901.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="bug-6001">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<z/>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-6001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z><a>/careers/sites/en</a><a>page.htm</a></z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-6101">
+      <description>causes a stack overflow in 7.5.1. No idea why; it works under 7.6</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role=".">
+            <content><![CDATA[<a xmlns:prefix="http://some.uri/" prefix:att="3"><b/></a>]]></content>
+         </source>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-6101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<x>
+  [.]
+</x>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-6201">
+      <description>optimization bug in 7.6.5,</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-04-29" change="document dependency on backwards-compatibility mode"/>
+      <environment>
+         <source role="." file="bug-62.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-6201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<x/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="bug-6301">
+      <description>Bug 788748 reported by Oliver Becker, ClassCastException</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-08-10" change="Deliver well-formed XML output"/>
+      <environment>
+         <source role="." file="bug-63.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-6301.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331, 337, 347, 349, 353, 359, 367, 373, 379, 383, 389, 397, 401, 409, 419, 421, 431, 433, 439, 443, 449, 457, 461, 463, 467, 479, 487, 491, 499, 503, 509, 521, 523, 541, 547, 557, 563, 569, 571, 577, 587, 593, 599, 601, 607, 613, 617, 619, 631, 641, 643, 647, 653, 659, 661, 673, 677, 683, 691, 701, 709, 719, 727, 733, 739, 743, 751, 757, 761, 769, 773, 787, 797, 809, 811, 821, 823, 827, 829, 839, 853, 857, 859, 863, 877, 881, 883, 887, 907, 911, 919, 929, 937, 941, 947, 953, 967, 971, 977, 983, 991, 997"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="bug-6401">
+      <description>See Saxon bug Bug 1930319 on SourceForge.: infinite recursion during
+         optimization</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." file="bug-64.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="bug-6401.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="bug-6401.out"/>
+      </result>
+   </test-case>
+</test-set>

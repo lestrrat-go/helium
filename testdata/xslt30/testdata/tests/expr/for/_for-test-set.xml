@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="for">
+   <description>Tests for</description>
+   <environment name="for01">
+      <source role="." file="for01.xml"/>
+   </environment>
+   <environment name="for03">
+      <source role="." file="for03.xml"/>
+   </environment>
+
+   <test-case name="for-001">
+      <description/>
+      <created by="XPath Editors" on="2012-11-07"/>
+      <environment ref="for01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="for-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="for-001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="for-002">
+      <description/>
+      <created by="XPath Editors" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="for-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>11, 12, 21, 22</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="for-003">
+      <description/>
+      <created by="XPath Editors" on="2012-11-07"/>
+      <environment ref="for03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="for-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>0</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="for-004">
+      <description/>
+      <created by="XPath Editors" on="2012-11-07"/>
+      <environment ref="for03"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="for-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>36.02</out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

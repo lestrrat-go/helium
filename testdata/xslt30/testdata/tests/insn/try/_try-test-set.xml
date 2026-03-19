@@ -1,0 +1,758 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.w3.org/2012/10/xslt-test-catalog ../../../admin/catalog-schema.xsd" name="try">
+   <description>Tests try</description>
+   <environment name="try020">
+      <source role="." file="try020.xml"/>
+      <source file="try020xpath.xml" uri="try020xpath.xml"/>
+   </environment>
+
+   <test-case name="try-001">
+      <description>Simple test of xsl:try</description>
+      <keywords>xsl:try error-handling generic-catch-clause FOAR0001</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>      
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o>divide by zero</o>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-002">
+      <description>Test of xsl:try as a higher-order function</description>
+      <keywords>xsl:try error-handling generic-catch-clause $err:code $err:module $err:line-number $err:description FORG0001</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Abel Braaksma" on="2015-04-19" change="Allow for outcome variants with and without lineinfo and module info"/>
+      <modified by="Michael Kay" on="2016-03-23" change="Further attempt to improve interoperability"/>      
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of xmlns:err="http://www.w3.org/2005/xqt-errors">
+            <assert>/o/err:error/@code = "err:FOAR0001"</assert>
+            <assert>/o/err:error/message[contains(lower-case(.), 'divi')]</assert>
+            <assert>/o/err:error/message[contains(lower-case(.), 'by zero')]</assert>
+            <assert>/o/err:error/@line = ("17", "")</assert>
+            <assert>/o/err:error/@module[. = "" or contains(., "try-002.xsl")]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="try-003">
+      <description>Test xsl:try rethrowing the exception</description>
+      <keywords>_IMPROVE:cleanup-redundant-code fn:error xsl:try error-handling generic-catch-clause specific-catch-clause FORG0001 $err:code $err:line-number $err:value</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FOAR0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="try-004">
+      <description>Use xsl:try to catch a validation error. Should not report the error.</description>
+      <keywords>stylesheet-function XTTE1540 xsl:import-schema xsl:try error-handling generic-catch-clause $err:code $err:module $err:line-number $err:description _WRONG:not-sure-test-is-correct xsl:function fn:boolean _IMPROVE:cannot-test-error-variables</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-03-23" change="Add dependency on schema awareness"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o><validation-error><err:error xmlns:err="http://www.w3.org/2005/xqt-errors" code="err:XTTE1540"
+                 module="try-004.xsl"
+                 line="0"><message>true</message></err:error></validation-error></o>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-005">
+      <description>
+         Show xsl:try around element creation doesn't catch an error just because the element isn't valid 
+         in the content model of its parent
+      </description>
+      <keywords>_WRONG:not-sure-test-is-correct stylesheet-function xsl:import-schema xsl:try error-handling generic-catch-clause $err:code $err:module $err:line-number $err:description xsl:function</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-03-23" change="Add dependency on schema awareness"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="try-006">
+      <description>xsl:try element, simple case</description>
+      <keywords>FOAR0001 xsl:try error-handling generic-catch-clause</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Infinity</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-007">
+      <description>xsl:try element, catch a specific error</description>
+      <keywords>xsl:try error-handling generic-catch-clause specific-catch-clause FOAR0001</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Infinity</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-008">
+      <description>xsl:try element, catch a specific error</description>
+      <keywords>xsl:try error-handling generic-catch-clause specific-catch-clause FOAR9876 FOAR0001</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-008.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Infinity</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-009">
+      <description>xsl:try element, catch several errors</description>
+      <keywords>xsl:try error-handling generic-catch-clause specific-catch-clause FOAR9876 err:FOAR0001</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Infinity</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-010">
+      <description>xsl:try element, use sequence constructor</description>
+      <keywords>xsl:try error-handling generic-catch-clause specific-catch-clause FOAR9876 err:FOAR0001</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-010.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out test="Infinity"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-011">
+      <description>Error: variable declared in xsl:try is not visible with xsl:catch</description>
+      <keywords>XPST0008 variable-scope xsl:try error-handling generic-catch-clause specific-catch-clause</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-011.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPST0008"/>
+      </result>
+   </test-case>
+
+   <test-case name="try-012">
+      <description>element-available on xsl:try/catch</description>
+      <keywords>fn:element-available xsl:try xsl:catch</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-06-29" change="spec of element-available() has changed in 3.0"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-012.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out try="true" catch="true"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-013">
+      <description>element-available on xsl:try/catch in XSLT 2.0</description>
+      <keywords>fn:element-available xsl:try xsl:catch 2.0-only-behavior</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-013.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out try="false" catch="false"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-014">
+      <description>xsl:fallback with xsl:try in XSLT 3.0</description>
+      <keywords>_WRONG:incorrect-dependency xsl:fallback xsl:try error-handling generic-catch-clause no-error-inside-try</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-014.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-015">
+      <description>xsl:fallback with xsl:try in XSLT 2.0</description>
+      <keywords>_WRONG:incorrect-dependency 2.0-only-behavior forwards-compatibility-mode xsl:fallback xsl:try error-handling generic-catch-clause no-error-inside-try</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-014.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-016">
+      <description>Invalid child of xsl:try in XSLT 3.0</description>
+      <keywords>_WRONG:incorrect-dependency xsl:fallback xsl:try error-handling generic-catch-clause no-error-inside-try</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-016.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-017">
+      <description>Invalid child of xsl:try in XSLT 2.0 (caught by xsl:fallback) (same test as try016 but run under XSLT 2.0)</description>
+      <keywords>_WRONG:incorrect-dependency forwards-compatibility-mode xsl:fallback xsl:try error-handling generic-catch-clause no-error-inside-try</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-017.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-018">
+      <description>xsl:catch with references to error variables in body</description>
+      <keywords>_IMPROVE:cannot-test-error-variables xsl:try error-handling generic-catch-clause $err:code $err:description $err:value $err:module $err:line-number $err:column-number FODC0002</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-04-28" change="reproducible results"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-018.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/code[@ns="http://www.w3.org/2005/xqt-errors" and @local="FODC0002"]</assert>
+           <assert>/out/description[contains(., 'try-018-rubbish.xml')]</assert>
+           <assert>/out/module[ends-with(., 'try-018.xsl')]</assert>
+           <assert>/out/line = "11"</assert>
+         </all-of>  
+      </result>
+   </test-case>
+
+   <test-case name="try-019">
+      <description>xsl:catch with references to error variables in select attribute</description>
+      <keywords>_WRONG:incorrect-dependency _IMPROVE:cannot-test-error-variables FODC0002 xsl:try error-handling generic-catch-clause $err:column-number</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-04-28" change="reproducible results"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-019.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>contains(/out, "FODC0002")</assert>
+           <assert>contains(/out, 'rubbish.xml')</assert>
+           <assert>contains(/out, 'try-019.xsl')</assert>
+           <assert>contains(/out, '#11#')</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="try-020">
+      <description>xsl:result-document within xsl:try which throws a division by zero error</description>
+      <keywords>_IMPROVE:xsl:result-document-href-dependency FOAR0001 xsl:result-document xsl:try error-handling generic-catch-clause</keywords>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-020.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<output xmlns:xs="http://www.w3.org/2001/XMLSchema"><ERROR message="Division by 0 error caught!"/></output>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-021">
+      <description>xsl:result-document within xsl:try</description>
+      <keywords>_WRONG:incorrect-dependency _IMPROVE:cannot-test-error-variables XTDE1490 fn:boolean xsl:result-document xsl:try error-handling generic-catch-clause $err:code $err:module $err:line-number $err:description</keywords>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-021.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<err:error xmlns:err="http://www.w3.org/2005/xqt-errors"
+           code="err:XTDE1490"
+           module="try-021.xsl"
+           line="15"><message>true</message></err:error>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-022">
+      <description>xsl:result-document within xsl:try, which catches a division by zero error in second result-document</description>
+      <keywords>FOAR0001 _IMPROVE:cannot-test-error-variables xsl:result-document xsl:try error-handling generic-catch-clause $err:code $err:module $err:line-number $err:description</keywords>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2013-01-31" change="restructure the test assertions"/>
+      <modified by="Michael Kay" on="2016-03-23" change="improve the test assertions"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-022.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/result/*:error[@code="err:FOAR0001" and @module="try-022.xsl" and @line="21"]</assert>
+           <assert>contains(/result/*:error/message, "zero")</assert>
+           <assert>/result/output = "main document"</assert>
+           <assert-result-document uri="try-022-1.out">
+             <assert>/output</assert>
+           </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="try-023">
+      <description>xsl:try within xsl:result-document, within xsl:try</description>
+      <keywords>_WRONG:incorrect-dependency no-error-inside-try xsl:result-document xsl:try error-handling generic-catch-clause $err:code $err:module $err:line-number $err:description</keywords>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2013-01-31" change="restructure the test assertions"/>
+      <modified by="Michael Kay" on="2013-04-05" change="further restructure the test assertions"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-023.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-result-document uri="try023.out">
+            	<assert>/output = "main document"</assert>
+            </assert-result-document>
+            <assert-result-document uri="try023_1.out">
+               <assert>/output/output/note = "secondary document written"</assert>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="try-024">
+      <description>xsl:try within xsl:result-document, within xsl:try, which catches a division by zero error in inner result-document</description>
+      <keywords>FOAR0001 complex-use-case _IMPROVE:cannot-test-error-variables xsl:result-document xsl:try error-handling generic-catch-clause $err:code $err:module $err:line-number $err:description</keywords>
+      <created by="O'Neil Delpratt" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2013-04-05" change="restructure the test assertions"/>
+      <modified by="Michael Kay" on="2016-03-23" change="improve the test assertions"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-024.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert-result-document uri="try024.out">
+               <assert>/output = "main document"</assert>
+            </assert-result-document>   
+            <assert-result-document uri="try024_1.out">
+               <all-of>
+                  <assert>/output/output/note = "secondary document written"</assert>
+                  <assert>/output/output/*:error/@code[contains(.,"FOAR0001")]</assert>
+                  <assert>contains(/output/output/*:error/message, "zero")</assert>
+               </all-of>   
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="try-025">
+      <description>Invalid child of xsl:try in XSLT 2.0 (not caught by xsl:fallback) (same test as try-016 but run under XSLT 2.0)</description>
+      <keywords>2.0-only-behavior XTSE0010 xsl:fallback xsl:try error-handling generic-catch-clause</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-025.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+
+   <test-case name="try-026">
+      <description>Invalid child of xsl:try in XSLT 2.0 (caught by xsl:fallback) (same test as try-017 but specifies version="3.0" at the instruction level)</description>
+      <keywords>version-attribute forwards-compatibility-mode xsl:fallback xsl:try error-handling generic-catch-clause</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-026.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="try-027">
+      <description>xsl:evaluate within xsl:try</description>
+      <keywords>xsl:evaluate _IMPROVE:cleanup-test xsl:try error-handling generic-catch-clause $err:description</keywords>
+      <created by="Toshihito Makita" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-03-23" change="add dependency on dynamic evaluation"/>
+      <environment ref="try020"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="dynamic_evaluation"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-027.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<output xmlns:err="http://www.w3.org/2005/xqt-errors"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="try-028">
+      <description>error in evaluating global variable is not caught</description>
+      <keywords>xsl:try</keywords>
+      <created by="Michael Kay" on="2015-06-29"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-028.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FOAR0001"/>
+      </result>
+   </test-case>
+   
+    <test-case name="try-029">
+      <description>error in evaluating local variable is not caught</description>
+      <keywords>xsl:try</keywords>
+      <created by="Michael Kay" on="2015-06-29"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-029.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FOAR0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="try-030">
+      <description>error in evaluating local variable is not caught</description>
+      <keywords>xsl:try</keywords>
+      <created by="Michael Kay" on="2015-06-29"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-030.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FOAR0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="try-031">
+      <description>error in evaluating local variable is not caught</description>
+      <keywords>xsl:try</keywords>
+      <created by="Michael Kay" on="2015-06-29"/>
+      <environment ref="try020"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-031.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FOAR0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="try-032">
+      <description>Saxon bug 3791 - reference to err:code in a predicate</description>
+      <keywords>xsl:try</keywords>
+      <created by="Michael Kay" on="2018-05-25"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-032.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out='test: Bang!'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="try-033">
+      <description>rollback-output="no": recovery still possible because no output written</description>
+      <keywords>xsl:try</keywords>
+      <created by="Michael Kay" on="2018-07-26"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-033.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out='Error err:FODC0002 was caught!'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="try-034">
+      <description>rollback-output="no": recovery not possible because lots of output written</description>
+      <keywords>xsl:try</keywords>
+      <created by="Michael Kay" on="2018-07-26"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-034.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTDE3530"/>
+      </result>
+   </test-case>
+   
+   <test-case name="try-035">
+      <description>Must not loop-lift constant expressions out of a try/catch</description>
+      <keywords>xsl:try</keywords>
+      <created by="Michael Kay" on="2019-02-23"/>
+      <environment ref="try020"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-035.xsl"/>
+      </test>
+      <result>
+         <assert>/error</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="try-036">
+      <description>xpath-default-namespace does not apply to error QNames in xsl:catch</description>
+      <keywords>xsl:try error-handling generic-catch-clause specific-catch-clause FOAR0001</keywords>
+      <created by="Michael Kay" on="2019-04-13"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-036.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>OK</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="try-037">
+      <description>xpath-default-namespace does not apply to error QNames in xsl:catch</description>
+      <keywords>xsl:try error-handling generic-catch-clause specific-catch-clause FOAR0001</keywords>
+      <created by="Michael Kay" on="2019-04-13"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-037.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>Caught</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="try-038">
+      <description>Catch failure in tokenize()!xs:double</description>
+      <created by="Michael Kay after Norm Tovey-Walsh" on="2022-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<doc><inline>NOPE</inline><function/><message/><nested-functions/></doc>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="try-039">
+      <description>
+         Error: variable declared in xsl:try is not visible within select attribute xsl:catch.
+         Derived from try-011: see Saxon bug 5881
+      </description>
+      <keywords>XPST0008 variable-scope xsl:try error-handling generic-catch-clause specific-catch-clause</keywords>
+      <created by="Michael Kay" on="2023-02-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-039.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XPST0008"/>
+      </result>
+   </test-case>
+   
+   <test-case name="try-040">
+      <description>
+         Error: variable declared outwith xsl:try is visible within select attribute xsl:catch.
+         Derived from try-011: see Saxon bug 5881
+      </description>
+      <created by="Michael Kay" on="2023-02-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-040.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>out = '3.14159'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="try-041">
+      <description>
+         Error: global variable declared outwith xsl:try is visible within select attribute xsl:catch.
+         Derived from try-011: see Saxon bug 5881
+      </description>
+      <created by="Michael Kay" on="2023-02-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-041.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>out = '3.14159'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="try-042">
+      <description>
+         Error: global variable declared outwith xsl:try is visible within select attribute xsl:catch.
+         Derived from try-011: see Saxon bug 5881
+      </description>
+      <created by="Michael Kay" on="2023-02-14"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="try-042.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>out = '3.14159'</assert>
+      </result>
+   </test-case>
+</test-set>

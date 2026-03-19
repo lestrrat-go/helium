@@ -1,0 +1,606 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="attribute">
+   <description>Tests the xsl:attribute instruction</description>
+   
+   <environment name="attribute-01">
+      <source role="." file="attribute-01.xml"/>
+   </environment>
+   
+   <environment name="attribute-02">
+      <source role=".">
+         <content><![CDATA[<doc><foo>a</foo></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="attribute-03">
+      <source role="." file="attribute-03.xml"/>
+   </environment>
+   
+   <environment name="attribute-04">
+      <source role=".">
+         <content><![CDATA[<page>source</page>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="attribute-05">
+      <source role="." file="attribute-05.xml"/>
+   </environment>
+   
+   <environment name="attribute-06">
+      <source role=".">
+         <content><![CDATA[<docs><a href="http://www.ns0.com">Attr0</a><b href="">Attr1</b></docs>]]></content>
+      </source>
+   </environment>
+   <environment name="attribute-07">
+      <source role=".">
+         <content><![CDATA[<ticket>
+<input>
+<zoneone checked="1">Zoneone
+</zoneone>
+</input> 
+</ticket> ]]></content>
+      </source>
+   </environment>
+   
+   <environment name="attribute-08">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="attribute-09">
+      <source role="." file="attribute-09.xml"/>
+   </environment>
+   
+   <environment name="attribute-09b">
+      <source role="." file="attribute-09b.xml"/>
+   </environment>
+
+   <environment name="attribute-11">
+      <source role="." file="attribute-11.xml"/>
+   </environment>
+   
+   <environment name="attribute-13">
+      <source role=".">
+         <content><![CDATA[<docs><b>bdd:attr</b></docs>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="attribute-14">
+      <source role=".">
+         <content><![CDATA[<docs><doc/><a>X</a><a>Y</a><a>Z</a></docs>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="attribute-0001">
+      <description>Test that the attribute name is cast to a string if supplied as a QName</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="http://ns.p.com/" p:local="content"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0002">
+      <description>Test that the attribute namespace is cast to a string if supplied as a anyURI</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2018-05-31" change="remove dependency on arbitrary generated namespace prefixes"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>exists(/out)</assert>
+            <assert>count(/out/@*) = 1</assert>
+            <assert>local-name(/out/@*) = "local"</assert>
+            <assert>namespace-uri(/out/@*) = "http://ns.p.com/2"</assert>
+            <assert>exists(/out/namespace::p[.="http://ns.p.com/"])</assert>
+            <assert>exists(/out/namespace::*[.="http://ns.p.com/2"])</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0003">
+      <description>Test that the attribute name is cast to a string if supplied as a dynamic QName</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="http://ns.p.com/" p:local="content"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0004">
+      <description>Test that the attribute namespace is cast to a string if supplied as a dynamic anyURI</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="http://ns.p.com/" xmlns:p_1="http://ns.p.com/2" p_1:local="content"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0005">
+      <description>Test that the attribute namespace is cast to a string if supplied as a dynamic boolean (Highly artifial test, but legal XSLT, even though the results cannot be converted to canonical XML)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result value="true"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0301">
+      <description>test use of non-ASCII characters in URL and non-URL attributes using HTML output method</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <modified by="Debbie Lockett" on="2019-12-03" change="Amend result to allow for default HTML version 5.0"/>
+      <environment ref="attribute-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="serialization" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0301.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches><![CDATA[(<!DOCTYPE (HTML|html)>\s*)?<html>]]></serialization-matches>
+            <serialization-matches><![CDATA[<html>\s*<title>test</title>\s*<body>]]></serialization-matches>
+            <serialization-matches><![CDATA[<body>\s+père]]></serialization-matches>
+            <serialization-matches><![CDATA[<a href="http://p%C3%A8re">url</a>]]></serialization-matches>
+            <serialization-matches><![CDATA[<input type="text" name="test1" value="père">\s+<input type="text" name="test1" value="père">]]></serialization-matches>
+            <serialization-matches><![CDATA[<textarea name="test2" wrap="virtual" rows="4" cols="40">père</textarea>]]></serialization-matches>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0401">
+      <description>This test is designed to exercise the different paths in the Saxon implementation of xsl:attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2019-10-25" change="No need for this test to require serialization, or to depend on order of attributes"/>
+      <environment ref="attribute-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0401.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/html/@one = 'simple'</assert>
+            <assert>/html/@two = 'expression'</assert>
+            <assert>/html/@three = 'complex'</assert>
+            <assert>/html/@four = 'source'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0501">
+      <description>This test is designed to show that fixed attributes are copied and implied attributes are not</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="attribute-05"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="dtd" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<!--abcdef--><page attfixed="default">source</page>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0601">
+      <description>The namespace attribute is interpreted as an attribute value template.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2019-09-25" change="Remove dependency on generated namespace prefixes"/>
+      <environment ref="attribute-06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0601.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/root/namespace::ped="http://ped.test.com"</assert>
+            <assert>/root/Out/namespace::*[. = 'http://www.ns0.com']</assert>
+            <assert>/root/Out/namespace::*[. = 'http://ped.test.com']</assert>
+            <assert>/root/Out/@Q{http://www.ns0.com}Attr0 = "Hello"</assert>
+            <assert>/root/Out/@Q{}Attr1 = "Whatsup"</assert>
+            <assert>/root/Out/@Q{http://ped.test.com}Attr2 = "Goodbye"</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0701">
+      <description>Verify that 'checked' attribute of HTML element input is correctly set.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2019-12-05" change="Accept serialization variations such as HTML5 DOCTYPE and changed attribute order"/>
+      <environment ref="attribute-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="serialization" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0701.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <any-of>
+            <serialization-matches><![CDATA[<Input\s+Type=["']checkbox["']\s+CHECKED\s*></Form]]></serialization-matches>
+            <serialization-matches><![CDATA[<Input\s+CHECKED\s+Type=["']checkbox["']\s*></Form]]></serialization-matches>
+         </any-of>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0801">
+      <description>Verify adding an attribute to an element replaces any existing attribute of that element with the same expanded name.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="attribute-08"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root xmlns:bdd="http://www.bdd.com" xmlns:ped="http://www.ped.com">
+<Out attr1="Hello" ped:attr1="Test2-OK" bdd:attr1="Test1-OK" attr2="Goodbye"/></root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0802">
+      <description>Attempt to set an empty or null attribute in various ways.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="attribute-08"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0802.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e NoContent="" String0t="" String0v="" String0f=""/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0803">
+      <description>Verify adding an attribute to an element after children have been added to it is an error.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="attribute-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0803.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0410"/>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0804">
+      <description>Verify adding an attribute to an element after a comment has been added to it is an error.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="attribute-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0804.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0410"/>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-0805">
+      <description>
+      	Verify adding an attribute to an element after a PI has been added to it is an error. 
+      	The attributes can be ignored. The spec doesn't explicitly say this is disallowed, as it does for 
+      	child elements, but it makes sense to have the same treatment.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="attribute-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0805.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0410"/>
+      </result>
+   </test-case>
+   
+   <test-case name="attribute-0806">
+      <description>
+      	XSLT processors may make use of the prefix of the QNAME specified in the name attribute ... however 
+      	they are not required to do so and, if the prefix is xmlns, they must not do so ... this will not 
+      	result in a namespace declaration being output.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="attribute-08"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="namespace_axis"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0806.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="attribute-0806.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="attribute-0807">
+      <description>
+      	Test case that uses xsl:attribute instruction to create an attribute without having the REQUIRED name.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="attribute-08"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0807.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>   
+
+
+   <test-case name="attribute-0901">
+      <description>Test for selecting attributes with xml namespace prefix.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="attribute-09"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  a
+  b
+
+  c
+  d
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="attribute-0902">
+      <description>Test for selecting attributes with namespace.</description>
+      <created by="Debbie Lockett" on="2017-07-05"/>
+      <environment ref="attribute-09b"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-0902.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-1101">
+      <description>Verify that attributes that contain text nodes with a newline, the output must contain a character reference.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2017-08-10" change="Revert to original intent as a serialization test"/>
+      <environment ref="attribute-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="serialization" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-1101.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches><![CDATA[attr1=["']x&#(0*10|x0*A);&#x?0*9;  y["']/>]]></serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-1301">
+      <description>The attribute must be in the designated namespace, even if the prefix has to be reset or ignored.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="attribute-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ans xmlns:bdd="http://bdd.test.com" bdd="http://bdd.test.com" attr-ns="http://xyz.com"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-1302">
+      <description>The attribute must be in the designated namespace, even if the prefix has to be reset or ignored.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="attribute-13"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-1302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:bdd="http://bdd.test.com"><ans local="attr" ns="http://xyz.com" good-prefix="true"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="attribute-1401">
+      <description>Use xsl:element with for-each inside xsl:attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="attribute-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out test1="XYZ"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="attribute-1501">
+      <description>Use xsl:attribute to validate against built-in attribute declarations in XML schema</description>
+      <created by="Michael Kay" on="2022-05-03"/>
+      <modified by="Michael Kay" on="2023-08-24" change="Import schema for XML namespace. It isn't built in automatically."/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-1501.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/e1/@xml:lang='en-US'</assert>
+            <assert>/out/e2/@xml:lang=''</assert>
+            <assert>/out/e3/@xml:space='preserve'</assert>
+            <assert>/out/e4/@xml:space='default'</assert>
+            <assert>/out/e5/@xml:id='ID001'</assert>
+            <assert>/out/id-ok='true'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="attribute-1502">
+      <description>Use xsl:attribute to validate against built-in attribute declarations in XML schema - error case</description>
+      <created by="Michael Kay" on="2022-05-03"/>
+      <modified by="Michael Kay" on="2023-08-24" change="Import schema for XML namespace. It isn't built in automatically."/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-1502.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="attribute-1503">
+      <description>Use xsl:attribute to validate against built-in attribute declarations in XML schema - error case</description>
+      <created by="Michael Kay" on="2022-05-03"/>
+      <modified by="Michael Kay" on="2023-08-24" change="Import schema for XML namespace. It isn't built in automatically."/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-1503.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="attribute-1504">
+      <description>Use xsl:attribute to validate against built-in attribute declarations in XML schema - error case</description>
+      <created by="Michael Kay" on="2022-05-03"/>
+      <modified by="Michael Kay" on="2023-08-24" change="Import schema for XML namespace. It isn't built in automatically."/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-1504.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="attribute-1505">
+      <description>Use xsl:attribute to validate against built-in attribute declarations in XML schema
+         - no error for duplicate IDs in this case.</description>
+      <created by="Michael Kay" on="2022-05-03"/>
+      <modified by="Michael Kay" on="2023-08-24" change="Import schema for XML namespace. It isn't built in automatically."/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-1505.xsl"/>
+      </test>
+      <result>
+         <assert>/out/doc/e5</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="attribute-1506">
+      <description>Use xsl:attribute to validate against built-in attribute declarations in XML schema - error case (duplicate ID)</description>
+      <created by="Michael Kay" on="2022-05-03"/>
+      <modified by="Michael Kay" on="2023-08-24" change="Import schema for XML namespace. It isn't built in automatically."/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-1506.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1555"/>
+      </result>
+   </test-case>
+   
+   <test-case name="attribute-1507">
+      <description>Use xsl:attribute to validate against built-in attribute declarations in XML schema - error case (dangling IDREF)</description>
+      <created by="Michael Kay" on="2022-05-03"/>
+      <modified by="Michael Kay" on="2023-08-24" change="Import schema for XML namespace. It isn't built in automatically."/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="attribute-1507.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1555"/>
+      </result>
+   </test-case>
+
+</test-set>

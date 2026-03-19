@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="forwards">
+
+   <description>Tests an XSLT 3.0 processor running in forwards-compatible mode</description>
+
+ 
+   <dependencies>
+      <spec value="XSLT30+"/>  
+      <!-- tests might need revision to run with a processor supporting a later version of XSLT -->
+   </dependencies>
+
+   <test-case name="forwards-001">
+      <description>If the element is in the XSLT namespace and appears as a child of the xsl:stylesheet element, 
+         and XSLT 3.0 does not allow the element to appear as a child of the xsl:stylesheet element, 
+         then the element and its content must be ignored.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-002">
+      <description>If the element is in the XSLT namespace and appears as a child of the xsl:stylesheet element, 
+         and XSLT 3.0 does not allow the element to appear as a child of the xsl:stylesheet element, 
+         then the element and its content must be ignored.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-003">
+      <description>Same as forwards-002 but using xsl:transform.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-004">
+      <description>Same as forwards-002 but using xsl:package. (Extrapolates what the spec actually says)</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <modified by="Michael Kay" on="2019-03-06" change="make entry point public"/>
+      <test>
+         <stylesheet file="forwards-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-005">
+      <description>Instruction as child of xsl:transform</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-006">
+      <description>xsl:transform as child of xsl:transform</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-007">
+      <description>xsl:when as child of xsl:transform</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-008">
+      <description>Bad XPath expression on use-when attribute of ignored element</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-008.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-009">
+      <description>Unknown shadow attribute in forwards compatibility mode</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-010">
+      <description>Unknown shadow attribute with invalid value in forwards compatibility mode</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-010.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-011">
+      <description>Handling of xsl:expose in forwards compatibility mode</description>
+      <created by="Michael Kay" on="2020-12-04"/>
+      <test>
+         <stylesheet file="forwards-011.xsl"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-101">
+      <description>If the element has an attribute that XSLT 3.0 does not allow the element to have, then the attribute must be ignored.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-101.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-102">
+      <description>If the element has an attribute that XSLT 3.0 does not allow the element to have, then the attribute must be ignored.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-102.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-103">
+      <description>If the element has an attribute that XSLT 3.0 does not allow the element to have, then the attribute must be ignored.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-103.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-104">
+      <description>If the element has an attribute that XSLT 3.0 does not allow the element to have, then the attribute must be ignored.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-104.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-105">
+      <description>If the element has an attribute that XSLT 3.0 does not allow the element to have, then the attribute must be ignored.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-105.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-106">
+      <description>If the element has an attribute that XSLT 3.0 does not allow the element to have, then the attribute must be ignored.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-106.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-107">
+      <description>If the element has a shadow attribute that XSLT 3.0 does not allow the element to have, then the attribute must be ignored.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-107.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-201">
+      <description>If the element is in the XSLT namespace and appears as a child of an element whose
+         content model requires a sequence constructor, and XSLT 3.0 does not allow such elements
+         to appear as part of a sequence constructor, then:
+         If the element has one or more xsl:fallback children, then no error is reported either
+         statically or dynamically, and the result of evaluating the instruction is the concatenation
+         of the sequences formed by evaluating the sequence constructors within its xsl:fallback children,
+         in document order. </description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-201.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'ok'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-202">
+      <description>If the element is in the XSLT namespace and appears as a child of an element whose
+         content model requires a sequence constructor, and XSLT 3.0 does not allow such elements
+         to appear as part of a sequence constructor, then:
+         If the element has one or more xsl:fallback children, then no error is reported either
+         statically or dynamically, and the result of evaluating the instruction is the concatenation
+         of the sequences formed by evaluating the sequence constructors within its xsl:fallback children,
+         in document order. Siblings of the xsl:fallback elements are ignored, even if they are valid 
+         XSLT 3.0 instructions.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-202.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/in = 'ok1'</assert>
+            <assert>/out/in = 'ok2'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-203">
+      <description>Siblings of the xsl:fallback elements are ignored, even if they are valid 
+         XSLT 3.0 instructions.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-203.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/in = 'ok1'</assert>
+            <assert>/out/in = 'ok2'</assert>
+            <assert>not(/out/*[3])</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-204">
+      <description>Siblings of the xsl:fallback elements are ignored, even if they are valid 
+         XSLT 3.0 instructions.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-204.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/in = 'ok1'</assert>
+            <assert>/out/in = 'ok2'</assert>
+            <assert>not(/out/*[3])</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="forwards-205">
+      <description>Siblings of the xsl:fallback elements are ignored, even if they are valid 
+         XSLT 3.0 instructions.</description>
+      <created by="Michael Kay" on="2017-06-19"/>
+      <test>
+         <stylesheet file="forwards-205.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/in = 'ok1'</assert>
+            <assert>/out/in = 'ok2'</assert>
+            <assert>not(/out/*[3])</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+ 
+   
+</test-set>

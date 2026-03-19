@@ -1,0 +1,474 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="package-version">
+   <description>Tests the effect of the package-version attribute</description>
+
+   <dependencies>
+     <spec value="XSLT30+"/>
+   </dependencies>
+   
+   <test-case name="package-version-001">
+      <description>Basic package-version test, absence of package-version is allowed on xsl:package</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>
+      <modified by="Abel Braaksma" on="2016-09-05" change="Added a name, so it can be reused in the -1xx versions of these tests"/>
+      <modified by="Abel Braaksma" on="2018-01-17" change="Removed package-version attribute to reflect the intent of the test"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public (with static param defaulting to private, as this otherwise conflicts with tests using this package), private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-001.xsl"/>
+         <param name="initialVisibility" static="yes" as="xs:string" select="'public'"/>
+      </test>
+      <result>
+         <assert-string-value>A package without a version is allowed</assert-string-value>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-002">
+      <description>Basic package-version test, with a simple version</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <modified by="Abel Braaksma" on="2016-09-05" change="Added a name, so it can be reused in the -1xx versions of these tests"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-002.xsl"/>
+      </test>
+      <result>
+         <assert>package-version = "1.0"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-003">
+      <description>Basic package-version test, with a NamePart</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <modified by="Abel Braaksma" on="2016-09-05" change="Added a name, so it can be reused in the -1xx versions of these tests"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-003.xsl"/>
+      </test>
+      <result>
+         <assert>package-version = "1.0-alpha"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-004">
+      <description>Basic package-version test, with a longer NamePart</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <modified by="Abel Braaksma" on="2016-09-05" change="Added a name, so it can be reused in the -1xx versions of these tests"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-004.xsl"/>
+      </test>
+      <result>
+         <assert>package-version = "1.0-alpha-beta-gamma"</assert>
+      </result>
+   </test-case>
+      
+   <test-case name="package-version-005">
+      <description>Basic package-version test, testing some weird, but allowed characters in the NamePart</description>
+      <created by="Abel Braaksma" on="2016-09-04"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-005.xsl"/>
+      </test>
+      <result>
+         <assert>package-version = "1.0-⿨⿩⿪⿫⿬⿭⿮⿯、。〃〄々〆〇〈〉《》「」『』【】〒〓〔〕〖〗〘〙〚〛〜〝〞〟〠〡〢〣〤〥〦〧〨〩〪〭〮〯〫〬〰〱〲〳〴〵〶〷〸〹〺〻〼〽〾〿぀ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじ"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-006">
+      <description>More advanced: overriding the package version with a shadow attribute</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-006.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-007">
+      <description>More advanced: overriding the package version with a shadow attribute, original package-version is invalid</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-007.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-008">
+      <description>Getting the version from the DTD declaration</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-008.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-009">
+      <description>Setting the package-version equal to the XSLT version, both in shadow attributes</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-009.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>   
+   
+   <test-case name="package-version-010">
+      <description>Setting part of the package-version equal to the product version (note: this test may fail if the product version is not a valid package version)</description>
+      <created by="Abel Braaksma" on="2016-06-06"/> 
+      <modified by="Michael Kay" on="2016-10-26" change=""/> 
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-010.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-011">
+      <description>Setting the package-version to the XSLT version in a creative manner</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-011.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-012">
+      <description>Setting the package-version to a bunch of very high numbers</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>   
+      <modified by="Michael Kay" on="2016-10-26" change="Allow error, see bug 29880"/>   
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-012.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/res = 'Success'</assert>
+            <error code="XTSE0020"/>
+         </any-of>
+      </result>
+   </test-case>
+      
+   <test-case name="package-version-013">
+      <description>Setting the package-version to a a LOT of NumericPart, there is no imposed limit</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>
+      <modified by="Michael Kay" on="2016-10-26" change="Allow error, see bug 29880"/>   
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-013.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/res = 'Success'</assert>
+            <error code="XTSE0020"/>
+         </any-of>
+      </result>
+   </test-case>
+      
+   <test-case name="package-version-014">
+      <description>Using package-version in forwards compatibility mode</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-014.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>
+         
+   <test-case name="package-version-015">
+      <description>Using package-version in backwards compatibility mode</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <dependencies>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="package-version-015.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>   
+   
+   <test-case name="package-version-016">
+      <description>Present package-version, absent name (allowed, but has no effect for top-level packages)</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-016.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>   
+   
+   <test-case name="package-version-017">
+      <description>Absent package-version, absent name</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-017.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>   
+   
+   <test-case name="package-version-018">
+      <description>Absent package-version, present name</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-018.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="package-version-019">
+      <description>Test up to the maximum limits that processors must accept</description>
+      <created by="Abel Braaksma" on="2016-10-26"/>     
+      <modified by="Abel Braaksma" on="2019-02-19" change="Make xsl:initial-template public, private named templates are not eligible initial templates (bug #30398)"/>
+      <test>
+         <stylesheet file="package-version-019.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-101">
+      <description>Loading a versionless package by its name, using version "*"</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>
+      <modified by="Abel Braaksma" on="2018-01-17" change="Renumbered from 101a. Removed package-version attribute from package xsl file."/>
+      <environment>
+         <package file="package-version-001.xsl" uri="urn:simple" role="secondary" />
+      </environment>
+      <test>
+         <stylesheet file="package-version-101.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-102">
+      <description>Loading a versionless package by its name, using version 1 (the default acc. to section 3.5)</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>
+      <environment>
+         <package file="package-version-001.xsl" uri="urn:simple" role="secondary" />
+      </environment>
+      <test>
+         <stylesheet file="package-version-102.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-103">
+      <description>Loading a versionless package by its name, using explicit version 1.0.0</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>
+      <environment>
+         <package file="package-version-001.xsl" uri="urn:simple" role="secondary" />
+      </environment>
+      <test>
+         <stylesheet file="package-version-103.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-104">
+      <description>Loading a versionless package by its name, using explicit version 1.*</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>
+      <environment>
+         <package file="package-version-001.xsl" uri="urn:simple" role="secondary" />
+      </environment>
+      <test>
+         <stylesheet file="package-version-104.xsl"/>
+      </test>
+      <result>
+         <assert>/res = 'Success'</assert>
+      </result>
+   </test-case>
+   
+
+
+   
+   <test-case name="package-version-900">
+      <description>Basic package-version test, error scenario, not allowed on xsl:stylesheet</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <test>
+         <stylesheet file="package-version-900.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-901">
+      <description>Basic package-version test, error scenario, not allowed on xsl:transform</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <test>
+         <stylesheet file="package-version-901.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-902">
+      <description>Basic package-version test, error scenario, some weird, but disallowed characters</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <test>
+         <stylesheet file="package-version-902.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-903">
+      <description>Basic package-version test, error scenario, invalid version number: 1.</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <test>
+         <stylesheet file="package-version-903.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-904">
+      <description>Basic package-version test, error scenario, invalid version number: 34..99</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <test>
+         <stylesheet file="package-version-904.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-905">
+      <description>Basic package-version test, error scenario, invalid version numbers: -5</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <test>
+         <stylesheet file="package-version-905.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-906">
+      <description>Basic package-version test, error scenario, invalid version numbers: 34E9</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <test>
+         <stylesheet file="package-version-906.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-907">
+      <description>Basic package-version test, error scenario, empty version number</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <test>
+         <stylesheet file="package-version-907.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-908">
+      <description>Shadow attribute makes package-version invalid</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <test>
+         <stylesheet file="package-version-908.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+
+   <test-case name="package-version-909">
+      <description>Shadow attribute in package-version throws FO error</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <test>
+         <stylesheet file="package-version-909.xsl"/>
+      </test>
+      <result>
+         <error code="FOAR0001"/>
+      </result>
+   </test-case>
+
+   <test-case name="package-version-910">
+      <description>Shadow attribute in package-version renders the original package version empty</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <test>
+         <stylesheet file="package-version-910.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+
+   <test-case name="package-version-911">
+      <description>Shadow attribute must not be in the xsl namespace</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>     
+      <test>
+         <stylesheet file="package-version-911.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0090"/>
+      </result>
+   </test-case>
+
+   <test-case name="package-version-912a">
+      <description>Using package-version attribute in XSLT 2.0 is not allowed (in fact, xsl:package is not even allowed, so XTSE0010, not XTSE0090)</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>  
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="package-version-912.xsl"/>         
+      </test>
+      <result>
+         <error code="XTSE0010"/>
+      </result>
+   </test-case>
+   
+   <test-case name="package-version-912b">
+      <description>Using package-version attribute in XSLT 1.0 is not allowed (in fact, xsl:package is not even allowed)</description>
+      <created by="Abel Braaksma" on="2016-06-06"/>  
+      <dependencies>
+         <spec value="XSLT10"/>
+      </dependencies>
+      <test>
+         <stylesheet file="package-version-912.xsl"/>         
+      </test>
+      <result>
+         <error code="*"/>
+      </result>
+   </test-case>
+</test-set> 

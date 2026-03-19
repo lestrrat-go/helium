@@ -1,0 +1,302 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-head">
+   <description>head() function with streaming</description>
+   
+   <environment name="sf-head-A">
+     <stylesheet file="sf-head-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-head-001">
+      <description>Streaming head() - grounded operand</description>
+      <keywords>striding-then-grounded leading-lone-slash PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4.95</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-002">
+      <description>Streaming head() - grounded operand</description>
+      <keywords>leading-lone-slash striding-then-grounded fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-003">
+      <description>Streaming head() - grounded atomic operand</description>
+      <keywords>striding-then-grounded leading-lone-slash fn:tokenize ContextItemExpr PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>8.3 1.0 6.8 7.8 22.5 7.8</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-010">
+      <description>Streaming head() - striding operand, inspection usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:count</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-011">
+      <description>Streaming head() - striding operand, absorption usage</description>
+      <keywords>striding leading-lone-slash PathExpr fn:sum</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "4.95"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-012">
+      <description>Streaming head() - striding operand, transmission usage</description>
+      <keywords>leading-lone-slash striding motionless-predicate fn:position PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>empty(/out/node())</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-013">
+      <description>Streaming head() - striding operand, focus-setting usage</description>
+      <keywords>AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "5.95"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-head-014">
+      <description>Streaming head() - striding operand, focus-controlled usage</description>
+      <keywords>leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE></out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-head-015">
+      <description>Streaming head() - striding operand, focus-setting usage</description>
+      <keywords>leading-lone-slash striding PathExpr AdditiveExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 "</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-head-016">
+      <description>Streaming head() - striding operand, focus-controlled usage</description>
+      <keywords>xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-017">
+      <description>Streaming head() - striding operand, focus-setting usage for inspection action</description>
+      <keywords>leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-018">
+      <description>Streaming head() - striding operand, apply-templates usage</description>
+      <keywords>leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and Prejudice"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-020">
+      <description>Streaming head() - crawling operand, inspection usage</description>
+      <keywords>xsl:copy-of fn:count crawling-then-striding PathExpr leading-double-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-021">
+      <description>Streaming head() - crawling operand, absorption usage</description>
+      <keywords>leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-022">
+      <description>Streaming head() - crawling operand, transmission usage</description>
+      <keywords>striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and Prejudice"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-023">
+      <description>Streaming head() - crawling operand, focus-setting usage</description>
+      <keywords>leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert>/out = "5.95"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-030">
+      <description>Streaming head() - climbing operand, inspection usage</description>
+      <keywords>striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-031">
+      <description>Streaming head() - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-head-032">
+      <description>Streaming head() - climbing operand, absorption usage</description>
+      <keywords>climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = "MHK"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-033">
+      <description>Streaming head() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "MMP"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-head-034">
+      <description>Streaming head() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>/out = "MMP"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-head-035">
+      <description>Streaming head() - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <environment ref="sf-head-A"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "MHK"</assert>
+      </result>
+   </test-case>  
+
+
+
+</test-set>

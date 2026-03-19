@@ -1,0 +1,1419 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="validation">
+   <description>Tests the @validation and @default-validation attributes</description>
+   
+   <environment name="validation-01">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="validation-02">
+      <source role="." validation="strict" file="validation-02.xml"/>
+      <schema file="gedSchema.xsd"/>
+      <schema file="xhtml1-transitional.xsd" role="secondary"/>
+      <schema file="xml.xsd" role="secondary"/>
+      <schema file="validation-10.xsd" role="secondary"/>
+   </environment>
+   
+   <environment name="validation-10">
+      <source role="." validation="strict" file="validation-10.xml"/>
+      <schema file="validation-10.xsd"/>
+   </environment>
+   
+   <environment name="validation-12">
+         <source role="." validation="strict">
+            <content><![CDATA[<test xmlns="http://ns.example.com/val12/"
+                                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true"/>]]></content>
+         </source>
+         <schema file="validation-12.xsd"/>
+      </environment>
+   
+   <environment name="validation-16">
+      <source role="." validation="skip">
+         <content><![CDATA[<test/>]]></content>
+      </source>
+      <schema file="validation-16.xsd"/>
+   </environment>
+   
+   <environment name="validation-20">
+      <source validation="strict" file="validation-20.xml" uri="validation-20.xml"/>
+      <source validation="strict" file="validation-20a.xml" uri="validation-20a.xml"/>
+      <schema file="validation-12.xsd"/>
+   </environment>
+
+   <test-case name="validation-0004">
+      <description>
+      	Erratum E10: validation of an attribute may cause a failure even if the attribute is subsequently 
+      	overwritten by a valid attribute. Note, a processor is not required to detect this failure. 
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+        <schema file="validation-0004.xsd" role="stylesheet-import"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <any-of>
+           <error code="XTTE1510"/>
+           <assert-xml><![CDATA[<IndividualRec Id="ABCD" Gender="F"/>]]></assert-xml>
+         </any-of>  
+      </result>
+   </test-case>
+
+   <test-case name="validation-0005">
+      <description>
+      	Erratum E12: validation uniqueness constraints when validating at element level. Note, the expected 
+      	result given in the test catalog is failure, but a processor is not required to detect this failure 
+      	(the erratum only says it "should" detect it). We don't currently have a way of representing this 
+      	alternative result.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+        <schema file="gedSchema.xsd" role="stylesheet-import"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0006">
+      <description>Validate standalone (parentless) attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTTE1555"/>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0101">
+      <description>
+      	Test that an error is raised if @validation=strict is present in the stylesheet 
+      	but the processor is a non-schema-aware processor.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0101.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1660"/>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0102a">
+      <description>
+      	Test that an error is raised (by 2.0) if @validation=lax is present in the stylesheet 
+      	but the processor is a non-schema-aware processor.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0102.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1660"/>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0102b">
+      <description>
+      	Test that an error is NOT raised (by 3.0) if @validation=lax is present in the stylesheet 
+      	but the processor is a non-schema-aware processor.
+      </description>
+      <created by="Michael Kay" on="2014-09-29"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0102.xsl"/>
+      </test>
+      <result>
+         <assert>/elem = '2.2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0103a">
+      <description>
+      	Test that an error is raised (in 2.0) if @validation=preserve is present in the stylesheet 
+      	but the processor is a non-schema-aware processor.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0103.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1660"/>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0103b">
+      <description>
+      	Test that an error is NOT raised (in 3.0) if @validation=preserve is present in the stylesheet 
+      	but the processor is a non-schema-aware processor.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0103.xsl"/>
+      </test>
+      <result>
+         <assert>/elem = '2.2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0104">
+      <description>
+      	Test that an error is raised if @default-validation=strict is present in the stylesheet 
+      	but the processor is a non-schema-aware processor.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0104.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1660"/>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0105a">
+      <description>
+      	Test that an error is raised (in 2.0) if @validation=preserve is present in the stylesheet 
+      	but the processor is a non-schema-aware processor.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2014-09-29" change="change the test to do what it says on the tin"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0105.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1660"/>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0105b">
+      <description>
+      	Test that an error is NOT raised (in 3.0) if @validation=preserve is present in the stylesheet 
+      	but the processor is a non-schema-aware processor.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Michael Kay" on="2014-09-29" change="change the test to do what it says on the tin"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0105.xsl"/>
+      </test>
+      <result>
+         <assert>/elem = '2.2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0106">
+      <description>
+         XSLT20 only:
+      	Test that an error is raised if @default-validation=preserve is present in the 
+      	stylesheet but the processor is a non-schema-aware processor.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Abel Braaksma" on="2015-04-06" change="Bug 28414, split into a 2.0 and 3.0 version"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0106.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE1660"/>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0106a">
+      <description>
+         XSLT30+ only:
+      	Test that an error is NOT raised if @default-validation=preserve is present in the 
+      	stylesheet but the processor is a non-schema-aware processor.
+      	See bug 28414.
+      </description>
+      <created by="Abel Braaksma" on="2015-04-05"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware" satisfied="false"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0106.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<elem>2.2</elem>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0107">
+      <description>
+      	Test validation with type="xs:untyped". Bugzilla 17480.
+      </description>
+      <created by="Michael Kay" on="2013-02-12"/>
+      <modified by="Michael Kay" on="2013-04-04" change="fix bug 21153"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0107.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/@a = "true"</assert>
+           <assert>/out/@b = "true"</assert>
+           <assert>/out/@c = "true"</assert>
+           <assert>/out/@d = "true"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0108">
+      <description>
+      	Test validation with type="xs:untypedAtomic". Bugzilla 17480.
+      </description>
+      <created by="Michael Kay" on="2013-02-12"/>
+      <modified by="Michael Kay" on="2013-04-04" change="fix bug 21153"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0108.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/@a = "true"</assert>
+           <assert>/out/@b = "true"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0109">
+      <description>
+      	Test unsuccessful validation with type="xs:untypedAtomic". Bugzilla 17480.
+      </description>
+      <created by="Michael Kay" on="2013-02-12"/>
+      <modified by="Michael Kay" on="2013-04-04" change="fix bug 21153"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0109.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0110">
+      <description>
+      	Test that an error is raised if @default-validation=strict is present on xsl:stylesheet.
+      </description>
+      <created by="Michael Kay" on="2015-02-02"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0110.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0020"/>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0111">
+      <description>
+         Validation of xsl:document with a document-node test
+      </description>
+      <created by="Michael Kay" on="2018-08-20"/>
+      <environment ref="validation-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0111.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE0505"/>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0201">
+      <description>
+      	A "system test" of schema-aware processing import the schema for the GEDCOM 6.0 vocabulary. 
+        Imports the schema for the target XHTML vocabulary 
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-04" change="Declared serialization requirement"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0201.xsl"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <assert-serialization method="xhtml" file="schvalid001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0202">
+      <description>
+      	A complex test creating multiple HTML output documents that are validated
+      	against a schema for XHTML
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2013-04-05" change="revamped assertions to avoid serialization dependencies"/>
+      <modified by="Michael Kay" on="2016-02-16" change="fix bug 29123 - remove 3.0 dependency."/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0202.xsl" role="principal"/>
+         <stylesheet file="validation-0202-person.xsl" role="secondary"/>
+      </test>
+      <result xmlns:h="http://www.w3.org/1999/xhtml">
+         <all-of>
+            <assert-result-document uri="validation-0202-out/index.xhtml">
+               <all-of>
+                  <assert>/h:html/h:head/h:title/normalize-space() = "Index of names"</assert>
+                  <assert>/h:html/h:body/h:h1 = "Index of names"</assert>
+                  <assert>/h:html/h:body/h:h2[1] = ""</assert>
+                  <assert>/h:html/h:body/h:h2[2] = "Bennett"</assert>
+                  <assert>/h:html/h:body/h:h2[3] = "Bouvier"</assert>
+                  <assert>/h:html/h:body/h:p[3]/normalize-space() = "Jaqueline Lee Bouvier"</assert>
+                </all-of>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I1.xhtml">
+               <all-of>
+                  <assert>/h:html/h:head/h:title/normalize-space() = "John Fitzgerald Kennedy"</assert>
+                  <assert>/h:html/h:body/h:h1/normalize-space() = "John Fitzgerald Kennedy"</assert>
+                  <assert>/h:html/h:body/h:table[1]/h:tr[1]/h:td[1]/h:p[1]/text()[1] = "29 May 1917"</assert>
+                  <assert>/h:html/h:body/h:table[1]/h:tr[1]/h:td[1]/h:p[1]/text()[2] = "Brookline, MA, USA"</assert>
+                </all-of>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I2.xhtml">
+               <assert>/h:html/h:head/h:title/normalize-space() = "Jaqueline Lee Bouvier"</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I3.xhtml">
+               <assert>/h:html/h:head/h:title/normalize-space() = "John Vernou Bouvier III"</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I4.xhtml">
+               <assert>/h:html/h:head/h:title/normalize-space() = "Janet Norton Lee"</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I5.xhtml">
+               <assert>/h:html/h:head/h:title/normalize-space() = "Caroline Bouvier Kennedy"</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I6.xhtml">
+               <assert>/h:html/h:head/h:title/normalize-space() = "John Fitzgerald Kennedy"</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I7.xhtml">
+               <assert>/h:html/h:head/h:title/normalize-space() = "Patrick Bouvier Kennedy"</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I8.xhtml">
+               <assert>/h:html/h:head/h:title/normalize-space() = "Joseph Patrick Kennedy"</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I9.xhtml">
+               <assert>/h:html/h:head/h:title/normalize-space() = "Rose Elizabeth Fitzgerald"</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I10.xhtml">
+               <assert>/h:html/h:head/h:title/normalize-space() = "Joseph Patrick Kennedy Jr"</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I11.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I12.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I13.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I14.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I15.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I17.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I18.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I19.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I20.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I21.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I22.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I23.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I24.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+            <assert-result-document uri="validation-0202-out/I25.xhtml">
+               <assert>/h:html/h:head/h:title</assert>
+            </assert-result-document>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0203">
+      <description>validation attribute of xsl:copy-of is ignored if node is not an element or attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root xmlns:xs="http://www.w3.org/2001/XMLSchema">2010-01-25Z</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0204">
+      <description>validation attribute of xsl:copy-of is ignored if node is not an element or attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0204.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root xmlns:xs="http://www.w3.org/2001/XMLSchema">Hello!</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0205">
+      <description>validation attribute of xsl:copy-of is ignored if node is not an element or attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0205.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root xmlns:xs="http://www.w3.org/2001/XMLSchema"><!--Hello!--></root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0206">
+      <description>validation attribute of xsl:copy-of is ignored if node is not an element or attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0206.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root xmlns:xs="http://www.w3.org/2001/XMLSchema">21</root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0207">
+      <description>validation attribute of xsl:copy-of is ignored if node is not an element or attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0207.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root xmlns:xs="http://www.w3.org/2001/XMLSchema"><?say Hello!?></root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0208">
+      <description>validation attribute of xsl:copy-of is ignored if node is not an element or attribute</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0208.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<root xmlns:xs="http://www.w3.org/2001/XMLSchema"><?say Hello!?></root>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0209">
+      <description>Test validation of xsl:attribute value against a simple atomic type</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0209.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1540"/>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0210">
+      <description>test impact of input-type-annotations: inconsistent across modules</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0210.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0265"/>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0211">
+      <description>Test validation of xsl:result-document: no href: output is invalid</description>
+      <created by="Michael Kay" on="2015-09-29"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0211.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0212">
+      <description>Test validation of xsl:result-document: with href: output is invalid</description>
+      <created by="Michael Kay" on="2015-09-29"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0212.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0213">
+      <description>Test validation of xsl:result-document: no href: output is valid</description>
+      <created by="Michael Kay" on="2017-11-30"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0213.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/*:html/*:head/*:title = 'Index of names'</assert>
+            <assert>/*:html/*:body/*:h1 = 'Index of names'</assert>
+            <assert>/comment() = 'The start'</assert>
+            <assert>/comment() = 'The end'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0214">
+      <description>Test validation of xsl:result-document: no href: output is invalid because of item-separator</description>
+      <created by="Michael Kay" on="2017-11-30"/>
+      <modified by="Michael Kay" on="2018-04-11" change="correct the expected error code"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0214.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1550"/>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-0215">
+      <description>Test validation=strip of xsl:result-document: no href: item-separator</description>
+      <created by="Michael Kay" on="2017-11-30"/>
+      <environment ref="validation-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0215.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/*:html/*:head/*:title = 'Index of names'</assert>
+            <assert>/*:html/*:body/*:h1 = 'Index of names'</assert>
+            <assert>/comment() = 'The start'</assert>
+            <assert>/comment() = 'The end'</assert>
+            <assert>/text() = '+++'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0301">
+      <description>show atomization of type-annotated element nodes</description>
+      <created by="Michael Kay" on="2012-11-07"/>      
+      <environment>
+         <source role="." validation="strict">
+            <content><![CDATA[<numbers xmlns="http://ns.example.com/val03/">12  34.5  18.2  5</numbers>]]></content>
+         </source>
+         <schema file="validation-03.xsd" uri="http://ns.example.com/val03/"/>
+   	</environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<total values="12 46.5 64.7 69.7"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0401">
+      <description>This stylesheet looks for cycles in the attribute set definitions within a stylesheet</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." validation="strict" file="validation-04.xml"/>
+         <schema file="schema-for-xslt20.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result cyclic-attribute-sets="A B D"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0501">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." validation="strict" file="validation-05.xml"/>
+         <schema file="schema-for-xslt20.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z>108</z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0601">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." validation="strict" file="validation-06.xml"/>
+         <schema file="schema-for-xslt20.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0601.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="validation-0601.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0701">
+      <description>match XSLT elements match literal result elements</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim MIlls" on="2012-12-18" change="Removed whitespace"/>
+      <environment>
+         <source role="." validation="strict" file="validation-07.xml"/>
+         <schema file="schema-for-xslt20.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0701.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="validation-0701.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0801">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." validation="strict" file="validation-08.xml"/>
+         <schema file="validation-08.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><p1 a="true"/><p2 a="true"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-0901">
+      <description>show that whitespace stripping is not allowed on an element with simple content import the schema for the GEDCOM 6.0 vocabulary</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." validation="strict" file="validation-09.xml"/>
+         <schema file="gedSchema.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-0901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a xmlns="http://www.w3.org/1999/xhtml" c="540">x</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-1001">
+      <description>test impact of input-type-annotations expected result changed 2010-07-13 as a result of decision on spec bug 10065 (test bug 891)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="validation-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><p1 a="false"/><p2 a="false"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-1002">
+      <description>PURPOSE : test impact of input-type-annotations</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="validation-10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><p1 a="true"/><p2 a="true"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-1101">
+      <description>show that if an element is validated as numeric, numeric comparison is OK</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." validation="strict">
+            <content><![CDATA[<test xmlns="http://ns.example.com/val11/">8</test>]]></content>
+         </source>
+         <schema file="validation-11.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a xmlns:t="http://ns.example.com/val11/">true</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-1201">
+      <description>show the nilled() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="validation-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z xmlns:t="http://ns.example.com/val12/"><a>true</a><a>false</a></z>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1202">
+      <description>Effect of xsl:copy-of validation="xxx" on the nilled property</description>
+      <created by="Michael Kay" on="2015-05-01"/>
+      <modified by="Abel Braaksma" on="2015-05-31" change="Bug 28634: adding xsl:import-schema to allow validation"/>
+      <modified by="Michael Kay" on="2018-07-02" change="Ensure sorting into (cross-)document order doesn't spoil the results"/>
+      <environment ref="validation-12"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z xmlns:t="http://ns.example.com/val12/"><a>true</a><a>true</a><a>true</a><a>false</a></z>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1203">
+      <description>Effect of copy-of() and snapshot() on the nilled property</description>
+      <created by="Michael Kay" on="2015-05-01"/>
+      <environment ref="validation-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1203.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z xmlns:t="http://ns.example.com/val12/"><a>true</a><a>true</a></z>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1204">
+      <description>Effect of xsl:copy with validation on the nilled property</description>
+      <created by="Michael Kay" on="2015-05-01"/>
+      <modified by="Abel Braaksma" on="2015-05-31" change="Bug 28634: adding xsl:import-schema to allow validation, fixed xslt version from 2.0 to 3.0"/>
+      <environment ref="validation-12"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1204.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z xmlns:t="http://ns.example.com/val12/"><a>true</a><a>true</a><a>false</a><a>false</a></z>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1301">
+      <description>
+        Test validation="strict" on an LRE using XSD 1.1 conditional type assignment.
+        Saxon bug 2316.
+      </description>
+      <created by="Michael Kay" on="2015-02-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+         <feature value="XSD_1.1"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1301.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<list><element type="type2"><child1/><child2/></element></list>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-1401">
+      <description>test use of a path expression containing an axis step referring to document-node(element(X))</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment>
+         <source role="." validation="strict">
+            <content><![CDATA[<test xmlns="http://schvalid016.uri/"><content>12</content></test>]]></content>
+         </source>
+         <schema file="validation-14.xsd"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1401.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z xmlns:t="http://schvalid016.uri/"><f match="yes"><a>found</a></f><g match="no"/><h match="no"/></z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-1501">
+      <description>
+      	Test use of schema-based idref() function.
+      	Note the schema used is inline in the stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim MIlls" on="2012-12-18" change="Removed whitespace"/>
+      <modified by="Michael Kay" on="2023-08-02" 
+         change="Removed validation='lax' in the environment.
+         The stylesheet validates the source document internally."/>
+      <environment>
+        <source role="." file="validation-15.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1501.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="validation-1501.out"/>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1601">
+      <description>
+         Test whether the implicit result document is validated. Bug 30211. default-validation="preserve"
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1601.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>not(/* instance of element(*,xs:untyped))</assert>
+            <assert>(/) instance of document-node(schema-element(Q{http://ns.example.com/val16/}doc))</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1602">
+      <description>
+         Test whether the implicit result document is validated. Bug 30211. Explicit validation at document level.
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1602.xsl"/>
+      </test>
+      <result>
+         <error code="XTTE1555"/>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1603">
+      <description>
+         Test whether the implicit result document is validated. Bug 30211. default-validation="strip"
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1603.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>not(/* instance of element(*,xs:untyped))</assert>
+            <assert>(/) instance of document-node(schema-element(Q{http://ns.example.com/val16/}doc))</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1604">
+      <description>
+         Test whether the implicit result document is validated. Bug 30211. 
+         default-validation="strip" on top level, ="preserve" on imported module
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1604.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>not(/* instance of element(*,xs:untyped))</assert>
+            <assert>(/) instance of document-node(schema-element(Q{http://ns.example.com/val16/}doc))</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1605">
+      <description>
+         Test whether the implicit result document is validated. Bug 30211. 
+         default-validation="preserve" on top level, ="strip" on imported module
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1605.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>not(/* instance of element(*,xs:untyped))</assert>
+            <assert>(/) instance of document-node(schema-element(Q{http://ns.example.com/val16/}doc))</assert>
+         </all-of>  
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1606">
+      <description>
+         Test whether the implicit result document is validated. Bug 30211. 
+         default-validation="preserve" on initial template
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1606.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>not(/* instance of element(*,xs:untyped))</assert>
+            <assert>(/) instance of document-node(schema-element(Q{http://ns.example.com/val16/}doc))</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1607">
+      <description>
+         Test whether the implicit result document is validated. Bug 30211. 
+         default-validation="strip" on initial template
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1607.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>not(/* instance of element(*,xs:untyped))</assert>
+            <assert>(/) instance of document-node(schema-element(Q{http://ns.example.com/val16/}doc))</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1701">
+      <description>
+         Invalid xsi:type attribute - strict validation
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1701.xsl"/>
+         <param name="VALIDATION" static="yes" select="'strict'"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/> 
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1702">
+      <description>
+         Invalid xsi:type attribute - lax validation
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1701.xsl"/>
+         <param name="VALIDATION" static="yes" select="'lax'"/>
+      </test>
+      <result>
+         <error code="XTTE1510"/> 
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1703">
+      <description>
+         Invalid xsi:type attribute - preserve validation
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1701.xsl"/>
+         <param name="VALIDATION" static="yes" select="'preserve'"/>
+      </test>
+      <result>
+         <assert>exists(/*:doc)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1704">
+      <description>
+         Invalid xsi:type attribute - strip validation
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1701.xsl"/>
+         <param name="VALIDATION" static="yes" select="'strip'"/>
+      </test>
+      <result>
+         <assert>exists(/*:doc)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1705">
+      <description>
+         Valid xsi:type attribute - strict validation
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1705.xsl"/>
+         <param name="VALIDATION" static="yes" select="'strict'"/>
+      </test>
+      <result>
+         <assert>/*:doc instance of schema-element(Q{http://ns.example.com/val16/}doc)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1706">
+      <description>
+         Valid xsi:type attribute - lax validation
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1705.xsl"/>
+         <param name="VALIDATION" static="yes" select="'lax'"/>
+      </test>
+      <result>
+         <assert>/*:doc instance of schema-element(Q{http://ns.example.com/val16/}doc)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1707">
+      <description>
+         Valid xsi:type attribute - preserve validation
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1705.xsl"/>
+         <param name="VALIDATION" static="yes" select="'preserve'"/>
+      </test>
+      <result>
+         <assert>exists(/*:doc)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-1708">
+      <description>
+         Valid xsi:type attribute - strip validation
+      </description>
+      <created by="Michael Kay" on="2017-12-21"/>
+      <environment ref="validation-16"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-1705.xsl"/>
+         <param name="VALIDATION" static="yes" select="'strip'"/>
+      </test>
+      <result>
+         <assert>exists(/*:doc)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="validation-2001">
+      <description>show patterns matching against nilled and unnilled elements in the source</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="validation-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-2001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z xmlns:t="http://ns.example.com/val12/"><a>nilled</a><a>not nilled</a></z>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="validation-2002">
+      <description>show templates matching against validated elements from the source document</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Tim MIlls" on="2012-12-18" change="Removed whitespace"/>
+      <environment ref="validation-20"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="validation-2002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<z xmlns:t="http://ns.example.com/val12/"><a>schema-element() matches when nilled=true</a><a>schema-element() matches when nilled=false</a></z>]]></assert-xml>
+      </result>
+   </test-case>
+   
+</test-set>

@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="extension-functions">
+   <description>Tests extension-functions</description>
+   <environment name="extension-functions-01">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="extension-functions-02">
+      <source role=".">
+         <content><![CDATA[<doc>
+   <number>5223849703457</number>
+   <number>ABC</number>
+   <number>-394729834.2347239480234</number>
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="extension-functions-0101">
+      <description>Uses function-available to test the existance of an extension function inside a use-when instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="extension-functions-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="extension-functions-0101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="extension-functions-0102">
+      <description>Uses function-available to test the existance of an extension function with a non-zero arity inside a use-when instruction.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="extension-functions-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="extension-functions-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="extension-functions-0103">
+      <description>Test to verify that an error is raised if the name of the extension function does not evaluate to a string that is a valid QName.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="extension-functions-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="extension-functions-0103.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE1400"/>
+      </result>
+   </test-case>
+
+   <test-case name="extension-functions-0104">
+      <description>Tests to verify that an error is raised if if there is no namespace declaration in scope for the prefix of the QName used as the name of the extension function.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="extension-functions-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="extension-functions-0104.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE1400"/>
+      </result>
+   </test-case>
+   
+   <test-case name="extension-functions-0105">
+      <description>A reserved namespace must not be used in the name of an extension instruction.</description>
+      <created by="Michael Kay" on="2015-11-06"/>
+      <environment ref="extension-functions-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="extension-functions-0105.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0800"/>
+      </result>
+   </test-case>
+   
+   <test-case name="extension-functions-0106">
+      <description>Fallback for an unknown extension instruction.</description>
+      <created by="Michael Kay" on="2015-11-06"/>
+      <environment ref="extension-functions-01"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="extension-functions-0106.xsl"/>
+      </test>
+      <result>
+         <assert>/out = ''</assert>
+      </result>
+   </test-case>
+
+   <test-case name="extension-functions-0201">
+      <description>Test case to verify that a dynamic error is raised if the arguments supplied to a call on an extension function do not satisfy the rules defined for that particular extension function.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-11-30" change="all-of to any-of" />
+      <environment ref="extension-functions-02"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="extension-functions-0201.xsl"/>
+      </test>
+      <result>
+         <any-of>
+            <error code="XTDE1420"/>
+            <error code="XTDE1425"/>
+         </any-of>
+      </result>
+   </test-case>
+</test-set>

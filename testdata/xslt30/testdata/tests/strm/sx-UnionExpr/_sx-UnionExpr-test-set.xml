@@ -1,0 +1,1114 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sx-UnionExpr">
+   <description>union expression function with streaming</description>
+   
+   <environment name="sx-union-A">
+     <stylesheet file="sx-union-A.xsl"/>
+   </environment>
+   
+   <environment name="sx-union-B">
+     <stylesheet file="sx-union-B.xsl"/>
+   </environment>
+   
+   <environment name="sx-union-C">
+      <stylesheet file="sx-union-C.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sx-union-002">
+      <description>Streaming union expression - grounded operand</description>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+        <any-of>
+         <assert-xml><![CDATA[<out><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE><a>A</a><b>B</b></out>]]></assert-xml>
+         <assert-xml><![CDATA[<out><a>A</a><b>B</b><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+        </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-010">
+      <description>Streaming union expression - striding operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding leading-lone-slash PathExpr fn:count</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "8"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-011">
+      <description>Streaming union expression - striding operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding leading-lone-slash PathExpr fn:sum</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "87.37"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-012">
+      <description>Streaming union expression - striding operand, transmission usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding motionless-predicate fn:position PathExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>/out = "6.58 4.95 16.47 B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-013">
+      <description>Streaming union expression - striding operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <any-of>
+           <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47 12 23"</assert>
+           <assert>/out = "12 23 5.95 7.58 5.95 5.95 17.47 17.47"</assert>
+         </any-of>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-014">
+      <description>Streaming union expression - striding operand, focus-controlled usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT><a>A</a><b>B</b></out>]]></assert-xml>
+            <assert-xml><![CDATA[<out><a>A</a><b>B</b><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+         </any-of>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-015">
+      <description>Streaming union expression - striding operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding PathExpr AdditiveExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+        <any-of>
+         <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47 12 23 "</assert>
+         <assert>/out = "12 23 5.95 7.58 5.95 5.95 17.47 17.47 "</assert>
+        </any-of> 
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-016">
+      <description>Streaming union expression - striding operand, focus-controlled usage</description>
+      <keywords>ParenthesizedExpr mixed-posture xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT><a>A</a><b>B</b></out>]]></assert-xml>
+            <assert-xml><![CDATA[<out><a>A</a><b>B</b><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-017">
+      <description>Streaming union expression - striding operand, focus-setting usage for inspection action</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "true false true true true true false false true true true false false"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-018">
+      <description>Streaming union expression - striding operand, apply-templates usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-020">
+      <description>Streaming union expression - crawling operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture xsl:copy-of fn:count crawling PathExpr leading-double-slash</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "8"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-021">
+      <description>Streaming union expression - crawling operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "13"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-022">
+      <description>Streaming union expression - crawling operand, transmission usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-023">
+      <description>Streaming union expression - crawling operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <any-of>
+           <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47 12 23"</assert>
+           <assert>/out = "12 23 5.95 7.58 5.95 5.95 17.47 17.47"</assert>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-030">
+      <description>Streaming union expression - climbing operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <any-of>
+           <assert>/out = "BOOKLIST BOOKS ITEM a b"</assert>
+           <assert>/out = "a b BOOKLIST BOOKS ITEM"</assert>
+         </any-of>        
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-031">
+      <description>Streaming union expression - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <any-of>
+           <assert>/out = "BOOKLIST BOOKS ITEM ITEM ITEM ITEM ITEM ITEM a b"</assert>
+           <assert>/out = "a b BOOKLIST BOOKS ITEM ITEM ITEM ITEM ITEM ITEM"</assert>
+         </any-of>
+      </result>   
+   </test-case> 
+   
+   <test-case name="sx-union-032">
+      <description>Streaming union expression - climbing operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "MHK|MMP|A|B"</assert>
+            <assert>/out = "A|B|MHK|MMP"</assert>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-033">
+      <description>Streaming union expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "MMP|P|P|P|H|P|A|B"</assert>
+            <assert>/out = "A|B|MMP|P|P|P|H|P"</assert>
+         </any-of>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-034">
+      <description>Streaming union expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "MMP|P|P|P|H|P|A|B"</assert>
+            <assert>/out = "A|B|MMP|P|P|P|H|P"</assert>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-035">
+      <description>Streaming union expression - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP|P|P|P|H|P|A|B"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-036">
+      <description>Streaming union expression - two potentially consuming operands (bug 27668)</description>
+      <keywords>ParenthesizedExpr mixed-posture crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-036"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/v[1] = 'P Paperback'</assert>
+           <assert>/out/v[2] = 'MMP Mass-market Paperback'</assert>
+           <assert>/out/v[3] = 'H Hard Cover'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-040">
+      <description>Streaming union expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-040"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))</assert>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (4.95, 6.58, 4.95, 4.95, 16.47, 16.47, 18.90))</assert>          
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-041">
+      <description>Streaming union expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-041"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))</assert>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (4.95, 6.58, 4.95, 4.95, 16.47, 16.47, 18.90))</assert>          
+         </any-of>        
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-042">
+      <description>Streaming union expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-042"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "18.90 4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+            <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47 18.90"</assert>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-043">
+      <description>Streaming union expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sx-union-A"/>
+      <test>
+         <initial-template name="r-043"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "18.90 4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+            <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47 18.90"</assert>
+         </any-of>
+      </result>
+   </test-case>
+
+
+   
+   <test-case name="sx-union-102">
+      <description>union expression (streaming arg 2) - grounded operand</description>
+      <keywords>leading-lone-slash striding-then-grounded fn:copy-of PathExpr ParenthesizedExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>A</a><b>B</b><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-110">
+      <description>union expression (streaming arg 2) - striding operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding leading-lone-slash PathExpr fn:count</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "8"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-111">
+      <description>union expression (streaming arg 2) - striding operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding leading-lone-slash PathExpr fn:sum</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "87.37"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-112">
+      <description>union expression (streaming arg 2) - striding operand, transmission usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding motionless-predicate fn:position PathExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+        <any-of>
+          <assert>/out = "B 6.58 4.95 16.47"</assert>
+          <assert>/out = "6.58 4.95 16.47 B"</assert>
+        </any-of> 
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-113">
+      <description>union expression (streaming arg 2) - striding operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture AdditiveExpr ContextItemExpr striding leading-lone-slash PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "12 23 5.95 7.58 5.95 5.95 17.47 17.47"</assert>
+            <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47 12 23"</assert>
+         </any-of>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-114">
+      <description>union expression (streaming arg 2) - striding operand, focus-controlled usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash AxisStep striding PathExpr positional-predicate SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT><a>A</a><b>B</b></out>]]></assert-xml>
+            <assert-xml><![CDATA[<out><a>A</a><b>B</b><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+         </any-of>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-115">
+      <description>union expression (streaming arg 2) - striding operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding PathExpr AdditiveExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "12 23 5.95 7.58 5.95 5.95 17.47 17.47 "</assert>
+            <assert>/out = "5.95 7.58 5.95 5.95 17.47 17.47 12 23 "</assert>
+         </any-of>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-116">
+      <description>union expression (streaming arg 2) - striding operand, focus-controlled usage</description>
+      <keywords>ParenthesizedExpr mixed-posture xsl:for-each striding AxisStep PathExpr positional-predicate leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT><a>A</a><b>B</b></out>]]></assert-xml>  
+            <assert-xml><![CDATA[<out><a>A</a><b>B</b><TITLE>Pride and Prejudice</TITLE><AUTHOR>Jane Austen</AUTHOR><PUBLISHER>Modern Library</PUBLISHER><PUB-DATE>2002-12-31</PUB-DATE><LANGUAGE>English</LANGUAGE><PRICE>4.95</PRICE><QUANTITY>187</QUANTITY><ISBN>0679601686</ISBN><PAGES>352</PAGES><DIMENSIONS UNIT="in">8.3 5.7 1.1</DIMENSIONS><WEIGHT UNIT="oz">6.1</WEIGHT></out>]]></assert-xml>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-117">
+      <description>union expression (streaming arg 2) - striding operand, focus-setting usage for inspection action</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding PathExpr positional-predicate SimpleMapExpr fn:name</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <any-of>
+         <assert>/out = "false false true false true true true true false false true true true"</assert>
+         <assert>/out = "true false true true true true false false true true true false false"</assert>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-118">
+      <description>union expression (streaming arg 2) - striding operand, apply-templates usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-120">
+      <description>union expression (streaming arg 2) - crawling operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture xsl:copy-of fn:count crawling PathExpr leading-double-slash</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "8"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-121">
+      <description>union expression (streaming arg 2) - crawling operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash text-nodes childless-nodes striding-then-crawling fn:count PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "13"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-122">
+      <description>union expression (streaming arg 2) - crawling operand, transmission usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-crawling leading-lone-slash fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-xml><![CDATA[<out><a>A</a><b>B</b>Pride and Prejudice</out>]]></assert-xml>
+            <assert-xml><![CDATA[<out>Pride and PrejudiceJane AustenModern Library</out>]]></assert-xml>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-123">
+      <description>union expression (streaming arg 2) - crawling operand, focus-setting usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-double-slash childless-nodes text-nodes AdditiveExpr PathExpr crawling SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>12 23 5.95 7.58 5.95 5.95 17.47 17.47</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-129">
+      <description>Streaming union expression - union of motionless and consuming striding nodes (was -140)</description>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-029"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ITEM TITLE AUTHOR PUBLISHER PUB-DATE LANGUAGE PRICE QUANTITY ISBN PAGES DIMENSIONS WEIGHT</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-130">
+      <description>union expression (streaming arg 2) - climbing operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "a b BOOKLIST BOOKS ITEM"</assert>
+            <assert>/out = "BOOKLIST BOOKS ITEM a b"</assert>
+         </any-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-131">
+      <description>union expression (streaming arg 2) - climbing operand, inspection usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding-then-climbing fn:name PathExpr SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "a b BOOKLIST BOOKS ITEM ITEM ITEM ITEM ITEM ITEM"</assert>
+            <assert>/out = "BOOKLIST BOOKS ITEM ITEM ITEM ITEM ITEM ITEM a b"</assert>
+         </any-of>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-132">
+      <description>union expression (streaming arg 2) - climbing operand, absorption usage</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing attribute-axis PathExpr positional-predicate ancestor-axis leading-lone-slash</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "A|B|MHK|MMP"</assert>
+            <assert>/out = "MHK|MMP|A|B"</assert>
+         </any-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-133">
+      <description>union expression (streaming arg 2) - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "A|B|MMP|P|P|P|H|P"</assert>
+            <assert>/out = "MMP|P|P|P|H|P|A|B"</assert>
+         </any-of>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-134">
+      <description>union expression (streaming arg 2) - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture climbing-then-climbing leading-lone-slash PathExpr ancestor-or-self-axis climbing</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "A|B|MMP|P|P|P|H|P"</assert>
+            <assert>/out = "MMP|P|P|P|H|P|A|B"</assert>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-135">
+      <description>union expression (streaming arg 2) - climbing operand, absorption usage, removal of duplicates</description>
+      <keywords>ParenthesizedExpr mixed-posture crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "A|B|MHK|MMP|P|P|P|H|P"</assert>
+            <assert>/out = "MHK|MMP|P|P|P|H|P|A|B"</assert>
+         </any-of>
+      </result>
+   </test-case>  
+
+   <test-case name="sx-union-136">
+      <description>Streaming union expression - two potentially consuming operands (bug 27668)</description>
+      <keywords>ParenthesizedExpr mixed-posture crawling-then-climbing leading-double-slash attribute-axis PathExpr ancestor-or-self-axis</keywords>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-036"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/v[1] = ('Paperback P', 'P Paperback')</assert>
+           <assert>/out/v[2] = ('Mass-market Paperback MMP', 'MMP Mass-market Paperback')</assert>
+           <assert>/out/v[3] = ('Hard Cover H', 'H Hard Cover')</assert>
+         </all-of>
+      </result>
+   </test-case>  
+   
+   <test-case name="sx-union-137">
+      <description>Streaming union expression - union of motionless/climbing references to ancestor nodes</description>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-037"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><v>MHK MMP oz</v><v>MHK P oz</v><v>MHK P oz</v><v>MHK P oz</v><v>MHK H g</v><v>MHK P oz</v></out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-138">
+      <description>Streaming union expression - union of motionless and consuming striding nodes</description>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-038"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ITEM TITLE AUTHOR PUBLISHER PUB-DATE LANGUAGE PRICE QUANTITY ISBN PAGES DIMENSIONS WEIGHT</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-139">
+      <description>Streaming union expression - union of motionless and consuming striding nodes</description>
+      <created by="Michael Kay" on="2015-03-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-039"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>ITEM TITLE AUTHOR PUBLISHER PUB-DATE LANGUAGE PRICE QUANTITY ISBN PAGES DIMENSIONS WEIGHT</out>]]></assert-xml>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-140">
+      <description>Streaming union expression - bug 29507</description>
+      <keywords>ParenthesizedExpr mixed-posture </keywords>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-040"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))</assert>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (4.95, 6.58, 4.95, 4.95, 16.47, 16.47, 18.90))</assert>          
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-141">
+      <description>Streaming union expression - bug 29507</description>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-041"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))</assert>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (4.95, 6.58, 4.95, 4.95, 16.47, 16.47, 18.90))</assert>          
+         </any-of>        
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-142">
+      <description>Streaming union expression - bug 29507</description>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-042"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "18.90 4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+            <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47 18.90"</assert>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-143">
+      <description>Streaming union expression - bug 29507</description>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <environment ref="sx-union-B"/>
+      <test>
+         <initial-template name="r-043"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "18.90 4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+            <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47 18.90"</assert>
+         </any-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-201">
+      <description>
+         Streaming union expression - mixed posture. Not streamable
+      </description>
+      <created by="Michael Kay" on="2016-02-26"/>
+      <test>
+         <stylesheet file="sx-union-201.xsl"/>
+      </test>
+      <result>
+         <!--
+         <any-of>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (18.90, 4.95, 6.58, 4.95, 4.95, 16.47, 16.47))</assert>
+            <assert>deep-equal(/out/PRICE/xs:decimal(.), (4.95, 6.58, 4.95, 4.95, 16.47, 16.47, 18.90))</assert>
+         </any-of>-->
+         <error code="XTSE3430"/>        
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-202">
+      <description>
+         Streaming union expression - union of two striding expressions is crawling. Not guaranteed streamable (though streamable in Saxon)
+      </description>
+      <created by="Michael Kay" on="2016-12-09"/>
+      <test>
+         <stylesheet file="sx-union-202.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>        
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-302">
+      <description>Streaming union expression - two consuming operands</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/*[1][self::AUTHOR] = 'Jane Austen'</assert>
+            <assert>/out/*[2][self::PRICE] = '4.95'</assert>
+            <assert>/out/*[3][self::AUTHOR] = 'Charlotte Brontë'</assert>
+            <assert>/out/*[4][self::PRICE] = '6.58'</assert>
+            <assert>/out/*[last()][self::PRICE] = '16.47'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-310">
+      <description>Streaming union expression - striding operands, inspection usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-010"/>
+      </test>
+      <result>
+         <assert>/out = "12"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-311">
+      <description>Streaming union expression - striding operand, absorption usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-011"/>
+      </test>
+      <result>
+         <assert>/out = "54.37"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-312">
+      <description>Streaming union expression - striding operand, transmission usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-012"/>
+      </test>
+      <result>
+         <assert>/out = "4.95 6.58 4.95 4.95 16.47 16.47"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-313">
+      <description>Streaming union expression - striding operand, focus-setting usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-013"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 188 7.58 114 5.95 86 5.95 130 17.47 130 17.47 130"</assert>        
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-314">
+      <description>Streaming union expression - striding operand, focus-controlled usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-014"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/*[1][self::PRICE] = 4.95</assert>
+            <assert>/out/*[2][self::QUANTITY] = 187</assert>
+            <assert>/out/*[3][self::PRICE] = 6.58</assert>
+            <assert>/out/*[4][self::QUANTITY] = 113</assert>
+            <assert>count(/out/*) = 12</assert>
+         </all-of>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-315">
+      <description>Streaming union expression - striding operand, focus-setting usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-015"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 188 7.58 114 5.95 86 5.95 130 17.47 130 17.47 130 "</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-316">
+      <description>Streaming union expression - striding operand, focus-controlled usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-016"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/*[1][self::AUTHOR] = 'Jane Austen'</assert>
+            <assert>/out/*[2][self::PUBLISHER] = 'Modern Library'</assert>
+            <assert>count(/out/*) = 2</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-317">
+      <description>Streaming union expression - striding operand, focus-setting usage for inspection action</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-017"/>
+      </test>
+      <result>
+         <assert>/out = "TITLE PUBLISHER PUB-DATE LANGUAGE PRICE PAGES DIMENSIONS WEIGHT TITLE PUBLISHER PUB-DATE LANGUAGE PRICE PAGES DIMENSIONS WEIGHT"</assert>
+      </result>
+   </test-case>
+   
+   <!--<test-case name="sx-union-318">
+      <description>Streaming union expression - striding operand, apply-templates usage</description>
+      <keywords>ParenthesizedExpr mixed-posture leading-lone-slash striding xsl:apply-templates PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-018"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library2002-12-31English4.9518706796016863528.3 5.7 1.16.1"</assert>
+      </result>
+   </test-case>-->
+   
+   <test-case name="sx-union-320">
+      <description>Streaming union expression - crawling operand, inspection usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-020"/>
+      </test>
+      <result>
+         <assert>/out = "66"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-321">
+      <description>Streaming union expression - crawling operand, absorption usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-021"/>
+      </test>
+      <result>
+         <assert>/out = "16"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-322">
+      <description>Streaming union expression - crawling operand, transmission usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-022"/>
+      </test>
+      <result>
+         <assert>/out = "Pride and PrejudiceJane AustenModern Library"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-323">
+      <description>Streaming union expression - crawling operand, focus-setting usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-023"/>
+      </test>
+      <result>
+         <assert>/out = "5.95 188 7.58 114 5.95 86 5.95 130 17.47 130 17.47 130"</assert>        
+      </result>
+   </test-case>
+   
+   <!--<test-case name="sx-union-330">
+      <description>Streaming union expression - climbing operand, inspection usage</description>
+      <keywords>ParenthesizedExpr mixed-posture striding-then-climbing fn:name leading-lone-slash PathExpr positional-predicate SimpleMapExpr ancestor-axis</keywords>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-030"/>
+      </test>
+      <result>
+         <any-of>
+            <assert>/out = "BOOKLIST BOOKS ITEM a b"</assert>
+            <assert>/out = "a b BOOKLIST BOOKS ITEM"</assert>
+         </any-of>        
+      </result>
+   </test-case>-->
+   
+   <test-case name="sx-union-331">
+      <description>Streaming union expression - climbing operand, inspection usage, removal of duplicates</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-031"/>
+      </test>
+      <result>
+         <assert>/out = "BOOKLIST BOOKS ITEM ITEM"</assert>
+      </result>   
+   </test-case> 
+   
+   <test-case name="sx-union-332">
+      <description>Streaming union expression - climbing operand, absorption usage</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-032"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP|P"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-333">
+      <description>Streaming union expression - climbing operand, absorption usage, removal of duplicates</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-033"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sx-union-334">
+      <description>Streaming union expression - climbing operand, absorption usage, removal of duplicates</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-034"/>
+      </test>
+      <result>
+         <assert>/out = "MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sx-union-335">
+      <description>Streaming union expression - climbing operand, absorption usage, removal of duplicates</description>
+      <created by="Michael Kay" on="2022-05-13"/>
+      <environment ref="sx-union-C"/>
+      <test>
+         <initial-template name="r-035"/>
+      </test>
+      <result>
+         <assert>/out = "MHK|MMP|P|P|P|H|P"</assert>
+      </result>
+   </test-case>
+
+</test-set>

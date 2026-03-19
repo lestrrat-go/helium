@@ -1,0 +1,722 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="next-match">
+   
+   <description>Tests xsl:next-match</description>
+   
+   <environment name="next-match001">
+      <source role=".">
+         <content><![CDATA[<doc><foo/></doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="next-match014">
+      <source role=".">
+         <content><![CDATA[<doc foo="bar"/>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="next-match015">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<a>
+		<b test='c'>1</b>
+		<b test='c'>2</b>
+		<b test='c'>3</b>
+	</a>
+
+</doc>]]></content>
+      </source>
+   </environment>
+   
+   <environment name="next-match022">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <tag>Example of apply-imports</tag>
+  <bag>Example of apply-templates</bag>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="next-match031">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <one>1</one>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="next-match045">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <tag>Example of next-match</tag>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="next-match046">
+      <source role=".">
+         <content><![CDATA[<doc><x/></doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="next-match-001">
+      <description>Simple test of next-match where the match pattern is a NameTest</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a><b><c/></b></a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-002">
+      <description>Simple test of next-match where the pattern of the dominant template is node() and it has @priority with value greater than the value of @priority on the secondary template which has a NameTest pattern.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<b><a><b><c/></b></a></b>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-003">
+      <description>
+         Test next-match inside templates with pattern of NameTest, AnyKindTest (node()) or '*' with predicate. 
+         All have computed priorities.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<c><b><a><a/></a></b></c>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-004">
+      <description>
+         Test with next-match where both the dominant and secondary template have @match=node() and 
+         identical priorities but their import precedence is different.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-004.xsl"/>
+         <stylesheet file="next-match-004a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a><b/></a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-005">
+      <description>Test next-match from an imported stylesheet using default priority and Wildcard Test</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-005.xsl"/>
+         <stylesheet file="next-match-005a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a><b/></a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-006">
+      <description>Test next-match with two imported stylesheets of different precedence</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-006.xsl"/>
+         <stylesheet file="next-match-006a.xsl" role="secondary"/>
+         <stylesheet file="next-match-006b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<c><b><a><ac><ab><aa><bc><bb><ba><a><aa><ba/></aa></a></ba></bb></bc></aa></ab></ac></a></b></c>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-007">
+      <description>
+         Test apply-imports inside a template which pattern is a KindTest.The secondary (imported) template has a 
+         NameTest pattern and hence higher priority.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-12-07" change="Added role attributes"/>
+      <environment ref="next-match001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-007.xsl" role="principal"/>
+         <stylesheet file="next-match-007a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a><b/></a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-008">
+      <description>
+         Test of apply-imports for two templates, one with pattern "element()" residing in primary 
+         stylesheet and the other one with pattern "element(*, xs:untyped)" residing in an imported stylesheet.
+      </description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-12-07" change="Added role attributes"/>
+      <environment ref="next-match001"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-008.xsl" role="principal"/>
+         <stylesheet file="next-match-008a.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a><b><a><b/></a></b></a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-009">
+      <description>Test next-match with default priority and AttributeTest</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match014"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a><b><c>bar</c></b></a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-010">
+      <description>Test of xsl:next-match for two templates, one with pattern "element()" and the other one with pattern "element(*, xs:untyped)".</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match014"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>one</one><two>finally</two></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-011">
+      <description>Test of xsl:next-match for two templates, one with pattern "attribute()" and the other one with pattern "attribute(*, xs:untypedAtomic)".</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match014"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>one</one><two>finally</two>bar</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-012">
+      <description>Test xsl:next-match within an attribute which is inside an attribute set.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match014"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-012.xsl"/>
+         </test>
+      <result>
+         <assert-xml><![CDATA[<a a1="5" a2="next matched">hello</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-013">
+      <description>Test xsl:next-match with one xsl:with-param</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match015"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+	
+		<y><x>c1</x></y>
+		<y><x>c2</x></y>
+		<y><x>c3</x></y>
+	
+
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-014">
+      <description>Testcase with two xsl:next-match instructions in one template</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match015"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><y><x>1</x></y><z><x>1</x></z><y><x>2</x></y><z><x>2</x></z><y><x>3</x></y><z><x>3</x></z></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-015">
+      <description>Test xsl:next-match inside a named template</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match015"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><y><z><x>1</x></z></y><y><z><x>2</x></z></y><y><z><x>3</x></z></y></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-016">
+      <description>Test of xsl:next-match with included stylesheets.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match022"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-016.xsl" role="principal"/>
+         <stylesheet file="impwparam8.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<imp1-t>top</imp1-t>
+<main-t>included template</main-t>
+<div>Example of apply-imports</div>
+<bag/>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-017">
+      <description>Test of xsl:next-match where the same stylesheet is both imported and included. Verifies that imported template is executed last even if it's priority is higher than the primary template, while included and primary templates are compared based on priorities.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <modified by="Tim Mills" on="2012-12-07" change="Added role attributes"/>
+      <environment ref="next-match022"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-017.xsl" role="principal"/>
+         <stylesheet file="impwparam8.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<imp1-t>top</imp1-t>
+<main-t>included template</main-t>
+<div><imp1-t>primary template</imp1-t>
+Example of apply-imports</div>
+<bag/>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-018">
+      <description>Test of xsl:next-match and no other matching templates are found. Verifies that built-in template rules are invoked.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match022"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-018.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<tag>Example of apply-imports</tag>
+<bag>Example of apply-templates</bag>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-019">
+      <description>Testcase with xsl:apply-imports and one xsl:with-param child element.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match022"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-019.xsl"/>
+         <stylesheet file="next-match-019a.xsl" role="secondary"/>
+         <stylesheet file="next-match-019b.xsl" role="secondary"/>
+         <stylesheet file="next-match-019c.xsl" role="secondary"/>
+         <stylesheet file="next-match-019d.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><main-t>top</main-t><div><imp1-t>imported template</imp1-t></div><imp-b>top</imp-b></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-020">
+      <description>Test xsl:next-match inside xsl:if.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match031"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>one time</one></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-021">
+      <description>Test of xsl:next-match in a template where the pattern has a union operator with Name Test and element() that match one and the same node.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match031"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>one time</one><one>one time</one><two>finally</two></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-022">
+      <description>Test that xsl:next-match stays in same mode as its caller.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match045"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-022.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+  <div style="border: solid green">Example of next-match</div>
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-023">
+      <description>Test of xsl:next-match in a template where the pattern has a union operator with *:NCName Name Test and element(QName) that match one and the same node.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match046"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-023.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><foo/><foo/><bar/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-024">
+      <description>Test of xsl:next-match in a template where the pattern has a union operator with *:NCName Name Test and element(QName) that match one and the same node. Template has assigned priority of 1.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match046"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-024.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><foo/><bar/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-025">
+      <description>Test of xsl:next-match in a template where the pattern has a union operator with node() and element(QName) that match one and the same node. A separate template with *:NCName Name Test calls xsl:next-match as well.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match046"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-025.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><foo/><bar/><foo/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="next-match-026">
+      <description>Test of xsl:next-match in a template where the pattern has a union operator with node() and element(QName) that match one and the same node.</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="next-match046"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-026.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><foo/><bar/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-027">
+      <description>Test of xsl:next-match applied to atomic values.</description>
+      <created by="Michael Kay" on="2016-01-19"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-027.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "A1BA2CBA3DCBA4EDCBA5"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-028">
+      <description>Test of xsl:next-match as tail call within named template.</description>
+      <created by="Michael Kay" on="2016-07-04"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-028.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<one><two><three/>alphabetagammadelta</two></one>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-029">
+      <description>Test xsl:next-match inside a named template with context-item use="absent"</description>
+      <created by="Michael Kay" on="2016-07-10"/>
+      <environment ref="next-match015"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-029.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0560"/>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-030">
+      <description>Test xsl:next-match inside xsl:copy with a select attribute</description>
+      <created by="Michael Kay" on="2016-07-10"/>
+      <environment ref="next-match015"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-030.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0560"/>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-031">
+      <description>Test xsl:next-match inside xsl:for-each</description>
+      <created by="Michael Kay" on="2016-07-10"/>
+      <environment ref="next-match015"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-031.xsl"/>
+      </test>
+      <result>
+         <error code="XTDE0560"/>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-032">
+      <description>Test xsl:next-match with a large set of predicate-based patterns</description>
+      <created by="Michael Kay" on="2017-07-06"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-032.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>found</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-033">
+      <description>Test of xsl:next-match and no other matching templates are found. 
+         Verifies that built-in template rules are invoked. Uses explicit on-no-match.</description>
+      <created by="Michael Kay" on="2017-11-02"/>
+      <environment ref="next-match022"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-033.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><tag><tag>Example of apply-imports</tag></tag><bag><bag>Example of apply-templates</bag></bag></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-034">
+      <description>Test of xsl:next-match and no other matching templates are found. 
+         Verifies that built-in template rules are invoked. Uses explicit on-no-match.</description>
+      <created by="Michael Kay" on="2017-11-02"/>
+      <environment ref="next-match022"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-034.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><tag></tag><bag></bag></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-035">
+      <description>Test of xsl:next-match and no other matching templates are found. 
+         Verifies that built-in template rules are invoked. Uses explicit on-no-match.</description>
+      <created by="Michael Kay" on="2017-11-02"/>
+      <environment ref="next-match022"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-035.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><tag>[Example of apply-imports]</tag><bag>[Example of apply-templates]</bag></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-036">
+      <description>Test of xsl:next-match across package boundaries.</description>
+      <created by="Michael Kay" on="2017-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-28" change="Make package discoverable by its URI-file mapping (name is itself not necessarily the URI of the package)"/>
+      <modified by="Michael Kay" on="2019-03-06" change="make initial mode public"/>
+      <environment ref="next-match022"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package name="http://xslt-tests/next-match-036-lib" uri="http://xslt-tests/next-match-036-lib" file="next-match-036-lib.xsl" role="secondary"/>
+         <stylesheet file="next-match-036.xsl"/>
+         <initial-mode name="m"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><tag2><tag>Example of apply-imports</tag></tag2><bag>Example of apply-templates</bag></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-037">
+      <description>Test of xsl:next-match across package boundaries via call-template.</description>
+      <created by="Michael Kay" on="2017-11-02"/>
+      <modified by="Abel Braaksma" on="2019-02-28" change="Make package discoverable by its URI-file mapping (name is itself not necessarily the URI of the package)"/>
+      <modified by="Michael Kay" on="2019-03-06" change="make initial mode public"/>
+      <environment ref="next-match022"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package name="http://xslt-tests/next-match-036-lib" uri="http://xslt-tests/next-match-036-lib" file="next-match-036-lib.xsl" role="secondary"/>
+         <stylesheet file="next-match-037.xsl"/>
+         <initial-mode name="m"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><tag2><ttt><tag>[Example of apply-imports]</tag></ttt></tag2><bag>[Example of apply-templates]</bag></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-038">
+      <description>Test of xsl:next-match when template rules call used-defined functions (Saxon bug 3706).</description>
+      <created by="Michael Kay" on="2018-03-02"/>
+      <environment>
+         <source role="." file="next-match-038.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-038.xsl"/>
+      </test>
+      <result>
+         <assert>/out[not(node())]</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-039">
+      <description>Test of xsl:next-match in a template where the pattern has a union operator; both branches match the same node and both have the same priority.</description>
+      <created by="Michael Kay" on="2019-02-27"/>
+      <environment ref="next-match031"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="next-match-039.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>one time</one><one>one time</one><two>finally</two></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="next-match-040">
+      <description>Test of xsl:next-match across package boundaries. Variant of -036 in which the mode is accepted as final rather than public</description>
+      <created by="Michael Kay" on="2019-03-07"/>
+      <environment ref="next-match022"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package name="http://xslt-tests/next-match-036-lib" uri="http://xslt-tests/next-match-036-lib" file="next-match-036-lib.xsl" role="secondary"/>
+         <stylesheet file="next-match-040.xsl"/>
+         <initial-mode name="m"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><tag2><tag>Example of apply-imports</tag></tag2><bag>Example of apply-templates</bag></out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

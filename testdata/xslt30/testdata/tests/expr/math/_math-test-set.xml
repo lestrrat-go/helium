@@ -1,0 +1,2908 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="math">
+   <description>Tests math</description>
+   <environment name="math-01">
+      <source role=".">
+         <content><![CDATA[<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-02">
+      <source role=".">
+         <content><![CDATA[<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-03">
+      <source role=".">
+         <content><![CDATA[<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-04">
+      <source role=".">
+         <content><![CDATA[<doc>
+<n attrib="1">0</n>
+<n attrib="1">1</n>
+<n attrib="1">2</n>
+<n attrib="1">3</n>
+<n attrib="2">4</n>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="math-05">
+      <source role=".">
+         <content><![CDATA[<doc><n1 attrib="2">2</n1><n2 attrib="4">3</n2></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-06">
+      <source role=".">
+         <content><![CDATA[<doc><n1 attrib="5">3</n1><n2 attrib="5">6</n2></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-07">
+      <source role=".">
+         <content><![CDATA[<doc><n-1 attrib="9">3</n-1><n-2 attrib="1">7</n-2></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-08">
+      <source role=".">
+         <content><![CDATA[<doc>
+<n1 attrib="10">6</n1>
+<n2 attrib="5">3</n2>
+<div attrib="20">9</div>
+<mod attrib="2">3</mod>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="math-09">
+      <source role=".">
+         <content><![CDATA[<doc>
+<n1 attrib="10">5</n1>
+<n2 attrib="4">2</n2>
+<div attrib="-5">-5</div>
+<mod attrib="-2">2</mod>
+</doc>
+]]></content>
+      </source>
+   </environment>
+   <environment name="math-10">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <n0>0</n0>
+  <n1>1</n1>
+  <n2>2</n2>
+  <n3>3</n3>
+  <n4>4</n4>
+  <n5>5</n5>
+  <n6>6</n6>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-11">
+      <source role=".">
+         <content><![CDATA[<doc>17</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-12">
+      <source role=".">
+         <content><![CDATA[<doc><n1>3</n1><n2>7</n2></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-13">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <n>0</n>
+  <n>1</n>
+  <n>2</n>
+  <n>-1</n>
+  <n>0.0001</n>
+  <n>five</n>
+  <n>NaN</n>
+  <n></n>
+  <n>.</n>
+  <n>0.</n>
+  <n>.0</n>
+  <n>-0</n>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-14">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <n0>0</n0>
+  <n1>1</n1>
+  <n2>2</n2>
+  <n3>3</n3>
+  <n4>4</n4>
+  <e>five</e>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-15">
+      <source role=".">
+         <content><![CDATA[<doc><n0>0</n0><n1>1</n1><n2>2</n2><n3>3</n3><n4>4</n4><e>five</e></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-16">
+      <source role=".">
+         <content><![CDATA[<doc><k>0.0004</k></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-17">
+      <source role="." file="math-17.xml"/>
+   </environment>
+   <environment name="math-18">
+      <source role="." file="math-18.xml"/>
+   </environment>
+   <environment name="math-19">
+      <source role=".">
+         <content><![CDATA[<doc><n0>0.0</n0><n1>1.54</n1><n2>2.999999</n2></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-20">
+      <source role=".">
+         <content><![CDATA[<doc><n0>0.0</n0><n1>1.24</n1><n2>2.999999</n2></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-21">
+      <source role=".">
+         <content><![CDATA[<doc>
+<n attrib="1">0</n>
+<n attrib="1">1</n>
+<n attrib="1">2</n>
+<n attrib="1">3</n>
+<n attrib="2">4</n>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-22">
+      <source role=".">
+         <content><![CDATA[<doc>
+<n1 attrib="2">2</n1>
+<n2 attrib="4">3</n2>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-23">
+      <source role=".">
+         <content><![CDATA[<doc>
+<n1 attrib="5">3</n1>
+<n2 attrib="5">6</n2>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-24">
+      <source role=".">
+         <content><![CDATA[<doc>
+<n-1 attrib="9">3</n-1>
+<n-2 attrib="1">7</n-2>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-25">
+      <source role=".">
+         <content><![CDATA[<doc>
+<n1 attrib="10">6</n1>
+<n2 attrib="5">3</n2>
+<div attrib="20">9</div>
+<mod attrib="2">3</mod>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-26">
+      <source role=".">
+         <content><![CDATA[<doc>
+<n1 attrib="10">5</n1>
+<n2 attrib="4">2</n2>
+<div attrib="-5">-5</div>
+<mod attrib="-2">2</mod>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-27">
+      <source role=".">
+         <content><![CDATA[<doc>
+<av>
+<a>
+<b>1</b>
+<h>8</h>
+<d>1</d>
+<e>1</e>
+</a>
+<v>
+<w>1</w>
+<h>7</h>
+<y>1</y>
+<z>1</z>
+</v>
+</av>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-28">
+      <source role="." file="math-28.xml"/>
+   </environment>
+   <environment name="math-29">
+      <source role=".">
+         <content><![CDATA[<doc>
+  <n0>1440</n0>
+  <n1>2</n1>
+  <n2>2</n2>
+  <n3>6</n3>
+  <n4>10</n4>
+  <n5>3</n5>
+</doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-30">
+      <source role="." file="math-30.xml"/>
+   </environment>
+   <environment name="math-31">
+      <source role=".">
+         <content><![CDATA[<doc><e>1</e><e>2</e><e>3</e><e>4</e><e>five</e></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-32">
+      <source role=".">
+         <content><![CDATA[<doc><e>17</e><e>-5</e><e>8</e><e>-37</e></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-33">
+      <source role=".">
+         <content><![CDATA[<doc></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-34">
+      <source role=".">
+         <content><![CDATA[<doc><a>1</a><a>2</a><a>3</a><a>4</a></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-35">
+      <source role=".">
+         <content><![CDATA[<doc><in>1</in><in>23</in><in>255</in><in>65536</in><in>4294967295</in></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-36">
+      <source role=".">
+         <content><![CDATA[<doc><a>5000</a><a>3000</a><a>400</a><a>50</a></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-37">
+      <source role=".">
+         <content><![CDATA[<doc><a>1</a><a>0.5</a><a>0.257</a></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-38">
+      <source role=".">
+         <content><![CDATA[<doc><a>9.5</a><a>100</a><a>90</a></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="math-39">
+      <source role=".">
+         <content><![CDATA[<doc><a>10</a><a>0.1755E1</a><a>3</a></doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="math-0101">
+      <description>Test of number() conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-01"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0101.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '1'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-0102">
+      <description>Test of division between decimal values.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0102.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2;
+    2;   
+    2;    
+    3.333333;     
+    3.333333;         
+    0.3;  
+    1;  
+    0.000333;                       
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-0103">
+      <description>Determine whether mod returns +0 or -0.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0103.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>INF;
+        INF;   
+        -INF;
+        -INF;   
+    </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-0104">
+      <description>Test that the strings "INF", "-INF", and "NaN" are acceptable</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0104.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>INF;
+    -INF;
+    NaN;        
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-0105">
+      <description>Test that the strings "INF", "-INF", and "NaN" are acceptable as floats</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0105.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out xmlns:xs="http://www.w3.org/2001/XMLSchema">INF;
+    -INF;
+    NaN;        
+  </out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="math-0106">
+      <description>Failure to compare empty string to number</description>
+      <created by="Michael Kay" on="2015-07-30"/>
+      <environment ref="math-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0106.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0001"/>
+      </result>
+   </test-case>
+   
+   <test-case name="math-0107">
+      <description>Saxon bug 3212: range test with empty sequence as an end-point</description>
+      <created by="Michael Kay" on="2017-04-28"/>
+      <environment ref="math-01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0107.xsl"/>
+      </test>
+      <result>
+         <assert>/out = ""</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-0201">
+      <description>Test of floor().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-02"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0201.xsl"/>
+      </test>
+      <result>
+         <assert>/out='0'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-0202">
+      <description>Test of ceiling().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-02"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0202.xsl"/>
+      </test>
+      <result>
+         <assert>/out='0'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-0301">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-03"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0301.xsl"/>
+      </test>
+      <result>
+         <assert>/out='0'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-0401">
+      <description>Test of sum().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-04"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0401.xsl"/>
+      </test>
+      <result>
+         <assert>/out='10'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-0501">
+      <description>Test of '*' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-05"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0501.xsl"/>
+      </test>
+      <result>
+         <assert>/out='6'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-0601">
+      <description>Test of '+' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-06"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0601.xsl"/>
+      </test>
+      <result>
+         <assert>/out='9'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-0701">
+      <description>Test of '-' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-07"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0701.xsl"/>
+      </test>
+      <result>
+         <assert>/out='2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-0801">
+      <description>Test of 'div' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-08"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0801.xsl"/>
+      </test>
+      <result>
+         <assert>/out='3'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-0901">
+      <description>Test of 'mod' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-09"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-0901.xsl"/>
+      </test>
+      <result>
+         <assert>/out='1'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1001">
+      <description>Test that div has precedence over + and -.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1001.xsl"/>
+      </test>
+      <result>
+         <assert>/out='5,44,9'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1002">
+      <description>Test that mod has precedence over + and -.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1002.xsl"/>
+      </test>
+      <result>
+         <assert>/out='15,2,2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1003">
+      <description>Test of repeated use of +.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1003.xsl"/>
+      </test>
+      <result>
+         <assert>/out='200,17,27'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1004">
+      <description>Test of repeated use of -. Space away from - when required.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1004.xsl"/>
+      </test>
+      <result>
+         <assert>/out='40,77,60'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1005">
+      <description>Test that * has precedence over + and -.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-10"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1005.xsl"/>
+      </test>
+      <result>
+         <assert>/out='17,24,39'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1101">
+      <description>Test that number() with no argument applies to context node.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-11"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1101.xsl"/>
+      </test>
+      <result>
+         <assert>/out='17'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1201">
+      <description>Test of unary '-' on a union.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-12"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1201.xsl"/>
+      </test>
+      <result>
+         <assert>/out='-3'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1301">
+      <description>Purpose: Test of is-a-number technique. </description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-13"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1301.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="math-1301.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="math-1401">
+      <description>Test what value-of does to a large number.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-14"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1401.xsl"/>
+      </test>
+      <result>
+         <assert>/out='9876543210'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1501">
+      <description>Test of number() conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1501.xsl"/>
+      </test>
+      <result>
+         <assert>/out='NaN'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1502">
+      <description>Test of number() conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1502.xsl"/>
+      </test>
+      <result>
+         <assert>/out='2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1503">
+      <description>Test of number() conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1503.xsl"/>
+      </test>
+      <result>
+         <assert>/out='3'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1504">
+      <description>Test of number() conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1504.xsl"/>
+      </test>
+      <result>
+         <assert>/out='NaN'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1505">
+      <description>Test of number() conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1505.xsl"/>
+      </test>
+      <result>
+         <assert>/out='NaN'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1506">
+      <description>Test of number() conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1506.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1507">
+      <description>Test of number() conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1507.xsl"/>
+      </test>
+      <result>
+         <assert>/out='NaN'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1508">
+      <description>Test of number() conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1508.xsl"/>
+      </test>
+      <result>
+         <assert>/out='NaN'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1509">
+      <description>Test of number() conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1509.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1510">
+      <description>Test of number() conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1510.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1511">
+      <description>Test of number() conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1511.xsl"/>
+      </test>
+      <result>
+         <assert>/out='false'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1512">
+      <description>Test of number() conversion function.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1512.xsl"/>
+      </test>
+      <result>
+         <assert>/out='false'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1513">
+      <description>Test of nesting of parentheses.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1513.xsl"/>
+      </test>
+      <result>
+         <assert>/out='4'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1514">
+      <description>Test that NaN propagates through + and parentheses.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1514.xsl"/>
+      </test>
+      <result>
+         <assert>/out='NaN'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1515">
+      <description>Test that NaN propagates through * and unary -.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1515.xsl"/>
+      </test>
+      <result>
+         <assert>/out='NaN'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1516">
+      <description>Test that NaN propagates through subtraction.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1516.xsl"/>
+      </test>
+      <result>
+         <assert>/out='NaN,NaN'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1517">
+      <description>Test that NaN propagates through div.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1517.xsl"/>
+      </test>
+      <result>
+         <assert>/out='NaN,NaN'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1518">
+      <description>Test that NaN propagates through mod.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1518.xsl"/>
+      </test>
+      <result>
+         <assert>/out='NaN,NaN'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1519">
+      <description>Test that NaN propagates through the numeric functions.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-15"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1519.xsl"/>
+      </test>
+      <result>
+         <assert>/out='NaN,NaN,NaN'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1601">
+      <description>Test of number() conversion function for small decimal numbers.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-16"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1601.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1.75|1.75|true|
+1.75|true|
+0.0004|0.0004|true|
+0.0004|true|
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-1701">
+      <description>Test of string to number conversion for small (yet still representable) decimal numbers.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1701.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="math-1701.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="math-1801">
+      <description>Test of string to number conversion for large (yet still representable) decimal numbers.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1801.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="math-1801.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="math-1901">
+      <description>Test of floor().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1901.xsl"/>
+      </test>
+      <result>
+         <assert>/out='0'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1902">
+      <description>Test of floor().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1902.xsl"/>
+      </test>
+      <result>
+         <assert>/out='1'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1903">
+      <description>Test of floor().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1903.xsl"/>
+      </test>
+      <result>
+         <assert>/out='1'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1904">
+      <description>Test of floor().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1904.xsl"/>
+      </test>
+      <result>
+         <assert>/out='2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1905">
+      <description>Test of floor().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1905.xsl"/>
+      </test>
+      <result>
+         <assert>/out='2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1906">
+      <description>Test of floor().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1906.xsl"/>
+      </test>
+      <result>
+         <assert>/out='-2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1907">
+      <description>Test of floor().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1907.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1908">
+      <description>Test of floor().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1908.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1909">
+      <description>Test of floor().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1909.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1910">
+      <description>Test of ceiling().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1910.xsl"/>
+      </test>
+      <result>
+         <assert>/out='0'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1911">
+      <description>Test of ceiling().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1911.xsl"/>
+      </test>
+      <result>
+         <assert>/out='2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1912">
+      <description>Test of ceiling().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1912.xsl"/>
+      </test>
+      <result>
+         <assert>/out='2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1913">
+      <description>Test of ceiling().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1913.xsl"/>
+      </test>
+      <result>
+         <assert>/out='3'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1914">
+      <description>Test of ceiling().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1914.xsl"/>
+      </test>
+      <result>
+         <assert>/out='3'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1915">
+      <description>Test of ceiling().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1915.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1916">
+      <description>Test of ceiling().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1916.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-1917">
+      <description>Test of ceiling().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-19"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-1917.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2001">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2021-08-28" change="simplify assertions"/>
+      <environment ref="math-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2001.xsl"/>
+      </test>
+      <result>
+         <assert>/out='0'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2002">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2002.xsl"/>
+      </test>
+      <result>
+         <assert>/out='1'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2003">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2003.xsl"/>
+      </test>
+      <result>
+         <assert>/out='1'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2004">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2004.xsl"/>
+      </test>
+      <result>
+         <assert>/out='3'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2005">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2005.xsl"/>
+      </test>
+      <result>
+         <assert>/out='3'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2006">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2006.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2007">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2007.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2008">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2008.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2009">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2009.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2010">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2010.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2011">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2011.xsl"/>
+      </test>
+      <result>
+         <assert>/out='3'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2012">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2012.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2013">
+      <description>Test of round().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-20"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2013.xsl"/>
+      </test>
+      <result>
+         <assert>/out='-1'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2101">
+      <description>Test of sum().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-21"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2102">
+      <description>Test of sum().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-21"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2102.xsl"/>
+      </test>
+      <result>
+         <assert>/out='0'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2201">
+      <description>Test of '*' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-22"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>6</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2202">
+      <description>Test of '*' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-22"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2202.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>8</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2301">
+      <description>Test of '+' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-23"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2301.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>9</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2302">
+      <description>Test of '+' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-23"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2302.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>10</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2303">
+      <description>Test of '+' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-23"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2303.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>10</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2401">
+      <description>Test of '-' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-24"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2401.xsl"/>
+      </test>
+      <result>
+         <assert>/out='-1'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2402">
+      <description>Test of '-' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-24"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2402.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2403">
+      <description>Test of '-' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-24"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2403.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2404">
+      <description>Test of '-' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-24"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2404.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2405">
+      <description>Test of '-' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-24"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2405.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>10</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2406">
+      <description>Test of '-' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-24"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2406.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>10</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2407">
+      <description>Test of '-' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-24"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2407.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2408">
+      <description>Test of '-' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-24"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2408.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-4</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2409">
+      <description>Test of '-' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-24"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2409.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>8</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2410">
+      <description>Test of '-' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-24"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2410.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>8</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2501">
+      <description>Test of 'div' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-25"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2502">
+      <description>Test of 'div' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-25"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2502.xsl"/>
+      </test>
+      <result>
+         <assert>/out='2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2503">
+      <description>Test of 'div' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-25"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2503.xsl"/>
+      </test>
+      <result>
+         <assert>/out='3'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2504">
+      <description>Test of 'div' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-25"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2504.xsl"/>
+      </test>
+      <result>
+         <assert>/out='2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2505">
+      <description>Test of 'div' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-25"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2505.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>10</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2506">
+      <description>Test of 'div' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-25"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2506.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2507">
+      <description>Test of 'div' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-25"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2507.xsl"/>
+      </test>
+      <result>
+         <assert>/out='false'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2508">
+      <description>Test of 'div' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-25"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2508.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out correct-result="false">false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2509">
+      <description>Test of 'div' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-25"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2509.xsl"/>
+      </test>
+      <result>
+         <assert>/out='false'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2601">
+      <description>Test of 'mod' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-26"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2601.xsl"/>
+      </test>
+      <result>
+         <assert>/out='1'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2602">
+      <description>Test of 'mod' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-26"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2602.xsl"/>
+      </test>
+      <result>
+         <assert>/out='-1'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2603">
+      <description>Test of 'mod' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-26"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2603.xsl"/>
+      </test>
+      <result>
+         <assert>/out='2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2604">
+      <description>Test of 'mod' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-26"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2604.xsl"/>
+      </test>
+      <result>
+         <assert>/out='-1'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2605">
+      <description>Test of 'mod' operator.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-26"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2605.xsl"/>
+      </test>
+      <result>
+         <assert>/out='true'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2606">
+      <description>Test of numeric literals containing "e" (XPath 2.0 only).</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-26"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2606.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>40.1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2607">
+      <description>Test of decimal numeric literals containing ".".</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-26"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2607.xsl"/>
+      </test>
+      <result>
+         <assert>/out='0'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-2608">
+      <description>Test integer division (XPath 2.0)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-26"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2608.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a val="1"/>;
+<a val="2"/>;
+<a val="0"/>;
+<a val="3"/>;
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2609">
+      <description>Test round(), floor(), ceiling() applied to an integer</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-26"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2609.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a val="12345678901234" check="true"/>;
+<a val="12345678901234" check="true"/>;
+<a val="12345678901234" check="true"/>;
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2610">
+      <description>Test round(), floor(), ceiling() applied to a decimal</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-26"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2610.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="math-2610.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="math-2611">
+      <description>Test round(), floor(), ceiling() applied to a double</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-26"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2611.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="math-2611.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="math-2612">
+      <description>Test round(), floor(), ceiling() applied to a float</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-26"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2612.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="math-2612.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="math-2701">
+      <description>Test of sum().</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-27"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2701.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>
+<h>8</h><h>7</h>
+15
+8
+</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2801">
+      <description>Test of repeated use of * to multiply.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-28"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>24,63</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-2901">
+      <description>Test of repeated division.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-29"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-2901.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>60,6,2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-3001">
+      <description>Mini stress of x-way multiply and divide.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-30"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3001.xsl"/>
+      </test>
+      <result>
+         <assert>/out='2'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-3101">
+      <description>Test of sum() with non-number.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-31"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3101.xsl"/>
+      </test>
+      <result>
+         <assert>/out='NaN'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-3201">
+      <description>Test of sum() with unary - in some nodes.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-32"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3201.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>-17</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-3301">
+      <description>Test of round-half-to-even on integers.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3301.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[2][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[3][@b="100" and @c="0" and @d="0"]</assert>
+            <assert>/out/a[4][@b="200" and @c="200" and @d="200"]</assert>
+            <assert>/out/a[5][@b="-200" and @c="-200" and @d="-200"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="math-3301a">
+      <description>Test of round-half-to-even on integers: variant test forcing run-time evaluation</description>
+      <created by="Michael Kay" on="2016-01-11"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3301a.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[2][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[3][@b="100" and @c="0" and @d="0"]</assert>
+            <assert>/out/a[4][@b="200" and @c="200" and @d="200"]</assert>
+            <assert>/out/a[5][@b="-200" and @c="-200" and @d="-200"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="math-3302">
+      <description>Test of round-half-to-even on decimals.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3302.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[2][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[3][@b="100" and @c="0" and @d="0"]</assert>
+            <assert>/out/a[4][@b="200" and @c="200" and @d="200"]</assert>
+            <assert>/out/a[5][@b="-100" and @c="-200" and @d="-200"]</assert>
+            <assert>/out/a[6][@b="180.02" and @c="150.02" and @d="250.02"]</assert>
+            <assert>/out/a[7][@b="-120.01" and @c="-150.02" and @d="-250.02"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="math-3302a">
+      <description>Test of round-half-to-even on decimals; variant forcing runtime evaluation</description>
+      <created by="Michael Kay" on="2016-01-11"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3302a.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[2][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[3][@b="100" and @c="0" and @d="0"]</assert>
+            <assert>/out/a[4][@b="200" and @c="200" and @d="200"]</assert>
+            <assert>/out/a[5][@b="-100" and @c="-200" and @d="-200"]</assert>
+            <assert>/out/a[6][@b="180.02" and @c="150.02" and @d="250.02"]</assert>
+            <assert>/out/a[7][@b="-120.01" and @c="-150.02" and @d="-250.02"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="math-3303">
+      <description>Test of round-half-to-even on doubles.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2024-09-09" 
+                change="corrected results as per https://github.com/w3c/xslt30-test/issues/79"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3303.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[2][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[3][@b="100" and @c="0" and @d="-0"]</assert>
+            <assert>/out/a[4][@b="200" and @c="200" and @d="200"]</assert>
+            <assert>/out/a[5][@b="-100" and @c="-200" and @d="-200"]</assert>
+            <assert>/out/a[6][@b="180.02" and @c="150.01" and @d="250.03"]</assert>
+            <assert>/out/a[7][@b="-120.01" and @c="-150.01" and @d="-250.03"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="math-3303a">
+      <description>Test of round-half-to-even on doubles: variant forcing runtime evaluation</description>
+      <created by="Michael Kay" on="2016-01-11"/>
+      <modified by="Michael Kay" on="2024-09-09" 
+                change="corrected results as per https://github.com/w3c/xslt30-test/issues/79"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3303a.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[2][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[3][@b="100" and @c="0" and @d="-0"]</assert>
+            <assert>/out/a[4][@b="200" and @c="200" and @d="200"]</assert>
+            <assert>/out/a[5][@b="-100" and @c="-200" and @d="-200"]</assert>
+            <assert>/out/a[6][@b="180.02" and @c="150.01" and @d="250.03"]</assert>
+            <assert>/out/a[7][@b="-120.01" and @c="-150.01" and @d="-250.03"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="math-3304">
+      <description>Test of round-half-to-even on floats.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3304.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[2][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[3][@b="100" and @c="0" and @d="-0"]</assert>
+            <assert>/out/a[4][@b="200" and @c="200" and @d="200"]</assert>
+            <assert>/out/a[5][@b="-100" and @c="-200" and @d="-200"]</assert>
+            <assert>/out/a[6][@b="180.02" and @c="150.01" and @d="250.02"]</assert>
+            <assert>/out/a[7][@b="-120.01" and @c="-150.01" and @d="-250.02"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="math-3304a">
+      <description>Test of round-half-to-even on floats. Variant forcing runtime evaluation</description>
+      <created by="Michael Kay" on="2016-01-11"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3304a.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a[1][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[2][@b="120" and @c="0" and @d="-3"]</assert>
+            <assert>/out/a[3][@b="100" and @c="0" and @d="-0"]</assert>
+            <assert>/out/a[4][@b="200" and @c="200" and @d="200"]</assert>
+            <assert>/out/a[5][@b="-100" and @c="-200" and @d="-200"]</assert>
+            <assert>/out/a[6][@b="180.02" and @c="150.01" and @d="250.02"]</assert>
+            <assert>/out/a[7][@b="-120.01" and @c="-150.01" and @d="-250.02"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="math-3305">
+      <description>Test of abs() on all numeric data types.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3305.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/int[@a="3" and @b="3" and @c="0"]</assert>
+            <assert>/out/decimal[@a="3.2" and @b="3.2" and @c="0"]</assert>
+            <assert>/out/double[@a="3.2" and @b="3.2" and @c="0" and @d="0" and @e="NaN" and @f="INF" and @g="INF"]</assert>
+            <assert>/out/float[@a="3.2" and @b="3.2" and @c="0" and @d="0" and @e="NaN" and @f="INF" and @g="INF"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="math-3305a">
+      <description>Test of abs() on all numeric data types. Variant forcing runtime evaluation</description>
+      <created by="Michael Kay" on="2016-01-11"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3305a.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/int[@a="3" and @b="3" and @c="0"]</assert>
+            <assert>/out/decimal[@a="3.2" and @b="3.2" and @c="0"]</assert>
+            <assert>/out/double[@a="3.2" and @b="3.2" and @c="0" and @d="0" and @e="NaN" and @f="INF" and @g="INF"]</assert>
+            <assert>/out/float[@a="3.2" and @b="3.2" and @c="0" and @d="0" and @e="NaN" and @f="INF" and @g="INF"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="math-3306">
+      <description>Test that casting to integer truncates towards zero.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3306.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/decimal[@a="3" and @b="-3"]</assert>
+            <assert>/out/double[@a="3" and @b="-3"]</assert>
+            <assert>/out/float[@a="3" and @b="-3"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="math-3306a">
+      <description>Test that casting to integer truncates towards zero. Variant forcing runtime evaluation</description>
+      <created by="Michael Kay" on="2016-01-11"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3306a.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/decimal[@a="3" and @b="-3"]</assert>
+            <assert>/out/double[@a="3" and @b="-3"]</assert>
+            <assert>/out/float[@a="3" and @b="-3"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="math-3307">
+      <description>Test that the result of dividing two integers is a decimal.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2016-02-14" change="results no longer include the xs namespace"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3307.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out result="true"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="math-3307a">
+      <description>Test that the result of dividing two integers is a decimal. Variant forcing runtime evaluation</description>
+      <created by="Michael Kay" on="2016-01-11"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3307a.xsl"/>
+      </test>
+      <result>
+         <assert>/out/@result = "true"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-3308">
+      <description>Bug in 7.8: converting a string of spaces to a number crashes</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3308.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "NaN"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="math-3308a">
+      <description>Bug in 7.8: converting a string of spaces to a number crashes. Variant forcing runtime evaluation</description>
+      <created by="Michael Kay" on="2016-01-11"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3308a.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "NaN"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-3309">
+      <description>Test whitespace trimming in string-to-number conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3309.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "-2"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="math-3309a">
+      <description>Test whitespace trimming in string-to-number conversion. Variant forcing runtime evaluation</description>
+      <created by="Michael Kay" on="2016-01-11"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3309a.xsl"/>
+      </test>
+      <result>
+         <assert>/out = "-2"</assert>
+      </result>
+   </test-case>
+
+   <test-case name="math-3310">
+      <description>test value comparisons on NaN</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3310.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>every $b in //t satisfies $b = 'true'</assert>
+            <assert>every $b in //f satisfies $b = 'false'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="math-3310a">
+      <description>test value comparisons on NaN. Variant forcing runtime evaluation</description>
+      <created by="Michael Kay" on="2016-01-11"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3310a.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>every $b in //t satisfies $b = 'true'</assert>
+            <assert>every $b in //f satisfies $b = 'false'</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="math-3311">
+      <description>test arithmetic on big integers</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <maximum_number_of_decimal_digits value="50"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3311.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a>509471411997963289699523771874153765145607095</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-3312">
+      <description>test value range of unsignedLong</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="schema_aware"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3312.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<a val="0 999999999999 18446744073709551615 18446744073709551618.14159">OK</a>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-3313">
+      <description>test decimal mod</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <maximum_number_of_decimal_digits value="50"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3313.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/aa[@ans="1.1"]</assert>
+            <assert>/out/ab[@ans="1.2"]</assert>
+            <assert>/out/ac[@ans="1.2"]</assert>
+            <assert>/out/ad[@ans="-1.2"]</assert>
+            <assert>/out/ae[@ans="-1.2"]</assert>
+            <assert>/out/af[@ans="0.2"]</assert>
+            <assert>/out/ag[@ans="0.2"]</assert>
+            <assert>/out/ah[@ans="-0.2"]</assert>
+            <assert>/out/ai[@ans="-0.2"]</assert>
+            <assert>/out/aj[@ans="0.1"]</assert>
+            <assert>/out/ak[@ans="0"]</assert>
+            <assert>/out/al[@ans="0"]</assert>
+            <assert>/out/am[@ans="0"]</assert>
+            <assert>/out/an[@ans="0.000000000000000000000000019999"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="math-3314">
+      <description>test idiv on different operand types</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3314.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/aa[@ans="3"]</assert>
+            <assert>/out/ab[@ans="0"]</assert>
+            <assert>/out/ac[@ans="-2"]</assert>
+            <assert>/out/ad[@ans="-2"]</assert>
+            <assert>/out/ae[@ans="2"]</assert>
+            <assert>/out/af[@ans="2"]</assert>
+            <assert>/out/ac[@ans="-2"]</assert>
+            <assert>/out/ad[@ans="-2"]</assert>
+            <assert>/out/ae[@ans="2"]</assert>
+            <assert>/out/af[@ans="2"]</assert>
+            <assert>/out/ac[@ans="-2"]</assert>
+            <assert>/out/ad[@ans="-2"]</assert>
+            <assert>/out/ae[@ans="2"]</assert>
+            <assert>/out/af[@ans="2"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="math-3315">
+      <description>test round-half-to-even on decimals</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <maximum_number_of_decimal_digits value="50"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3315.xsl"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/a0[@ans="1234567896123456789612345678961234567896.1234567896"]</assert>
+            <assert>/out/aa[@ans="1234567896123456789612345678961234567896.1235"]</assert>
+            <assert>/out/ab[@ans="1234567896123456789612345678961234567896.1"]</assert>
+            <assert>/out/ac[@ans="1234567896123456789612345678961234567896"]</assert>
+            <assert>/out/ad[@ans="1234567896123456789612345678961234567900"]</assert>
+            <assert>/out/ae[@ans="1234567896123456789612345678960000000000"]</assert>
+            <assert>/out/af[@ans="1234567896000000000000000000000000000000"]</assert>
+            <assert>/out/af2[@ans="1234567897000000000000000000000000000000"]</assert>
+            <assert>/out/af3[@ans="1234567898000000000000000000000000000000"]</assert>
+            <assert>/out/ag[@ans="0"]</assert>
+            <assert>/out/b0[@ans="0.0000000000000000000000000123456789012346"]</assert>
+            <assert>/out/ba[@ans="0"]</assert>
+            <assert>/out/bb[@ans="0"]</assert>
+            <assert>/out/bc[@ans="0"]</assert>
+            <assert>/out/bd[@ans="0"]</assert>
+            <assert>/out/be[@ans="0"]</assert>
+            <assert>/out/bf[@ans="0"]</assert>
+            <assert>/out/bg[@ans="0"]</assert>
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="math-3316">
+      <description>Additional test case for unary minus</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3316.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<circle xmlns:xs="http://www.w3.org/2001/XMLSchema" cx="10" cy="-1" r="4"/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-3317">
+      <description>test BCM: arithmetic on empty sequence returns NaN</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="backwards_compatibility"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3317.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a0 ans="NaN"/><a0 ans="NaN"/><a0 ans="NaN"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-3318">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3318.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<x>123456789012345678</x>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-3319">
+      <description/>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3319.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<x>1.17</x>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-3320">
+      <description>XSLT 2.0 doesn't allow two parameters for fn:Round</description>
+      <created by="ONeil Delpratt, Saxonica" on="2012-11-07"/>
+      <environment ref="math-33"/>
+      <dependencies>
+         <spec value="XSLT20"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3320.xsl"/>
+      </test>
+      <result>
+         <error code="XPST0017"/>
+      </result>
+   </test-case>
+
+   <test-case name="math-3401">
+      <description>Test that sum() returns the same type as its argument</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-34"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3401.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="math-3401.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="math-3402">
+      <description>Test that avg() returns the same type as its argument</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="math-34"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3402.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="math-3402.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="math-3501">
+      <description>a recursive decimal-to-hex conversion</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-03-20" change="remove whitespace from result, see bug 24035"/>
+      <environment ref="math-35"/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3501.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<o><out dec="1">1</out><out dec="23">17</out><out dec="255">FF</out
+         ><out dec="65536">10000</out><out dec="4294967295">FFFFFFFF</out></o>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-3601">
+      <description>Round with different test cases for xs:Integer</description>
+      <created by="ONeil Delpratt, Saxonica" on="2012-11-07"/>
+      <environment ref="math-36"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3601.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="math-3601.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="math-3701">
+      <description>Round with different test cases for xs:double</description>
+      <created by="ONeil Delpratt, Saxonica" on="2012-11-07"/>
+      <modified by="Michael Kay, Saxonica" on="2019-01-21" change="correct unintended error (see math-3702)"/>
+      <environment ref="math-37"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3701.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="math-3701.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="math-3702">
+      <description>extension-element-prefixes cannot use a reserved namespace. Was math-3701, now corrected to raise an error</description>
+      <created by="Michael Kay, Saxonica" on="2019-01-21"/>
+      <environment ref="math-37"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3702.xsl"/>
+      </test>
+      <result>
+         <error code="XTSE0085"/>
+      </result>
+   </test-case>
+   
+   <test-case name="math-3801">
+      <description>Round with different test cases for xs:Decimal</description>
+      <created by="ONeil Delpratt, Saxonica" on="2012-11-07"/>
+      <modified by="Michael Kay, Saxonica" on="2019-01-21" change="correct unintended error (see math-3702)"/>
+      <environment ref="math-38"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3801.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<x><out>3</out><out>-2</out><out>1.3</out><out>1.3</out><out>1.22</out><out>-13.51243</out><out>200</out><out>200</out><out>-13</out><out>200</out></x>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="math-3901">
+      <description>Round with different test cases for xs:Float</description>
+      <created by="ONeil Delpratt, Saxonica" on="2012-11-07"/>
+      <modified by="Michael Kay, Saxonica" on="2019-01-21" change="correct unintended error (see math-3702)"/>
+      <environment ref="math-39"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="math-3901.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="math-3901.out"/>
+      </result>
+   </test-case>
+</test-set>

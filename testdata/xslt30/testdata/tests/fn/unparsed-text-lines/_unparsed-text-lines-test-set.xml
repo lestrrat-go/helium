@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="unparsed-text-lines">
+   <description>Tests unparsed-text-lines</description>
+   <dependencies>
+      <spec value="XSLT30+"/>
+   </dependencies>
+
+   <test-case name="unparsed-text-lines-001">
+      <description>Basic test of unparsed-text-lines function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="unparsed-text-lines-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><line>Adduce the equine quadruped</line><line>to element aquatic:</line><line>ingurgitation, it is said,</line><line>must still be automatic.</line></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="unparsed-text-lines-002">
+      <description>Test of unparsed-text-lines function with empty last line in file</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="unparsed-text-lines-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><line>Adduce the equine quadruped</line><line>to element aquatic:</line><line/><line>ingurgitation, it is said,</line><line>must still be automatic.</line></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="unparsed-text-lines-003">
+      <description>Test of unparsed-text-lines function using position() and last()</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="unparsed-text-lines-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><line nr="1" of="4">Adduce the equine quadruped</line><line nr="2" of="4">to element aquatic:</line><line nr="3" of="4">ingurgitation, it is said,</line><line nr="4" of="4">must still be automatic.</line></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="unparsed-text-lines-004">
+      <description>Test of unparsed-text-lines function recovering from error (NUL character in file)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2015-08-13" change="error code has changed"/>
+      <test>
+         <stylesheet file="unparsed-text-lines-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><error>Invalid text file</error></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="unparsed-text-lines-005">
+      <description>Test of unparsed-text-lines function reading an empty file</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <test>
+         <stylesheet file="unparsed-text-lines-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="unparsed-text-lines-006">
+      <description>Test of unparsed-text-lines function failing with error (NUL character in file)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Debbie Lockett, Saxonica" on="2016-02-16" change="Correct error code: see bug 29302"/>
+      <test>
+         <stylesheet file="unparsed-text-lines-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="FOUT1190"/>
+      </result>
+   </test-case>
+</test-set>

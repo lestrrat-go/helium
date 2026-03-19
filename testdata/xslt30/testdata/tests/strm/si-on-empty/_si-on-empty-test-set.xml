@@ -1,0 +1,438 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="si-on-empty">
+   <description>Tests xsl:stream instruction introduced in XSLT 3.0 with xsl:on-empty.</description>
+   
+   <environment name="si-on-empty-A">
+     <stylesheet file="si-on-empty-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="si-on-empty-001">
+      <description>xsl:element; value is consuming; xsl:on-empty</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>
+      <test>
+         <initial-template name="s-001"/>
+      </test>
+      <result>
+         <assert>exists(/out/a)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-002">
+      <description>Test of xsl:stream instruction with xsl:on-empty</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<Results><first>one</first><second
+         /><CATEGORY CODE="P" DESC="Paperback"/><CATEGORY CODE="MMP" DESC="Mass-market Paperback"/><CATEGORY CODE="H" DESC="Hard Cover"
+         /><last>last</last></Results>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-003">
+      <description>Test of xsl:on-empty with atomic values, some 'empty'</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-003"/>
+      </test>
+      <result>
+         <assert>/out = "23  2011-01-01  0 "</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-004">
+      <description>Test of xsl:on-empty with xsl:if</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-004"/>
+      </test>
+      <result>
+         <assert>exists(/out/a)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-005">
+      <description>Test of xsl:on-empty with xsl:if</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-005"/>
+      </test>
+      <result>
+         <assert>exists(/out/a/banana)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-006">
+      <description>Test of xsl:on-empty with xsl:for-each</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-006"/>
+      </test>
+      <result>
+         <assert>count(/out/ul/li) = 6</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-007">
+      <description>Test of xsl:on-empty with xsl:for-each</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <modified by="Michael Kay" on="2015-08-16" change="spec change, see bug 28888"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-007"/>
+      </test>
+      <result>
+         <assert>exists(/out/ul)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-008">
+      <description>Test of xsl:on-empty with comment nodes</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-008"/>
+      </test>
+      <result>
+         <assert>count(/out/in/comment()[.='3']) = 6</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-009">
+      <description>Test of xsl:on-empty with text nodes</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <modified by="Michael Kay" on="2015-08-16" change="spec change, see bug 28888"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-009"/>
+      </test>
+      <result>
+         <assert>count(/out/in[.='3']) = 6</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-010">
+      <description>Test of xsl:on-empty with xsl:fork</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-010"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a><TITLE>Pride and Prejudice</TITLE><TITLE>Wuthering Heights</TITLE
+         ><TITLE>Tess of the d'Urbervilles</TITLE><TITLE>Jude the Obscure</TITLE><TITLE>The Big Over Easy</TITLE
+         ><TITLE>The Eyre Affair</TITLE><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE><PRICE>4.95</PRICE
+         ><PRICE>16.47</PRICE><PRICE>16.47</PRICE></a></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-011">
+      <description>Test of xsl:on-empty with xsl:fork</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-011"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-012">
+      <description>Test of xsl:on-empty with document nodes</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-012"/>
+      </test>
+      <result>
+         <assert>/out/in/@value = 'true'</assert>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="si-on-empty-021">
+      <description>Test of xsl:on-empty with xsl:element (empty)</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-021"/>
+      </test>
+      <result>
+         <assert>/out/a = 'There is no price data'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-022">
+      <description>Test of xsl:on-empty with xsl:element (not empty)</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-022"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE
+         ><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></a></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-023">
+      <description>Test of xsl:on-empty with xsl:element (empty)</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-023"/>
+      </test>
+      <result>
+         <assert>/out/a = 'There is no price data'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-024">
+      <description>Test of xsl:on-empty with xsl:element (not empty)</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-024"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE
+         ><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></a></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-025">
+      <description>Test of xsl:on-empty with multiple elements (some empty)</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <modified by="Michael Kay" on="2015-08-16" change="spec change, see bug 28888"/>
+      <modified by="Michael Kay" on="2020-12-05" change="use base-uri rather than document-uri,
+         because document-uri has to be globally unique, and xsl:source-document doesn't
+         guarantee stability at this level"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-025"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-026">
+      <description>Test of xsl:on-empty with multiple elements (some empty)</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <modified by="Michael Kay" on="2015-08-16" change="spec change, see bug 28888"/>
+      <modified by="Michael Kay" on="2020-12-05" change="use base-uri rather than document-uri,
+         because document-uri has to be globally unique, and xsl:source-document doesn't
+         guarantee stability at this level"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-026"/>
+      </test>
+      <result>
+         <assert>/out = 'true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-027">
+      <description>Test of xsl:on-empty with multiple elements (all empty)</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <modified by="Michael Kay" on="2015-08-16" change="spec change, see bug 28888"/>    
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-027"/>
+      </test>
+      <result>
+         <assert>/out = 'There is no price data'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-028">
+      <description>Test of xsl:on-empty with atomic values</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <modified by="Michael Kay" on="2015-08-16" change="spec change, see bug 28888"/>    
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-028"/>
+      </test>
+      <result>
+         <assert>/out = '20'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-029">
+      <description>Test of xsl:on-empty with atomic values</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <modified by="Michael Kay" on="2015-08-16" change="spec change, see bug 28888"/>    
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-029"/>
+      </test>
+      <result>
+         <assert>/out = '4.95 6.58 4.95 4.95 16.47 16.47'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-030">
+      <description>Test of xsl:on-empty with xsl:variable</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-030"/>
+      </test>
+      <result>
+         <assert>/out = "There is no price data within BOOKLIST"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-031">
+      <description>Test of xsl:on-empty with xsl:variable</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-031"/>
+      </test>
+      <result>
+         <assert>/out = 'There is no price data within BOOKLIST'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-032">
+      <description>Test of xsl:on-empty with xsl:if</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-032"/>
+      </test>
+      <result>
+         <assert>/out = 'Howdy!'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-033">
+      <description>Test of xsl:on-empty with xsl:if</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-033"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><banana x="78"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-034">
+      <description>Test of xsl:on-empty with xsl:for-each and xsl:where-populated</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-034"/>
+      </test>
+      <result>
+         <assert>/out = 'There has been no gossip.'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-037">
+      <description>Test of xsl:on-empty with xsl:fork</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-037"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a><TITLE>Pride and Prejudice</TITLE><TITLE>Wuthering Heights</TITLE
+         ><TITLE>Tess of the d'Urbervilles</TITLE><TITLE>Jude the Obscure</TITLE
+         ><TITLE>The Big Over Easy</TITLE><TITLE>The Eyre Affair</TITLE
+         ><PRICE>4.95</PRICE><PRICE>6.58</PRICE><PRICE>4.95</PRICE
+         ><PRICE>4.95</PRICE><PRICE>16.47</PRICE><PRICE>16.47</PRICE></a></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-038">
+      <description>Test of xsl:on-empty with xsl:fork</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-038"/>
+      </test>
+      <result>
+         <assert>/out/a = 'The forks were empty.'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-039">
+      <description>Test of consuming xsl:on-empty (executed)</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-039"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><TITLE>Wuthering Heights</TITLE
+         ><TITLE>Tess of the d'Urbervilles</TITLE><TITLE>Jude the Obscure</TITLE
+         ><TITLE>The Big Over Easy</TITLE><TITLE>The Eyre Affair</TITLE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-040">
+      <description>Test of consuming xsl:on-empty (not executed)</description>
+      <created by="Michael Kay" on="2015-07-02"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-040"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><content/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-041">
+      <description>Zero-length text nodes are considered empty</description>
+      <created by="Michael Kay" on="2015-08-16"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-041"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>EMPTY</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-042">
+      <description>Childless document nodes are considered empty</description>
+      <created by="Michael Kay" on="2015-08-16"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-042"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>EMPTY</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-on-empty-043">
+      <description>Document nodes containing whitespace text are not considered empty</description>
+      <created by="Michael Kay" on="2015-08-16"/>
+      <environment ref="si-on-empty-A"/>  
+      <test>
+         <initial-template name="s-043"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>  </out>]]></assert-xml>
+      </result>
+   </test-case>
+
+
+</test-set>

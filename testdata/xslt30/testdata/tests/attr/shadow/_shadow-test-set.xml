@@ -1,0 +1,167 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="shadow">
+   <description>Tests Shadow Attributes (Static AVTs)</description>
+   <environment name="shadow-A">
+      <source role=".">
+         <content><![CDATA[<doc>
+	<item>att1</item>
+	<item>att2</item>
+	<item>att3</item>
+	<item>att4</item>
+</doc>]]></content>
+      </source>
+   </environment>
+
+
+   <test-case name="shadow-001">
+      <description>
+         Test of simple shadow attribute on an instruction
+      </description>
+      <keywords>static-variable xsl:value-of _select</keywords>
+      <created by="Michael Kay" on="2014-05-15"/>
+      <modified by="Michael Kay" on="2015-10-30" change="add an empty expression, bug 29226"/>
+      <environment ref="shadow-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="shadow-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '3'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="shadow-002">
+      <description>
+         Test of shadow attribute on xsl:variable/@static
+      </description>
+      <keywords>xsl:variable xsl:value-of _static _select static-variable</keywords>
+      <created by="Michael Kay" on="2014-05-15"/>
+      <environment ref="shadow-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="shadow-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '3'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="shadow-003">
+      <description>
+         Test of shadow attribute on xsl:stylesheet/@version
+      </description>
+      <keywords>xsl:transform _version</keywords>
+      <created by="Michael Kay" on="2014-05-15"/>
+      <environment ref="shadow-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="shadow-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '1 2 3 4 5'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="shadow-004">
+      <description>
+         Test of shadow attribute on xsl:include/@href
+      </description>
+      <keywords>static-variable xsl:transform xsl:include _version _href mixed-avt</keywords>
+      <created by="Michael Kay" on="2014-05-15"/>
+      <environment ref="shadow-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="shadow-004.xsl"/>
+         <initial-template name="go"/>
+      </test>
+      <result>
+         <assert>/out = '1 2 3 4 5'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="shadow-005">
+      <description>
+         Test of shadow attribute on @use-when
+      </description>
+      <keywords>static-variable xsl:template _use-when</keywords>
+      <created by="Michael Kay" on="2014-05-15"/>
+      <environment ref="shadow-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="shadow-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '3'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="shadow-006">
+      <description>
+         Test of shadow attribute on @xpath-default-namespace
+      </description>
+      <keywords>static-variable xsl:template _xpath-default-namespace</keywords>
+      <created by="Michael Kay" on="2014-05-15"/>
+      <environment ref="shadow-A"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="shadow-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = '1'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="shadow-007">
+      <description>
+         Underscored attributes on LREs are unaffected
+      </description>
+      <keywords>static-variable xsl:template _xpath-default-namespace</keywords>
+      <created by="Michael Kay" on="2015-02-06"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="shadow-007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out one="1" _one="1.0" _two="two"/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="shadow-008">
+      <description>
+         Underscored attribute xsl:_default-collection not accepted on as LRE
+      </description>
+      <keywords>static-variable xsl:template _xpath-default-namespace</keywords>
+      <created by="Michael Kay" on="2020-01-25"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="shadow-008.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE0805"/>
+      </result>
+   </test-case>
+
+</test-set>

@@ -1,0 +1,177 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="su-shallow-descent">
+   <description>Streamable stylesheet functions: category "shallow-descent"</description>
+   
+   <environment name="su-shallow-descent-A">
+      <stylesheet file="su-shallow-descent-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="su-shallow-descent-001">
+      <description>Call an arity-1 stylesheet function</description>
+      <created by="Michael Kay" on="2016-07-15"/>
+      <environment ref="su-shallow-descent-A"/>
+      <test>
+         <initial-template name="t-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><TITLE>Pride and Prejudice</TITLE><TITLE>Tess of the d'Urbervilles</TITLE><TITLE>The Big Over Easy</TITLE></out>]]></assert-xml>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-shallow-descent-002">
+      <description>Call an arity-2 stylesheet function with recursion</description>
+      <created by="Michael Kay" on="2016-07-15"/>
+      <environment ref="su-shallow-descent-A"/>
+      <test>
+         <initial-template name="t-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out
+            ><TITLE>Pride and Prejudice</TITLE><PUBLISHER>Modern Library</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>187</QUANTITY><PAGES>352</PAGES><WEIGHT UNIT="oz">6.1</WEIGHT
+            ><TITLE>Wuthering Heights</TITLE><PUBLISHER>Penguin Classics</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>113</QUANTITY><PAGES>430</PAGES><WEIGHT UNIT="oz">11.2</WEIGHT
+            ><TITLE>Tess of the d'Urbervilles</TITLE><PUBLISHER>Bantam Classics</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>85</QUANTITY><PAGES>480</PAGES><WEIGHT UNIT="oz">7.7</WEIGHT
+            ><TITLE>Jude the Obscure</TITLE><PUBLISHER>Penguin Classics</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>129</QUANTITY><PAGES>528</PAGES><WEIGHT UNIT="oz">10.9</WEIGHT
+            ><TITLE>The Big Over Easy</TITLE><PUBLISHER>Hodder &amp; Stoughton</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>129</QUANTITY><PAGES>346</PAGES><WEIGHT UNIT="g">390</WEIGHT
+            ><TITLE>The Eyre Affair</TITLE><PUBLISHER>Penguin</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>129</QUANTITY><PAGES>384</PAGES><WEIGHT UNIT="oz">9.0</WEIGHT></out>
+]]></assert-xml>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-shallow-descent-003">
+      <description>Call an arity-2 stylesheet function with recursion, called with grounded node</description>
+      <created by="Michael Kay" on="2016-07-15"/>
+      <environment ref="su-shallow-descent-A"/>
+      <test>
+         <initial-template name="t-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out
+            ><TITLE>Pride and Prejudice</TITLE><PUBLISHER>Modern Library</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>187</QUANTITY><PAGES>352</PAGES><WEIGHT UNIT="oz">6.1</WEIGHT
+            ><TITLE>Wuthering Heights</TITLE><PUBLISHER>Penguin Classics</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>113</QUANTITY><PAGES>430</PAGES><WEIGHT UNIT="oz">11.2</WEIGHT
+            ><TITLE>Tess of the d'Urbervilles</TITLE><PUBLISHER>Bantam Classics</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>85</QUANTITY><PAGES>480</PAGES><WEIGHT UNIT="oz">7.7</WEIGHT
+            ><TITLE>Jude the Obscure</TITLE><PUBLISHER>Penguin Classics</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>129</QUANTITY><PAGES>528</PAGES><WEIGHT UNIT="oz">10.9</WEIGHT
+            ><TITLE>The Big Over Easy</TITLE><PUBLISHER>Hodder &amp; Stoughton</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>129</QUANTITY><PAGES>346</PAGES><WEIGHT UNIT="g">390</WEIGHT
+            ><TITLE>The Eyre Affair</TITLE><PUBLISHER>Penguin</PUBLISHER><LANGUAGE>English</LANGUAGE><QUANTITY>129</QUANTITY><PAGES>384</PAGES><WEIGHT UNIT="oz">9.0</WEIGHT></out>
+]]></assert-xml>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-shallow-descent-004">
+      <description>Call stylesheet function whose body is motionless</description>
+      <created by="Michael Kay" on="2016-07-15"/>
+      <modified by="Michael Kay" on="2017-02-15" change="add expected results"/>
+      <environment ref="su-shallow-descent-A"/>
+      <test>
+         <initial-template name="t-004"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>count(/out/BOOKLIST/BOOKS/ITEM) = 6</assert>
+            <assert>count(/out/BOOKLIST/CATEGORIES/CATEGORY) = 3</assert>
+            <assert>/out/BOOKLIST/BOOKS/ITEM[6]/TITLE='The Eyre Affair'</assert>
+         </all-of>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-shallow-descent-101">
+      <description>Shallow-descent function with consuming second argument</description>
+      <created by="Michael Kay" on="2016-06-26"/>
+      <test>
+         <stylesheet file="su-shallow-descent-101.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><section>one</section><section>two</section></out>]]></assert-xml>
+      </result>       
+   </test-case>
+
+   <test-case name="su-shallow-descent-901">
+      <description>Invalid shallow-descent function - zero arity</description>
+      <created by="Michael Kay" on="2016-07-15"/>
+      <test>
+         <stylesheet file="su-shallow-descent-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3155"/>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-shallow-descent-902">
+      <description>Invalid shallow-descent function - result not striding</description>
+      <created by="Michael Kay" on="2016-07-15"/>
+      <test>
+         <stylesheet file="su-shallow-descent-902.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-shallow-descent-903">
+      <description>Invalid shallow-descent function - result not consuming</description>
+      <created by="Michael Kay" on="2016-07-15"/>
+      <test>
+         <stylesheet file="su-shallow-descent-903.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-shallow-descent-904">
+      <description>Invalid shallow-descent function - result is crawling</description>
+      <created by="Michael Kay" on="2016-07-15"/>
+      <test>
+         <stylesheet file="su-shallow-descent-904.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-shallow-descent-905">
+      <description>Invalid shallow-descent function - argument is climbing</description>
+      <created by="Michael Kay" on="2016-07-15"/>
+      <test>
+         <stylesheet file="su-shallow-descent-905.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-shallow-descent-906">
+      <description>Invalid shallow-descent function - first argument allows a sequence</description>
+      <created by="Michael Kay" on="2016-07-15"/>
+      <test>
+         <stylesheet file="su-shallow-descent-906.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+   
+   <test-case name="su-shallow-descent-907">
+      <description>Invalid shallow-descent function call - second argument is consuming</description>
+      <created by="Michael Kay" on="2016-07-15"/>
+      <test>
+         <stylesheet file="su-shallow-descent-907.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>       
+   </test-case>
+ 
+
+</test-set>

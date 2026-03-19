@@ -1,0 +1,509 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-sum">
+   <description>sum() function with streaming</description>
+   
+   <environment name="sf-sum-A">
+     <stylesheet file="sf-sum-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-sum-003">
+      <description>Basic Test of xsl:stream instruction with sum()</description>
+      <keywords>striding PathExpr</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>54.37</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-sum-004">
+      <description>Test of xsl:stream instruction with sum(), filtered with a motionless predicate</description>
+      <keywords>striding PathExpr motionless-predicate</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-004"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>32.95</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-sum-005">
+      <description>Test of xsl:stream instruction with sum(), filtered with a positional predicate</description>
+      <keywords>striding PathExpr positional-predicate fn:position</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-005"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>16.48</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-sum-006">
+      <description>Test of xsl:stream instruction with sum(), filtered with a positional predicate</description>
+      <keywords>striding fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-006"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>16.48</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="sf-sum-007">
+      <description>Test of xsl:stream instruction with sum(), filtered with a positional predicate</description>
+      <keywords>striding fn:position PathExpr positional-predicate</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-007"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>16.48</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-008">
+      <description>Test of xsl:stream instruction with sum(), filtered with data() to make the predicates motionless</description>
+      <keywords>striding-then-grounded predicate PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-008"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2520</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-009">
+      <description>Test of xsl:stream instruction with sum(), filtered with text() to make the predicates motionless</description>
+      <keywords>striding childless-nodes text-nodes PathExpr predicate</keywords>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-009"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2520</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-010">
+      <description>Test of xsl:stream instruction with sum(), filtered with number() to make the predicates motionless</description>
+      <keywords>striding-then-grounded fn:number PathExpr predicate</keywords>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-010"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2520</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-011">
+      <description>sum() selecting nothing, returning the $zero case</description>
+      <keywords>striding empty-sequence PathExpr</keywords>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-011"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>42</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-012">
+      <description>sum() selecting both streamed nodes and literals</description>
+      <keywords>ParenthesizedExpr striding-then-grounded mixed-posture fn:number PathExpr</keywords>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-012"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2583</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-013">
+      <description>sum() selecting both streamed nodes and literals while also filtering</description>
+      <keywords>fn:tail striding-then-grounded fn:number PathExpr ParenthesizedExpr</keywords>
+      <created by="Michael Kay" on="2012-11-20"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-013"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2231</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-015">
+      <description>Test of xsl:stream instruction with sum() of a computed value</description>
+      <keywords>striding-then-grounded ForExpr LetExpr leading-double-slash fn:outermost crawling-then-striding PathExpr SimpleMapExpr fn:data</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-015"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1604.553</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-016">
+      <description>Test of xsl:stream instruction with sum() of a computed value</description>
+      <keywords>MultiplicativeExpr attribute-axis striding-then-grounded PathExpr</keywords>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-016"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1491746</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-017">
+      <description>Test of xsl:stream instruction with sum() using copy-of to make it streamable</description>
+      <keywords>striding-then-grounded predicate fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-017"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2520</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-018">
+      <description>Test of xsl:stream instruction with sum() over attribute values</description>
+      <keywords>striding-then-climbing attribute-axis PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-018"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>745873</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-019">
+      <description>Test of xsl:stream instruction with sum() over attribute values, filtered</description>
+      <keywords>striding-then-climbing attribute-axis motionless-predicate xs:decimal PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-019"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>840679</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-020">
+      <description>sum() over attribute values, computed</description>
+      <keywords>striding-then-grounded attribute-axis climbing PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-020"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>935484</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-021">
+      <description>sum() over values that depend on a condition</description>
+      <keywords>striding-then-grounded AdditiveExpr climbing attribute-axis UnaryExpr PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-021"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>836308</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-022">
+      <description>sum() with a loop used to compute each value</description>
+      <keywords>striding xs:NMTOKENS ContextItemExpr xs:decimal PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-022"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>112.5</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-023">
+      <description>sum() over a crawling expression</description>
+      <keywords>xs:NMTOKENS ContextItemExpr leading-double-slash xs:decimal PathExpr fn:outermost crawling-then-striding SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-023"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>112.5</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+      <test-case name="sf-sum-040">
+      <description>sum() over an empty grounded expression</description>
+      <keywords>empty-sequence leading-double-slash fn:outermost crawling-then-striding PathExpr fn:data</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-040"/>
+      </test>
+      <result>
+         <assert>/out = "-1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-041">
+      <description>sum() over an empty striding expression</description>
+      <keywords>striding leading-lone-slash PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-041"/>
+      </test>
+      <result>
+         <assert>/out = "-1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-042">
+      <description>sum() over an empty crawling expression</description>
+      <keywords>leading-double-slash fn:outermost crawling-then-striding PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-042"/>
+      </test>
+      <result>
+         <assert>/out = "-1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-043">
+      <description>sum() over an empty grounded expression</description>
+      <keywords>crawling-then-climbing parent-axis attribute-axis leading-double-slash PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-16"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-043"/>
+      </test>
+      <result>
+         <assert>/out = "-1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-044">
+      <description>sum(); second operand is consuming, but unused</description>
+      <keywords>leading-double-slash fn:number PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-044"/>
+      </test>
+      <result>
+         <assert>/out = "55"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-045">
+      <description>sum(); second operand is consuming, and used</description>
+      <keywords>leading-double-slash fn:number PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-045"/>
+      </test>
+      <result>
+         <assert>/out = "4.95"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-050">
+      <description>sum() over dayTimeDuration values</description>
+      <keywords>striding-then-grounded ContextItemExpr collation-argument leading-double-slash PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-050"/>
+      </test>
+      <result>
+         <assert>/out = "P110429D"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-051">
+      <description>sum() over yearMonthDuration values</description>
+      <keywords>striding-then-grounded collation-argument ContextItemExpr FOCH0002 leading-double-slash PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-051"/>
+      </test>
+      <result>
+         <assert>/out = "P302Y1M"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-052">
+      <description>sum() over inconsistent type values</description>
+      <keywords>striding-then-grounded ContextItemExpr collation-argument leading-double-slash xsl:try error-handling specific-catch-clause FOCH0002 PathExpr fn:outermost crawling-then-striding</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-052"/>
+      </test>
+      <result>
+         <error code="FORG0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-053">
+      <description>sum() over incorrect type values</description>
+      <keywords>ParenthesizedExpr collation-argument striding PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-053"/>
+      </test>
+      <result>
+         <error code="FORG0006"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-054">
+      <description>sum() over inconsistent type values, error is caught</description>
+      <keywords>ParenthesizedExpr striding collation-argument PathExpr FOCH0002</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-054"/>
+      </test>
+      <result>
+         <assert>/out = "caught"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-055">
+      <description>sum() over incorrect type values, error is caught</description>
+      <keywords>collation-argument ParenthesizedExpr striding xsl:try error-handling specific-catch-clause FOCH0002 PathExpr</keywords>
+      <created by="Michael Kay" on="2014-01-06"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-055"/>
+      </test>
+      <result>
+         <assert>/out = "caught"</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-sum-056">
+      <description>sum() over crawling nodes included nested values</description>
+      <keywords/>
+      <created by="Michael Kay" on="2014-05-23"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-056"/>
+      </test>
+      <result>
+         <assert>/out = '12360'</assert>
+      </result>
+   </test-case>  
+   
+   <test-case name="sf-sum-057">
+      <description>crawling operand, second argument is ignored when first is non-empty (bug 29420)</description>
+      <keywords/>
+      <created by="Michael Kay" on="2016-02-05"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-057"/>
+      </test>
+      <result>
+         <assert>/out = '54.37'</assert>
+      </result>
+   </test-case> 
+   
+   <test-case name="sf-sum-058">
+      <description>crawling operand, second argument is consuming</description>
+      <keywords/>
+      <created by="Michael Kay" on="2016-02-05"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-058"/>
+      </test>
+      <result>
+         <assert>/out = '54.37'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-059">
+      <description>crawling operand, second argument is consuming but ignored</description>
+      <keywords/>
+      <created by="Michael Kay" on="2016-02-05"/>
+      <environment ref="sf-sum-A"/>
+      <test>
+         <initial-template name="s-059"/>
+      </test>
+      <result>
+         <assert>/out = '15'</assert>
+      </result>
+   </test-case>
+
+   <test-case name="sf-sum-901">
+      <description>Test of xsl:stream instruction with sum(), filtered with predicate that atomizes.</description>
+      <keywords>consuming-predicate fn:last striding-then-roaming PathExpr positional-predicate XTSE3430 _IMPROVE:fix-description</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <test>
+         <stylesheet file="sf-sum-901.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-sum-902">
+      <description>Test of xsl:stream instruction with sum(), filtered with predicate that uses last().</description>
+      <keywords>_IMPROVE:fix-description consuming-predicate GeneralComp striding-then-roaming XTSE3430 PathExpr</keywords>
+      <created by="Michael Kay" on="2013-11-21"/>
+      <test>
+         <stylesheet file="sf-sum-902.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+
+
+</test-set>

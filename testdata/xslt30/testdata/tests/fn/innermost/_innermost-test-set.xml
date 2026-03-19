@@ -1,0 +1,37 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="innermost">
+   <description>innermost() function without streaming</description>
+
+   <dependencies>
+      <spec value="XSLT30+"/>
+   </dependencies>
+   
+   <test-case name="innermost-001">
+      <description> innermost() - grounded operand. Note: see bug 24125.</description>
+      <keywords>fn:snapshot bug-24125 leading-lone-slash PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-17"/>
+      <test>
+         <stylesheet file="innermost-001.xsl"/>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1.1 1.2.1 1.2.2 1.3</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="innermost-901">
+      <description>innermost() - non-grounded operand</description>
+      <keywords>XTSE3430 overlapping-nodes-with-transmission-usage leading-lone-slash crawling PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-17"/>
+      <test>
+         <stylesheet file="innermost-901.xsl"/>
+         <initial-template name="r-901"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1.1 1.2.1 1.2.2 1.3</out>]]></assert-xml>
+      </result>
+   </test-case>   
+
+
+
+</test-set>

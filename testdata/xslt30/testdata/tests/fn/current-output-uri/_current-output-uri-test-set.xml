@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="current-output-uri">
+   <description>Tests current-output-uri() function in XSLT 3.0</description>
+   
+   <dependencies>
+       <spec value="XSLT30+"/>
+   </dependencies>
+
+   <test-case name="current-output-uri-001">
+      <description>Returns empty sequence in temporary output state</description>
+      <created by="Michael Kay" on="2014-07-12"/>      
+      <test>
+         <stylesheet file="current-output-uri-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<ok/>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="current-output-uri-002">
+      <description>Initial value of current-output-uri is the same as the base output URI (regardless of whether the principal result is output to a different location)</description>
+      <created by="Michael Kay" on="2014-07-12"/>      
+      <test>
+         <stylesheet file="current-output-uri-002.xsl"/>
+         <initial-template name="main"/>
+         <!-- sets the base output uri -->
+         <output file="results/current-output-uri-002.xml"/>
+      </test>
+      <result>
+         <assert>ends-with(/out, 'results/current-output-uri-002.xml')</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="current-output-uri-003">
+      <description>Value of current-output-uri() should change within xsl:result-document</description>
+      <created by="Michael Kay" on="2014-07-12"/>
+      <modified by="Abel Braaksma" on="2019-02-02" change="The assertion was not relative to the base output URI, but relative to the test base, leading to 'result/result/second' as tested location"/>
+      <test>
+         <stylesheet file="current-output-uri-003.xsl"/>
+         <initial-template name="main"/>
+         <!-- sets the base output uri -->
+         <output file="results/current-output-uri-003.xml"/>
+      </test>
+      <result>
+         <!-- relative to the base output uri -->
+         <assert-result-document uri="second/current-output-uri-003.xml">
+            <assert>ends-with(/out, 'results/second/current-output-uri-003.xml')</assert>
+         </assert-result-document>
+      </result>
+   </test-case>
+   
+   <test-case name="current-output-uri-004">
+      <description>Value of current-output-uri() in a tunnel parameter</description>
+      <created by="Michael Kay" on="2014-09-16"/>
+      <modified by="Michael Kay" on="2019-03-06" change="Test -003 has changed the convention for assert-result-document/@uri; apply the same change here"/>
+      <environment>
+         <source role="." file="current-output-uri-004.xsl"/>
+      </environment>     
+      <test>
+         <stylesheet file="current-output-uri-004.xsl"/>
+         <output file="results/current-output-uri-004.xml"/>
+      </test>
+      <result>
+         <assert-result-document uri="row1.xml">
+            <assert>ends-with(/row/col/@base, 'results/current-output-uri-004.xml')</assert>
+         </assert-result-document>
+      </result>
+   </test-case>
+   
+   <test-case name="current-output-uri-005">
+      <description>Value of current-output-uri() while evaluating a stylesheet function</description>
+      <created by="Michael Kay" on="2014-09-16"/>   
+      <test>
+         <stylesheet file="current-output-uri-005.xsl"/>
+         <initial-template name="main"/>
+         <output file="results/current-output-uri-005.xml"/>
+      </test>
+      <result>
+         <assert>/out = ''</assert>
+      </result>
+   </test-case>
+   
+   
+   <test-case name="current-output-uri-006">
+      <description>Initial function must operate in temporary output state, current-output-uri() should return empty</description>
+      <created by="Abel Braaksma" on="2019-01-31"/> 
+      <modified by="Michael Kay" on="2019-03-06" change="make initial function public; add tree=no"/> 
+      <test>
+         <stylesheet file="current-output-uri-006.xsl"/>
+         <initial-function name="f:start" xmlns:f="urn:function"/>
+         <output tree="no" serialize="no" file="results/current-output-uri-006.xml"/>
+      </test>
+      <result>
+         <assert-empty />
+      </result>
+   </test-case>   
+   
+
+   <test-case name="current-output-uri-007">
+      <description>Whole stylesheet is in temp output state and current-output-uri() should return empty everywhere</description>
+      <created by="Abel Braaksma" on="2019-01-31"/>   
+      <modified by="Michael Kay" on="2019-03-06" change="make initial function public; add tree=no; change to return a single string, not a sequence of text nodes"/> 
+      <test>
+         <stylesheet file="current-output-uri-007.xsl"/>
+         <initial-function name="f:start" xmlns:f="urn:function"/>
+      </test>
+      <result>
+         <assert-string-value>||||||</assert-string-value>
+      </result>
+   </test-case>   
+   
+   <test-case name="current-output-uri-008">
+      <description>Mix of with and without temp output state for current-output-uri(), initial-template</description>
+      <created by="Abel Braaksma" on="2019-01-31"/>
+      <modified by="Michael Kay" on="2019-03-06" change="add test for pattern evaluation in xsl:for-each-group"/>
+      <test>
+         <stylesheet file="current-output-uri-008.xsl"/>
+         <initial-template name="start"/>
+         <output file="results/current-output-uri-008.xml"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/result/output-uri[1][@value!ends-with(., '-008.xml')]</assert>
+            <assert>/result/output-uri[2][@value = '']</assert>
+            <assert>/result/output-uri[3][@value!ends-with(., '-008.xml')]</assert>
+            <assert>/result/output-uri[4][@correct="output-uri is empty in patterns"]</assert>
+            <assert>/result/in-function/output-uri[1][@value = '']</assert>
+            <assert>/result/in-function/output-uri[2][@value = '']</assert>
+            <assert>/result/in-function/output-uri[3][@correct="output-uri is empty in patterns"]</assert>
+            <assert>/result/in-pattern/group[@at='0']</assert>
+         </all-of>
+      </result>
+   </test-case>   
+   
+   <test-case name="current-output-uri-009">
+      <description>Empty current-output-uri() from xsl:sort</description>
+      <created by="Abel Braaksma" on="2019-01-31"/>
+      <modified by="Michael Kay" on="2019-07-25" change="The spec is unclear, see bug 30410. Allowing alternative result."/>
+      <test>
+         <stylesheet file="current-output-uri-009.xsl"/>
+         <output file="results/current-output-uri-009.xml"/>
+      </test>
+      <result>
+         <any-of>
+            <assert-string-value>13488</assert-string-value>
+            <error code="XTTE1020"/>
+         </any-of>
+      </result>
+   </test-case>   
+   
+   <test-case name="current-output-uri-010">
+      <description>No current-output-uri() from xsl:merge-key</description>
+      <created by="Abel Braaksma" on="2019-01-31"/>   
+      <modified by="Michael Kay" on="2019-07-25" change="The spec is unclear, see bug 30410. Allowing alternative result."/>
+      <test>
+         <stylesheet file="current-output-uri-010.xsl"/>
+         <output file="results/current-output-uri-010.xml"/>
+      </test>
+      <result>
+         <any-of>
+            <all-of>
+               <assert>every $x in /result/merged satisfies ($x/text() = 'current-output-uri-010.xml')</assert>
+               <assert>count(/result/merged[(position() - 1) * 2 = @item]) = 30</assert>
+            </all-of>
+            <error code="XTTE1020"/>
+         </any-of>
+      </result>
+   </test-case>   
+   
+   <!-- TODO
+   <test-case name="current-output-uri-011">
+      <description>No current-output-uri() from patterns (not in spec, see bug)</description>
+      <created by="Abel Braaksma" on="2019-01-31"/>   
+      <test>
+         <stylesheet file="current-output-uri-011.xsl"/>
+         <initial-function name="f:start" xmlns:f="urn:function"/>
+         <output file="results/current-output-uri-011.xml"/>
+      </test>
+      <result>
+         <assert-empty />
+      </result>
+   </test-case>   
+   
+
+   <test-case name="current-output-uri-012">
+      <description>No current-output-uri() from body in xsl:variable, xsl:with-param, xsl:param (not in spec, see bug)</description>
+      <created by="Abel Braaksma" on="2019-01-31"/>   
+      <test>
+         <stylesheet file="current-output-uri-012.xsl"/>
+         <initial-function name="f:start" xmlns:f="urn:function"/>
+         <output file="results/current-output-uri-012.xml"/>
+      </test>
+      <result>
+         <assert-empty />
+      </result>
+   </test-case>   
+   -->
+   
+   <test-case name="current-output-uri-013">
+      <description>Test absence of base output URI with fn:current-output-uri</description>
+      <created by="Abel Braaksma" on="2019-02-02"/>      
+      <modified by="Michael Kay" on="2019-07-25" change="Explicitly request an absent base output URI, as per bug 30413"/>
+      <test>
+         <stylesheet file="current-output-uri-013.xsl"/>
+         <output file="#absent" />
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>empty: true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="current-output-uri-014">
+      <description>Test that the base output URI is relative (at some level) to the test location</description>
+      <!-- MHK comment (2019-12-18): I can't see any reason why this should be the case. The test driver can put output files anywhere it likes -->
+      <created by="Abel Braaksma" on="2019-02-02"/>      
+      <test>
+         <stylesheet file="current-output-uri-014.xsl"/>
+         <output file="" />
+      </test>
+      <result>
+         <assert>contains(/out/text(), 'fn/current-output-uri')</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="current-output-uri-015">
+      <description>Test absence of base output URI with fn:current-output-uri is not influenced by presence of xsl:output</description>
+      <created by="Abel Braaksma" on="2019-02-02"/> 
+      <modified by="Michael Kay" on="2019-03-05" change="use indent='no' to satisfy test catalog-004"/>
+      <modified by="Michael Kay" on="2019-07-25" change="Explicitly request an absent base output URI, as per bug 30413"/>
+      <test>
+         <stylesheet file="current-output-uri-015.xsl"/>
+         <output file="#absent" />
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>empty: true</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="current-output-uri-016">
+      <description>Test dynamic invocation of fn:current-output-uri, should return empty sequence</description>
+      <created by="Abel Braaksma" on="2019-02-02"/>      
+      <modified by="Abel Braaksma" on="2019-03-08" change="Bug #30411, current output URI is cleared upon dynamic function invocation, dependency on HOF"/>
+      <dependencies>
+         <feature value="higher_order_functions" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="current-output-uri-016.xsl"/>
+         <!-- sets the base output uri -->
+         <output file="results/current-output-uri-016.xml"/>
+      </test>
+      <result>
+         <assert>/out = 'current-output-uri-is-empty=true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="current-output-uri-017">
+      <description>Test fn:current-output-uri inside anonymous function body context</description>
+      <created by="Abel Braaksma" on="2019-02-02"/>      
+      <modified by="Abel Braaksma" on="2019-03-08" change="Bug #30411, current output URI is cleared inside anonymous function bodies, dependency on HOF"/>
+      <dependencies>
+         <feature value="higher_order_functions" satisfied="true"/>
+      </dependencies>
+      <test>
+         <stylesheet file="current-output-uri-017.xsl"/>
+         <!-- sets the base output uri -->
+         <output file="results/current-output-uri-017.xml"/>         
+      </test>
+      <result>
+         <assert>/out = 'current-output-uri-is-empty=true'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="current-output-uri-901">
+      <description>Error scenario, function current-output-uri cannot be used in static expressions, here _href in xsl:result-document</description>
+      <created by="Abel Braaksma" on="2019-02-02"/>      
+      <test>
+         <stylesheet file="current-output-uri-901.xsl"/>
+      </test>
+      <result>
+         <error code="XPST0017" />
+      </result>
+   </test-case>   
+
+   <test-case name="current-output-uri-902">
+      <description>Error scenario: use fn:current-output-uri inside xsl:evaluate</description>
+      <created by="Abel Braaksma" on="2019-02-02"/>      
+      <test>
+         <stylesheet file="current-output-uri-902.xsl"/>
+         <param name="xpathExpr" select="'current-output-uri()'" />
+         <!-- sets the base output uri -->
+         <output file="results/current-output-uri-902.xml"/>
+      </test>
+      <result>
+         <error code="XTDE3160" />
+      </result>
+   </test-case>
+   
+</test-set>

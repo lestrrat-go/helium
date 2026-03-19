@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-filter">
+   <description>fn:filter() function with streaming</description>
+   
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+      <feature value="higher_order_functions"/>
+   </dependencies>
+   
+   <test-case name="sf-filter-001">
+      <description>Streaming filter() - grounded operand</description>
+      <keywords>leading-lone-slash NamedFunctionRef XTSE3430 stylesheet-function xsl:function PathExpr _WRONG:test-is-streamable</keywords>
+      <created by="Michael Kay" on="2013-11-25"/>
+      <modified by="Michael Kay" on="2014-05-07" change="reduced to a single test, as not streamable"/>
+      <test>
+         <stylesheet file="sf-filter-001.xsl"/>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-filter-002">
+      <description>Streaming filter() - grounded operand</description>
+      <keywords>grounded NamedFunctionRef striding-then-grounded stylesheet-function xsl:function fn:copy-of PathExpr</keywords>
+      <created by="Michael Kay" on="2014-05-07"/>
+      <test>
+         <stylesheet file="sf-filter-002.xsl"/>
+         <initial-template name="r-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><PRICE>16.47</PRICE><PRICE>16.47</PRICE></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-filter-003">
+      <description>Streaming filter() - grounded atomic operand</description>
+      <keywords>fn:tokenize ContextItemExpr striding-then-grounded NamedFunctionRef stylesheet-function xsl:function PathExpr SimpleMapExpr</keywords>
+      <created by="Michael Kay" on="2014-05-07"/>
+      <test>
+         <stylesheet file="sf-filter-003.xsl"/>
+         <initial-template name="r-003"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>22.5 18.0</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+
+
+</test-set>

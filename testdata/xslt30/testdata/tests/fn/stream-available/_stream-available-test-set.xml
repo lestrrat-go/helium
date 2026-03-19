@@ -1,0 +1,95 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="stream-available">
+   <description>Tests stream-available() function in XSLT 3.0</description>
+   
+   <environment name="stream-available-A">
+     <stylesheet file="stream-available-001.xsl"/>
+   </environment>
+   
+   <dependencies>
+       <spec value="XSLT30+"/>
+   </dependencies>
+
+   <test-case name="stream-available-001">
+      <description>Returns false, stream is not available (non-existent file)</description>
+      <keywords>stream-unavailable</keywords>
+      <created by="Michael Kay" on="2014-07-18"/>
+      <environment ref="stream-available-A"/>
+            
+      <test>
+         <param name="uri" select="'non-existent-stream.xml'"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-available-002">
+      <description>Returns true, stream is available</description>
+      <created by="Michael Kay" on="2014-08-08"/> 
+      <environment ref="stream-available-A"/>           
+      <test>
+         <param name="uri" select="'../snapshot/snapshot-01.xml'"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-available-003">
+      <description>Returns false, file exists but is not well-formed XML</description>
+      <created by="Michael Kay" on="2014-08-08"/> 
+      <environment ref="stream-available-A"/>    
+      <test>
+         <param name="uri" select="'../unparsed-text/xiso-8859-1.txt'"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-available-004">
+      <description>Returns true, file exists and is well-formed XML for the first mile or two</description>
+      <created by="Michael Kay" on="2014-08-08"/> 
+      <environment ref="stream-available-A"/>
+      <test>
+         <param name="uri" select="'unfinished.xml'"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-available-005">
+      <description>Returns true, file exists and is well-formed XML except it has two top-level elements</description>
+      <created by="Michael Kay" on="2014-08-08"/>
+      <environment ref="stream-available-A"/>            
+      <test>
+         <param name="uri" select="'egpe.xml'"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "true"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="stream-available-006">
+      <description>Returns false, file exists and consists entirely of DTD, with an unresolved reference in the DTD</description>
+      <created by="Michael Kay" on="2015-08-04"/>
+      <environment ref="stream-available-A"/>            
+      <test>
+         <param name="uri" select="'dtd-only.xml'"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = "false"</assert>
+      </result>
+   </test-case>
+
+
+
+</test-set>

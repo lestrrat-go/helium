@@ -1,0 +1,788 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2012/10/xslt-test-catalog" name="backwards">
+
+   <description>Tests backwards compatibility with XSLT 1.0</description>
+
+   <environment name="backwards006">
+      <source role=".">
+         <content><![CDATA[<data><item>1.00</item><item>2.00</item><item>1</item><item>2</item></data>]]></content>
+      </source>
+   </environment>
+
+   <environment name="backwards072">
+      <source role=".">
+         <content><![CDATA[<root>
+     <one marker="a"/>
+     <two marker="b"/>
+     <three marker="c"/>
+</root>]]></content>
+      </source>
+   </environment>
+
+   <environment name="backwards073">
+      <source role=".">
+         <content><![CDATA[<apply>
+  <partialdiff/>
+  <bvar>
+    <ci>x</ci> 
+    <degree>
+      <cn>2</cn> 
+    </degree>  
+  </bvar> 
+  <bvar>
+    <ci>y</ci> 
+  </bvar> 
+</apply>]]></content>
+      </source>
+   </environment>
+
+   <dependencies>
+      <feature value="backwards_compatibility"/>
+   </dependencies>
+
+   <test-case name="backwards-001">
+      <description>Basic test of backwards compatibility mode</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-001.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-002">
+      <description>Backwards compatibility mode with version=1.9</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-002.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-003">
+      <description>Backwards compatibility mode with version=001</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-003.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-004">
+      <description>Backwards compatibility mode with version=+0.5</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-004.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-005">
+      <description>Backwards compatibility mode with version=-29</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-005.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-006">
+      <description>Mixing versions in one stylesheet module</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-006.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>1</one><two>1 2 3 4 5</two></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-007">
+      <description>Mixing versions in one stylesheet module, nested override</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-007.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>1</one><two>1 2 3 4 5</two></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-008">
+      <description>Mixing versions in two stylesheet modules</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-008.xsl"/>
+         <stylesheet file="backwards-001.xsl" role="secondary"/>
+         <initial-template name="two"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out-two><out>1</out><two>1 2 3 4 5</two></out-two>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-009">
+      <description>xsl:value-of with separator, version is irrelevant</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-009.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>1,2,3,4,5</one><two>1,2,3,4,5</two></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-010">
+      <description>effect of BC on AVTs</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-010.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one select="1"/><two select="1 2 3 4 5"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-011">
+      <description>effect of BC on xsl:number</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-011.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><one>1</one><two>1.2.3.4.5</two></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-012">
+      <description>effect of BC on xsl:sort</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-012.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>5 4 3 2 1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-013">
+      <description>effect of BC on xsl:call-template</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-013.xsl"/>
+         <stylesheet file="backwards-001.xsl" role="secondary"/>
+         <initial-template name="two"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><out>1</out></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-014">
+      <description>effect of BC on unresolved function calls</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-014.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out/>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-015">
+      <description>effect of BC on xsl:number</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-015.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>NaN</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-016">
+      <description>effect of BC on xsl:number</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-016.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>NaN</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-017">
+      <description>effect of BC on default output method</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2022-06-15" change="This should be a serialization test. See GitHub issue #9."/>
+      <dependencies>
+         <spec value="XSLT10+"/>
+         <feature value="serialization"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-017.xsl"/>
+         <initial-template name="main"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches>href="file:///My Documents/page.html"</serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-018">
+      <description>effect of BC on default output method</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="serialization"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-018.xsl"/>
+         <initial-template name="main"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <all-of>
+            <serialization-matches>meta http-equiv</serialization-matches>
+            <!--<serialization-matches>My%20Documents</serialization-matches>-->
+         </all-of>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-019">
+      <description>effect of BC on default output method (implicit result document)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2014-04-28" change="correct expected results"/>
+      <modified by="John Lumley" on="2014-09-02" change="Declared serialization requirement"/>
+      <modified by="Michael Kay" on="2022-06-15" change="Change expected result. See GitHub issue #9"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="serialization"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-019.xsl"/>
+         <initial-template name="main"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches>file:///My D&#xf8;cuments/page.html</serialization-matches>
+      </result>
+   </test-case>
+   
+   <test-case name="backwards-019b">
+      <description>effect of BC on default output method (explicit result document)</description>
+      <created by="Michael Kay" on="2022-06-15"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+         <feature value="serialization"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-019b.xsl"/>
+         <initial-template name="main"/>
+         <output serialize="yes"/>
+      </test>
+      <result>
+         <serialization-matches>file:///My D%C3%B8cuments/page.html</serialization-matches>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-020">
+      <description>effect of BC on function call argument conversions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-020.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>20</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-021">
+      <description>effect of BC on function call argument conversions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-021.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>re</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-022">
+      <description>effect of BC on function call argument conversions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-022.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>21</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-023">
+      <description>effect of BC on arithmetic expressions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-023.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>NaN</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-024">
+      <description>effect of BC on arithmetic expressions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-024.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>7</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-025">
+      <description>effect of BC on arithmetic expressions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-025.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>2</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-026">
+      <description>effect of BC on arithmetic expressions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-026.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>21</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-027">
+      <description>effect of BC on arithmetic expressions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-027.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-028">
+      <description>effect of BC on general comparisons</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-028.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-029">
+      <description>effect of BC on general comparisons</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-029.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-030">
+      <description>effect of BC on general comparisons</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-030.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-031">
+      <description>effect of BC on general comparisons</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-031.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-032">
+      <description>effect of BC on general comparisons</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-032.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-033">
+      <description>effect of BC on general comparisons</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-033.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-034">
+      <description>effect of BC on errors in logical expressions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-034.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>false</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-035">
+      <description>effect of BC on errors in logical expressions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-035.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-036">
+      <description>Backwards compatibility mode with simplified stylesheet</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="backwards006"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-036.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-037">
+      <description>Backwards compatibility mode with simplified stylesheet,
+         version=+1.99999</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="backwards006"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-037.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-038">
+      <description>effect of BC on xsl:key and key() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="backwards006"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-038.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><k><item>1</item></k></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-039">
+      <description>effect of BC on xsl:key and key() function; two key definitions, same name, one
+         in 1.0 mode one in 2.0 mode.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <modified by="Michael Kay" on="2012-11-27" change="See bug 20102"/>
+      <environment ref="backwards006"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-039.xsl"/>
+         <stylesheet file="backwards-038.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><k><item>1.00</item></k><k><item>1</item></k></out>]]></assert-xml>
+         <!-- was: <assert-xml><![CDATA[<out><k><item>1</item></k></out>]]></assert-xml> -->
+      </result>
+   </test-case>
+
+   <test-case name="backwards-040">
+      <description>effect of BC on parameter passing in built-in templates</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="backwards006"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-040.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><item-found param="3"><item>1.00</item></item-found><item-found param="3"
+            ><item>2.00</item></item-found><item-found param="3"><item>1</item></item-found><item-found param="3"
+            ><item>2</item></item-found></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-041">
+      <description>effect of BC on function call argument conversions</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="backwards006"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-041.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>true</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-042">
+      <description>In range expressions, (M to N), standard function conversion rules apply, which
+         means that in BC mode, M or N can be a sequence of integers, and the first-item rule holds.
+         See spec bugzilla entry 7424.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="backwards006"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-042.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>1,2,3</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-043">
+      <description>effect of BC on xsl:key and key() function; two key definitions, same name, one
+         in 1.0 mode one in 2.0 mode.</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="backwards072"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-043.xsl"/>
+         <stylesheet file="backwards-043a.xsl" role="secondary"/>
+         <stylesheet file="backwards-043b.xsl" role="secondary"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<result><one marker="a"/><two marker="b"/></result>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="backwards-044">
+      <description>Arithmetic in BC mode (a test that fails in Saxon 9.1)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="backwards073"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-044.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>3</out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="backwards-045">
+      <description>Fine-grained changes in xsl:version</description>
+      <created by="Michael Kay" on="2014-11-26"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-045.xsl"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+           <assert>/out/a1 eq 'true'</assert>
+           <assert>/out/a2 eq 'false'</assert>
+           <assert>/out/b1 eq 'true'</assert>
+           <assert>/out/b2 eq 'false'</assert>
+           <assert>/out/c1 eq '1'</assert>
+           <assert>/out/c2 eq '1 2 3'</assert>
+           <assert>/out/d1 eq 'false'</assert>
+           <assert>/out/d2 eq 'failed'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="backwards-046">
+      <description>Effect of BC mode when required type is xs:string?</description>
+      <created by="Michael Kay" on="2024-05-14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="backwards-046.xsl"/>
+      </test>
+      <result>
+         <assert>/out/result/@count = '0'</assert>
+      </result>
+   </test-case>
+  
+
+</test-set>

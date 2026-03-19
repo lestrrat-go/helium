@@ -1,0 +1,517 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="resolve-uri">
+   <description>Tests resolve-uri() and other functionality related to resolution of relative URIs</description>
+   <environment name="reluri01">
+      <source role="." file="reluri01.xml"/>
+   </environment>
+   <environment name="reluri09">
+      <source role="." file="reluri09.xml"/>
+   </environment>
+   <environment name="reluri10">
+      <source role=".">
+         <content><![CDATA[<doc><filename>level3/xreluri09a.xml</filename></doc>]]></content>
+      </source>
+   </environment>
+   <environment name="reluri11">
+      <source role="." file="reluri11.xml"/>
+   </environment>
+   <environment name="reluri14">
+      <source role=".">
+         <content><![CDATA[<doc/>]]></content>
+      </source>
+   </environment>
+   <environment name="reluri17">
+      <source role=".">
+         <content><![CDATA[<doc xml:base="file:///TestInputs/reluri/reluri17.xml"/>]]></content>
+      </source>
+   </environment>
+   <environment name="reluri18">
+      <source role="." file="reluri18.xml"/>
+   </environment>
+
+   <test-case name="resolve-uri-001">
+      <description>Base URI (Stylesheet import/Inclusion)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="resolve-uri-001.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-002">
+      <description>Base URI (Stylesheet import/Inclusion)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="resolve-uri-002.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-003">
+      <description>Base URI (Stylesheet import/Inclusion)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-003.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="resolve-uri-003.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-004">
+      <description>Base URI (Stylesheet import/Inclusion)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-004.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="resolve-uri-004.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-005">
+      <description>Base URI (Stylesheet import/Inclusion)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-005.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="resolve-uri-005.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-006">
+      <description>Base URI (Stylesheet import/Inclusion)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-006.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="resolve-uri-006.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-007">
+      <description>Base URI (Stylesheet import/Inclusion)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-007.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="resolve-uri-007.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-008">
+      <description>Base URI (Stylesheet import/Inclusion)</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-008.xsl"/>
+      </test>
+      <result>
+         <assert-xml file="resolve-uri-008.out"/>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-009">
+      <description>Multiple Source Documents</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri09"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-009.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><first><body>Watching the game, having a bud</body></first></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-010">
+      <description>Multiple Source Documents</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri10"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-010.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><body>Watching the game, having a bud</body></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-011">
+      <description>Multiple Source Documents</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-011.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><body>Watching the game, having a bud</body></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-012">
+      <description>Test the static-base-uri() function with no parameters</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-012.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>file:///TestInputs/reluri/reluri12.xsl</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-013">
+      <description>Test the static-base-uri() function with no parameters</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri11"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-013.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>http://some.other/</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-014">
+      <description>Test the resolve-uri() function with one argument</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-014.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>http://some.other/home/</a><a>http://some.other/home/banana.xml</a
+            ><a>http://some.other/</a><a>http://www.wrox.com/</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-015">
+      <description>Test the resolve-uri() function with two arguments</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-015.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>http://some.other/home/</a><a>http://some.other/home/banana.xml</a
+            ><a>http://some.other/banana.xml</a><a>http://some.other/</a><a>http://www.wrox.com/</a></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-016">
+      <description>Test the document-uri() function</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-016.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><a>resolve-uri/reluri18.xml</a><a/></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-017">
+      <description>Test the resolve-uri() function with base URI being a relative URI: this is an error according to erratum FO.E1</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-017.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0002"/>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-018">
+      <description>Test the resolve-uri() function with invalid relative URI</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-018.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0002"/>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-019">
+      <description>Test the resolve-uri() function with invalid base URI</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri14"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-019.xsl"/>
+      </test>
+      <result>
+         <error code="FORG0002"/>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-020">
+      <description>Test the base-uri() function with no parameters</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri17"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-020.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out>file:///TestInputs/reluri/reluri17.xml</out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="resolve-uri-021">
+      <description>Test that a processing instruction may have a base URI distinct from its parent element</description>
+      <created by="Michael Kay" on="2012-11-07"/>
+      <environment ref="reluri18"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-021.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><e>resolve-uri/level1/element.xml</e><p>resolve-uri/level1/pi.xml</p></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="resolve-uri-022">
+      <description>
+         Tests deep dotted paths and paths that try to get past the root, checks the mandatory RFC rules about removing the dots
+         Note that from a recent discussion it is understood that 
+          - if an xml:base contains dotted paths, these are returned unchanged (no dot-replacement)
+          - if resolve-uri has $relative absolute path, it is returned unchanged (no dot-replacement)
+          - if resolve-uri has empty string for $relative, then $absolute is returned unchanged (no dot-replacement)         
+      </description>
+      <created by="Abel Braaksma" on="2015-03-30"/>
+      <modified by="Abel Braaksma" on="2015-04-15" change="Bug 28435: for XSLT 2.0 compatibility, added initial template, removed xsl:initial-template"/>
+      <modified by="Michael Kay" on="2015-06-30" change="Tests using indent=yes should not use assert-xml; checked by catalog-004"/>
+      <modified by="Michael Kay" on="2015-11-27" change="Add 3.0 dependency (test uses expand-text)"/>
+      <modified by="Michael Kay" on="2019-12-19" change="Break up the result assertions for ease of debugging"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-022.xsl"/>
+         <initial-template name="initial-template" />
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/@xml:base = 'http://example.com/a/b/c/d/../d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z'</assert>
+            <assert>/out/resolveA='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/'</assert>
+            <assert>/out/resolveB='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/'</assert>
+            <assert>/out/resolveC='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/'</assert>
+            <assert>/out/resolveD='http://example.com/'</assert>
+            <assert>/out/resolveE='http://example.com/'</assert>
+            <assert>/out/resolveF='http://example.com/'</assert>
+            <assert>/out/resolveG='http://example.com/'</assert>
+            <assert>/out/resolveH='http://example.com/'</assert>
+            <assert>/out/resolveI='http://example.com/'</assert>
+            <assert>/out/resolveJ='http://example.com/'</assert>
+            <assert>/out/resolveK='http://example.com/'</assert>
+            <assert>/out/resolveL='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveM='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveN='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveO='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveP='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveQ='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveR='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveS='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveT='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/'</assert>
+            <assert>/out/resolveU='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/'</assert>
+            <assert>/out/resolveV='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/'</assert>
+            <assert>/out/resolveW='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/'</assert>
+            <assert>/out/resolveX='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/'</assert>
+            <assert>/out/resolveY='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/'</assert>
+            <assert>/out/resolveZ='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/'</assert>
+            <assert>/out/resolveZA='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/'</assert>
+            <assert>/out/resolveZB='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/'</assert>
+            <assert>/out/resolveZC='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/'</assert>
+            <assert>/out/resolveZD='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/'</assert>
+            <assert>/out/resolveZE='http://example.com/a/b/c/d/e/f/g/i/j/k/l/'</assert>
+            <assert>/out/resolveZF='http://example.com/a/b/c/d/e/f/g/i/j/k/'</assert>
+            <assert>/out/resolveZG='http://example.com/a/b/c/d/e/f/g/i/j/'</assert>
+            <assert>/out/resolveZH='http://example.com/a/b/c/d/e/f/g/i/'</assert>
+            <assert>/out/resolveZI='http://example.com/a/b/c/d/e/f/g/'</assert>
+            <assert>/out/resolveZJ='http://example.com/a/b/c/d/e/f/'</assert>
+            <assert>/out/resolveZK='http://example.com/a/b/c/d/e/'</assert>
+            <assert>/out/resolveZL='http://example.com/a/b/c/d/'</assert>
+            <assert>/out/resolveZM='http://example.com/a/b/c/'</assert>
+            <assert>/out/resolveZN='http://example.com/a/b/'</assert>
+            <assert>/out/resolveZO='http://example.com/a/'</assert>
+            <assert>/out/resolveZP='http://example.com/a/'</assert>
+            <assert>/out/resolveZQ='http://example.com/'</assert>
+            <assert>/out/resolveZR='http://example.com/'</assert>
+            <assert>/out/resolveZS='http://example.com/'</assert>
+            <assert>/out/resolveZT='http://example.com/'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="resolve-uri-023">
+      <description>
+         Same as resolve-uri-022, adapted to require the work to be done at run-time
+      </description>
+      <created by="Michael Kay" on="2016-01-18"/>
+      <modified by="Michael Kay" on="2019-12-19" change="Break up the result assertions for ease of debugging"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-023.xsl"/>
+         <initial-template name="initial-template" />
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/@xml:base = 'http://example.com/a/b/c/d/../d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z'</assert>
+            <assert>/out/resolveA='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/'</assert>
+            <assert>/out/resolveB='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/'</assert>
+            <assert>/out/resolveC='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/'</assert>
+            <assert>/out/resolveD='http://example.com/'</assert>
+            <assert>/out/resolveE='http://example.com/'</assert>
+            <assert>/out/resolveF='http://example.com/'</assert>
+            <assert>/out/resolveG='http://example.com/'</assert>
+            <assert>/out/resolveH='http://example.com/'</assert>
+            <assert>/out/resolveI='http://example.com/'</assert>
+            <assert>/out/resolveJ='http://example.com/'</assert>
+            <assert>/out/resolveK='http://example.com/'</assert>
+            <assert>/out/resolveL='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveM='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveN='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveO='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveP='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveQ='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveR='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveS='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/'</assert>
+            <assert>/out/resolveT='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/'</assert>
+            <assert>/out/resolveU='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/'</assert>
+            <assert>/out/resolveV='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/'</assert>
+            <assert>/out/resolveW='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/'</assert>
+            <assert>/out/resolveX='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/'</assert>
+            <assert>/out/resolveY='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/'</assert>
+            <assert>/out/resolveZ='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/'</assert>
+            <assert>/out/resolveZA='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/'</assert>
+            <assert>/out/resolveZB='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/'</assert>
+            <assert>/out/resolveZC='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/'</assert>
+            <assert>/out/resolveZD='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/'</assert>
+            <assert>/out/resolveZE='http://example.com/a/b/c/d/e/f/g/i/j/k/l/'</assert>
+            <assert>/out/resolveZF='http://example.com/a/b/c/d/e/f/g/i/j/k/'</assert>
+            <assert>/out/resolveZG='http://example.com/a/b/c/d/e/f/g/i/j/'</assert>
+            <assert>/out/resolveZH='http://example.com/a/b/c/d/e/f/g/i/'</assert>
+            <assert>/out/resolveZI='http://example.com/a/b/c/d/e/f/g/'</assert>
+            <assert>/out/resolveZJ='http://example.com/a/b/c/d/e/f/'</assert>
+            <assert>/out/resolveZK='http://example.com/a/b/c/d/e/'</assert>
+            <assert>/out/resolveZL='http://example.com/a/b/c/d/'</assert>
+            <assert>/out/resolveZM='http://example.com/a/b/c/'</assert>
+            <assert>/out/resolveZN='http://example.com/a/b/'</assert>
+            <assert>/out/resolveZO='http://example.com/a/'</assert>
+            <assert>/out/resolveZP='http://example.com/a/'</assert>
+            <assert>/out/resolveZQ='http://example.com/'</assert>
+            <assert>/out/resolveZR='http://example.com/'</assert>
+            <assert>/out/resolveZS='http://example.com/'</assert>
+            <assert>/out/resolveZT='http://example.com/'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="resolve-uri-024">
+      <description>
+         Resolving static base URI with ".." path segments. Extracts three tests from resolve-uri-022 for ease of analysis.         
+      </description>
+      <created by="Michael Kay" on="2019-12-19"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="resolve-uri-024.xsl"/>
+         <initial-template name="initial-template" />
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/@xml:base = 'http://example.com/a/b/c/d/../d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z'</assert>
+            <assert>/out/base1='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/Z'</assert>
+            <any-of>
+               <assert>/out/base2='http://example.com/a/b/c/d/../d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z'</assert>
+               <assert>/out/base2='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z'</assert>
+            </any-of>
+            <any-of>
+               <assert>/out/base3='http://example.com/a/b/c/d/../d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z'</assert>
+               <assert>/out/base3='http://example.com/a/b/c/d/e/f/g/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z'</assert>
+            </any-of>
+         </all-of>
+      </result>
+   </test-case>
+</test-set>

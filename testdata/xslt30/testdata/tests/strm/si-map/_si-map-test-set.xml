@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="si-map">
+   <description>xsl:map with streaming</description>
+   
+   <environment name="si-map-A">
+     <stylesheet file="si-map-A.xsl"/>
+   </environment>
+   
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   
+   
+   <test-case name="si-map-001">
+      <description>Use xsl:map within xsl:stream</description>
+      <created by="Michael Kay" on="2014-01-22"/>
+      <environment ref="si-map-A"/>
+      <test>
+         <initial-template name="m-001"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out
+   ><book author="Jane Austen"
+         title="Pride and Prejudice"
+         price="4.95"
+         publisher="Modern Library"
+   /><book author="Charlotte Brontë"
+         title="Wuthering Heights"
+         price="6.58"
+         publisher="Penguin Classics"
+   /><book author="Thomas Hardy"
+         title="Tess of the d'Urbervilles"
+         price="4.95"
+         publisher="Bantam Classics"
+   /><book author="Thomas Hardy"
+         title="Jude the Obscure"
+         price="4.95"
+         publisher="Penguin Classics"
+   /><book author="Jasper Fforde"
+         title="The Big Over Easy"
+         price="16.47"
+         publisher="Hodder &amp; Stoughton"
+   /><book author="Jasper Fforde"
+         title="The Eyre Affair"
+         price="16.47"
+         publisher="Penguin"
+/></out>
+]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-map-002">
+      <description>Use xsl:map within xsl:stream; map entry values are sequences</description>
+      <created by="Michael Kay" on="2014-01-22"/>
+      <environment ref="si-map-A"/>
+      <test>
+         <initial-template name="m-002"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><books 
+          authors="Jane Austen Charlotte Brontë Thomas Hardy Thomas Hardy Jasper Fforde Jasper Fforde"
+          titles="Pride and Prejudice Wuthering Heights Tess of the d'Urbervilles Jude the Obscure The Big Over Easy The Eyre Affair"
+          prices="4.95 6.58 4.95 4.95 16.47 16.47"
+          publishers="Modern Library Penguin Classics Bantam Classics Penguin Classics Hodder &amp; Stoughton Penguin"/></out>]]></assert-xml>
+      </result>
+   </test-case>
+   
+   <test-case name="si-map-003">
+      <description>Use xsl:map within xsl:stream, with computed keys</description>
+      <created by="Michael Kay" on="2014-01-22"/>
+      <environment ref="si-map-A"/>
+      <test>
+         <initial-template name="m-003"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/book[1]/@author = "Jane Austen"</assert>
+            <assert>/out/book[2]/@author = "Charlotte Brontë"</assert>
+            <assert>/out/book[1]/@title = "Pride and Prejudice"</assert>
+            <assert>/out/book[2]/@title = "Wuthering Heights"</assert>
+         </all-of>   
+      </result>
+   </test-case>  
+   
+   <test-case name="si-map-004">
+      <description>Use xsl:map within xsl:stream, compute min and max simultaneously</description>
+      <created by="Michael Kay" on="2014-01-22"/>
+      <environment ref="si-map-A"/>
+      <test>
+         <initial-template name="m-004"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/min = "4.95"</assert>
+            <assert>/out/max = "16.47"</assert>
+         </all-of>   
+      </result>
+   </test-case> 
+   
+   <test-case name="si-map-005">
+      <description>Use xsl:map within xsl:stream, map value is empty sequence</description>
+      <created by="Michael Kay" on="2014-01-22"/>
+      <environment ref="si-map-A"/>
+      <test>
+         <initial-template name="m-005"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/min = "0"</assert>
+            <assert>/out/max = "0"</assert>
+         </all-of>   
+      </result>
+   </test-case>
+   
+   <test-case name="si-map-006">
+      <description>Use xsl:map within xsl:stream, use consuming keys</description>
+      <created by="Michael Kay" on="2014-01-22"/>
+      <environment ref="si-map-A"/>
+      <test>
+         <initial-template name="m-006"/>
+      </test>
+      <result>
+         <assert>/out/ok</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="si-map-007">
+      <description>Streaming xsl:map, error due to duplicate keys</description>
+      <created by="Michael Kay" on="2014-01-22"/>
+      <environment ref="si-map-A"/>
+      <test>
+         <initial-template name="m-007"/>
+      </test>
+      <result>
+         <error code="XTDE3365"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-map-008">
+      <description>Streaming xsl:map, containing another consuming xsl:map</description>
+      <created by="Michael Kay" on="2014-01-22"/>
+      <environment ref="si-map-A"/>
+      <test>
+         <initial-template name="m-008"/>
+      </test>
+      <result>
+         <all-of>
+         	<assert>count(/out/book) = 6</assert>
+         	<assert>/out/book[1]/@author = "Jane Austen"</assert>
+         	<assert>/out/book[1]/@title = "Pride and Prejudice"</assert>
+         	<assert>/out/book[6]/@author = "Jasper Fforde"</assert>
+         	<assert>/out/book[6]/@outcome = "success"</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="si-map-009">
+      <description>Streaming xsl:map, type error: sequence constructor in xsl:map includes a non-map item</description>
+      <created by="Michael Kay" on="2014-01-22"/>
+      <modified by="Michael Kay" on="2016-08-16" change="correct description and expected error code"/>
+      <environment ref="si-map-A"/>
+      <test>
+         <initial-template name="m-009"/>
+      </test>
+      <result>
+         <error code="XTTE3375"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-map-901">
+      <description>Use xsl:map within xsl:stream, attempt to save streamed nodes in map value</description>
+      <created by="Michael Kay" on="2014-01-22"/>
+      <test>
+         <stylesheet file="si-map-901.xsl"/>
+         <initial-template name="m-901"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>
+   
+   <test-case name="si-map-902">
+      <description>Use xsl:map within xsl:stream, both key and value are consuming</description>
+      <created by="Michael Kay" on="2014-01-22"/>
+      <test>
+         <stylesheet file="si-map-902.xsl"/>
+         <initial-template name="m-902"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>  
+   
+   <test-case name="si-map-903">
+      <description>Use xsl:map within xsl:stream, implicit fork only works for xsl:map
+         instructions where every child is xsl:map-entry</description>
+      <created by="Michael Kay" on="2014-01-22"/>
+      <test>
+         <stylesheet file="si-map-903.xsl"/>
+         <initial-template name="m-903"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>     
+   
+ 
+   
+</test-set>

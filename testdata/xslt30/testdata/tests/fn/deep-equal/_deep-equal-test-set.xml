@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns:xs="http://www.w3.org/2001/XMLSchema"
+          xmlns="http://www.w3.org/2012/10/xslt-test-catalog"
+          name="deep-equal">
+   <description>Tests deep-equal</description>
+   <environment name="deepeq01">
+      <source role=".">
+         <content><![CDATA[<doc>
+<!-- a node -->
+<a a="a"/>
+<!-- a node -->
+<a a="a"/>
+<!-- a few more nodes -->
+<b a="b"/>
+<c c="a"/>
+</doc>]]></content>
+      </source>
+   </environment>
+
+   <test-case name="deep-equal-001">
+      <description>test deep-equal() function on attribute nodes</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="deepeq01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="deep-equal-001.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><true>true</true><false>false</false><false>false</false></out>]]></assert-xml>
+      </result>
+   </test-case>
+
+   <test-case name="deep-equal-002">
+      <description>test deep-equal() function on comment nodes</description>
+      <created by="Michael Kay" on="2012-10-30"/>
+      <environment ref="deepeq01"/>
+      <dependencies>
+         <spec value="XSLT20+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="deep-equal-002.xsl"/>
+      </test>
+      <result>
+         <assert-xml><![CDATA[<out><true>true</true><false>false</false></out>]]></assert-xml>
+      </result>
+   </test-case>
+</test-set>

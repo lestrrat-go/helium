@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="sf-reverse">
+   <description>reverse() function with streaming</description>
+
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="streaming"/>
+   </dependencies>
+   
+   <test-case name="sf-reverse-001">
+      <description>Streaming reverse() - grounded operand. Note: see bug 24125.</description>
+      <keywords>fn:snapshot striding leading-lone-slash PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-17"/>
+      <test>
+         <stylesheet file="sf-reverse-001.xsl"/>
+         <initial-template name="r-001"/>
+      </test>
+      <result>
+         <assert>/out = "1.3 1.2.2 1.2.1 1.2 1.1 1"</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="sf-reverse-901">
+      <description>Non-Streaming reverse() - non-grounded operand</description>
+      <keywords>XTSE3430 striding-then-crawling leading-lone-slash PathExpr</keywords>
+      <created by="Michael Kay" on="2013-12-17"/>
+      <test>
+         <stylesheet file="sf-reverse-901.xsl"/>
+         <initial-template name="r-901"/>
+      </test>
+      <result>
+         <error code="XTSE3430"/>
+      </result>
+   </test-case>   
+
+
+
+</test-set>

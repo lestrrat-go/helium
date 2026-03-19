@@ -1,0 +1,152 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<test-set xmlns="http://www.w3.org/2012/10/xslt-test-catalog" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="function-lookup">
+   <description>Tests the function-lookup() function</description>
+
+   <dependencies>
+      <spec value="XSLT30+"/>
+      <feature value="higher_order_functions"/>
+   </dependencies>
+
+   <test-case name="function-lookup-001">
+      <description>test function-lookup() on stylesheet function</description>
+      <created by="Michael Kay" on="2018-04-24"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-lookup-001.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '15'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-lookup-002">
+      <description>test function-lookup() on stylesheet function with visibility="private"</description>
+      <created by="Michael Kay" on="2018-04-24"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-lookup-002.xsl"/>
+      </test>
+      <result>
+         <assert>/out = '15'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-lookup-003">
+      <description>test function-lookup() in a static expression (fails)</description>
+      <created by="Michael Kay" on="2018-04-24"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-lookup-003.xsl"/>
+      </test>
+      <result>
+         <assert>not(/out/one)</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-lookup-004">
+      <description>function-lookup() can't see hidden functions</description>
+      <created by="Michael Kay" on="2018-04-24"/>
+      <environment>
+         <package file="function-lookup-004a.xsl" role="secondary" uri="http://function-lookup-004a/" package-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="function-lookup-004.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <assert>/out = 'false'</assert>
+      </result>
+   </test-case>
+   
+   <test-case name="function-lookup-005">
+      <description>function-lookup() in used package</description>
+      <created by="Michael Kay" on="2018-04-24"/>
+      <environment>
+         <package file="function-lookup-005a.xsl" role="secondary" uri="http://function-lookup-005a/" package-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="function-lookup-005.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/sub/multiply/@exists = 'true'</assert>
+            <assert>/out/sub/divide/@exists = 'false'</assert>
+            <assert>/out/sub/add/@exists = 'true'</assert>
+            <assert>/out/sub/add/@effect = '7'</assert>
+            <assert>/out/sub/subtract/@exists = 'false'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="function-lookup-006">
+      <description>function-lookup(xsl:original)</description>
+      <created by="Michael Kay" on="2018-04-24"/>
+      <environment>
+         <package file="function-lookup-005a.xsl" role="secondary" uri="http://function-lookup-005a/" package-version="1.0"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <package file="function-lookup-006.xsl" role="principal"/>
+         <initial-template name="main"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out/@result = '7'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="function-lookup-007">
+      <description>function-lookup with a context-sensitive system function</description>
+      <created by="Michael Kay" on="2018-04-24"/>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>
+      <test>
+         <stylesheet file="function-lookup-007.xsl" role="principal"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/out = 'pferd'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+   <test-case name="function-lookup-008">
+      <description>function-lookup followed by fn:apply (Saxon bug 4723)</description>
+      <created by="Michael Kay after Martin Honnen" on="2020-09-04"/>
+      <environment>
+         <source role="." file="function-lookup-008.xml"/>
+      </environment>
+      <dependencies>
+         <spec value="XSLT30+"/>
+      </dependencies>     
+      <test>
+         <stylesheet file="function-lookup-008.xsl" role="principal"/>
+      </test>
+      <result>
+         <all-of>
+            <assert>/root/example = 'abc'</assert>
+         </all-of>
+      </result>
+   </test-case>
+   
+
+
+
+</test-set>
