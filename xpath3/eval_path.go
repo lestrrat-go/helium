@@ -28,13 +28,13 @@ func evalVariable(ec *evalContext, e VariableExpr) (Sequence, error) {
 	if ec.vars != nil {
 		// Try exact name first
 		if v, ok := ec.vars.Lookup(e.Name); ok {
-			return v, nil
+			return enrichNodeItems(ec, v), nil
 		}
 		// If EQName (Q{uri}local), normalize to {uri}local and retry
 		if strings.HasPrefix(e.Name, "Q{") {
 			resolved := e.Name[1:] // strip leading "Q"
 			if v, ok := ec.vars.Lookup(resolved); ok {
-				return v, nil
+				return enrichNodeItems(ec, v), nil
 			}
 		}
 		// If prefixed, resolve to {uri}local and retry
@@ -43,7 +43,7 @@ func evalVariable(ec *evalContext, e VariableExpr) (Sequence, error) {
 				local := e.Name[len(e.Prefix)+1:] // strip "prefix:"
 				resolved := "{" + uri + "}" + local
 				if v, ok := ec.vars.Lookup(resolved); ok {
-					return v, nil
+					return enrichNodeItems(ec, v), nil
 				}
 			}
 		}
@@ -53,10 +53,42 @@ func evalVariable(ec *evalContext, e VariableExpr) (Sequence, error) {
 		if v, ok, err := ec.variableResolver.ResolveVariable(ec.goCtx, e.Name); err != nil {
 			return nil, err
 		} else if ok {
-			return v, nil
+			return enrichNodeItems(ec, v), nil
 		}
 	}
 	return nil, fmt.Errorf("%w: $%s", ErrUndefinedVariable, e.Name)
+}
+
+// enrichNodeItems ensures NodeItems in a sequence have their TypeAnnotation
+// and related fields set from the evalContext's type annotations map. This is
+// needed because variables may store NodeItems created before type annotations
+// were available (e.g., validated after construction).
+func enrichNodeItems(ec *evalContext, seq Sequence) Sequence {
+	if ec == nil || ec.typeAnnotations == nil {
+		return seq
+	}
+	needsEnrich := false
+	for _, item := range seq {
+		if ni, ok := item.(NodeItem); ok && ni.TypeAnnotation == "" {
+			if _, hasAnn := ec.typeAnnotations[ni.Node]; hasAnn {
+				needsEnrich = true
+				break
+			}
+		}
+	}
+	if !needsEnrich {
+		return seq
+	}
+	result := make(Sequence, len(seq))
+	for i, item := range seq {
+		if ni, ok := item.(NodeItem); ok && ni.TypeAnnotation == "" {
+			enriched := nodeItemFor(ec, ni.Node)
+			result[i] = enriched
+		} else {
+			result[i] = item
+		}
+	}
+	return result
 }
 
 func evalSequenceExpr(ec *evalContext, e SequenceExpr) (Sequence, error) {
@@ -425,6 +457,15 @@ func resolveTestTypeName(raw string, ec *evalContext) string {
 				}
 				return QAnnotation(uri, local)
 			}
+		}
+	}
+	// Unprefixed type names: resolve using the default element namespace
+	// (same as unprefixed element names in XPath). This handles types like
+	// "addressType" in element(address, addressType) when xpath-default-namespace
+	// provides the namespace.
+	if ec != nil && ec.namespaces != nil {
+		if defNS, ok := ec.namespaces[""]; ok && defNS != "" {
+			return QAnnotation(defNS, raw)
 		}
 	}
 	return raw

@@ -464,11 +464,42 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		}
 		prefix, local := splitQName(t.Name)
 		ns := ""
-		if prefix != "" && ec.namespaces != nil {
-			ns = ec.namespaces[prefix]
+		if ec.namespaces != nil {
+			if prefix != "" {
+				ns = ec.namespaces[prefix]
+			} else {
+				// Unprefixed names use the default element namespace.
+				ns = ec.namespaces[""]
+			}
 		}
-		// The node must have the same name as the declared element.
-		if ixpath.LocalNameOf(ni.Node) != local || ixpath.NodeNamespaceURI(ni.Node) != ns {
+		// The node must have the same name as the declared element
+		// (or a substitution group member — checked separately below).
+		nameMatch := ixpath.LocalNameOf(ni.Node) == local && ixpath.NodeNamespaceURI(ni.Node) == ns
+		if !nameMatch {
+			// Check substitution group membership.
+			if ec.schemaDeclarations == nil {
+				return false
+			}
+			// Try to find if this node's name is a substitution group member of the declared element.
+			memberLocal := ixpath.LocalNameOf(ni.Node)
+			memberNS := ixpath.NodeNamespaceURI(ni.Node)
+			headType, headFound := ec.schemaDeclarations.LookupSchemaElement(local, ns)
+			if !headFound {
+				return false
+			}
+			// The node's type must be a subtype of the head's type.
+			ann := ni.TypeAnnotation
+			if ann == "" {
+				ann = TypeUntyped
+			}
+			if ann == TypeUntyped {
+				// Check if member is declared in schema
+				_, memberFound := ec.schemaDeclarations.LookupSchemaElement(memberLocal, memberNS)
+				return memberFound
+			}
+			if isSubtypeOf(ann, headType) || ec.schemaDeclarations.IsSubtypeOf(ann, headType) {
+				return true
+			}
 			return false
 		}
 		typeName, found := ec.schemaDeclarations.LookupSchemaElement(local, ns)
