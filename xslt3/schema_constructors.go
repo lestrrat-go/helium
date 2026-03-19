@@ -92,11 +92,12 @@ func (ec *execContext) schemaTypeName(uri, local string) string {
 	if uri == catalog.XSD {
 		return "xs:" + local
 	}
-	prefixes := ec.schemaPrefixes(uri)
-	if len(prefixes) == 0 {
-		return local
+	// Use Q{ns}local annotation format for consistency with type annotations
+	// from schema validation and XPath instance-of checks.
+	if uri != "" {
+		return "Q{" + uri + "}" + local
 	}
-	return prefixes[0] + ":" + local
+	return local
 }
 
 func (ec *execContext) schemaPrefixes(uri string) []string {

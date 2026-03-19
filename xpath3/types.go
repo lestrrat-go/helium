@@ -804,6 +804,49 @@ func schemaAnnotationParts(name string) (local, ns string, ok bool) {
 	return name, "", true
 }
 
+// resolveQNameFromNode resolves a QName string (e.g., "my:brown-bear") using
+// the in-scope namespaces of the given node.
+func resolveQNameFromNode(s string, node helium.Node) (QNameValue, error) {
+	s = strings.TrimSpace(s)
+	prefix, local := "", s
+	if idx := strings.IndexByte(s, ':'); idx >= 0 {
+		prefix = s[:idx]
+		local = s[idx+1:]
+	}
+	var uri string
+	if prefix != "" {
+		// Look up the namespace from the node's in-scope declarations.
+		if elem, ok := node.(*helium.Element); ok {
+			for _, ns := range elem.Namespaces() {
+				if ns.Prefix() == prefix {
+					uri = ns.URI()
+					break
+				}
+			}
+			// Walk up parents if not found on this element.
+			if uri == "" {
+				for p := elem.Parent(); p != nil; p = p.Parent() {
+					if pe, ok := p.(*helium.Element); ok {
+						for _, ns := range pe.Namespaces() {
+							if ns.Prefix() == prefix {
+								uri = ns.URI()
+								break
+							}
+						}
+						if uri != "" {
+							break
+						}
+					}
+				}
+			}
+		}
+		if uri == "" {
+			return QNameValue{}, fmt.Errorf("undeclared namespace prefix: %s", prefix)
+		}
+	}
+	return QNameValue{Prefix: prefix, Local: local, URI: uri}, nil
+}
+
 func atomizedTypeForAnnotation(annotation string, decls SchemaDeclarations) string {
 	switch annotation {
 	case "", TypeUntypedAtomic, TypeUntyped:
@@ -846,6 +889,16 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 	case NodeItem:
 		s := ixpath.StringValue(v.Node)
 		if v.TypeAnnotation != "" && v.TypeAnnotation != TypeUntypedAtomic {
+			// QName types need namespace resolution from the node's scope.
+			if v.TypeAnnotation == TypeQName || v.AtomizedType == TypeQName {
+				if qv, err := resolveQNameFromNode(s, v.Node); err == nil {
+					typeName := v.TypeAnnotation
+					if typeName == "" {
+						typeName = TypeQName
+					}
+					return AtomicValue{TypeName: typeName, Value: qv}, nil
+				}
+			}
 			cast, err := CastFromString(s, v.TypeAnnotation)
 			if err == nil {
 				return cast, nil
