@@ -55,15 +55,17 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 		if err := validateDocumentStructure(tmpDoc); err != nil {
 			return err
 		}
-		root := findDocumentElement(tmpDoc)
-		if root != nil && ec.schemaRegistry != nil {
-			if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil {
-				var xsltErr *XSLTError
-				if errors.As(err, &xsltErr) && xsltErr.Code == errCodeXTTE1510 {
-					return dynamicError(errCodeXTTE1540,
-						"document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
+		if ec.schemaRegistry != nil {
+			root := findDocumentElement(tmpDoc)
+			if root != nil {
+				if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil {
+					var xsltErr *XSLTError
+					if errors.As(err, &xsltErr) && xsltErr.Code == errCodeXTTE1510 {
+						return dynamicError(errCodeXTTE1540,
+							"document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
+					}
+					return err
 				}
-				return err
 			}
 		}
 	}
