@@ -205,7 +205,7 @@ func evalUnionExpr(ec *evalContext, e UnionExpr) (Sequence, error) {
 	}
 	result := make(Sequence, len(merged))
 	for i, n := range merged {
-		result[i] = NodeItem{Node: n}
+		result[i] = nodeItemFor(ec, n)
 	}
 	return result, nil
 }
@@ -250,7 +250,7 @@ func evalIntersectExceptExpr(ec *evalContext, e IntersectExceptExpr) (Sequence, 
 	}
 	seq := make(Sequence, len(result))
 	for i, n := range result {
-		seq[i] = NodeItem{Node: n}
+		seq[i] = nodeItemFor(ec, n)
 	}
 	return seq, nil
 }
@@ -271,7 +271,7 @@ func evalFilterExpr(ec *evalContext, e FilterExpr) (Sequence, error) {
 		}
 		result := make(Sequence, len(nodes))
 		for i, n := range nodes {
-			result[i] = NodeItem{Node: n}
+			result[i] = nodeItemFor(ec, n)
 		}
 		return result, nil
 	}
@@ -359,7 +359,7 @@ func evalPathExpr(ec *evalContext, e PathExpr) (Sequence, error) {
 	}
 	seq := make(Sequence, len(deduped))
 	for i, n := range deduped {
-		seq[i] = NodeItem{Node: n}
+		seq[i] = nodeItemFor(ec, n)
 	}
 	return seq, nil
 }
@@ -397,7 +397,7 @@ func evalPathStepExpr(ec *evalContext, e PathStepExpr) (Sequence, error) {
 			isNodeResult = false
 			// Convert previously collected nodes to items
 			for _, pn := range allNodes {
-				allItems = append(allItems, NodeItem{Node: pn})
+				allItems = append(allItems, nodeItemFor(ec, pn))
 			}
 			allNodes = nil
 		}
@@ -411,7 +411,7 @@ func evalPathStepExpr(ec *evalContext, e PathStepExpr) (Sequence, error) {
 		}
 		seq := make(Sequence, len(allNodes))
 		for i, n := range allNodes {
-			seq[i] = NodeItem{Node: n}
+			seq[i] = nodeItemFor(ec, n)
 		}
 		return seq, nil
 	}
