@@ -244,7 +244,7 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 			if ec.typeAnnotations != nil {
 				ann = ec.typeAnnotations[ni.Node]
 			}
-			reqTypeNorm := normalizeTypeName(reqTypeName)
+			reqTypeNorm := normalizeTypeName(reqTypeName, ec)
 			// Untyped nodes (source documents not validated against schema): check if the
 			// schema declares this element with a compatible type and accept it.
 			if ann == "" || ann == "xs:untyped" || ann == "Q{}untyped" {
@@ -425,14 +425,32 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string) (xpath3.Item, er
 	return cast, nil
 }
 
-// normalizeTypeName normalizes a type name to include the xs: prefix.
-func normalizeTypeName(name string) string {
+// normalizeTypeName normalizes a type name. xs: and xsd: prefixes are
+// canonicalized to xs:. Other prefixed names are resolved to Q{ns}local
+// format using the exec context's namespace bindings (if available).
+func normalizeTypeName(name string, ec ...*execContext) string {
 	if strings.HasPrefix(name, "xs:") {
+		return name
+	}
+	if strings.HasPrefix(name, "Q{") {
 		return name
 	}
 	// Normalize xsd: prefix to xs: (both map to XML Schema namespace)
 	if strings.HasPrefix(name, "xsd:") {
 		return "xs:" + name[4:]
+	}
+	// Resolve other prefix:local names to Q{ns}local using namespace bindings.
+	if idx := strings.IndexByte(name, ':'); idx > 0 {
+		prefix := name[:idx]
+		local := name[idx+1:]
+		if len(ec) > 0 && ec[0] != nil {
+			if ns, ok := ec[0].stylesheet.namespaces[prefix]; ok {
+				if ns == "http://www.w3.org/2001/XMLSchema" {
+					return "xs:" + local
+				}
+				return xpath3.QAnnotation(ns, local)
+			}
+		}
 	}
 	// Map unprefixed names to xs: prefixed
 	switch name {
