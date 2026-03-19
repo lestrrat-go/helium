@@ -215,6 +215,50 @@ func matchAll(parent *helium.Element, mg *ModelGroup, children []childElem, pos 
 		return consumed, fmt.Errorf("missing")
 	}
 
+	// Validate content of each matched child element.
+	var contentErr error
+	for i := 0; i < consumed; i++ {
+		child := children[pos+i]
+		childQN := QName{Local: child.name, NS: child.ns}
+		idx, ok := nameToIdx[childQN]
+		if !ok {
+			idx, ok = nameToIdx[QName{Local: child.name}]
+		}
+		if !ok {
+			continue
+		}
+		edecl, isElem := mg.Particles[idx].Term.(*ElementDecl)
+		if !isElem {
+			continue
+		}
+		actualDecl := resolveSubstDecl(child, edecl, schema)
+		td := actualDecl.Type
+		td, xsiErr := resolveXsiType(child.elem, td, schema, filename, out)
+		if xsiErr != nil {
+			contentErr = xsiErr
+			continue
+		}
+		if td != nil && td.Abstract {
+			msg := "The type definition is abstract."
+			out.WriteString(validityError(filename, child.elem.Line(), elemDisplayName(child.elem), msg))
+			contentErr = fmt.Errorf("abstract type")
+			continue
+		}
+		annotateElement(cfg, child.elem, td)
+		if td != nil {
+			if hasXsiNil(child.elem) {
+				if err := validateNilledElement(child.elem, actualDecl, td, schema, cfg, filename, out); err != nil {
+					contentErr = err
+				}
+			} else if err := validateElementContent(child.elem, actualDecl, td, schema, cfg, filename, out); err != nil {
+				contentErr = err
+			}
+		}
+	}
+	if contentErr != nil {
+		return consumed, contentErr
+	}
+
 	return consumed, nil
 }
 
