@@ -238,6 +238,19 @@ func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
 	if isIntegerDerived(a.TypeName) && a.TypeName != TypeInteger {
 		return AtomicValue{TypeName: TypeInteger, Value: a.BigInt()}, nil
 	}
+	// User-defined schema types: promote based on the underlying Go value.
+	if !IsKnownXSDType(a.TypeName) && a.TypeName != "" {
+		switch a.Value.(type) {
+		case *big.Int:
+			return AtomicValue{TypeName: TypeInteger, Value: a.BigInt()}, nil
+		case *big.Rat:
+			return AtomicValue{TypeName: TypeDecimal, Value: a.BigRat()}, nil
+		case float64:
+			return AtomicValue{TypeName: TypeDouble, Value: a.ToFloat64()}, nil
+		case float32:
+			return AtomicValue{TypeName: TypeFloat, Value: a.Value}, nil
+		}
+	}
 	return a, nil
 }
 

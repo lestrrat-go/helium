@@ -62,13 +62,11 @@ func (ec *execContext) makeSchemaConstructor(td *xsd.TypeDef) func(context.Conte
 		if err != nil {
 			return nil, err
 		}
-		value, err := xpath3.AtomicToString(cast)
-		if err != nil {
-			return nil, err
-		}
+		// Preserve the actual typed value (e.g., *big.Int for integer types)
+		// so that aggregate functions like sum() can operate on it.
 		return xpath3.SingleAtomic(xpath3.AtomicValue{
 			TypeName: typeName,
-			Value:    value,
+			Value:    cast.Value,
 		}), nil
 	}
 }
