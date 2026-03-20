@@ -1046,7 +1046,12 @@ func matchSchemaAttributeTest(ctx *execContext, t xpath3.SchemaAttributeTest, no
 	if prefix != "" {
 		ns = ctx.stylesheet.namespaces[prefix]
 	}
-	if attr.LocalName() != local || attr.URI() != ns {
+	// Strip prefix from attribute's local name (may include prefix when created by xsl:attribute)
+	attrLocalName := attr.LocalName()
+	if idx := strings.IndexByte(attrLocalName, ':'); idx >= 0 {
+		attrLocalName = attrLocalName[idx+1:]
+	}
+	if attrLocalName != local || attr.URI() != ns {
 		return false
 	}
 	if ctx.schemaRegistry == nil {
@@ -1254,6 +1259,11 @@ func matchAttributeTest(ctx *execContext, at xpath3.AttributeTest, node helium.N
 	if !ok {
 		return false
 	}
+	// Get the actual local name of the attribute, stripping any prefix
+	attrLocal := attr.LocalName()
+	if idx := strings.IndexByte(attrLocal, ':'); idx >= 0 {
+		attrLocal = attrLocal[idx+1:]
+	}
 	name := at.Name
 	nameMatch := false
 	if idx := strings.IndexByte(name, ':'); idx >= 0 {
@@ -1263,9 +1273,9 @@ func matchAttributeTest(ctx *execContext, at xpath3.AttributeTest, node helium.N
 		if ctx != nil {
 			uri = ctx.resolvePrefix(prefix)
 		}
-		nameMatch = attr.LocalName() == local && attr.URI() == uri
+		nameMatch = attrLocal == local && attr.URI() == uri
 	} else {
-		nameMatch = attr.LocalName() == name
+		nameMatch = attrLocal == name
 	}
 	if !nameMatch {
 		return false
