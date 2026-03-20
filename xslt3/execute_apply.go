@@ -142,8 +142,11 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 	}
 
 	// XSLT 3.0: process atomic values — try template matching first,
-	// then fall back to built-in text output
-	for _, item := range atomicItems {
+	// then fall back to built-in text output.
+	// Set position/size so position()/last() work correctly inside templates.
+	ec.size = len(atomicItems)
+	for i, item := range atomicItems {
+		ec.position = i + 1
 		if tmpl := ec.findAtomicTemplate(item, mode); tmpl != nil {
 			if err := ec.executeAtomicTemplate(ctx, tmpl, item, mode); err != nil {
 				return err
