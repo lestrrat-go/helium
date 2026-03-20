@@ -74,6 +74,7 @@ import-schema-044
 import-schema-045
 import-schema-047
 import-schema-048
+import-schema-055
 import-schema-062
 import-schema-065
 import-schema-071
@@ -90,6 +91,7 @@ import-schema-196
 import-schema-197
 import-schema-198
 import-schema-199
+import-schema-202
 match-013
 match-014
 match-050
