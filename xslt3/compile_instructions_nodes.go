@@ -51,6 +51,8 @@ func (c *compiler) compileValueOf(elem *helium.Element) (*ValueOfInst, error) {
 		inst.Body = body
 	}
 
+	inst.DisableOutputEscaping = getAttr(elem, "disable-output-escaping") == "yes"
+
 	return inst, nil
 }
 

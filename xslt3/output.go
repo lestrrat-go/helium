@@ -89,7 +89,7 @@ func defaultOutputDef() *OutputDef {
 }
 
 func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
-	if len(charMap) > 0 {
+	if len(charMap) > 0 || hasDOEMarkers(doc) {
 		return serializeXMLWithCharMap(w, doc, outDef, charMap)
 	}
 	// Set encoding on the document so the XML declaration includes it.
@@ -129,7 +129,20 @@ func serializeXMLWithCharMap(w io.Writer, doc *helium.Document, outDef *OutputDe
 }
 
 func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[rune]string) error {
+	doeActive := false
 	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+		// Handle DOE marker PIs
+		if child.Type() == helium.ProcessingInstructionNode {
+			piName := string(child.Name())
+			if piName == "disable-output-escaping" {
+				doeActive = true
+				continue
+			}
+			if piName == "enable-output-escaping" {
+				doeActive = false
+				continue
+			}
+		}
 		switch child.Type() {
 		case helium.ElementNode:
 			elem := child.(*helium.Element)
@@ -171,7 +184,11 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 			}
 		case helium.TextNode, helium.CDATASectionNode:
 			text := string(child.Content())
-			if err := writeTextWithCharMap(sw, text, charMap); err != nil {
+			if doeActive {
+				if err := sw.WriteRaw(text); err != nil {
+					return err
+				}
+			} else if err := writeTextWithCharMap(sw, text, charMap); err != nil {
 				return err
 			}
 		case helium.CommentNode:
@@ -241,6 +258,18 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 		htmlpkg.WithNoFormat(),
 	}
 	return htmlpkg.WriteDoc(w, doc, opts...)
+}
+
+// hasDOEMarkers checks if the document contains any disable-output-escaping markers.
+func hasDOEMarkers(doc *helium.Document) bool {
+	found := false
+	_ = helium.Walk(doc, func(n helium.Node) error {
+		if n.Type() == helium.ProcessingInstructionNode && string(n.Name()) == "disable-output-escaping" {
+			found = true
+		}
+		return nil
+	})
+	return found
 }
 
 // applyCharacterMap replaces characters in text according to the character map.

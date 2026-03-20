@@ -90,6 +90,28 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 	if emptySequence {
 		return nil
 	}
+	if inst.DisableOutputEscaping {
+		// Insert DOE marker PI so the serializer writes this text raw.
+		pi, err := ec.resultDoc.CreatePI("disable-output-escaping", "")
+		if err != nil {
+			return err
+		}
+		if err := ec.addNode(pi); err != nil {
+			return err
+		}
+		text, err := ec.resultDoc.CreateText([]byte(value))
+		if err != nil {
+			return err
+		}
+		if err := ec.addNode(text); err != nil {
+			return err
+		}
+		piEnd, err := ec.resultDoc.CreatePI("enable-output-escaping", "")
+		if err != nil {
+			return err
+		}
+		return ec.addNode(piEnd)
+	}
 	text, err := ec.resultDoc.CreateText([]byte(value))
 	if err != nil {
 		return err
@@ -175,6 +197,27 @@ func (ec *execContext) execText(inst *TextInst) error {
 	// Note: xsl:text with empty literal content still produces a zero-length
 	// text node. This is needed for variables with as="text()" to receive
 	// exactly 1 item. Only TVT-expanded empty values are skipped (above).
+	if inst.DisableOutputEscaping {
+		pi, err := ec.resultDoc.CreatePI("disable-output-escaping", "")
+		if err != nil {
+			return err
+		}
+		if err := ec.addNode(pi); err != nil {
+			return err
+		}
+		text, err := ec.resultDoc.CreateText([]byte(value))
+		if err != nil {
+			return err
+		}
+		if err := ec.addNode(text); err != nil {
+			return err
+		}
+		piEnd, err := ec.resultDoc.CreatePI("enable-output-escaping", "")
+		if err != nil {
+			return err
+		}
+		return ec.addNode(piEnd)
+	}
 	text, err := ec.resultDoc.CreateText([]byte(value))
 	if err != nil {
 		return err

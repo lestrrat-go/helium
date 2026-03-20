@@ -671,7 +671,7 @@ func (w *Writer) WriteString(content string) error {
 			w.elemStack[len(w.elemStack)-1].hasText = true
 		}
 		w.writeTextEscaped(content)
-	case stateText:
+	case stateNone, stateText, stateDocument:
 		if len(w.elemStack) > 0 {
 			w.elemStack[len(w.elemStack)-1].hasText = true
 		}
