@@ -234,6 +234,9 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 		switch v := item.(type) {
 		case xpath3.NodeItem:
 			prevWasAtomic = false
+			if normalizeNode(v.Node) == nil {
+				continue
+			}
 			if v.Node.Type() == helium.AttributeNode {
 				// Attribute nodes: add as attribute to current element
 				attr := v.Node.(*helium.Attribute)
