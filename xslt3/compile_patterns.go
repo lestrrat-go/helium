@@ -1024,7 +1024,46 @@ func matchNameTest(ctx *execContext, nt xpath3.NameTest, node helium.Node) bool 
 		// Unprefixed element names use xpath-default-namespace
 		expectedURI = ctx.xpathDefaultNS
 	}
-	return nodeLocal == nt.Local && nodeURI == expectedURI
+	if nodeLocal != nt.Local || nodeURI != expectedURI {
+		return false
+	}
+	// XSLT 3.0 §6.6: when mode typed="strict", bare element name patterns
+	// are treated as schema-element() — the element must have been validated
+	// against the schema declaration for that name.
+	if isElem && ctx != nil && nt.Prefix != "*" && isTypedStrictMode(ctx) {
+		if ctx.schemaRegistry == nil {
+			return false
+		}
+		declType, found := ctx.schemaRegistry.LookupElement(nodeLocal, nodeURI)
+		if !found {
+			return false
+		}
+		ann := ""
+		if ctx.typeAnnotations != nil {
+			ann = ctx.typeAnnotations[node]
+		}
+		if ann == "" || ann == "xs:untyped" {
+			return false
+		}
+		if ann != declType && !ctx.schemaRegistry.IsSubtypeOf(ann, declType) {
+			return false
+		}
+	}
+	return true
+}
+
+// isTypedStrictMode returns true if the current mode has typed="strict" or typed="yes".
+func isTypedStrictMode(ctx *execContext) bool {
+	mode := ctx.currentMode
+	if md := ctx.stylesheet.modeDefs[mode]; md != nil {
+		return md.Typed == "strict" || md.Typed == "yes" || md.Typed == "true" || md.Typed == "1"
+	}
+	if mode == "" {
+		if md := ctx.stylesheet.modeDefs["#default"]; md != nil {
+			return md.Typed == "strict" || md.Typed == "yes" || md.Typed == "true" || md.Typed == "1"
+		}
+	}
+	return false
 }
 
 // matchElementTest checks if a node matches an element() test.

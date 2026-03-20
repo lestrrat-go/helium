@@ -218,9 +218,12 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 
 	useAccumulators := getAttr(elem, "use-accumulators")
 
+	typed := getAttr(elem, "typed")
+
 	md := &ModeDef{
 		Name:            name,
 		OnNoMatch:       onNoMatch,
+		Typed:           typed,
 		Streamable:      streamable,
 		Visibility:      visibility,
 		OnMultipleMatch: onMultipleMatch,
