@@ -537,7 +537,7 @@ func matchPatternAlt(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
 		}
 		return matchByEvaluation(ctx, alt, node)
 	default:
-		// For complex expressions, try evaluating from document root
+			// For complex expressions, try evaluating from document root
 		// and checking if node is in the result set.
 		return matchByEvaluation(ctx, alt, node)
 	}
