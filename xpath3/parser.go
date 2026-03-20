@@ -12,6 +12,13 @@ import (
 
 const maxParseDepth = 200
 
+type tokenStream interface {
+	Next() Token
+	Peek() Token
+	PeekAt(offset int) Token
+	Backup()
+}
+
 // isNameLikeToken returns true if the token type can be used as a local name
 // after a prefix ':' in a QName. XPath 3.1 keywords are context-sensitive:
 // e.g. "my:function()" is a valid prefixed function call, not a keyword.
@@ -30,7 +37,7 @@ func isNameLikeToken(t TokenType) bool {
 
 // parser builds an AST from a token stream.
 type parser struct {
-	lexer *lexer
+	lexer tokenStream
 	depth int
 }
 
