@@ -318,6 +318,12 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 		}
 		_, _ = io.WriteString(w, ">\n")
 	}
+	// Insert <meta http-equiv="Content-Type"> in <head> if not already present.
+	// Per XSLT HTML serialization spec, the serializer should add this
+	// meta element to identify the encoding.
+	if outDef.IncludeContentType == nil || *outDef.IncludeContentType {
+		insertHTMLMeta(doc, outDef)
+	}
 	opts := []htmlpkg.WriteOption{
 		htmlpkg.WithNoDefaultDTD(),
 		htmlpkg.WithNoFormat(),
@@ -384,4 +390,56 @@ func resolveCharacterMaps(ss *Stylesheet, names []string) map[rune]string {
 		return nil
 	}
 	return merged
+}
+
+// insertHTMLMeta inserts a <meta http-equiv="Content-Type"> element as the
+// first child of the <head> element if not already present.
+func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
+	root := doc.DocumentElement()
+	if root == nil {
+		return
+	}
+	// Find the <head> element (case-insensitive).
+	var head *helium.Element
+	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+		if e, ok := child.(*helium.Element); ok && strings.EqualFold(e.Name(), "head") {
+			head = e
+			break
+		}
+	}
+	if head == nil {
+		return
+	}
+	// Check if a <meta http-equiv="Content-Type"> already exists.
+	for child := head.FirstChild(); child != nil; child = child.NextSibling() {
+		if e, ok := child.(*helium.Element); ok && strings.EqualFold(e.Name(), "meta") {
+			if he, _ := e.GetAttribute("http-equiv"); strings.EqualFold(he, "Content-Type") {
+				return // already present
+			}
+		}
+	}
+	// Create and insert the meta element.
+	enc := outDef.Encoding
+	if enc == "" {
+		enc = "UTF-8"
+	}
+	meta, err := doc.CreateElement("meta")
+	if err != nil {
+		return
+	}
+	_ = meta.SetAttribute("http-equiv", "Content-Type")
+	_ = meta.SetAttribute("content", "text/html; charset="+enc)
+	// Insert meta as first child of <head>.
+	// Unlink existing children, add meta, then re-add them.
+	var children []helium.Node
+	for child := head.FirstChild(); child != nil; {
+		next := child.NextSibling()
+		helium.UnlinkNode(child)
+		children = append(children, child)
+		child = next
+	}
+	_ = head.AddChild(meta)
+	for _, child := range children {
+		_ = head.AddChild(child)
+	}
 }
