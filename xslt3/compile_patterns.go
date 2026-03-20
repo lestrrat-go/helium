@@ -62,6 +62,17 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %v", alt, valErr)
 		}
 		ast := compiled.AST()
+		// Parenthesized predicate patterns are not allowed: (.[pred])
+		// Skip XPath comments (:...:) which start with "(" but aren't parens.
+		trimmedAlt := strings.TrimSpace(alt)
+		if strings.HasPrefix(trimmedAlt, "(") && !strings.HasPrefix(trimmedAlt, "(:") &&
+			strings.HasSuffix(trimmedAlt, ")") {
+			if fe, ok := ast.(xpath3.FilterExpr); ok {
+				if _, isCtx := fe.Expr.(xpath3.ContextItemExpr); isCtx {
+					return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: parenthesized predicate pattern not allowed", alt)
+				}
+			}
+		}
 		if err := validatePatternExpr(ast); err != nil {
 			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %s", alt, err)
 		}
