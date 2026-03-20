@@ -242,15 +242,20 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 			return err
 		}
 
-		// Execute body in element context
+		// Execute body in element context.
+		// Temporarily disable sequenceMode so that children are added to
+		// this element normally (not captured as separate sequence items).
 		out := ec.currentOutput()
 		savedCurrent := out.current
 		savedPrevAtomic := out.prevWasAtomic
+		savedSeqMode := out.sequenceMode
 		out.current = elem
 		out.prevWasAtomic = false
+		out.sequenceMode = false
 		defer func() {
 			out.current = savedCurrent
 			out.prevWasAtomic = savedPrevAtomic
+			out.sequenceMode = savedSeqMode
 		}()
 
 		// Apply attribute sets if specified
