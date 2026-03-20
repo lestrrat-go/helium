@@ -147,6 +147,10 @@ func (r *schemaRegistry) IsSubtypeOf(typeName, baseTypeName string) bool {
 	if typeName == baseTypeName {
 		return true
 	}
+	// xs:anyType is the universal supertype of all types.
+	if baseTypeName == "xs:anyType" {
+		return true
+	}
 	// Delegate built-in XSD types to the static hierarchy.
 	if isXSBuiltin(typeName) {
 		if isBuiltinSubtypeOf(typeName, baseTypeName) {
