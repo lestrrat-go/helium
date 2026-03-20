@@ -35,7 +35,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 	} else {
 		// Default select is child::node() which requires a node context item.
 		// If the context item is an atomic value (contextNode is nil), raise XTTE0510.
-		if ec.contextNode == nil {
+		if normalizeNode(ec.contextNode) == nil {
 			return dynamicError(errCodeXTTE0510, "apply-templates with default select requires a node context item")
 		}
 		nodes = selectDefaultNodes(ec.contextNode)
