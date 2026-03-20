@@ -294,11 +294,83 @@ func (p *parser) parseDirectPredicates() ([]Expr, error) {
 		predicates = make([]Expr, 0, 2)
 	}
 	for p.lexer.Peek().Type == TokenLBracket {
-		pred, err := p.parsePredicate()
+		p.lexer.Next()
+		predStart := -1
+		if l, ok := p.lexer.(*lexer); ok {
+			predStart = l.idx
+		}
+
+		pred, ok, err := p.tryParseDirectPredicateExpr()
 		if err != nil {
 			return nil, err
 		}
+		if !ok || p.lexer.Peek().Type != TokenRBracket {
+			if predStart >= 0 {
+				p.lexer.(*lexer).idx = predStart
+			}
+			pred, err = p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if p.lexer.Peek().Type != TokenRBracket {
+			return nil, fmt.Errorf("%w: ']' but got %s", ErrExpectedToken, p.lexer.Peek())
+		}
+		p.lexer.Next()
 		predicates = append(predicates, pred)
 	}
 	return predicates, nil
+}
+
+func (p *parser) tryParseDirectPredicateExpr() (Expr, bool, error) {
+	l, ok := p.lexer.(*lexer)
+	if !ok {
+		return nil, false, nil
+	}
+
+	start := l.idx
+
+	left, ok, err := p.tryParseDirectPredicateOperand()
+	if err != nil || !ok {
+		l.idx = start
+		return nil, ok, err
+	}
+
+	op := p.lexer.Peek().Type
+	if !isDirectPredicateOp(op) {
+		return left, true, nil
+	}
+	p.lexer.Next()
+
+	right, ok, err := p.tryParseDirectPredicateOperand()
+	if err != nil || !ok {
+		l.idx = start
+		return nil, ok, err
+	}
+	return BinaryExpr{Op: op, Left: left, Right: right}, true, nil
+}
+
+func (p *parser) tryParseDirectPredicateOperand() (Expr, bool, error) {
+	tok := p.lexer.Peek()
+	switch tok.Type {
+	case TokenString:
+		p.lexer.Next()
+		return LiteralExpr{Value: tok.Value}, true, nil
+	case TokenNumber:
+		p.lexer.Next()
+		n, err := parseNumberLiteral(tok.Value)
+		if err != nil {
+			return nil, false, err
+		}
+		return n, true, nil
+	case TokenVariableRef:
+		p.lexer.Next()
+		return variableExprFromToken(tok.Value), true, nil
+	}
+	return p.tryParseDirectLocationPath()
+}
+
+func isDirectPredicateOp(t TokenType) bool {
+	return isGeneralComp(t) || isValueComp(t)
 }
