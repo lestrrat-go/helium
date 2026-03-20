@@ -377,19 +377,25 @@ func stepPriority(step xpath3.Step) float64 {
 		}
 		return 0
 	case xpath3.ElementTest:
+		if nt.TypeName != "" {
+			if nt.Name == "" || nt.Name == "*" {
+				return 0 // element(*, type) — type constraint, priority 0
+			}
+			return 0.25 // element(name, type)
+		}
 		if nt.Name == "" || nt.Name == "*" {
 			return -0.5 // element() or element(*)
 		}
-		if nt.TypeName != "" {
-			return 0.25 // element(name, type)
-		}
 		return 0 // element(specific-name)
 	case xpath3.AttributeTest:
+		if nt.TypeName != "" {
+			if nt.Name == "" || nt.Name == "*" {
+				return 0 // attribute(*, type) — type constraint, priority 0
+			}
+			return 0.25 // attribute(name, type)
+		}
 		if nt.Name == "" || nt.Name == "*" {
 			return -0.5 // attribute() or attribute(*)
-		}
-		if nt.TypeName != "" {
-			return 0.25 // attribute(name, type)
 		}
 		return 0 // attribute(specific-name)
 	case xpath3.DocumentTest:
@@ -952,7 +958,28 @@ func matchTypeAnnotation(ctx *execContext, node helium.Node, typeName string) bo
 			return false
 		}
 	}
-	return normalize(ann) == normalize(typeName)
+	normAnn := normalize(ann)
+	normType := normalize(typeName)
+	if normAnn == normType {
+		return true
+	}
+	// Check subtype relationship using built-in XSD type hierarchy.
+	fullAnn := ann
+	if !strings.HasPrefix(fullAnn, "xs:") && !strings.HasPrefix(fullAnn, "Q{") {
+		fullAnn = "xs:" + fullAnn
+	}
+	fullType := typeName
+	if !strings.HasPrefix(fullType, "xs:") && !strings.HasPrefix(fullType, "Q{") {
+		fullType = "xs:" + fullType
+	}
+	if xpath3.BuiltinIsSubtypeOf(fullAnn, fullType) {
+		return true
+	}
+	// Check via schema declarations for user-defined types.
+	if ctx != nil && ctx.schemaRegistry != nil {
+		return ctx.schemaRegistry.IsSubtypeOf(fullAnn, fullType)
+	}
+	return false
 }
 
 // matchDocumentTest checks if a node matches a document-node() test.
