@@ -74,6 +74,16 @@ func (p *parser) tryParseDirectFunctionCall() (Expr, bool, error) {
 		return nil, false, nil
 	}
 
+	// Node kind test names followed by '(' are steps, not function calls.
+	if p.lexer.PeekAt(1).Type == TokenLParen {
+		switch tok.Value {
+		case "node", "text", "comment", "processing-instruction",
+			"element", "attribute", "document-node", "schema-element",
+			"schema-attribute", "namespace-node":
+			return nil, false, nil
+		}
+	}
+
 	p.lexer.Next()
 	prefix := ""
 	name := tok.Value
@@ -250,6 +260,45 @@ func (p *parser) tryParseDirectNodeTest(axis AxisType) (NodeTest, bool, error) {
 	}
 
 	if p.lexer.PeekAt(1).Type == TokenLParen {
+		// Node kind tests: node(), text(), comment(), processing-instruction(), etc.
+		switch tok.Value {
+		case "node":
+			p.lexer.Next() // name
+			p.lexer.Next() // (
+			if p.lexer.Peek().Type != TokenRParen {
+				return nil, false, nil
+			}
+			p.lexer.Next() // )
+			return TypeTest{Kind: NodeKindNode}, true, nil
+		case "text":
+			p.lexer.Next()
+			p.lexer.Next()
+			if p.lexer.Peek().Type != TokenRParen {
+				return nil, false, nil
+			}
+			p.lexer.Next()
+			return TypeTest{Kind: NodeKindText}, true, nil
+		case "comment":
+			p.lexer.Next()
+			p.lexer.Next()
+			if p.lexer.Peek().Type != TokenRParen {
+				return nil, false, nil
+			}
+			p.lexer.Next()
+			return TypeTest{Kind: NodeKindComment}, true, nil
+		case "processing-instruction":
+			p.lexer.Next()
+			p.lexer.Next()
+			target := ""
+			if p.lexer.Peek().Type == TokenString || isNameLikeToken(p.lexer.Peek().Type) {
+				target = p.lexer.Next().Value
+			}
+			if p.lexer.Peek().Type != TokenRParen {
+				return nil, false, nil
+			}
+			p.lexer.Next()
+			return PITest{Target: target}, true, nil
+		}
 		return nil, false, nil
 	}
 
