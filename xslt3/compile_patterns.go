@@ -17,8 +17,9 @@ type Pattern struct {
 
 // PatternAlt is one alternative in a union pattern (separated by |).
 type PatternAlt struct {
-	expr     xpath3.Expr // the parsed XPath AST
-	priority float64
+	expr         xpath3.Expr // the parsed XPath AST
+	priority     float64
+	neverMatches bool // true for syntactically valid but semantically empty patterns (e.g., child::document-node())
 }
 
 // compilePattern compiles an XSLT match pattern string.
@@ -51,8 +52,9 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %s", alt, err)
 		}
 		pa := &PatternAlt{
-			expr:     ast,
-			priority: computeDefaultPriority(ast),
+			expr:         ast,
+			priority:     computeDefaultPriority(ast),
+			neverMatches: strings.Contains(alt, "child::document-node"),
 		}
 		p.Alternatives = append(p.Alternatives, pa)
 	}
@@ -623,6 +625,9 @@ func (p *Pattern) matchesAttributes() bool {
 // XSLT patterns evaluate by checking if the node would be selected by the
 // equivalent XPath expression when evaluated in the right context.
 func matchPatternAlt(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
+	if alt.neverMatches {
+		return false
+	}
 	switch e := alt.expr.(type) {
 	case xpath3.LocationPath:
 		return matchLocationPath(ctx, e, node)
@@ -747,7 +752,15 @@ func nodeMatchesStep(ctx *execContext, step xpath3.Step, node helium.Node) bool 
 		// so we need another way to distinguish. For now, we only prevent
 		// matching when the node has a parent (i.e., it IS a child of something).
 		// Document nodes at the root have no parent, so they pass.
-		if _, ok := step.NodeTest.(xpath3.DocumentTest); !ok {
+		if _, isDocTest := step.NodeTest.(xpath3.DocumentTest); isDocTest {
+			// document-node() in a pattern only matches actual document nodes.
+			// Since document nodes are never children of anything, a
+			// child::document-node() step only matches root document nodes
+			// (which have no parent).
+			if node.Type() != helium.DocumentNode {
+				return false
+			}
+		} else {
 			// Allow self::node() to match document nodes.
 			if step.Axis == xpath3.AxisSelf {
 				if tt, ok := step.NodeTest.(xpath3.TypeTest); !ok || tt.Kind != xpath3.NodeKindNode {
