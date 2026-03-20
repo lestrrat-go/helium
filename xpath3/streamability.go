@@ -3,7 +3,7 @@ package xpath3
 // AST returns the root AST node of the compiled expression.
 // This is used by streamability analysis in xslt3.
 func (e *Expression) AST() Expr {
-	return e.ast
+	return e.astExpr()
 }
 
 // WalkExpr walks an XPath 3.1 AST, calling fn for each Expr node.
@@ -195,8 +195,9 @@ func ExprUsesAxis(expr *Expression, axis AxisType) bool {
 	if expr == nil {
 		return false
 	}
+	ast := expr.astExpr()
 	found := false
-	WalkExpr(expr.ast, func(e Expr) bool {
+	WalkExpr(ast, func(e Expr) bool {
 		if found {
 			return false
 		}
@@ -219,8 +220,9 @@ func ExprUsesFunction(expr *Expression, name string) bool {
 	if expr == nil {
 		return false
 	}
+	ast := expr.astExpr()
 	found := false
-	WalkExpr(expr.ast, func(e Expr) bool {
+	WalkExpr(ast, func(e Expr) bool {
 		if found {
 			return false
 		}
@@ -241,8 +243,9 @@ func ExprHasDownwardStep(expr *Expression) bool {
 	if expr == nil {
 		return false
 	}
+	ast := expr.astExpr()
 	found := false
-	WalkExpr(expr.ast, func(e Expr) bool {
+	WalkExpr(ast, func(e Expr) bool {
 		if found {
 			return false
 		}
@@ -273,8 +276,9 @@ func ExprHasNonMotionlessPredicate(expr *Expression) bool {
 	if expr == nil {
 		return false
 	}
+	ast := expr.astExpr()
 	found := false
-	WalkExpr(expr.ast, func(e Expr) bool {
+	WalkExpr(ast, func(e Expr) bool {
 		if found {
 			return false
 		}
@@ -348,7 +352,7 @@ func CountDownwardSelections(expr *Expression) int {
 	if expr == nil {
 		return 0
 	}
-	return countDownwardSelectionsInExpr(expr.ast)
+	return countDownwardSelectionsInExpr(expr.astExpr())
 }
 
 func countDownwardSelectionsInExpr(expr Expr) int {
@@ -437,8 +441,9 @@ func ExprUsesUpwardAxis(expr *Expression) bool {
 	if expr == nil {
 		return false
 	}
+	ast := expr.astExpr()
 	found := false
-	WalkExpr(expr.ast, func(e Expr) bool {
+	WalkExpr(ast, func(e Expr) bool {
 		if found {
 			return false
 		}
@@ -462,8 +467,9 @@ func ExprUsesDescendantOrSelf(expr *Expression) bool {
 	if expr == nil {
 		return false
 	}
+	ast := expr.astExpr()
 	found := false
-	WalkExpr(expr.ast, func(e Expr) bool {
+	WalkExpr(ast, func(e Expr) bool {
 		if found {
 			return false
 		}

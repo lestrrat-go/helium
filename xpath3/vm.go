@@ -57,7 +57,18 @@ type vmProgram struct {
 }
 
 func compileVMProgram(ast Expr) (*vmProgram, prefixValidationPlan, error) {
-	builder := vmBuilder{prefixPlan: newPrefixPlanBuilder()}
+	return compileVMProgramWithOptions(ast, false)
+}
+
+func compileOwnedVMProgram(ast Expr) (*vmProgram, prefixValidationPlan, error) {
+	return compileVMProgramWithOptions(ast, true)
+}
+
+func compileVMProgramWithOptions(ast Expr, reuseInput bool) (*vmProgram, prefixValidationPlan, error) {
+	builder := vmBuilder{
+		prefixPlan: newPrefixPlanBuilder(),
+		reuseInput: reuseInput,
+	}
 	root, err := builder.compileExpr(ast)
 	if err != nil {
 		return nil, prefixValidationPlan{}, err
@@ -79,6 +90,7 @@ func compileVMProgramLoose(ast Expr) (*vmProgram, prefixValidationPlan) {
 type vmBuilder struct {
 	instructions []vmInstruction
 	prefixPlan   prefixPlanBuilder
+	reuseInput   bool
 }
 
 func (b *vmBuilder) compileExpr(expr Expr) (compiledExprRef, error) {
@@ -340,7 +352,12 @@ func (b *vmBuilder) lowerExpr(expr Expr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerLocationPath(expr LocationPath) (Expr, error) {
-	steps := make([]Step, len(expr.Steps))
+	var steps []Step
+	if b.reuseInput {
+		steps = expr.Steps
+	} else {
+		steps = make([]Step, len(expr.Steps))
+	}
 	for i, step := range expr.Steps {
 		preds, err := b.lowerChildExprSlice(step.Predicates)
 		if err != nil {
@@ -693,7 +710,12 @@ func (b *vmBuilder) lowerChildExprSlice(items []Expr) ([]Expr, error) {
 	if len(items) == 0 {
 		return nil, nil
 	}
-	result := make([]Expr, len(items))
+	var result []Expr
+	if b.reuseInput {
+		result = items
+	} else {
+		result = make([]Expr, len(items))
+	}
 	for i, item := range items {
 		switch item.(type) {
 		case PlaceholderExpr, *PlaceholderExpr:

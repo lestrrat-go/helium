@@ -21,6 +21,7 @@ xpath1 → internal/xpath → helium
 
 ```
 string → lexer ([]Token) → parser (Expr AST) → VM lowering (`vmProgram`) → VM execution → Sequence → Result
+                                        └→ on-demand reparse for `AST()` / streamability helpers
 ```
 
 ## `internal/xpath` Files
@@ -102,7 +103,9 @@ func NodePrefix(n helium.Node) string
 ## Runtime Model
 
 - `Compile()` parses AST, lowers to `vmProgram`, and collects the prefix validation plan during lowering
+- String-based `Compile()` uses an ownership-taking lowering path that can reuse parsed slices, then keeps only `source` + `vmProgram`; AST-inspection helpers reparse on demand
 - Non-trivial lowered nodes become indexed `vmInstruction`s; trivial leaf Exprs stay inline in parent payloads
 - Child Expr references inside lowered payloads become `compiledExprRef` when they need their own instruction slot
 - VM executes compiled refs by opcode, then reuses existing `eval_*` helpers via `exprEvaluator`
+- `CompileExpr()` uses non-mutating lowering and keeps the caller-provided AST
 - Raw `eval()` remains as fallback for unlowered `CompileExpr` inputs

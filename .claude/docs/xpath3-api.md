@@ -20,8 +20,11 @@ type Expression struct {
     program *vmProgram
 }
 func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error)
+func (e *Expression) AST() Expr
 func (e *Expression) String() string
 ```
+
+`Compile()` parses then lowers through the VM backend, but does not retain the parsed AST on the `Expression`; `AST()` and streamability helpers reparse from `source` on demand. `CompileExpr()` keeps the caller-provided AST and lowers it without mutating the input tree.
 
 ## Result
 
@@ -74,7 +77,7 @@ type CollectionResolver interface {
 
 User functions registered via `WithFunctionsNS` CANNOT override built-ins in `fn:` namespace.
 
-`Compile()` lowers parsed AST to VM program. `CompileExpr()` attempts same lowering, with raw AST fallback for unsupported custom Expr implementations.
+`Compile()` lowers parsed AST to VM program using an ownership-taking lowering path that can reuse parsed slices. `CompileExpr()` uses a non-mutating lowering path, with raw AST fallback for unsupported custom Expr implementations.
 
 ## Errors
 

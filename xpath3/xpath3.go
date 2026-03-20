@@ -23,13 +23,12 @@ func Compile(expr string) (*Expression, error) {
 	if err != nil {
 		return nil, err
 	}
-	program, prefixPlan, err := compileVMProgram(ast)
+	program, prefixPlan, err := compileOwnedVMProgram(ast)
 	if err != nil {
 		return nil, err
 	}
 	return &Expression{
 		source:     expr,
-		ast:        ast,
 		program:    program,
 		prefixPlan: prefixPlan,
 	}, nil
@@ -221,5 +220,19 @@ func (e *Expression) evaluate(ec *evalContext) (Sequence, error) {
 	if e.program != nil {
 		return e.program.execute(ec)
 	}
-	return eval(ec, e.ast)
+	return eval(ec, e.astExpr())
+}
+
+func (e *Expression) astExpr() Expr {
+	if e.ast != nil {
+		return e.ast
+	}
+	if e.source == "" {
+		return nil
+	}
+	ast, err := Parse(e.source)
+	if err != nil {
+		return nil
+	}
+	return ast
 }
