@@ -454,6 +454,14 @@ func computeDefaultPriority(expr xpath3.Expr) float64 {
 	case xpath3.ContextItemExpr:
 		// "." (self::node()) — wildcard node test, priority -0.5
 		return -0.5
+	case xpath3.UnionExpr:
+		// Union pattern (a|b): priority is max of operands' priorities.
+		lp := computeDefaultPriority(e.Left)
+		rp := computeDefaultPriority(e.Right)
+		if lp > rp {
+			return lp
+		}
+		return rp
 	case xpath3.FilterExpr:
 		// Predicate pattern: .[pred1][pred2]...
 		// Priority = 0.5 + (number of predicates * 0.25)
@@ -681,8 +689,26 @@ func matchPatternAlt(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
 			return matchByEvaluation(ctx, alt, node)
 		}
 		return matchByEvaluation(ctx, alt, node)
+	case xpath3.UnionExpr:
+		// Union pattern: (a|b) matches if node matches either operand.
+		leftAlt := &PatternAlt{expr: e.Left}
+rightAlt := &PatternAlt{expr: e.Right}
+		return matchPatternAlt(ctx, leftAlt, node) || matchPatternAlt(ctx, rightAlt, node)
+	case xpath3.IntersectExceptExpr:
+		// intersect/except pattern: matches if node matches per the operator.
+		leftAlt := &PatternAlt{expr: e.Left}
+		rightAlt := &PatternAlt{expr: e.Right}
+		leftMatch := matchPatternAlt(ctx, leftAlt, node)
+		rightMatch := matchPatternAlt(ctx, rightAlt, node)
+		if e.Op == xpath3.TokenIntersect {
+			return leftMatch && rightMatch
+		}
+		return leftMatch && !rightMatch // except
+	case xpath3.VariableExpr:
+		// $var pattern: matches if node is in the variable's value.
+		return matchByEvaluation(ctx, alt, node)
 	default:
-			// For complex expressions, try evaluating from document root
+		// For complex expressions, try evaluating from document root
 		// and checking if node is in the result set.
 		return matchByEvaluation(ctx, alt, node)
 	}
