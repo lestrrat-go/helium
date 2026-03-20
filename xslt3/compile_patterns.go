@@ -123,6 +123,8 @@ func validatePatternExprInner(expr xpath3.Expr, topLevel bool) error {
 			return nil // (a|b)[pred]
 		case xpath3.IntersectExceptExpr:
 			return nil // (a except b)[pred]
+		case xpath3.FunctionCall:
+			return nil // fn()[pred] — e.g., root()[self::A]
 		case xpath3.LocationPath:
 			return nil // (path)[pred]
 		case *xpath3.LocationPath:
