@@ -20,7 +20,7 @@ func (c *compiler) compileSourceDocument(elem *helium.Element) (Instruction, err
 
 	inst := &SourceDocumentInst{
 		Href:       hrefAVT,
-		Streamable: getAttr(elem, "streamable") == "yes",
+		Streamable: xsdBoolTrue(getAttr(elem, "streamable")),
 		BaseURI:    stylesheetBaseURI(elem, c.baseURI),
 	}
 	if useAccumulators := getAttr(elem, "use-accumulators"); useAccumulators != "" {
@@ -420,7 +420,7 @@ func (c *compiler) compileAccumulator(elem *helium.Element) error {
 	acc := &AccumulatorDef{
 		Name:       expandedName,
 		As:         getAttr(elem, "as"),
-		Streamable: getAttr(elem, "streamable") == "yes",
+		Streamable: xsdBoolTrue(getAttr(elem, "streamable")),
 	}
 
 	// Read initial-value attribute
@@ -448,9 +448,11 @@ func (c *compiler) compileAccumulator(elem *helium.Element) error {
 		}
 	}
 
-	if _, exists := c.stylesheet.accumulators[expandedName]; !exists {
-		c.stylesheet.accumulatorOrder = append(c.stylesheet.accumulatorOrder, expandedName)
+	if _, exists := c.stylesheet.accumulators[expandedName]; exists {
+		return staticError(errCodeXTSE3350,
+			"duplicate accumulator name %q", expandedName)
 	}
+	c.stylesheet.accumulatorOrder = append(c.stylesheet.accumulatorOrder, expandedName)
 	c.stylesheet.accumulators[expandedName] = acc
 	return nil
 }

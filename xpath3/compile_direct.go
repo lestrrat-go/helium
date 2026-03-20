@@ -145,6 +145,10 @@ func (p *parser) tryParseDirectLocationPath() (Expr, bool, error) {
 			Axis:     AxisDescendantOrSelf,
 			NodeTest: TypeTest{Kind: NodeKindNode},
 		})
+		// "//" requires a following step; standalone "//" is a syntax error.
+		if !looksLikeDirectStepStart(p.lexer.Peek()) {
+			return nil, false, nil
+		}
 	default:
 		if !looksLikeDirectStepStart(tok) {
 			return nil, false, nil

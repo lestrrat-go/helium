@@ -32,6 +32,21 @@ func analyzeStreamability(ss *Stylesheet) error {
 		}
 	}
 
+	// Check streamable accumulators: initial-value must be motionless.
+	for _, acc := range ss.accumulators {
+		if acc.Streamable && acc.Initial != nil {
+			if err := checkStreamableExpr(acc.Initial); err != nil {
+				return err
+			}
+			// A motionless expression must not navigate the document at all.
+			if xpath3.ExprHasDownwardStep(acc.Initial) {
+				return staticError(errCodeXTSE3430,
+					"streamable accumulator %q has non-motionless initial-value expression %q",
+					acc.Name, acc.Initial.String())
+			}
+		}
+	}
+
 	// Check functions with declared streamability.
 	for _, fn := range ss.functions {
 		if fn.Streamability != "" {

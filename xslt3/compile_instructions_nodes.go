@@ -306,11 +306,15 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 		InheritNamespaces: true,
 	}
 
-	if cn := getAttr(elem, "copy-namespaces"); cn == "no" {
-		inst.CopyNamespaces = false
+	if cn := getAttr(elem, "copy-namespaces"); cn != "" {
+		if v, ok := parseXSDBool(cn); ok && !v {
+			inst.CopyNamespaces = false
+		}
 	}
-	if in := getAttr(elem, "inherit-namespaces"); in == "no" {
-		inst.InheritNamespaces = false
+	if in := getAttr(elem, "inherit-namespaces"); in != "" {
+		if v, ok := parseXSDBool(in); ok && !v {
+			inst.InheritNamespaces = false
+		}
 	}
 
 	// Shadow attributes (_attr overrides attr via AVT at runtime)
