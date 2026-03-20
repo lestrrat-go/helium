@@ -377,13 +377,21 @@ func (ec *execContext) execMap(ctx context.Context, inst *MapInst) error {
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
 	var entries []xpath3.MapEntry
+	// Build entries and detect duplicates per XTDE3365.
+	// Use a temporary map to check for duplicate keys efficiently.
+	dupCheck := xpath3.NewMap(nil)
 	for _, item := range frame.pendingItems {
 		m, ok := item.(xpath3.MapItem)
 		if !ok {
 			return dynamicError(errCodeXTDE0450, "xsl:map body produced non-map item %T", item)
 		}
 		if err := m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
+			if _, exists := dupCheck.Get(k); exists {
+				ks, _ := xpath3.AtomicToString(k)
+				return dynamicError(errCodeXTDE3365, "duplicate key %q in xsl:map", ks)
+			}
 			entries = append(entries, xpath3.MapEntry{Key: k, Value: v})
+			dupCheck = xpath3.NewMap(entries)
 			return nil
 		}); err != nil {
 			return err
