@@ -104,10 +104,12 @@ func NodePrefix(n helium.Node) string
 ## Runtime Model
 
 - `Compile()` first tries a direct compile fast path for simple path-like expressions and simple predicate comparisons, then falls back to shared parse+lower on the same token stream
+- Direct fast-path parsing emits `vmLocationPathExpr` / `vmLocationStep` payloads immediately for simple location paths instead of building AST `LocationPath` / `Step` nodes first
 - Shared fallback path is `string -> lexer ([]Token) -> parser (Expr AST) -> VM lowering`
 - String-based `Compile()` uses an ownership-taking lowering path that can reuse parsed slices, then keeps only `source` + `vmProgram`; AST-inspection helpers reparse on demand
 - Non-trivial lowered nodes become indexed `vmInstruction`s; `vmInstruction` now stores a generic payload, not just AST `Expr`s
 - Location paths and `PathExpr` path segments are lowered to VM-specific payload types (`vmLocationPathExpr`, `vmLocationStep`, `vmPathExpr`) instead of reusing AST `LocationPath` nodes in the instruction stream
+- Common location-path predicates are also lowered to VM-specific inline predicate payloads for hot cases such as `[N]`, `[position() = N]`, `[@attr]`, and `[@attr = "literal"]`
 - Child Expr references inside lowered payloads become `compiledExprRef` when they need their own instruction slot
 - VM executes compiled refs by opcode, then reuses existing `eval_*` helpers via `exprEvaluator`
 - `CompileExpr()` uses non-mutating lowering and keeps the caller-provided AST

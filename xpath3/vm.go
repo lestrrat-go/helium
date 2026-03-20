@@ -52,6 +52,26 @@ type vmLocationStep struct {
 	Predicates []Expr
 }
 
+type vmPositionPredicateExpr struct {
+	Position int
+}
+
+func (vmPositionPredicateExpr) exprNode() {}
+
+type vmAttributeExistsPredicateExpr struct {
+	NodeTest NodeTest
+}
+
+func (vmAttributeExistsPredicateExpr) exprNode() {}
+
+type vmAttributeEqualsStringPredicateExpr struct {
+	NodeTest NodeTest
+	Value    string
+	Fallback Expr
+}
+
+func (vmAttributeEqualsStringPredicateExpr) exprNode() {}
+
 type vmLocationPathExpr struct {
 	Absolute bool
 	Steps    []vmLocationStep
@@ -188,6 +208,13 @@ func (b *vmBuilder) lowerExpr(expr Expr) (Expr, error) {
 			return b.lowerOwnedLocationPath(e)
 		}
 		return b.lowerLocationPath(*e)
+	case vmLocationPathExpr:
+		return b.lowerVMLocationPath(e)
+	case *vmLocationPathExpr:
+		if e == nil {
+			return nil, fmt.Errorf("%w: nil *vmLocationPathExpr", ErrUnsupportedExpr)
+		}
+		return b.lowerVMLocationPath(*e)
 	case BinaryExpr:
 		return b.lowerBinaryExpr(e)
 	case *BinaryExpr:
@@ -251,6 +278,13 @@ func (b *vmBuilder) lowerExpr(expr Expr) (Expr, error) {
 			return nil, fmt.Errorf("%w: nil *PathExpr", ErrUnsupportedExpr)
 		}
 		return b.lowerPathExpr(*e)
+	case vmPathExpr:
+		return b.lowerVMPathExpr(e)
+	case *vmPathExpr:
+		if e == nil {
+			return nil, fmt.Errorf("%w: nil *vmPathExpr", ErrUnsupportedExpr)
+		}
+		return b.lowerVMPathExpr(*e)
 	case PathStepExpr:
 		return b.lowerPathStepExpr(e)
 	case *PathStepExpr:
@@ -383,10 +417,28 @@ func (b *vmBuilder) lowerOwnedLocationPath(expr *LocationPath) (Expr, error) {
 	return b.lowerLocationPathSteps(expr.Absolute, expr.Steps)
 }
 
+func (b *vmBuilder) lowerVMLocationPath(expr vmLocationPathExpr) (Expr, error) {
+	var steps []vmLocationStep
+	if b.reuseInput {
+		steps = expr.Steps
+	} else {
+		steps = make([]vmLocationStep, len(expr.Steps))
+		copy(steps, expr.Steps)
+	}
+	for i := range steps {
+		preds, err := b.lowerPredicateSlice(steps[i].Predicates)
+		if err != nil {
+			return nil, err
+		}
+		steps[i].Predicates = preds
+	}
+	return vmLocationPathExpr{Absolute: expr.Absolute, Steps: steps}, nil
+}
+
 func (b *vmBuilder) lowerLocationPathSteps(absolute bool, steps []Step) (Expr, error) {
 	loweredSteps := make([]vmLocationStep, len(steps))
 	for i, step := range steps {
-		preds, err := b.lowerChildExprSlice(step.Predicates)
+		preds, err := b.lowerPredicateSlice(step.Predicates)
 		if err != nil {
 			return nil, err
 		}
@@ -517,6 +569,23 @@ func (b *vmBuilder) lowerPathExpr(expr PathExpr) (Expr, error) {
 	var path *vmLocationPathExpr
 	if expr.Path != nil {
 		lowered, err := b.lowerLocationPath(*expr.Path)
+		if err != nil {
+			return nil, err
+		}
+		lp := lowered.(vmLocationPathExpr)
+		path = &lp
+	}
+	return vmPathExpr{Filter: filter, Path: path}, nil
+}
+
+func (b *vmBuilder) lowerVMPathExpr(expr vmPathExpr) (Expr, error) {
+	filter, err := b.lowerChildExpr(expr.Filter)
+	if err != nil {
+		return nil, err
+	}
+	var path *vmLocationPathExpr
+	if expr.Path != nil {
+		lowered, err := b.lowerVMLocationPath(*expr.Path)
 		if err != nil {
 			return nil, err
 		}
@@ -757,6 +826,42 @@ func (b *vmBuilder) lowerChildExprSlice(items []Expr) ([]Expr, error) {
 		result[i] = ref
 	}
 	return result, nil
+}
+
+func (b *vmBuilder) lowerPredicateSlice(items []Expr) ([]Expr, error) {
+	if len(items) == 0 {
+		return nil, nil
+	}
+	result := make([]Expr, len(items))
+	for i, item := range items {
+		lowered, err := b.lowerPredicate(item)
+		if err != nil {
+			return nil, err
+		}
+		result[i] = lowered
+	}
+	return result, nil
+}
+
+func (b *vmBuilder) lowerPredicate(expr Expr) (Expr, error) {
+	if position, ok := vmPredicatePosition(expr); ok {
+		return vmPositionPredicateExpr{Position: position}, nil
+	}
+	if test, ok := vmPredicateAttributeExists(expr); ok {
+		return vmAttributeExistsPredicateExpr{NodeTest: test}, nil
+	}
+	if test, value, ok := vmPredicateAttributeEqualsString(expr); ok {
+		fallback, err := b.lowerChildExpr(expr)
+		if err != nil {
+			return nil, err
+		}
+		return vmAttributeEqualsStringPredicateExpr{
+			NodeTest: test,
+			Value:    value,
+			Fallback: fallback,
+		}, nil
+	}
+	return b.lowerChildExpr(expr)
 }
 
 func isImmediateVMExpr(expr Expr) bool {

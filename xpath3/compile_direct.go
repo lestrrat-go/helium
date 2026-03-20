@@ -112,7 +112,7 @@ func (p *parser) tryParseDirectFunctionCall() (Expr, bool, error) {
 func (p *parser) tryParseDirectLocationPath() (Expr, bool, error) {
 	tok := p.lexer.Peek()
 	absolute := false
-	steps := make([]Step, 0, 4)
+	steps := make([]vmLocationStep, 0, 4)
 
 	switch tok.Type {
 	case TokenSlash:
@@ -121,7 +121,7 @@ func (p *parser) tryParseDirectLocationPath() (Expr, bool, error) {
 	case TokenSlashSlash:
 		absolute = true
 		p.lexer.Next()
-		steps = append(steps, Step{
+		steps = append(steps, vmLocationStep{
 			Axis:     AxisDescendantOrSelf,
 			NodeTest: TypeTest{Kind: NodeKindNode},
 		})
@@ -133,7 +133,7 @@ func (p *parser) tryParseDirectLocationPath() (Expr, bool, error) {
 
 	if !looksLikeDirectStepStart(p.lexer.Peek()) {
 		if absolute {
-			return &LocationPath{Absolute: true, Steps: steps}, true, nil
+			return vmLocationPathExpr{Absolute: true, Steps: steps}, true, nil
 		}
 		return nil, false, nil
 	}
@@ -159,13 +159,13 @@ func (p *parser) tryParseDirectLocationPath() (Expr, bool, error) {
 			if err != nil || !ok {
 				return nil, ok, err
 			}
-			steps = append(steps, Step{
+			steps = append(steps, vmLocationStep{
 				Axis:     AxisDescendantOrSelf,
 				NodeTest: TypeTest{Kind: NodeKindNode},
 			})
 			steps = append(steps, step)
 		default:
-			return &LocationPath{Absolute: absolute, Steps: steps}, true, nil
+			return vmLocationPathExpr{Absolute: absolute, Steps: steps}, true, nil
 		}
 	}
 }
@@ -179,16 +179,16 @@ func looksLikeDirectStepStart(tok Token) bool {
 	}
 }
 
-func (p *parser) tryParseDirectStep() (Step, bool, error) {
+func (p *parser) tryParseDirectStep() (vmLocationStep, bool, error) {
 	tok := p.lexer.Peek()
 
 	switch tok.Type {
 	case TokenDot:
 		p.lexer.Next()
-		return Step{Axis: AxisSelf, NodeTest: TypeTest{Kind: NodeKindNode}}, true, nil
+		return vmLocationStep{Axis: AxisSelf, NodeTest: TypeTest{Kind: NodeKindNode}}, true, nil
 	case TokenDotDot:
 		p.lexer.Next()
-		return Step{Axis: AxisParent, NodeTest: TypeTest{Kind: NodeKindNode}}, true, nil
+		return vmLocationStep{Axis: AxisParent, NodeTest: TypeTest{Kind: NodeKindNode}}, true, nil
 	}
 
 	axis := AxisChild
@@ -201,7 +201,7 @@ func (p *parser) tryParseDirectStep() (Step, bool, error) {
 		if p.lexer.PeekAt(1).Type == TokenColonColon {
 			a, ok := ixpath.AxisFromName(tok.Value)
 			if !ok {
-				return Step{}, false, fmt.Errorf("%w: %q", ErrUnknownAxis, tok.Value)
+				return vmLocationStep{}, false, fmt.Errorf("%w: %q", ErrUnknownAxis, tok.Value)
 			}
 			axis = a
 			p.lexer.Next()
@@ -211,15 +211,15 @@ func (p *parser) tryParseDirectStep() (Step, bool, error) {
 
 	nodeTest, ok, err := p.tryParseDirectNodeTest(axis)
 	if err != nil || !ok {
-		return Step{}, ok, err
+		return vmLocationStep{}, ok, err
 	}
 
 	predicates, err := p.parseDirectPredicates()
 	if err != nil {
-		return Step{}, true, err
+		return vmLocationStep{}, true, err
 	}
 
-	return Step{
+	return vmLocationStep{
 		Axis:       axis,
 		NodeTest:   nodeTest,
 		Predicates: predicates,

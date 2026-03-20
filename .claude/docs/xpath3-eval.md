@@ -48,7 +48,7 @@ type vmInstruction struct {
 type compiledExprRef struct { index int }
 ```
 
-Lowering is structural for non-trivial nodes: recursive children usually become `compiledExprRef` indexes, trivial leaves such as literals or variable refs can stay inline in the parent payload, and hot path forms now use VM-specific payloads instead of AST nodes. `LocationPath` / `PathExpr` lower to `vmLocationPathExpr` / `vmPathExpr` with `vmLocationStep` slices. VM execution switches on `vmOpcode` for compiled refs, then reuses existing `eval_*` helpers for language semantics.
+Lowering is structural for non-trivial nodes: recursive children usually become `compiledExprRef` indexes, trivial leaves such as literals or variable refs can stay inline in the parent payload, and hot path forms now use VM-specific payloads instead of AST nodes. `LocationPath` / `PathExpr` lower to `vmLocationPathExpr` / `vmPathExpr` with `vmLocationStep` slices, and the direct-compile fast path can emit `vmLocationPathExpr` directly before lowering child predicate expressions. Common predicates on VM location steps also lower to inline VM predicate payloads for `[N]`, `[position() = N]`, `[@attr]`, and `[@attr = "literal"]`; other predicates stay as lowered `Expr`s. VM execution switches on `vmOpcode` for compiled refs, then reuses existing `eval_*` helpers for language semantics.
 
 ## Evaluation Rules by Expr Type
 

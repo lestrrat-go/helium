@@ -290,6 +290,20 @@ func appendVMPredicatePrefixChecks(plan *prefixPlanBuilder, pred Expr) {
 	}
 }
 
+func appendVMPredicatePrefixChecks(plan *prefixPlanBuilder, pred Expr) {
+	switch p := pred.(type) {
+	case vmPositionPredicateExpr:
+		return
+	case vmAttributeExistsPredicateExpr:
+		appendNodeTestPrefixChecks(plan, p.NodeTest)
+	case vmAttributeEqualsStringPredicateExpr:
+		appendNodeTestPrefixChecks(plan, p.NodeTest)
+		appendPrefixChecks(plan, p.Fallback)
+	default:
+		appendPrefixChecks(plan, pred)
+	}
+}
+
 func appendNodeTestPrefixChecks(plan *prefixPlanBuilder, nt NodeTest) {
 	if nt == nil {
 		return

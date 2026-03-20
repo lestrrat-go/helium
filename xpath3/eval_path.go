@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 	"strings"
 
@@ -239,7 +240,7 @@ func evalVMStepWithPredicates(evalFn exprEvaluator, ec *evalContext, nodes []hel
 			return nil, err
 		}
 		for _, pred := range step.Predicates {
-			matched, err = applyPredicate(evalFn, ec, matched, pred)
+			matched, err = applyVMPredicate(evalFn, ec, matched, pred)
 			if err != nil {
 				return nil, err
 			}
@@ -247,6 +248,105 @@ func evalVMStepWithPredicates(evalFn exprEvaluator, ec *evalContext, nodes []hel
 		allFiltered = append(allFiltered, matched...)
 	}
 	return ixpath.DeduplicateNodes(allFiltered, ec.docOrder, ec.maxNodes)
+}
+
+func applyVMPredicate(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, pred Expr) ([]helium.Node, error) {
+	switch p := pred.(type) {
+	case vmPositionPredicateExpr:
+		return applyVMPositionPredicate(nodes, p), nil
+	case vmAttributeExistsPredicateExpr:
+		return applyVMAttributeExistsPredicate(ec, nodes, p), nil
+	case vmAttributeEqualsStringPredicateExpr:
+		return applyVMAttributeEqualsStringPredicate(evalFn, ec, nodes, p)
+	default:
+		return applyPredicate(evalFn, ec, nodes, pred)
+	}
+}
+
+func applyVMPositionPredicate(nodes []helium.Node, pred vmPositionPredicateExpr) []helium.Node {
+	if pred.Position <= 0 || pred.Position > len(nodes) {
+		return nil
+	}
+	return nodes[pred.Position-1 : pred.Position]
+}
+
+func applyVMAttributeExistsPredicate(ec *evalContext, nodes []helium.Node, pred vmAttributeExistsPredicateExpr) []helium.Node {
+	var result []helium.Node
+	for _, n := range nodes {
+		if nodeHasMatchingAttribute(ec, n, pred.NodeTest) {
+			result = append(result, n)
+		}
+	}
+	return result
+}
+
+func applyVMAttributeEqualsStringPredicate(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, pred vmAttributeEqualsStringPredicateExpr) ([]helium.Node, error) {
+	size := len(nodes)
+	var result []helium.Node
+	for i, n := range nodes {
+		match, ok := vmAttributeEqualsStringPredicateMatches(ec, n, pred)
+		if !ok {
+			frame := ec.pushNodeContext(n, i+1, size)
+			r, err := evalFn(ec, pred.Fallback)
+			ec.restoreContext(frame)
+			if err != nil {
+				return nil, err
+			}
+			predMatch, err := predicateTrue(r, i+1)
+			if err != nil {
+				return nil, err
+			}
+			match = predMatch
+		}
+		if match {
+			result = append(result, n)
+		}
+	}
+	return result, nil
+}
+
+func vmAttributeEqualsStringPredicateMatches(ec *evalContext, node helium.Node, pred vmAttributeEqualsStringPredicateExpr) (bool, bool) {
+	elem, ok := node.(*helium.Element)
+	if !ok {
+		return false, true
+	}
+
+	mustFallback := false
+	matched := false
+	elem.ForEachAttribute(func(attr *helium.Attribute) bool {
+		if !matchNodeTest(pred.NodeTest, attr, AxisAttribute, ec) {
+			return true
+		}
+		if nodeTypeAnnotation(attr, ec) != "" {
+			mustFallback = true
+			return false
+		}
+		if attr.Value() == pred.Value {
+			matched = true
+			return false
+		}
+		return true
+	})
+	if mustFallback {
+		return false, false
+	}
+	return matched, true
+}
+
+func nodeHasMatchingAttribute(ec *evalContext, node helium.Node, test NodeTest) bool {
+	elem, ok := node.(*helium.Element)
+	if !ok {
+		return false
+	}
+	found := false
+	elem.ForEachAttribute(func(attr *helium.Attribute) bool {
+		if !matchNodeTest(test, attr, AxisAttribute, ec) {
+			return true
+		}
+		found = true
+		return false
+	})
+	return found
 }
 
 func evalVMStepNoPredicates(ec *evalContext, nodes []helium.Node, step vmLocationStep) ([]helium.Node, error) {
@@ -601,4 +701,181 @@ func predicateTrue(r Sequence, position int) (bool, error) {
 		}
 	}
 	return EBV(r)
+}
+
+func vmPredicatePosition(expr Expr) (int, bool) {
+	switch e := expr.(type) {
+	case LiteralExpr:
+		return vmPositionFromLiteral(e)
+	case *LiteralExpr:
+		if e == nil {
+			return 0, false
+		}
+		return vmPositionFromLiteral(*e)
+	case BinaryExpr:
+		return vmPredicatePositionFromBinary(e)
+	case *BinaryExpr:
+		if e == nil {
+			return 0, false
+		}
+		return vmPredicatePositionFromBinary(*e)
+	default:
+		return 0, false
+	}
+}
+
+func vmPredicatePositionFromBinary(expr BinaryExpr) (int, bool) {
+	if expr.Op != TokenEquals && expr.Op != TokenEq {
+		return 0, false
+	}
+	if positionCall(expr.Left) {
+		return vmPositionFromExpr(expr.Right)
+	}
+	if positionCall(expr.Right) {
+		return vmPositionFromExpr(expr.Left)
+	}
+	return 0, false
+}
+
+func vmPositionFromExpr(expr Expr) (int, bool) {
+	switch e := expr.(type) {
+	case LiteralExpr:
+		return vmPositionFromLiteral(e)
+	case *LiteralExpr:
+		if e == nil {
+			return 0, false
+		}
+		return vmPositionFromLiteral(*e)
+	default:
+		return 0, false
+	}
+}
+
+func vmPositionFromLiteral(expr LiteralExpr) (int, bool) {
+	switch v := expr.Value.(type) {
+	case *big.Int:
+		if !v.IsInt64() {
+			return 0, false
+		}
+		n := v.Int64()
+		if n <= 0 || n > math.MaxInt {
+			return 0, false
+		}
+		return int(n), true
+	case float64:
+		if v <= 0 || v != math.Trunc(v) || v > math.MaxInt {
+			return 0, false
+		}
+		return int(v), true
+	default:
+		return 0, false
+	}
+}
+
+func positionCall(expr Expr) bool {
+	switch e := expr.(type) {
+	case FunctionCall:
+		return len(e.Args) == 0 && e.Name == "position" && (e.Prefix == "" || e.Prefix == "fn")
+	case *FunctionCall:
+		if e == nil {
+			return false
+		}
+		return len(e.Args) == 0 && e.Name == "position" && (e.Prefix == "" || e.Prefix == "fn")
+	default:
+		return false
+	}
+}
+
+func vmPredicateAttributeExists(expr Expr) (NodeTest, bool) {
+	return vmSingleRelativeAttributePath(expr)
+}
+
+func vmPredicateAttributeEqualsString(expr Expr) (NodeTest, string, bool) {
+	switch e := expr.(type) {
+	case BinaryExpr:
+		return vmPredicateAttributeEqualsStringBinary(e)
+	case *BinaryExpr:
+		if e == nil {
+			return nil, "", false
+		}
+		return vmPredicateAttributeEqualsStringBinary(*e)
+	default:
+		return nil, "", false
+	}
+}
+
+func vmPredicateAttributeEqualsStringBinary(expr BinaryExpr) (NodeTest, string, bool) {
+	if expr.Op != TokenEquals && expr.Op != TokenEq {
+		return nil, "", false
+	}
+	if test, ok := vmSingleRelativeAttributePath(expr.Left); ok {
+		if value, ok := vmStringLiteralValue(expr.Right); ok {
+			return test, value, true
+		}
+	}
+	if test, ok := vmSingleRelativeAttributePath(expr.Right); ok {
+		if value, ok := vmStringLiteralValue(expr.Left); ok {
+			return test, value, true
+		}
+	}
+	return nil, "", false
+}
+
+func vmSingleRelativeAttributePath(expr Expr) (NodeTest, bool) {
+	switch e := expr.(type) {
+	case LocationPath:
+		return vmAttributeNodeTestFromLocationPath(e.Absolute, e.Steps)
+	case *LocationPath:
+		if e == nil {
+			return nil, false
+		}
+		return vmAttributeNodeTestFromLocationPath(e.Absolute, e.Steps)
+	case vmLocationPathExpr:
+		return vmAttributeNodeTestFromVMLocationPath(e.Absolute, e.Steps)
+	case *vmLocationPathExpr:
+		if e == nil {
+			return nil, false
+		}
+		return vmAttributeNodeTestFromVMLocationPath(e.Absolute, e.Steps)
+	default:
+		return nil, false
+	}
+}
+
+func vmAttributeNodeTestFromLocationPath(absolute bool, steps []Step) (NodeTest, bool) {
+	if absolute || len(steps) != 1 {
+		return nil, false
+	}
+	step := steps[0]
+	if step.Axis != AxisAttribute || len(step.Predicates) != 0 {
+		return nil, false
+	}
+	return step.NodeTest, true
+}
+
+func vmAttributeNodeTestFromVMLocationPath(absolute bool, steps []vmLocationStep) (NodeTest, bool) {
+	if absolute || len(steps) != 1 {
+		return nil, false
+	}
+	step := steps[0]
+	if step.Axis != AxisAttribute || len(step.Predicates) != 0 {
+		return nil, false
+	}
+	return step.NodeTest, true
+}
+
+func vmStringLiteralValue(expr Expr) (string, bool) {
+	switch e := expr.(type) {
+	case LiteralExpr:
+		value, ok := e.Value.(string)
+		return value, ok
+	case *LiteralExpr:
+		if e == nil {
+			return "", false
+		}
+		value, ok := e.Value.(string)
+		return value, ok
+	default:
+		return "", false
+	}
 }

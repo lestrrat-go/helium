@@ -57,3 +57,47 @@ func TestCountPathWithPredicateWhitespaceVM(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, 2.0, value)
 }
+
+func TestPositionalPredicateVM(t *testing.T) {
+	doc := parseTestDoc(t)
+
+	result, err := xpath3.Evaluate(t.Context(), doc, `string(/library/book[1]/@id)`)
+	require.NoError(t, err)
+
+	value, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, "1", value)
+}
+
+func TestPositionFunctionPredicateVM(t *testing.T) {
+	doc := parseTestDoc(t)
+
+	result, err := xpath3.Evaluate(t.Context(), doc, `string(/library/book[position() = 2]/title)`)
+	require.NoError(t, err)
+
+	value, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, "XML Handbook", value)
+}
+
+func TestAttributeExistencePredicateVM(t *testing.T) {
+	doc := parseTestDoc(t)
+
+	result, err := xpath3.Evaluate(t.Context(), doc, `count(/library/book[@lang])`)
+	require.NoError(t, err)
+
+	value, ok := result.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, 3.0, value)
+}
+
+func TestAttributeEqualityPredicateReverseOperandsVM(t *testing.T) {
+	doc := parseTestDoc(t)
+
+	result, err := xpath3.Evaluate(t.Context(), doc, `string(/library/book["en" = @lang][2]/title)`)
+	require.NoError(t, err)
+
+	value, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, "XPath Mastery", value)
+}
