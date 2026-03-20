@@ -74,12 +74,12 @@ func (p *parser) tryParseDirectFunctionCall() (Expr, bool, error) {
 		return nil, false, nil
 	}
 
-	// Node kind test names followed by '(' are steps, not function calls.
+	// Reserved kind test names (element, text, comment, etc.) are not function calls.
 	if p.lexer.PeekAt(1).Type == TokenLParen {
 		switch tok.Value {
 		case "node", "text", "comment", "processing-instruction",
 			"element", "attribute", "document-node", "schema-element",
-			"schema-attribute", "namespace-node":
+			"schema-attribute", "namespace-node", "item", "empty-sequence":
 			return nil, false, nil
 		}
 	}
@@ -121,6 +121,16 @@ func (p *parser) tryParseDirectFunctionCall() (Expr, bool, error) {
 
 func (p *parser) tryParseDirectLocationPath() (Expr, bool, error) {
 	tok := p.lexer.Peek()
+
+	// Standalone "." is ContextItemExpr, not a location path.
+	if tok.Type == TokenDot {
+		next := p.lexer.PeekAt(1).Type
+		if next != TokenSlash && next != TokenSlashSlash && next != TokenLBracket {
+			p.lexer.Next()
+			return ContextItemExpr{}, true, nil
+		}
+	}
+
 	absolute := false
 	steps := make([]vmLocationStep, 0, 4)
 

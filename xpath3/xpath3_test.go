@@ -156,6 +156,33 @@ func TestInlineFunctionDoesNotInheritFocus(t *testing.T) {
 	require.Equal(t, "XPDY0002", xpErr.Code)
 }
 
+func TestNilContextRangeExpr(t *testing.T) {
+	// "1 to 10" doesn't require a context item; evaluation with nil node must succeed.
+	result, err := xpath3.Evaluate(t.Context(), nil, `1 to 10`)
+	require.NoError(t, err)
+	require.Equal(t, 10, len(result.Sequence()))
+}
+
+func TestNilContextWithContextItem(t *testing.T) {
+	// Evaluating "." with a context item (atomic value) and nil node must succeed.
+	ctx := xpath3.WithContextItem(t.Context(), xpath3.AtomicValue{TypeName: "xs:integer", Value: int64(42)})
+	compiled, err := xpath3.Compile(".")
+	require.NoError(t, err)
+	result, err := compiled.Evaluate(ctx, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(result.Sequence()))
+}
+
+func TestNilContextElementKindTest(t *testing.T) {
+	// "element()" as standalone expression parses as child::element() step.
+	// With a valid context node, it should select child elements.
+	doc := parseTestDoc(t)
+	result, err := xpath3.Evaluate(t.Context(), doc, `element()`)
+	require.NoError(t, err)
+	// The doc has a root element "library"
+	require.True(t, len(result.Sequence()) > 0)
+}
+
 func TestResultIsNodeSet(t *testing.T) {
 	doc := parseTestDoc(t)
 	result, err := xpath3.Evaluate(t.Context(), doc, `/library/book`)
