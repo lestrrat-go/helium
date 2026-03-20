@@ -629,15 +629,11 @@ func matchPatternAlt(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
 rightAlt := &PatternAlt{expr: e.Right}
 		return matchPatternAlt(ctx, leftAlt, node) || matchPatternAlt(ctx, rightAlt, node)
 	case xpath3.IntersectExceptExpr:
-		// intersect/except pattern: matches if node matches per the operator.
-		leftAlt := &PatternAlt{expr: e.Left}
-		rightAlt := &PatternAlt{expr: e.Right}
-		leftMatch := matchPatternAlt(ctx, leftAlt, node)
-		rightMatch := matchPatternAlt(ctx, rightAlt, node)
-		if e.Op == xpath3.TokenIntersect {
-			return leftMatch && rightMatch
-		}
-		return leftMatch && !rightMatch // except
+		// intersect/except patterns require evaluation-based matching to
+		// get correct set semantics. Both sides must be evaluated from the
+		// same context; independent matching gives wrong results for cases
+		// like "a//* intersect b//*" where a and b are nested.
+		return matchByEvaluation(ctx, alt, node)
 	case xpath3.PathStepExpr:
 		// Path step pattern: E1/E2 or E1//E2 where E2 is a non-axis step.
 		// Match bottom-up: check if the candidate matches the right part,
