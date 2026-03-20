@@ -574,6 +574,12 @@ func (p *Pattern) matchPatternItem(ctx *execContext, item xpath3.Item) bool {
 	}()
 
 	for _, alt := range p.Alternatives {
+		// Variable reference patterns (e.g., match="$var") only match nodes,
+		// never atomic items. Per XSLT 3.0 §5.5.3, the semantics require
+		// root(N)//(V) which is undefined for non-node items.
+		if _, isVar := alt.expr.(xpath3.VariableExpr); isVar {
+			continue
+		}
 		compiled := xpath3.CompileExpr(alt.expr)
 		xpathCtx := ctx.newXPathContext(nil)
 		result, err := compiled.Evaluate(xpathCtx, nil)

@@ -153,6 +153,16 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 			}
 			continue
 		}
+		// Check mode's on-no-match: for "deep-skip" and "shallow-skip",
+		// unmatched atomic items are silently skipped.
+		modeKey := mode
+		if modeKey == "" || modeKey == "#unnamed" {
+			modeKey = "#default"
+		}
+		modeDef := ec.stylesheet.modeDefs[modeKey]
+		if modeDef != nil && (modeDef.OnNoMatch == "deep-skip" || modeDef.OnNoMatch == "shallow-skip") {
+			continue
+		}
 		av, err := xpath3.AtomizeItem(item)
 		if err != nil {
 			continue
