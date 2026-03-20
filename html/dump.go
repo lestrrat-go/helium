@@ -59,7 +59,7 @@ func WriteDoc(out io.Writer, doc *helium.Document, options ...WriteOption) error
 		_, _ = io.WriteString(out, defaultHTMLDTD)
 	}
 
-	d := htmlDumper{format: !cfg.noFormat}
+	d := htmlDumper{format: !cfg.noFormat, preserveCase: cfg.preserveCase}
 
 	// Serialize all children of the document
 	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
@@ -77,7 +77,8 @@ func WriteDoc(out io.Writer, doc *helium.Document, options ...WriteOption) error
 }
 
 type htmlDumper struct {
-	format bool
+	format       bool
+	preserveCase bool
 }
 
 // WriteNode serializes an HTML node to the writer
@@ -198,8 +199,9 @@ func htmlEscapeText(w io.Writer, s []byte) error {
 // htmlEscapeAttrValue escapes attribute values for HTML output.
 // For non-URI attributes: escapes &, ", <, >.
 // For URI attributes: escapes only & and " (matching libxml2's htmlAttrDumpOutput).
-// Non-ASCII characters with named HTML4 entities are output as &name;.
-func htmlEscapeAttrValue(w io.Writer, s string, isURI bool) error {
+// Non-ASCII characters with named HTML4 entities are output as &name;
+// unless noEntityEnc is true (used by XSLT HTML output which emits UTF-8 directly).
+func htmlEscapeAttrValue(w io.Writer, s string, isURI bool, noEntityEnc bool) error {
 	last := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune([]byte(s[i:]))
@@ -214,6 +216,10 @@ func htmlEscapeAttrValue(w io.Writer, s string, isURI bool) error {
 		case r == '>' && !isURI:
 			esc = htmlAttrEscGt
 		case r >= 0x80:
+			if noEntityEnc {
+				i += width
+				continue
+			}
 			if entName := lookupEntityByRune(r); entName != "" {
 				if _, err := io.WriteString(w, s[last:i]); err != nil {
 					return err
@@ -254,15 +260,20 @@ func htmlEscapeAttrValue(w io.Writer, s string, isURI bool) error {
 
 // dumpElement serializes an HTML element.
 func (d *htmlDumper) dumpElement(out io.Writer, e *helium.Element) error {
-	name := strings.ToLower(e.Name())
-	info := lookupElement(name)
+	nameLower := strings.ToLower(e.Name())
+	info := lookupElement(nameLower)
+
+	name := nameLower
+	if d.preserveCase {
+		name = e.Name()
+	}
 
 	// Opening tag
 	_, _ = io.WriteString(out, "<")
 	_, _ = io.WriteString(out, name)
 
 	// Attributes
-	if err := dumpAttributes(out, e); err != nil {
+	if err := d.dumpAttributes(out, e); err != nil {
 		return err
 	}
 
@@ -304,10 +315,33 @@ func (d *htmlDumper) dumpElement(out io.Writer, e *helium.Element) error {
 	return nil
 }
 
+// htmlBooleanAttrs is the set of HTML attributes that should be minimized
+// (output as just the attribute name with no value) per the XSLT/HTML
+// serialization spec. See https://www.w3.org/TR/xslt-xquery-serialization-31/#HTML_BOOLEAN
+var htmlBooleanAttrs = map[string]struct{}{
+	"checked":  {},
+	"compact":  {},
+	"declare":  {},
+	"defer":    {},
+	"disabled": {},
+	"ismap":    {},
+	"multiple": {},
+	"nohref":   {},
+	"noresize": {},
+	"noshade":  {},
+	"nowrap":   {},
+	"readonly": {},
+	"selected": {},
+}
+
 // dumpAttributes serializes HTML element attributes.
-func dumpAttributes(out io.Writer, e *helium.Element) error {
+func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 	for _, attr := range e.Attributes() {
-		attrName := strings.ToLower(attr.Name())
+		attrNameLower := strings.ToLower(attr.Name())
+		attrName := attrNameLower
+		if d.preserveCase {
+			attrName = attr.Name()
+		}
 		_, _ = io.WriteString(out, " ")
 		_, _ = io.WriteString(out, attrName)
 
@@ -319,15 +353,24 @@ func dumpAttributes(out io.Writer, e *helium.Element) error {
 			continue
 		}
 
+		// HTML boolean attributes: minimize when value equals the
+		// attribute name (case-insensitive), per XSLT serialization spec.
+		if _, ok := htmlBooleanAttrs[attrNameLower]; ok {
+			val := attr.Value()
+			if strings.EqualFold(val, attrNameLower) {
+				continue
+			}
+		}
+
 		val := attr.Value()
 		elemName := strings.ToLower(e.LocalName())
-		isURI := htmlURIAttrs[attrName] || (attrName == "name" && elemName == "a")
+		isURI := htmlURIAttrs[attrNameLower] || (attrNameLower == "name" && elemName == "a")
 		if isURI {
 			val = uriEscapeStr(val)
 		}
 
 		_, _ = io.WriteString(out, "=\"")
-		if err := htmlEscapeAttrValue(out, val, isURI); err != nil {
+		if err := htmlEscapeAttrValue(out, val, isURI, d.preserveCase); err != nil {
 			return err
 		}
 		_, _ = io.WriteString(out, "\"")

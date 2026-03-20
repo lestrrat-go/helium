@@ -47,6 +47,7 @@ func WithNoWarning() ParseOption {
 type dumpConfig struct {
 	noDefaultDTD bool
 	noFormat     bool
+	preserveCase bool
 }
 
 // WriteOption configures HTML serialization behavior.
@@ -64,5 +65,13 @@ func WithNoDefaultDTD() WriteOption {
 func WithNoFormat() WriteOption {
 	return func(c *dumpConfig) {
 		c.noFormat = true
+	}
+}
+
+// WithPreserveCase preserves the original case of element and attribute names
+// instead of lowercasing them. Used by XSLT HTML output method.
+func WithPreserveCase() WriteOption {
+	return func(c *dumpConfig) {
+		c.preserveCase = true
 	}
 }

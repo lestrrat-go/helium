@@ -256,6 +256,7 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 	opts := []htmlpkg.WriteOption{
 		htmlpkg.WithNoDefaultDTD(),
 		htmlpkg.WithNoFormat(),
+		htmlpkg.WithPreserveCase(),
 	}
 	return htmlpkg.WriteDoc(w, doc, opts...)
 }
