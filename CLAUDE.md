@@ -10,6 +10,10 @@ Go and grew broader native Go APIs and features along the way.
 
 The xpath3 package targets **XSD 1.1 only**. This means `+INF` is a valid lexical form for xs:double and xs:float, and xs:dateTimeStamp is a recognized type. QT3 tests with `dependency type="xsd-version" value="1.0"` are skipped.
 
+## Generated Files
+
+- NEVER modify generated files by hand. Regenerate through owning generator, e.g. `xslt3gen`.
+
 ## Pre-Read Rules
 
 Read the linked doc BEFORE working in that area. No exceptions.
@@ -20,6 +24,7 @@ Read the linked doc BEFORE working in that area. No exceptions.
 | Cross-package imports | `.claude/docs/dependencies.md` |
 | Working with `context.Context`, package `Context` payloads, carrier/accessor patterns | `.claude/docs/context.md` |
 | Feature status, test counts, known gaps, ParseOption support | `.claude/docs/libxml2-parity.md` |
+| Maintainability review, legacy-code triage, exhaustive review requests | `.claude/docs/maintainability-review.md` |
 | Writing/running tests, golden files, test data, helpers | `.claude/docs/testing.md` |
 | Error types, format strings, ErrorHandler, ValidateError | `.claude/docs/error-formatting.md` |
 | Parse pipeline, encoding, entities, SAX→DOM, push parser | `.claude/docs/parser-internals.md` |
@@ -49,6 +54,7 @@ These docs cache repository state. Still read source before modifying code.
 | `dependencies.md` | Inter-package import changes |
 | `context.md` | `context.Context` conventions, package `Context` payload pattern, `NewContext`/`GetContext` guidance changes |
 | `libxml2-parity.md` | Test count, parser limitation, feature, or ParseOption changes |
+| `maintainability-review.md` | Maintainability review workflow, coverage rules, or reporting guidance changes |
 | `testing.md` | Test data layout, helper, env var, or test pattern changes |
 | `error-formatting.md` | Error format, error type, or ErrorHandler changes |
 | `parser-internals.md` | Parse pipeline, encoding, entity, SAX, or parserCtx changes |
