@@ -22,6 +22,26 @@ type PatternAlt struct {
 	neverMatches bool // true for syntactically valid but semantically empty patterns (e.g., child::document-node())
 }
 
+// isNeverMatchingPattern detects patterns that are syntactically valid but
+// semantically can never match any node. For example, child::document-node()
+// never matches because document nodes cannot be children; similarly,
+// child::attribute() never matches because attributes are not children.
+func isNeverMatchingPattern(alt string) bool {
+	// child::document-node() — document nodes are never children
+	if strings.Contains(alt, "child::document-node") {
+		return true
+	}
+	// child::attribute() — attributes are never children
+	if strings.Contains(alt, "child::attribute") {
+		return true
+	}
+	// child::namespace-node() — namespace nodes are never children
+	if strings.Contains(alt, "child::namespace-node") {
+		return true
+	}
+	return false
+}
+
 // compilePattern compiles an XSLT match pattern string.
 // XSLT patterns are a restricted subset of XPath expressions.
 func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS string) (*Pattern, error) {
@@ -54,7 +74,7 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 		pa := &PatternAlt{
 			expr:         ast,
 			priority:     computeDefaultPriority(ast),
-			neverMatches: strings.Contains(alt, "child::document-node"),
+			neverMatches: isNeverMatchingPattern(alt),
 		}
 		p.Alternatives = append(p.Alternatives, pa)
 	}
