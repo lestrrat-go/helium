@@ -260,10 +260,14 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 }
 
 func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
-	// Validate boolean attribute: stable (including empty string)
+	// Validate boolean attribute: stable (including empty string).
+	// Skip validation for AVTs (contain '{' and '}') since the value
+	// is determined at runtime.
 	if stableAttr, hasStable := elem.GetAttribute("stable"); hasStable {
-		if err := validateBooleanAttr("xsl:sort", "stable", stableAttr); err != nil {
-			return nil, err
+		if !strings.ContainsAny(stableAttr, "{}") {
+			if err := validateBooleanAttr("xsl:sort", "stable", stableAttr); err != nil {
+				return nil, err
+			}
 		}
 	}
 
