@@ -307,6 +307,7 @@ func (c *compiler) validatePatternFunctions(p *Pattern, source string) error {
 				"http://www.w3.org/2005/xpath-functions/math",
 				"http://www.w3.org/2005/xpath-functions/map",
 				"http://www.w3.org/2005/xpath-functions/array",
+				"http://www.w3.org/2001/XMLSchema",
 				NSXSLT:
 				return true
 			}
