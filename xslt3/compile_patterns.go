@@ -1122,6 +1122,26 @@ func isTypedStrictMode(ctx *execContext) bool {
 }
 
 // matchElementTest checks if a node matches an element() test.
+// isBuiltinXSDType returns true for type names that are built-in XSD types
+// (e.g., "string", "integer", "decimal", "untyped", "untypedAtomic").
+func isBuiltinXSDType(name string) bool {
+	switch name {
+	case "string", "boolean", "decimal", "float", "double",
+		"duration", "dateTime", "time", "date",
+		"gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth",
+		"hexBinary", "base64Binary", "anyURI", "QName", "NOTATION",
+		"normalizedString", "token", "language", "NMTOKEN", "NMTOKENS",
+		"Name", "NCName", "ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES",
+		"integer", "nonPositiveInteger", "negativeInteger", "long", "int",
+		"short", "byte", "nonNegativeInteger", "unsignedLong", "unsignedInt",
+		"unsignedShort", "unsignedByte", "positiveInteger",
+		"yearMonthDuration", "dayTimeDuration", "dateTimeStamp",
+		"untyped", "untypedAtomic", "anyType", "anySimpleType", "anyAtomicType":
+		return true
+	}
+	return false
+}
+
 func matchElementTest(ctx *execContext, et xpath3.ElementTest, node helium.Node) bool {
 	if node.Type() != helium.ElementNode {
 		return false
@@ -1234,6 +1254,9 @@ func matchTypeAnnotation(ctx *execContext, node helium.Node, typeName string) bo
 		} else if ctx != nil && ctx.xpathDefaultNS != "" {
 			// Unprefixed type name: resolve via xpath-default-namespace
 			return "Q{" + ctx.xpathDefaultNS + "}" + s
+		} else if !isBuiltinXSDType(s) {
+			// Unprefixed non-XSD type with no namespace: use Q{} form
+			return "Q{}" + s
 		}
 		return s
 	}
