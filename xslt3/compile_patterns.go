@@ -743,7 +743,7 @@ func matchPathStepPattern(ctx *execContext, e xpath3.PathStepExpr, node helium.N
 			}
 		}
 	} else {
-		// E1/E2 with child axis: check immediate parent only
+		// E1/E2 with child axis: check immediate parent.
 		parent := node.Parent()
 		if parent != nil && matchPatternAlt(ctx, leftAlt, parent) {
 			return true
@@ -803,8 +803,8 @@ func matchLocationPath(ctx *execContext, path xpath3.LocationPath, node helium.N
 	// Match remaining steps upward.
 	// The axis of the last step determines how to walk to the preceding step.
 	remaining := path.Steps[:len(path.Steps)-1]
-	if lastStep.Axis == xpath3.AxisDescendant {
-		// descendant axis: any ancestor may contain the preceding step
+	if lastStep.Axis == xpath3.AxisDescendant || lastStep.Axis == xpath3.AxisDescendantOrSelf {
+		// descendant / descendant-or-self axis: any ancestor may contain the preceding step
 		for cur := node.Parent(); cur != nil; cur = cur.Parent() {
 			if matchStepsUpward(ctx, remaining, path.Absolute, cur) {
 				return true
@@ -812,7 +812,10 @@ func matchLocationPath(ctx *execContext, path xpath3.LocationPath, node helium.N
 		}
 		return false
 	}
-	return matchStepsUpward(ctx, remaining, path.Absolute, node.Parent())
+	if matchStepsUpward(ctx, remaining, path.Absolute, node.Parent()) {
+		return true
+	}
+	return false
 }
 
 // matchStepsUpward matches remaining pattern steps upward through ancestors.
