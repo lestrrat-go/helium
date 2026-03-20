@@ -96,6 +96,17 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	if outDef.Encoding != "" && doc.Encoding() == "utf8" {
 		doc.SetEncoding(outDef.Encoding)
 	}
+	// Add DOCTYPE if doctype-public or doctype-system is specified and
+	// the document doesn't already have a DTD.
+	if (outDef.DoctypePublic != "" || outDef.DoctypeSystem != "") && doc.IntSubset() == nil {
+		rootName := "html" // default
+		if root := doc.DocumentElement(); root != nil {
+			rootName = root.Name()
+		}
+		if _, err := doc.CreateInternalSubset(rootName, outDef.DoctypePublic, outDef.DoctypeSystem); err != nil {
+			return err
+		}
+	}
 	var opts []helium.WriteOption
 	if outDef.Indent {
 		opts = append(opts, helium.WithFormat())
@@ -117,6 +128,17 @@ func serializeXMLWithCharMap(w io.Writer, doc *helium.Document, outDef *OutputDe
 			enc = "UTF-8"
 		}
 		if err := sw.StartDocument("1.0", enc, ""); err != nil {
+			return err
+		}
+	}
+
+	// Add DOCTYPE if doctype-public or doctype-system is specified.
+	if outDef.DoctypePublic != "" || outDef.DoctypeSystem != "" {
+		rootName := "html"
+		if root := doc.DocumentElement(); root != nil {
+			rootName = root.Name()
+		}
+		if err := sw.WriteDTD(rootName, outDef.DoctypePublic, outDef.DoctypeSystem, ""); err != nil {
 			return err
 		}
 	}
@@ -253,6 +275,30 @@ func serializeText(w io.Writer, doc *helium.Document, charMap map[rune]string) e
 }
 
 func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
+	// Output DOCTYPE if specified.
+	if outDef.DoctypePublic != "" || outDef.DoctypeSystem != "" {
+		rootName := "html"
+		if root := doc.DocumentElement(); root != nil {
+			rootName = root.Name()
+		}
+		_, _ = io.WriteString(w, "<!DOCTYPE ")
+		_, _ = io.WriteString(w, rootName)
+		if outDef.DoctypePublic != "" {
+			_, _ = io.WriteString(w, " PUBLIC \"")
+			_, _ = io.WriteString(w, outDef.DoctypePublic)
+			_, _ = io.WriteString(w, "\"")
+			if outDef.DoctypeSystem != "" {
+				_, _ = io.WriteString(w, " \"")
+				_, _ = io.WriteString(w, outDef.DoctypeSystem)
+				_, _ = io.WriteString(w, "\"")
+			}
+		} else if outDef.DoctypeSystem != "" {
+			_, _ = io.WriteString(w, " SYSTEM \"")
+			_, _ = io.WriteString(w, outDef.DoctypeSystem)
+			_, _ = io.WriteString(w, "\"")
+		}
+		_, _ = io.WriteString(w, ">\n")
+	}
 	opts := []htmlpkg.WriteOption{
 		htmlpkg.WithNoDefaultDTD(),
 		htmlpkg.WithNoFormat(),
