@@ -47,6 +47,12 @@ func MustCompile(expr string) *Expression {
 	return e
 }
 
+// Validate runs static namespace prefix validation using the given bindings.
+// This catches undeclared namespace prefixes in function calls, type names, etc.
+func (e *Expression) Validate(namespaces map[string]string) error {
+	return e.prefixPlan.Validate(namespaces, false, nil)
+}
+
 // Evaluate evaluates the compiled expression against the given context node.
 // The context.Context may carry XPath 3.1 evaluation settings attached via
 // WithNamespaces, WithVariables, WithFunction(s), and related mutators.

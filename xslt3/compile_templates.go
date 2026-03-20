@@ -31,6 +31,10 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		if err != nil {
 			return err
 		}
+		// Validate function calls in the pattern against known functions.
+		if err := c.validatePatternFunctions(p, matchAttr); err != nil {
+			return err
+		}
 		tmpl.Match = p
 	}
 

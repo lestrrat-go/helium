@@ -37,10 +37,16 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 		if isOuterParenthesized(alt) {
 			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: parenthesized pattern not allowed", alt)
 		}
-		ast, err := xpath3.Parse(alt)
+		compiled, err := xpath3.Compile(alt)
 		if err != nil {
 			return nil, staticError(errCodeXTSE0500, "invalid pattern %q: %v", alt, err)
 		}
+		// Run static validation (prefix checks) against the stylesheet
+		// namespace bindings.
+		if valErr := compiled.Validate(nsBindings); valErr != nil {
+			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %v", alt, valErr)
+		}
+		ast := compiled.AST()
 		if err := validatePatternExpr(ast); err != nil {
 			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %s", alt, err)
 		}
@@ -228,12 +234,109 @@ func isPatternFunctionArg(expr xpath3.Expr) bool {
 	return false
 }
 
+// validatePatternFunctions checks that all function calls in a pattern
+// reference known functions (built-in XPath or declared xsl:function).
+// Unknown functions like f:special() raise XPST0017 at compile time.
+func (c *compiler) validatePatternFunctions(p *Pattern, source string) error {
+	for _, alt := range p.Alternatives {
+		var walkErr error
+		xpath3.WalkExpr(alt.expr, func(e xpath3.Expr) bool {
+			if walkErr != nil {
+				return false
+			}
+			fc, ok := e.(xpath3.FunctionCall)
+			if !ok {
+				return true
+			}
+			// Unprefixed functions are built-in XPath functions — always OK.
+			if fc.Prefix == "" {
+				return true
+			}
+			local := fc.Name
+			nsURI := c.nsBindings[fc.Prefix]
+			displayName := fc.Prefix + ":" + local
+			// Known XPath/XSLT function namespaces are always OK.
+			switch nsURI {
+			case "http://www.w3.org/2005/xpath-functions",
+				"http://www.w3.org/2005/xpath-functions/math",
+				"http://www.w3.org/2005/xpath-functions/map",
+				"http://www.w3.org/2005/xpath-functions/array",
+				NSXSLT:
+				return true
+			}
+			// Check if declared as xsl:function in the stylesheet.
+			qn := xpath3.QualifiedName{Name: local, URI: nsURI}
+			if _, ok := c.stylesheet.functions[qn]; ok {
+				return true
+			}
+			walkErr = staticError("XPST0017",
+				"unknown function %s() in match pattern %q", displayName, source)
+			return false
+		})
+		if walkErr != nil {
+			return walkErr
+		}
+	}
+	return nil
+}
+
 // validatePredicateExpr validates expressions used inside predicates.
 // Predicates in patterns can contain arbitrary XPath expressions.
 func validatePredicateExpr(_ xpath3.Expr) error {
 	// Predicates can contain any valid XPath expression,
-	// so no additional validation needed.
+	// so no additional validation needed beyond function checks
+	// (which are handled separately by validatePatternFunctions).
 	return nil
+}
+
+// validatePatternFunctionCalls walks the pattern AST and checks that all
+// function calls reference known functions. Unknown functions raise
+// XPST0017 at compile time rather than silently failing at match time.
+func validatePatternFunctionCalls(expr xpath3.Expr, nsBindings map[string]string) error {
+	var walkErr error
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		if walkErr != nil {
+			return false
+		}
+		fc, ok := e.(xpath3.FunctionCall)
+		if !ok {
+			return true
+		}
+		// Resolve function name to namespace URI
+		name := fc.Name
+		nsURI := ""
+		if idx := strings.IndexByte(name, ':'); idx >= 0 {
+			prefix := name[:idx]
+			local := name[idx+1:]
+			if uri, ok := nsBindings[prefix]; ok {
+				nsURI = uri
+			}
+			_ = local
+		}
+		// Built-in XPath functions (no namespace) are always allowed.
+		if nsURI == "" && !strings.Contains(name, ":") {
+			return true
+		}
+		// Known XSLT/XPath function namespaces are allowed.
+		switch nsURI {
+		case "http://www.w3.org/2005/xpath-functions",
+			"http://www.w3.org/2005/xpath-functions/math",
+			"http://www.w3.org/2005/xpath-functions/map",
+			"http://www.w3.org/2005/xpath-functions/array",
+			NSXSLT:
+			return true
+		}
+		// Check if the function is registered as an XSLT stylesheet function
+		// (xsl:function). We don't have the function registry here, so we
+		// check at the template compilation level.
+		// For now, reject function calls in unknown namespaces.
+		if nsURI != "" {
+			walkErr = staticError("XPST0017",
+				"unknown function %s() in pattern", name)
+		}
+		return true
+	})
+	return walkErr
 }
 
 // isOuterParenthesized checks if a pattern string is entirely wrapped in
