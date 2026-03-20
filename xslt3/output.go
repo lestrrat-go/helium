@@ -114,6 +114,23 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	if outDef.OmitDeclaration {
 		opts = append(opts, helium.WithNoDecl())
 	}
+	// The helium XML serializer adds a newline after the XML declaration
+	// and after each top-level child (libxml2 behavior). For XSLT output,
+	// when indent="no" we strip the newline after the declaration to
+	// produce a conformant XSLT serialization.
+	if !outDef.Indent && !outDef.OmitDeclaration {
+		var buf strings.Builder
+		if err := doc.XML(&buf, opts...); err != nil {
+			return err
+		}
+		out := buf.String()
+		// Remove the newline that immediately follows the XML declaration.
+		if idx := strings.Index(out, "?>\n"); idx >= 0 {
+			out = out[:idx+2] + out[idx+3:]
+		}
+		_, err := io.WriteString(w, out)
+		return err
+	}
 	return doc.XML(w, opts...)
 }
 
