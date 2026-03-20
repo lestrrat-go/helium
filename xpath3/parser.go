@@ -1037,22 +1037,20 @@ loop:
 		tok := p.lexer.Peek()
 		switch tok.Type {
 		case TokenSlash:
-			p.lexer.Next()
-			if !p.looksLikeStep() {
-				p.lexer.Backup() // put / back — caller handles non-step continuation
+			if !p.looksLikeStepOffset(1) {
 				break loop
 			}
+			p.lexer.Next()
 			s, err := p.parseStep()
 			if err != nil {
 				return nil, err
 			}
 			steps = append(steps, s)
 		case TokenSlashSlash:
-			p.lexer.Next()
-			if !p.looksLikeStep() {
-				p.lexer.Backup() // put // back — caller handles non-step continuation
+			if !p.looksLikeStepOffset(1) {
 				break loop
 			}
+			p.lexer.Next()
 			steps = append(steps, Step{
 				Axis:     AxisDescendantOrSelf,
 				NodeTest: TypeTest{Kind: NodeKindNode},
@@ -1098,16 +1096,14 @@ func (p *parser) parseStep() (Step, error) {
 		axis = AxisAttribute
 		p.lexer.Next()
 	case TokenName, TokenFunction, TokenMap, TokenArray:
-		p.lexer.Next()
-		if p.lexer.Peek().Type == TokenColonColon {
+		if p.lexer.PeekAt(1).Type == TokenColonColon {
 			if a, ok := ixpath.AxisFromName(tok.Value); ok {
 				axis = a
+				p.lexer.Next()
 				p.lexer.Next() // consume '::'
 			} else {
 				return Step{}, fmt.Errorf("%w: %q", ErrUnknownAxis, tok.Value)
 			}
-		} else {
-			p.lexer.Backup() // not an axis, put name back
 		}
 	}
 
@@ -2099,14 +2095,16 @@ func (p *parser) expectToken(expected TokenType) error {
 
 // looksLikeStep returns true if the next token(s) look like the start of a location step.
 func (p *parser) looksLikeStep() bool {
-	tok := p.lexer.Peek()
+	return p.looksLikeStepOffset(0)
+}
+
+func (p *parser) looksLikeStepOffset(offset int) bool {
+	tok := p.lexer.PeekAt(offset)
 	switch tok.Type {
 	case TokenDotDot, TokenAt, TokenStar:
 		return true
 	case TokenName, TokenFunction, TokenMap, TokenArray:
-		p.lexer.Next()
-		next := p.lexer.Peek()
-		p.lexer.Backup()
+		next := p.lexer.PeekAt(offset + 1)
 
 		if next.Type == TokenColonColon {
 			return true // axis::
@@ -2126,15 +2124,9 @@ func (p *parser) looksLikeStep() bool {
 		if next.Type == TokenColon {
 			// prefix:local (name test) vs prefix:name( (QName function call)
 			// vs prefix:name# (named function ref)
-			p.lexer.Next() // consume prefix
-			p.lexer.Next() // consume ':'
-			localTok := p.lexer.Peek()
+			localTok := p.lexer.PeekAt(offset + 2)
 			if isNameLikeToken(localTok.Type) {
-				p.lexer.Next()
-				afterLocal := p.lexer.Peek()
-				p.lexer.Backup() // local name
-				p.lexer.Backup() // ':'
-				p.lexer.Backup() // prefix
+				afterLocal := p.lexer.PeekAt(offset + 3)
 				if afterLocal.Type == TokenLParen {
 					return false // QName function call
 				}
@@ -2143,8 +2135,6 @@ func (p *parser) looksLikeStep() bool {
 				}
 				return true // QName step
 			}
-			p.lexer.Backup() // ':'
-			p.lexer.Backup() // prefix
 			return true
 		}
 		if next.Type == TokenHash {
