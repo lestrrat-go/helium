@@ -17,11 +17,21 @@ type lexer struct {
 
 // newLexer creates a lexer and tokenizes the entire input.
 func newLexer(input string) (*lexer, error) {
-	l := &lexer{input: input}
+	l := &lexer{
+		input:  input,
+		tokens: make([]Token, 0, estimateTokenCapacity(input)),
+	}
 	if err := l.tokenize(); err != nil {
 		return nil, err
 	}
 	return l, nil
+}
+
+func estimateTokenCapacity(input string) int {
+	if len(input) < 8 {
+		return 8
+	}
+	return len(input)/2 + 1
 }
 
 // Next returns the next token and advances the cursor.

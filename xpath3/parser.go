@@ -68,7 +68,8 @@ func (p *parser) parseExpression() (Expr, error) {
 		return first, nil
 	}
 
-	items := []Expr{first}
+	items := make([]Expr, 0, 4)
+	items = append(items, first)
 	for p.lexer.Peek().Type == TokenComma {
 		p.lexer.Next()
 		item, err := p.parseExprSingle()
@@ -864,8 +865,8 @@ func (p *parser) parseArgumentList() ([]Expr, error) {
 		return nil, fmt.Errorf("%w: '(' but got %s", ErrExpectedToken, p.lexer.Peek())
 	}
 	p.lexer.Next() // consume '('
-	var args []Expr
 	if p.lexer.Peek().Type != TokenRParen {
+		args := make([]Expr, 0, 4)
 		for {
 			if p.lexer.Peek().Type == TokenQMark {
 				// Disambiguate: ? followed by a key specifier (NCName, integer, *, '(')
@@ -893,12 +894,17 @@ func (p *parser) parseArgumentList() ([]Expr, error) {
 			}
 			p.lexer.Next() // consume ','
 		}
+		if p.lexer.Peek().Type != TokenRParen {
+			return nil, fmt.Errorf("%w: ')' in argument list but got %s", ErrExpectedToken, p.lexer.Peek())
+		}
+		p.lexer.Next()
+		return args, nil
 	}
 	if p.lexer.Peek().Type != TokenRParen {
 		return nil, fmt.Errorf("%w: ')' in argument list but got %s", ErrExpectedToken, p.lexer.Peek())
 	}
 	p.lexer.Next()
-	return args, nil
+	return nil, nil
 }
 
 // parseLookupKey parses the key after '?': NCName, integer, '*', or '(' expr ')'.
@@ -1024,7 +1030,8 @@ func (p *parser) parseRelativeLocationPath() ([]Step, error) {
 	if err != nil {
 		return nil, err
 	}
-	steps := []Step{step}
+	steps := make([]Step, 0, 4)
+	steps = append(steps, step)
 
 loop:
 	for {
@@ -1119,6 +1126,9 @@ func (p *parser) parseStep() (Step, error) {
 	}
 
 	var predicates []Expr
+	if p.lexer.Peek().Type == TokenLBracket {
+		predicates = make([]Expr, 0, 2)
+	}
 	for p.lexer.Peek().Type == TokenLBracket {
 		pred, err := p.parsePredicate()
 		if err != nil {
