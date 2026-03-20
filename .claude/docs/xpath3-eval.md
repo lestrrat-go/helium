@@ -47,7 +47,7 @@ type vmInstruction struct {
 type compiledExprRef struct { index int }
 ```
 
-Lowering is structural: one instruction per AST node. Lowered payload Exprs keep node metadata, but recursive children become `compiledExprRef` indexes. Existing `eval_*` helpers still implement semantics; only recursion target changes.
+Lowering is structural for non-trivial nodes: lowered payload Exprs keep node metadata, recursive children usually become `compiledExprRef` indexes, and trivial leaves such as literals or variable refs can stay inline in the parent payload. VM execution switches on `vmOpcode` for compiled refs, then reuses existing `eval_*` helpers for language semantics.
 
 ## Evaluation Rules by Expr Type
 

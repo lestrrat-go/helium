@@ -68,7 +68,7 @@ XPath 3.1 expression parsing and evaluation.
 - Type system: Sequence ([]Item), AtomicValue, NodeItem, MapItem, ArrayItem, FunctionItem
 - Structured errors: XPathError with W3C error codes (XPTY0004, FOER0000, etc.)
 - Limits: recursion 5000, node-set 10M, configurable op limit
-- Runtime: `Compile()` lowers AST to VM instruction graph; `Evaluate()` executes VM via shared eval helpers
+- Runtime: `Compile()` lowers AST to a VM instruction graph, keeping trivial leaves inline in parent payloads; `Evaluate()` executes compiled refs by opcode and reuses shared eval helpers for semantics
 - Files: `xpath3.go` (API), `parser.go`, `lexer.go`, `expr.go`, `token.go`, `eval.go`, `eval_dispatch.go`, `vm.go`, `compare.go`, `cast.go`, `types.go`, `sequence.go`, `context.go`, `errors.go`, `functions*.go` (15 files)
 - Imports: helium, internal/xpath, internal/lexicon
 

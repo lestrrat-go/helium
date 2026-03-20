@@ -24,3 +24,25 @@ func TestGeneralComparisonAgainstLargeRangeVM(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, value)
 }
+
+func TestLiteralArgsFunctionCallVM(t *testing.T) {
+	result, err := xpath3.Evaluate(t.Context(), nil, `concat("go", "-", "vm")`)
+	require.NoError(t, err)
+
+	value, ok := result.IsString()
+	require.True(t, ok)
+	require.Equal(t, "go-vm", value)
+}
+
+func TestLocationPathPredicateVM(t *testing.T) {
+	doc := parseTestDoc(t)
+
+	result, err := xpath3.Evaluate(t.Context(), doc, `/library/book[@lang="en"]/title/string()`)
+	require.NoError(t, err)
+
+	atomics, err := result.Atomics()
+	require.NoError(t, err)
+	require.Len(t, atomics, 2)
+	require.Equal(t, "Go Programming", atomics[0].StringVal())
+	require.Equal(t, "XPath Mastery", atomics[1].StringVal())
+}

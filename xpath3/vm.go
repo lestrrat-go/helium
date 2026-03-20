@@ -85,12 +85,27 @@ func (b *vmBuilder) compileExpr(expr Expr) (compiledExprRef, error) {
 	if err != nil {
 		return compiledExprRef{}, err
 	}
+	return b.appendInstruction(lowered), nil
+}
+
+func (b *vmBuilder) appendInstruction(lowered Expr) compiledExprRef {
 	ref := compiledExprRef{index: len(b.instructions)}
 	b.instructions = append(b.instructions, vmInstruction{
 		op:   opcodeForExpr(lowered),
 		expr: lowered,
 	})
-	return ref, nil
+	return ref
+}
+
+func (b *vmBuilder) lowerChildExpr(expr Expr) (Expr, error) {
+	lowered, err := b.lowerExpr(expr)
+	if err != nil {
+		return nil, err
+	}
+	if isImmediateVMExpr(lowered) {
+		return lowered, nil
+	}
+	return b.appendInstruction(lowered), nil
 }
 
 func (b *vmBuilder) lowerExpr(expr Expr) (Expr, error) {
@@ -324,7 +339,7 @@ func (b *vmBuilder) lowerExpr(expr Expr) (Expr, error) {
 func (b *vmBuilder) lowerLocationPath(expr LocationPath) (Expr, error) {
 	steps := make([]Step, len(expr.Steps))
 	for i, step := range expr.Steps {
-		preds, err := b.lowerExprSlice(step.Predicates)
+		preds, err := b.lowerChildExprSlice(step.Predicates)
 		if err != nil {
 			return nil, err
 		}
@@ -351,11 +366,7 @@ func (b *vmBuilder) lowerBinaryExpr(expr BinaryExpr) (Expr, error) {
 
 func (b *vmBuilder) lowerBinaryOperand(op TokenType, expr Expr) (Expr, error) {
 	if !isGeneralComparisonToken(op) {
-		ref, err := b.compileExpr(expr)
-		if err != nil {
-			return nil, err
-		}
-		return ref, nil
+		return b.lowerChildExpr(expr)
 	}
 
 	switch e := expr.(type) {
@@ -367,16 +378,12 @@ func (b *vmBuilder) lowerBinaryOperand(op TokenType, expr Expr) (Expr, error) {
 		}
 		return b.lowerRangeExpr(*e)
 	default:
-		ref, err := b.compileExpr(expr)
-		if err != nil {
-			return nil, err
-		}
-		return ref, nil
+		return b.lowerChildExpr(expr)
 	}
 }
 
 func (b *vmBuilder) lowerUnaryExpr(expr UnaryExpr) (Expr, error) {
-	operand, err := b.compileExpr(expr.Operand)
+	operand, err := b.lowerChildExpr(expr.Operand)
 	if err != nil {
 		return nil, err
 	}
@@ -384,11 +391,11 @@ func (b *vmBuilder) lowerUnaryExpr(expr UnaryExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerConcatExpr(expr ConcatExpr) (Expr, error) {
-	left, err := b.compileExpr(expr.Left)
+	left, err := b.lowerChildExpr(expr.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := b.compileExpr(expr.Right)
+	right, err := b.lowerChildExpr(expr.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -396,11 +403,11 @@ func (b *vmBuilder) lowerConcatExpr(expr ConcatExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerSimpleMapExpr(expr SimpleMapExpr) (Expr, error) {
-	left, err := b.compileExpr(expr.Left)
+	left, err := b.lowerChildExpr(expr.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := b.compileExpr(expr.Right)
+	right, err := b.lowerChildExpr(expr.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -408,11 +415,11 @@ func (b *vmBuilder) lowerSimpleMapExpr(expr SimpleMapExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerRangeExpr(expr RangeExpr) (Expr, error) {
-	start, err := b.compileExpr(expr.Start)
+	start, err := b.lowerChildExpr(expr.Start)
 	if err != nil {
 		return nil, err
 	}
-	end, err := b.compileExpr(expr.End)
+	end, err := b.lowerChildExpr(expr.End)
 	if err != nil {
 		return nil, err
 	}
@@ -420,11 +427,11 @@ func (b *vmBuilder) lowerRangeExpr(expr RangeExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerUnionExpr(expr UnionExpr) (Expr, error) {
-	left, err := b.compileExpr(expr.Left)
+	left, err := b.lowerChildExpr(expr.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := b.compileExpr(expr.Right)
+	right, err := b.lowerChildExpr(expr.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -432,11 +439,11 @@ func (b *vmBuilder) lowerUnionExpr(expr UnionExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerIntersectExceptExpr(expr IntersectExceptExpr) (Expr, error) {
-	left, err := b.compileExpr(expr.Left)
+	left, err := b.lowerChildExpr(expr.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := b.compileExpr(expr.Right)
+	right, err := b.lowerChildExpr(expr.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -444,11 +451,11 @@ func (b *vmBuilder) lowerIntersectExceptExpr(expr IntersectExceptExpr) (Expr, er
 }
 
 func (b *vmBuilder) lowerFilterExpr(expr FilterExpr) (Expr, error) {
-	base, err := b.compileExpr(expr.Expr)
+	base, err := b.lowerChildExpr(expr.Expr)
 	if err != nil {
 		return nil, err
 	}
-	preds, err := b.lowerExprSlice(expr.Predicates)
+	preds, err := b.lowerChildExprSlice(expr.Predicates)
 	if err != nil {
 		return nil, err
 	}
@@ -456,7 +463,7 @@ func (b *vmBuilder) lowerFilterExpr(expr FilterExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerPathExpr(expr PathExpr) (Expr, error) {
-	filter, err := b.compileExpr(expr.Filter)
+	filter, err := b.lowerChildExpr(expr.Filter)
 	if err != nil {
 		return nil, err
 	}
@@ -472,11 +479,11 @@ func (b *vmBuilder) lowerPathExpr(expr PathExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerPathStepExpr(expr PathStepExpr) (Expr, error) {
-	left, err := b.compileExpr(expr.Left)
+	left, err := b.lowerChildExpr(expr.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := b.compileExpr(expr.Right)
+	right, err := b.lowerChildExpr(expr.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -484,13 +491,13 @@ func (b *vmBuilder) lowerPathStepExpr(expr PathStepExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerLookupExpr(expr LookupExpr) (Expr, error) {
-	base, err := b.compileExpr(expr.Expr)
+	base, err := b.lowerChildExpr(expr.Expr)
 	if err != nil {
 		return nil, err
 	}
 	var key Expr
 	if expr.Key != nil {
-		keyRef, err := b.compileExpr(expr.Key)
+		keyRef, err := b.lowerChildExpr(expr.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -502,7 +509,7 @@ func (b *vmBuilder) lowerLookupExpr(expr LookupExpr) (Expr, error) {
 func (b *vmBuilder) lowerUnaryLookupExpr(expr UnaryLookupExpr) (Expr, error) {
 	var key Expr
 	if expr.Key != nil {
-		keyRef, err := b.compileExpr(expr.Key)
+		keyRef, err := b.lowerChildExpr(expr.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -516,13 +523,13 @@ func (b *vmBuilder) lowerFLWORExpr(expr FLWORExpr) (Expr, error) {
 	for i, clause := range expr.Clauses {
 		switch c := clause.(type) {
 		case ForClause:
-			ref, err := b.compileExpr(c.Expr)
+			ref, err := b.lowerChildExpr(c.Expr)
 			if err != nil {
 				return nil, err
 			}
 			clauses[i] = ForClause{Var: c.Var, PosVar: c.PosVar, Expr: ref}
 		case LetClause:
-			ref, err := b.compileExpr(c.Expr)
+			ref, err := b.lowerChildExpr(c.Expr)
 			if err != nil {
 				return nil, err
 			}
@@ -531,7 +538,7 @@ func (b *vmBuilder) lowerFLWORExpr(expr FLWORExpr) (Expr, error) {
 			return nil, fmt.Errorf("%w: unsupported FLWOR clause %T", ErrUnsupportedExpr, clause)
 		}
 	}
-	ret, err := b.compileExpr(expr.Return)
+	ret, err := b.lowerChildExpr(expr.Return)
 	if err != nil {
 		return nil, err
 	}
@@ -541,13 +548,13 @@ func (b *vmBuilder) lowerFLWORExpr(expr FLWORExpr) (Expr, error) {
 func (b *vmBuilder) lowerQuantifiedExpr(expr QuantifiedExpr) (Expr, error) {
 	bindings := make([]QuantifiedBinding, len(expr.Bindings))
 	for i, binding := range expr.Bindings {
-		ref, err := b.compileExpr(binding.Domain)
+		ref, err := b.lowerChildExpr(binding.Domain)
 		if err != nil {
 			return nil, err
 		}
 		bindings[i] = QuantifiedBinding{Var: binding.Var, Domain: ref}
 	}
-	satisfies, err := b.compileExpr(expr.Satisfies)
+	satisfies, err := b.lowerChildExpr(expr.Satisfies)
 	if err != nil {
 		return nil, err
 	}
@@ -555,15 +562,15 @@ func (b *vmBuilder) lowerQuantifiedExpr(expr QuantifiedExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerIfExpr(expr IfExpr) (Expr, error) {
-	cond, err := b.compileExpr(expr.Cond)
+	cond, err := b.lowerChildExpr(expr.Cond)
 	if err != nil {
 		return nil, err
 	}
-	thenExpr, err := b.compileExpr(expr.Then)
+	thenExpr, err := b.lowerChildExpr(expr.Then)
 	if err != nil {
 		return nil, err
 	}
-	elseExpr, err := b.compileExpr(expr.Else)
+	elseExpr, err := b.lowerChildExpr(expr.Else)
 	if err != nil {
 		return nil, err
 	}
@@ -571,13 +578,13 @@ func (b *vmBuilder) lowerIfExpr(expr IfExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerTryCatchExpr(expr TryCatchExpr) (Expr, error) {
-	tryExpr, err := b.compileExpr(expr.Try)
+	tryExpr, err := b.lowerChildExpr(expr.Try)
 	if err != nil {
 		return nil, err
 	}
 	catches := make([]CatchClause, len(expr.Catches))
 	for i, catch := range expr.Catches {
-		ref, err := b.compileExpr(catch.Expr)
+		ref, err := b.lowerChildExpr(catch.Expr)
 		if err != nil {
 			return nil, err
 		}
@@ -587,7 +594,7 @@ func (b *vmBuilder) lowerTryCatchExpr(expr TryCatchExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerInstanceOfExpr(expr InstanceOfExpr) (Expr, error) {
-	ref, err := b.compileExpr(expr.Expr)
+	ref, err := b.lowerChildExpr(expr.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -595,7 +602,7 @@ func (b *vmBuilder) lowerInstanceOfExpr(expr InstanceOfExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerCastExpr(expr CastExpr) (Expr, error) {
-	ref, err := b.compileExpr(expr.Expr)
+	ref, err := b.lowerChildExpr(expr.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -603,7 +610,7 @@ func (b *vmBuilder) lowerCastExpr(expr CastExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerCastableExpr(expr CastableExpr) (Expr, error) {
-	ref, err := b.compileExpr(expr.Expr)
+	ref, err := b.lowerChildExpr(expr.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -611,7 +618,7 @@ func (b *vmBuilder) lowerCastableExpr(expr CastableExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerTreatAsExpr(expr TreatAsExpr) (Expr, error) {
-	ref, err := b.compileExpr(expr.Expr)
+	ref, err := b.lowerChildExpr(expr.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -619,7 +626,7 @@ func (b *vmBuilder) lowerTreatAsExpr(expr TreatAsExpr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerFunctionCall(expr FunctionCall) (Expr, error) {
-	args, err := b.lowerExprSlice(expr.Args)
+	args, err := b.lowerChildExprSlice(expr.Args)
 	if err != nil {
 		return nil, err
 	}
@@ -627,11 +634,11 @@ func (b *vmBuilder) lowerFunctionCall(expr FunctionCall) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerDynamicFunctionCall(expr DynamicFunctionCall) (Expr, error) {
-	fn, err := b.compileExpr(expr.Func)
+	fn, err := b.lowerChildExpr(expr.Func)
 	if err != nil {
 		return nil, err
 	}
-	args, err := b.lowerExprSlice(expr.Args)
+	args, err := b.lowerChildExprSlice(expr.Args)
 	if err != nil {
 		return nil, err
 	}
@@ -639,7 +646,7 @@ func (b *vmBuilder) lowerDynamicFunctionCall(expr DynamicFunctionCall) (Expr, er
 }
 
 func (b *vmBuilder) lowerInlineFunctionExpr(expr InlineFunctionExpr) (Expr, error) {
-	body, err := b.compileExpr(expr.Body)
+	body, err := b.lowerChildExpr(expr.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -650,11 +657,11 @@ func (b *vmBuilder) lowerInlineFunctionExpr(expr InlineFunctionExpr) (Expr, erro
 func (b *vmBuilder) lowerMapConstructorExpr(expr MapConstructorExpr) (Expr, error) {
 	pairs := make([]MapConstructorPair, len(expr.Pairs))
 	for i, pair := range expr.Pairs {
-		key, err := b.compileExpr(pair.Key)
+		key, err := b.lowerChildExpr(pair.Key)
 		if err != nil {
 			return nil, err
 		}
-		value, err := b.compileExpr(pair.Value)
+		value, err := b.lowerChildExpr(pair.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -664,7 +671,7 @@ func (b *vmBuilder) lowerMapConstructorExpr(expr MapConstructorExpr) (Expr, erro
 }
 
 func (b *vmBuilder) lowerArrayConstructorExpr(expr ArrayConstructorExpr) (Expr, error) {
-	items, err := b.lowerExprSlice(expr.Items)
+	items, err := b.lowerChildExprSlice(expr.Items)
 	if err != nil {
 		return nil, err
 	}
@@ -672,14 +679,14 @@ func (b *vmBuilder) lowerArrayConstructorExpr(expr ArrayConstructorExpr) (Expr, 
 }
 
 func (b *vmBuilder) lowerSequenceExpr(expr SequenceExpr) (Expr, error) {
-	items, err := b.lowerExprSlice(expr.Items)
+	items, err := b.lowerChildExprSlice(expr.Items)
 	if err != nil {
 		return nil, err
 	}
 	return SequenceExpr{Items: items}, nil
 }
 
-func (b *vmBuilder) lowerExprSlice(items []Expr) ([]Expr, error) {
+func (b *vmBuilder) lowerChildExprSlice(items []Expr) ([]Expr, error) {
 	if len(items) == 0 {
 		return nil, nil
 	}
@@ -690,13 +697,22 @@ func (b *vmBuilder) lowerExprSlice(items []Expr) ([]Expr, error) {
 			result[i] = PlaceholderExpr{}
 			continue
 		}
-		ref, err := b.compileExpr(item)
+		ref, err := b.lowerChildExpr(item)
 		if err != nil {
 			return nil, err
 		}
 		result[i] = ref
 	}
 	return result, nil
+}
+
+func isImmediateVMExpr(expr Expr) bool {
+	switch expr.(type) {
+	case LiteralExpr, VariableExpr, RootExpr, ContextItemExpr, NamedFunctionRef, PlaceholderExpr:
+		return true
+	default:
+		return false
+	}
 }
 
 func opcodeForExpr(expr Expr) vmOpcode {
@@ -796,11 +812,84 @@ func (v *vm) evalExpr(ec *evalContext, expr Expr) (Sequence, error) {
 
 func (v *vm) evalExprBody(ec *evalContext, expr Expr) (Sequence, error) {
 	if ref, ok := expr.(compiledExprRef); ok {
-		if ref.index < 0 || ref.index >= len(v.program.instructions) {
-			return nil, fmt.Errorf("%w: invalid VM instruction %d", ErrUnsupportedExpr, ref.index)
-		}
-		inst := v.program.instructions[ref.index]
-		return dispatchExpr(v.evalExpr, ec, inst.expr)
+		return v.evalInstruction(ec, ref)
 	}
 	return dispatchExpr(v.evalExpr, ec, expr)
+}
+
+func (v *vm) evalInstruction(ec *evalContext, ref compiledExprRef) (Sequence, error) {
+	if ref.index < 0 || ref.index >= len(v.program.instructions) {
+		return nil, fmt.Errorf("%w: invalid VM instruction %d", ErrUnsupportedExpr, ref.index)
+	}
+	inst := v.program.instructions[ref.index]
+	switch inst.op {
+	case vmOpLiteral:
+		return evalLiteral(inst.expr.(LiteralExpr))
+	case vmOpVariable:
+		return evalVariable(ec, inst.expr.(VariableExpr))
+	case vmOpRoot:
+		return evalRootExpr(ec)
+	case vmOpContextItem:
+		return evalContextItemExpr(ec)
+	case vmOpLocationPath:
+		return evalLocationPath(v.evalExpr, ec, inst.expr.(*LocationPath))
+	case vmOpBinary:
+		return evalBinaryExpr(v.evalExpr, ec, inst.expr.(BinaryExpr))
+	case vmOpUnary:
+		return evalUnaryExpr(v.evalExpr, ec, inst.expr.(UnaryExpr))
+	case vmOpConcat:
+		return evalConcatExpr(v.evalExpr, ec, inst.expr.(ConcatExpr))
+	case vmOpSimpleMap:
+		return evalSimpleMapExpr(v.evalExpr, ec, inst.expr.(SimpleMapExpr))
+	case vmOpRange:
+		return evalRangeExpr(v.evalExpr, ec, inst.expr.(RangeExpr))
+	case vmOpUnion:
+		return evalUnionExpr(v.evalExpr, ec, inst.expr.(UnionExpr))
+	case vmOpIntersectExcept:
+		return evalIntersectExceptExpr(v.evalExpr, ec, inst.expr.(IntersectExceptExpr))
+	case vmOpFilter:
+		return evalFilterExpr(v.evalExpr, ec, inst.expr.(FilterExpr))
+	case vmOpPath:
+		return evalPathExpr(v.evalExpr, ec, inst.expr.(PathExpr))
+	case vmOpPathStep:
+		return evalPathStepExpr(v.evalExpr, ec, inst.expr.(PathStepExpr))
+	case vmOpLookup:
+		return evalLookupExpr(v.evalExpr, ec, inst.expr.(LookupExpr))
+	case vmOpUnaryLookup:
+		return evalUnaryLookupExpr(v.evalExpr, ec, inst.expr.(UnaryLookupExpr))
+	case vmOpFLWOR:
+		return evalFLWOR(v.evalExpr, ec, inst.expr.(FLWORExpr))
+	case vmOpQuantified:
+		return evalQuantifiedExpr(v.evalExpr, ec, inst.expr.(QuantifiedExpr))
+	case vmOpIf:
+		return evalIfExpr(v.evalExpr, ec, inst.expr.(IfExpr))
+	case vmOpTryCatch:
+		return evalTryCatchExpr(v.evalExpr, ec, inst.expr.(TryCatchExpr))
+	case vmOpInstanceOf:
+		return evalInstanceOfExpr(v.evalExpr, ec, inst.expr.(InstanceOfExpr))
+	case vmOpCast:
+		return evalCastExpr(v.evalExpr, ec, inst.expr.(CastExpr))
+	case vmOpCastable:
+		return evalCastableExpr(v.evalExpr, ec, inst.expr.(CastableExpr))
+	case vmOpTreatAs:
+		return evalTreatAsExpr(v.evalExpr, ec, inst.expr.(TreatAsExpr))
+	case vmOpFunctionCall:
+		return evalFunctionCall(v.evalExpr, ec, inst.expr.(FunctionCall))
+	case vmOpDynamicFunctionCall:
+		return evalDynamicFunctionCall(v.evalExpr, ec, inst.expr.(DynamicFunctionCall))
+	case vmOpNamedFunctionRef:
+		return evalNamedFunctionRef(ec, inst.expr.(NamedFunctionRef))
+	case vmOpInlineFunction:
+		return evalInlineFunctionExpr(v.evalExpr, ec, inst.expr.(InlineFunctionExpr))
+	case vmOpMapConstructor:
+		return evalMapConstructorExpr(v.evalExpr, ec, inst.expr.(MapConstructorExpr))
+	case vmOpArrayConstructor:
+		return evalArrayConstructorExpr(v.evalExpr, ec, inst.expr.(ArrayConstructorExpr))
+	case vmOpSequence:
+		return evalSequenceExpr(v.evalExpr, ec, inst.expr.(SequenceExpr))
+	case vmOpPlaceholder:
+		return nil, fmt.Errorf("%w: placeholder outside partial application", ErrUnsupportedExpr)
+	default:
+		return nil, fmt.Errorf("%w: invalid VM opcode %d", ErrUnsupportedExpr, inst.op)
+	}
 }

@@ -102,7 +102,7 @@ func NodePrefix(n helium.Node) string
 ## Runtime Model
 
 - `Compile()` parses AST, builds prefix validation plan, lowers to `vmProgram`
-- Each lowered node becomes one indexed `vmInstruction`
-- Child Expr references inside lowered payloads become `compiledExprRef`
-- VM recursion reuses existing `eval_*` helpers via `exprEvaluator`
+- Non-trivial lowered nodes become indexed `vmInstruction`s; trivial leaf Exprs stay inline in parent payloads
+- Child Expr references inside lowered payloads become `compiledExprRef` when they need their own instruction slot
+- VM executes compiled refs by opcode, then reuses existing `eval_*` helpers via `exprEvaluator`
 - Raw `eval()` remains as fallback for unlowered `CompileExpr` inputs

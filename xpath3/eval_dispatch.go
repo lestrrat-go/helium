@@ -18,6 +18,23 @@ func evalWith(evalFn exprEvaluator, ec *evalContext, expr Expr) (Sequence, error
 	return evalFn(ec, expr)
 }
 
+func evalContextItemExpr(ec *evalContext) (Sequence, error) {
+	if ec.contextItem != nil {
+		return Sequence{ec.contextItem}, nil
+	}
+	if ec.node == nil {
+		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+	}
+	return Sequence{nodeItemFor(ec, ec.node)}, nil
+}
+
+func evalRootExpr(ec *evalContext) (Sequence, error) {
+	if ec.node == nil {
+		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+	}
+	return Sequence{nodeItemFor(ec, ixpath.DocumentRoot(ec.node))}, nil
+}
+
 func dispatchExpr(evalFn exprEvaluator, ec *evalContext, expr Expr) (Sequence, error) {
 	switch e := expr.(type) {
 	case compiledExprRef:
@@ -27,18 +44,9 @@ func dispatchExpr(evalFn exprEvaluator, ec *evalContext, expr Expr) (Sequence, e
 	case VariableExpr:
 		return evalVariable(ec, e)
 	case ContextItemExpr:
-		if ec.contextItem != nil {
-			return Sequence{ec.contextItem}, nil
-		}
-		if ec.node == nil {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
-		}
-		return Sequence{nodeItemFor(ec, ec.node)}, nil
+		return evalContextItemExpr(ec)
 	case RootExpr:
-		if ec.node == nil {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
-		}
-		return Sequence{nodeItemFor(ec, ixpath.DocumentRoot(ec.node))}, nil
+		return evalRootExpr(ec)
 	case SequenceExpr:
 		return evalSequenceExpr(evalFn, ec, e)
 	case *LocationPath:
