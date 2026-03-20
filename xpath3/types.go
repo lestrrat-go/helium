@@ -935,6 +935,16 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 				return cast, nil
 			}
 		}
+		// XPath 3.1 Section 2.6.2: typed value of PI, comment, and namespace nodes is xs:string
+		if v.Node != nil {
+			switch v.Node.Type() {
+			case helium.ProcessingInstructionNode, helium.CommentNode, helium.NamespaceNode:
+				return AtomicValue{
+					TypeName: TypeString,
+					Value:    s,
+				}, nil
+			}
+		}
 		return AtomicValue{
 			TypeName: TypeUntypedAtomic,
 			Value:    s,

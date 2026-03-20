@@ -706,7 +706,7 @@ func (w *Writer) WriteRaw(content string) error {
 			w.elemStack[len(w.elemStack)-1].hasText = true
 		}
 		w.writeStr(content)
-	case stateText, stateDocument:
+	case stateNone, stateText, stateDocument:
 		if len(w.elemStack) > 0 {
 			w.elemStack[len(w.elemStack)-1].hasText = true
 		}
