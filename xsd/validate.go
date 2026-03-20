@@ -84,7 +84,17 @@ func validateRootElement(elem *helium.Element, schema *Schema, cfg *validateConf
 	}
 
 	if edecl.Type == nil {
-		return nil
+		// Substitution group members inherit the type from the head element.
+		if edecl.SubstitutionGroup != (QName{}) {
+			headDecl, headOK := schema.LookupElement(edecl.SubstitutionGroup.Local, edecl.SubstitutionGroup.NS)
+			if headOK && headDecl.Type != nil {
+				edecl = headDecl
+			} else {
+				return nil
+			}
+		} else {
+			return nil
+		}
 	}
 
 	td, err := resolveXsiType(elem, edecl.Type, schema, filename, out)
