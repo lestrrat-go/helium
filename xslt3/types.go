@@ -384,6 +384,13 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execConte
 		return av, nil
 	}
 
+	// Schema-derived subtypes satisfy a wider target type without recasting.
+	if len(ec) > 0 && ec[0] != nil && ec[0].schemaRegistry != nil {
+		if ec[0].schemaRegistry.IsSubtypeOf(av.TypeName, target) {
+			return av, nil
+		}
+	}
+
 	// xs:anyAtomicType matches any atomic value
 	if target == "xs:anyAtomicType" {
 		return av, nil
