@@ -19,11 +19,11 @@ type Expression struct {
 
 // Compile parses an XPath 3.1 expression string into a reusable Expression.
 func Compile(expr string) (*Expression, error) {
-	ast, err := Parse(expr)
+	l, err := newLexer(expr)
 	if err != nil {
 		return nil, err
 	}
-	program, prefixPlan, err := compileOwnedVMProgram(ast)
+	program, prefixPlan, err := compileFromLexer(l)
 	if err != nil {
 		return nil, err
 	}

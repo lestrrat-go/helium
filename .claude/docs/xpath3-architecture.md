@@ -71,6 +71,7 @@ func NodePrefix(n helium.Node) string
 | `token.go` | `TokenType` constants (60+) |
 | `lexer.go` | One-pass tokenizer |
 | `parser.go` | Recursive descent parser |
+| `compile_direct.go` | `Compile()` fast path for simple path-like expressions, with shared parser fallback |
 | `eval.go` | `evalContext`, raw AST eval trampoline |
 | `eval_dispatch.go` | Shared dispatch used by raw eval + VM |
 | `vm.go` | AST lowering to indexed instruction graph + VM executor |
@@ -102,7 +103,8 @@ func NodePrefix(n helium.Node) string
 
 ## Runtime Model
 
-- `Compile()` parses AST, lowers to `vmProgram`, and collects the prefix validation plan during lowering
+- `Compile()` first tries a direct compile fast path for simple path-like expressions and falls back to shared parse+lower on the same token stream
+- Shared fallback path is `string -> lexer ([]Token) -> parser (Expr AST) -> VM lowering`
 - String-based `Compile()` uses an ownership-taking lowering path that can reuse parsed slices, then keeps only `source` + `vmProgram`; AST-inspection helpers reparse on demand
 - Non-trivial lowered nodes become indexed `vmInstruction`s; trivial leaf Exprs stay inline in parent payloads
 - Child Expr references inside lowered payloads become `compiledExprRef` when they need their own instruction slot

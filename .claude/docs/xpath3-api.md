@@ -24,7 +24,7 @@ func (e *Expression) AST() Expr
 func (e *Expression) String() string
 ```
 
-`Compile()` parses then lowers through the VM backend, but does not retain the parsed AST on the `Expression`; `AST()` and streamability helpers reparse from `source` on demand. `CompileExpr()` keeps the caller-provided AST and lowers it without mutating the input tree.
+`Compile()` first tries a direct fast path for simple path-like expressions on the lexer token stream, then falls back to parse+lower through the VM backend on the same lexer if the fast path does not apply. It does not retain the parsed AST on the `Expression`; `AST()` and streamability helpers reparse from `source` on demand. `CompileExpr()` keeps the caller-provided AST and lowers it without mutating the input tree.
 
 ## Result
 
@@ -77,7 +77,7 @@ type CollectionResolver interface {
 
 User functions registered via `WithFunctionsNS` CANNOT override built-ins in `fn:` namespace.
 
-`Compile()` lowers parsed AST to VM program using an ownership-taking lowering path that can reuse parsed slices. `CompileExpr()` uses a non-mutating lowering path, with raw AST fallback for unsupported custom Expr implementations.
+`Compile()` uses a direct compile fast path where possible, otherwise lowers parsed AST to VM program using an ownership-taking lowering path that can reuse parsed slices. `CompileExpr()` uses a non-mutating lowering path, with raw AST fallback for unsupported custom Expr implementations.
 
 ## Errors
 

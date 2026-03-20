@@ -47,15 +47,7 @@ func Parse(expr string) (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &parser{lexer: l}
-	e, err := p.parseExpression()
-	if err != nil {
-		return nil, err
-	}
-	if tok := p.lexer.Peek(); tok.Type != TokenEOF {
-		return nil, fmt.Errorf("%w: %s after expression", ErrUnexpectedToken, tok)
-	}
-	return e, nil
+	return parseWithLexer(l)
 }
 
 // parseExpression parses → ExprSingle (',' ExprSingle)* (sequence constructor).
