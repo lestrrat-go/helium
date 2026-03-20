@@ -403,39 +403,6 @@ func (ec *execContext) stripAnnotations(node helium.Node) {
 	}
 }
 
-// transferAnnotations copies type annotations from src tree nodes to the
-// corresponding dst tree nodes (walked in parallel). This preserves type
-// annotations when nodes are deep-copied to a different document.
-func (ec *execContext) transferAnnotations(src, dst helium.Node) {
-	if ec.typeAnnotations == nil {
-		return
-	}
-	if typeName, ok := ec.typeAnnotations[src]; ok {
-		ec.annotateNode(dst, typeName)
-	}
-	if srcElem, ok := src.(*helium.Element); ok {
-		if dstElem, ok := dst.(*helium.Element); ok {
-			for _, srcAttr := range srcElem.Attributes() {
-				if typeName, ok := ec.typeAnnotations[srcAttr]; ok {
-					for _, dstAttr := range dstElem.Attributes() {
-						if srcAttr.LocalName() == dstAttr.LocalName() && srcAttr.URI() == dstAttr.URI() {
-							ec.annotateNode(dstAttr, typeName)
-							break
-						}
-					}
-				}
-			}
-		}
-	}
-	srcChild := src.FirstChild()
-	dstChild := dst.FirstChild()
-	for srcChild != nil && dstChild != nil {
-		ec.transferAnnotations(srcChild, dstChild)
-		srcChild = srcChild.NextSibling()
-		dstChild = dstChild.NextSibling()
-	}
-}
-
 func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) error {
 	name, err := inst.Name.evaluate(ctx, ec.contextNode)
 	if err != nil {
