@@ -285,7 +285,7 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 				return err
 			}
 		case "character-map":
-			if err := c.validateCharacterMap(ce); err != nil {
+			if err := c.compileCharacterMap(ce); err != nil {
 				return err
 			}
 		}

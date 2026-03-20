@@ -272,6 +272,10 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		ec.insideResultDocPrimary = false
 		ec.outputStack[0].itemSeparator = savedSep
 		ec.outputStack = savedStack
+		// Propagate character map names to the primary output frame
+		if len(inst.UseCharacterMaps) > 0 {
+			ec.primaryCharacterMaps = inst.UseCharacterMaps
+		}
 		return nil
 	}
 

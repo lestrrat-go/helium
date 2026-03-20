@@ -8,7 +8,27 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
-func (c *compiler) validateCharacterMap(elem *helium.Element) error {
+func (c *compiler) compileCharacterMap(elem *helium.Element) error {
+	saved := c.pushElementNamespaces(elem)
+	defer func() { c.nsBindings = saved }()
+
+	name := getAttr(elem, "name")
+	if name == "" {
+		return staticError(errCodeXTSE0110, "xsl:character-map requires name attribute")
+	}
+	name = resolveQName(name, c.nsBindings)
+
+	cm := &CharacterMapDef{
+		Name:     name,
+		Mappings: make(map[rune]string),
+	}
+
+	if ucm := getAttr(elem, "use-character-maps"); ucm != "" {
+		for _, n := range strings.Fields(ucm) {
+			cm.UseCharacterMaps = append(cm.UseCharacterMaps, resolveQName(n, c.nsBindings))
+		}
+	}
+
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
@@ -17,11 +37,27 @@ func (c *compiler) validateCharacterMap(elem *helium.Element) error {
 		if childElem.URI() != NSXSLT || childElem.LocalName() != "output-character" {
 			continue
 		}
-		// xsl:output-character requires "character" attribute (not "char")
-		if _, has := childElem.GetAttribute("character"); !has {
+		charAttr := getAttr(childElem, "character")
+		if charAttr == "" {
 			return staticError(errCodeXTSE0010,
 				"xsl:output-character requires 'character' attribute")
 		}
+		r := firstRune(charAttr)
+		str := getAttr(childElem, "string")
+		cm.Mappings[r] = str
+	}
+
+	if c.stylesheet.characterMaps == nil {
+		c.stylesheet.characterMaps = make(map[string]*CharacterMapDef)
+	}
+	// Merge: later declarations override earlier ones for the same name
+	if existing, ok := c.stylesheet.characterMaps[name]; ok {
+		for r, s := range cm.Mappings {
+			existing.Mappings[r] = s
+		}
+		existing.UseCharacterMaps = append(existing.UseCharacterMaps, cm.UseCharacterMaps...)
+	} else {
+		c.stylesheet.characterMaps[name] = cm
 	}
 	return nil
 }
@@ -91,6 +127,9 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 }
 
 func (c *compiler) compileOutput(elem *helium.Element) error {
+	saved := c.pushElementNamespaces(elem)
+	defer func() { c.nsBindings = saved }()
+
 	name := getAttr(elem, "name")
 	outDef := &OutputDef{
 		Name:     name,
@@ -120,6 +159,12 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 
 	if is := getAttr(elem, "item-separator"); is != "" {
 		outDef.ItemSeparator = &is
+	}
+
+	if ucm := getAttr(elem, "use-character-maps"); ucm != "" {
+		for _, n := range strings.Fields(ucm) {
+			outDef.UseCharacterMaps = append(outDef.UseCharacterMaps, resolveQName(n, c.nsBindings))
+		}
 	}
 
 	c.stylesheet.outputs[name] = outDef

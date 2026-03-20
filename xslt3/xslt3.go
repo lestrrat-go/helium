@@ -69,7 +69,7 @@ func TransformToWriter(ctx context.Context, source *helium.Document, ss *Stylesh
 
 	// Get the output definition
 	outDef := ss.outputs[""]
-	return serializeResult(w, resultDoc, outDef)
+	return SerializeResult(w, resultDoc, outDef)
 }
 
 // TransformString applies the compiled stylesheet to the source document
