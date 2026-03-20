@@ -323,6 +323,26 @@ type fegGroup struct {
 	items xpath3.Sequence
 }
 
+func groupLookupKey(item xpath3.Item, collationKeyFn func(string) string) (string, xpath3.Sequence) {
+	av, err := xpath3.AtomizeItem(item)
+	if err != nil {
+		s := stringifyItem(item)
+		if collationKeyFn != nil {
+			return collationKeyFn(s), xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: s}}
+		}
+		return s, xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: s}}
+	}
+
+	s, err := xpath3.AtomicToString(av)
+	if err != nil {
+		s = ""
+	}
+	if collationKeyFn != nil {
+		return collationKeyFn(s), xpath3.Sequence{av}
+	}
+	return canonicalKey(av), xpath3.Sequence{av}
+}
+
 // groupBy implements group-by: items are grouped by the string value of the
 // group-by expression evaluated with each item as context. When composite is
 // false and the expression returns a sequence of multiple values, the item is
@@ -391,15 +411,11 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 		} else {
 			// Non-composite: each value creates a separate group key
 			for _, keyItem := range resultSeq {
-				keyVal := stringifyItem(keyItem)
-				lookupKey := keyVal
-				if collationKeyFn != nil {
-					lookupKey = collationKeyFn(keyVal)
-				}
+				lookupKey, keySeq := groupLookupKey(keyItem, collationKeyFn)
 				if e, ok := groupMap[lookupKey]; ok {
 					e.items = append(e.items, item)
 				} else {
-					groupMap[lookupKey] = &entry{key: keyVal, items: xpath3.Sequence{item}}
+					groupMap[lookupKey] = &entry{keySeq: keySeq, items: xpath3.Sequence{item}}
 					order = append(order, lookupKey)
 				}
 			}
@@ -412,10 +428,7 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 		if e.keySeq != nil {
 			groups[i] = fegGroup{key: e.keySeq, items: e.items}
 		} else {
-			groups[i] = fegGroup{
-				key:   xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: e.key}},
-				items: e.items,
-			}
+			groups[i] = fegGroup{items: e.items}
 		}
 	}
 	return groups, nil
@@ -470,12 +483,19 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 			keyVal = compositeKeyString(rSeq)
 			keySeq = atomizeSequence(rSeq)
 		} else {
-			keyVal = stringifyResult(result)
+			resultSeq := result.Sequence()
+			if len(resultSeq) == 0 {
+				keyVal = ""
+				keySeq = xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: ""}}
+			} else {
+				keyVal, keySeq = groupLookupKey(resultSeq[0], nil)
+			}
 		}
 
 		lookupKey := keyVal
 		if collationKeyFn != nil {
-			lookupKey = collationKeyFn(keyVal)
+			lexical := stringifyResult(result)
+			lookupKey = collationKeyFn(lexical)
 		}
 
 		if lookupKey == currentKey && len(currentItems) > 0 {
