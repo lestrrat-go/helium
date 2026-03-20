@@ -1137,11 +1137,6 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		c.stylesheet.inputTypeAnnotations = ita
 	}
 
-	// Read input-type-annotations from stylesheet root
-	if ita := getAttr(root, "input-type-annotations"); ita != "" {
-		c.stylesheet.inputTypeAnnotations = ita
-	}
-
 	// Read xpath-default-namespace from stylesheet root
 	if xdn := getAttr(root, "xpath-default-namespace"); xdn != "" {
 		c.xpathDefaultNS = xdn
@@ -1173,11 +1168,6 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		c.stylesheet.defaultValidation = dv
 	} else if c.stylesheet.defaultValidation == "" {
 		c.stylesheet.defaultValidation = validationStrip
-	}
-
-	// Read input-type-annotations from stylesheet root
-	if ita := getAttr(root, "input-type-annotations"); ita != "" {
-		c.stylesheet.inputTypeAnnotations = ita
 	}
 
 	// Read input-type-annotations from stylesheet root
