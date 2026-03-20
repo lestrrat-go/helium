@@ -181,9 +181,10 @@ Supported casts per XPath 3.1 Section 18. All atomic types in `xpath3-types.md`.
 
 - Stateless between `Expression.Evaluate` calls
 - `evalContext` created fresh per call, discarded after
+- Hot-path node/item rebinding during predicates, path steps, and simple-map evaluation mutates the current `evalContext` temporarily and restores it afterward instead of allocating copied child contexts
 - Default language comes from `WithDefaultLanguage`; built-ins fall back to `"en"` when unset
 - `DocOrderCache` lazy, O(n) build, O(1) lookup
-- Inline function closures capture variable map snapshot (value semantics)
+- Inline functions and named function refs snapshot the dynamic context they close over, so later focus rebinding does not change captured behavior
 
 ## Safety Limits
 

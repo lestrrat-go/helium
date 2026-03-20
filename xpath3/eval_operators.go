@@ -120,13 +120,14 @@ func evalSimpleMapExpr(evalFn exprEvaluator, ec *evalContext, e SimpleMapExpr) (
 	var result Sequence
 	size := len(left)
 	for i, item := range left {
-		var subCtx *evalContext
+		var frame evalContextFrame
 		if ni, ok := item.(NodeItem); ok {
-			subCtx = ec.withNode(ni.Node, i+1, size)
+			frame = ec.pushNodeContext(ni.Node, i+1, size)
 		} else {
-			subCtx = ec.withContextItem(item, i+1, size)
+			frame = ec.pushContextItem(item, i+1, size)
 		}
-		r, err := evalFn(subCtx, e.Right)
+		r, err := evalFn(ec, e.Right)
+		ec.restoreContext(frame)
 		if err != nil {
 			return nil, err
 		}
@@ -293,13 +294,14 @@ func applySequencePredicate(evalFn exprEvaluator, ec *evalContext, seq Sequence,
 	var result Sequence
 	size := len(seq)
 	for i, item := range seq {
-		var subCtx *evalContext
+		var frame evalContextFrame
 		if ni, ok := item.(NodeItem); ok {
-			subCtx = ec.withNode(ni.Node, i+1, size)
+			frame = ec.pushNodeContext(ni.Node, i+1, size)
 		} else {
-			subCtx = ec.withContextItem(item, i+1, size)
+			frame = ec.pushContextItem(item, i+1, size)
 		}
-		r, err := evalFn(subCtx, pred)
+		r, err := evalFn(ec, pred)
+		ec.restoreContext(frame)
 		if err != nil {
 			return nil, err
 		}
@@ -339,8 +341,9 @@ func evalPathExpr(evalFn exprEvaluator, ec *evalContext, e PathExpr) (Sequence, 
 	}
 	var result []helium.Node
 	for _, n := range baseNodes {
-		subCtx := ec.withNode(n, 1, 1)
-		subResult, err := evalLocationPath(evalFn, subCtx, e.Path)
+		frame := ec.pushNodeContext(n, 1, 1)
+		subResult, err := evalLocationPath(evalFn, ec, e.Path)
+		ec.restoreContext(frame)
 		if err != nil {
 			return nil, err
 		}
@@ -382,8 +385,9 @@ func evalPathStepExpr(evalFn exprEvaluator, ec *evalContext, e PathStepExpr) (Se
 	isNodeResult := true
 
 	for i, n := range baseNodes {
-		subCtx := ec.withNode(n, i+1, len(baseNodes))
-		r, err := evalFn(subCtx, e.Right)
+		frame := ec.pushNodeContext(n, i+1, len(baseNodes))
+		r, err := evalFn(ec, e.Right)
+		ec.restoreContext(frame)
 		if err != nil {
 			return nil, err
 		}

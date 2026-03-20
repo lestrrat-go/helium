@@ -176,6 +176,48 @@ func (ec *evalContext) withContextItem(item Item, pos, size int) *evalContext {
 	return &cp
 }
 
+type evalContextFrame struct {
+	node        helium.Node
+	contextItem Item
+	position    int
+	size        int
+}
+
+func (ec *evalContext) pushNodeContext(n helium.Node, pos, size int) evalContextFrame {
+	frame := evalContextFrame{
+		node:        ec.node,
+		contextItem: ec.contextItem,
+		position:    ec.position,
+		size:        ec.size,
+	}
+	ec.node = n
+	ec.contextItem = nil
+	ec.position = pos
+	ec.size = size
+	return frame
+}
+
+func (ec *evalContext) pushContextItem(item Item, pos, size int) evalContextFrame {
+	frame := evalContextFrame{
+		node:        ec.node,
+		contextItem: ec.contextItem,
+		position:    ec.position,
+		size:        ec.size,
+	}
+	ec.contextItem = item
+	ec.node = nil
+	ec.position = pos
+	ec.size = size
+	return frame
+}
+
+func (ec *evalContext) restoreContext(frame evalContextFrame) {
+	ec.node = frame.node
+	ec.contextItem = frame.contextItem
+	ec.position = frame.position
+	ec.size = frame.size
+}
+
 // contextStringValue returns the string value of the current context item.
 // For node context items, it returns the XPath string value of the node.
 // For atomic context items, it returns the string representation.

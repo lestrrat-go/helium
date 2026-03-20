@@ -410,8 +410,9 @@ func applyPredicate(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, 
 	size := len(nodes)
 	var result []helium.Node
 	for i, n := range nodes {
-		pctx := ec.withNode(n, i+1, size)
-		r, err := evalFn(pctx, pred)
+		frame := ec.pushNodeContext(n, i+1, size)
+		r, err := evalFn(ec, pred)
+		ec.restoreContext(frame)
 		if err != nil {
 			return nil, err
 		}

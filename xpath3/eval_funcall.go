@@ -164,7 +164,8 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 	// the dynamic context (including focus) is fixed at reference creation time.
 	// Capture the evalContext snapshot for focus/variables, but use the caller's
 	// context.Context at invocation time for cancellation propagation.
-	capturedEC := ec
+	capturedECValue := *ec
+	capturedEC := &capturedECValue
 	// Populate type signature from built-in registry
 	var paramTypes []SequenceType
 	var returnType *SequenceType
@@ -222,7 +223,8 @@ func evalInlineFunctionExpr(evalFn exprEvaluator, ec *evalContext, e InlineFunct
 			}
 			// Use caller's evalContext for mutable state (opCount, docOrder, docCache)
 			// if available, otherwise fall back to the captured context.
-			baseEC := ec
+			capturedECValue := *ec
+			baseEC := &capturedECValue
 			if callerEC := getFnContext(ctx); callerEC != nil {
 				baseEC = callerEC
 			}
