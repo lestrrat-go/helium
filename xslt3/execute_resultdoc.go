@@ -110,9 +110,26 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 			return err
 		}
 	} else {
-		for child := tmpDoc.FirstChild(); child != nil; child = child.NextSibling() {
-			if err := ec.copyNodeToOutput(child); err != nil {
-				return err
+		// Move children from tmpDoc to the parent output. When validation
+		// is "preserve", move nodes directly (unlink + addNode) so that
+		// type annotations keyed by node pointer are preserved.
+		preserveAnnotations := inst.Validation == "preserve"
+		if preserveAnnotations {
+			var children []helium.Node
+			for child := tmpDoc.FirstChild(); child != nil; child = child.NextSibling() {
+				children = append(children, child)
+			}
+			for _, child := range children {
+				helium.UnlinkNode(child)
+				if err := ec.addNode(child); err != nil {
+					return err
+				}
+			}
+		} else {
+			for child := tmpDoc.FirstChild(); child != nil; child = child.NextSibling() {
+				if err := ec.copyNodeToOutput(child); err != nil {
+					return err
+				}
 			}
 		}
 	}

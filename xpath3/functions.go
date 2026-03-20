@@ -228,7 +228,20 @@ func coerceArgToString(seq Sequence) (string, error) {
 	default:
 		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
 	}
-	a, err := AtomizeItem(seq[0])
+	// Use AtomizeSequence (not AtomizeItem) to properly expand list types.
+	// For nodes with list type annotations, atomization produces multiple
+	// items which must raise XPTY0004 for xs:string? parameters.
+	atoms, err := AtomizeSequence(seq)
+	if err != nil {
+		return "", err
+	}
+	if len(atoms) == 0 {
+		return "", nil
+	}
+	if len(atoms) > 1 {
+		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
+	}
+	a := atoms[0]
 	if err != nil {
 		return "", err
 	}
