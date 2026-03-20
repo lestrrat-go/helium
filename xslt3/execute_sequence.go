@@ -345,19 +345,18 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 				return err
 			}
 			prevWasAtomic = true
-		case xpath3.FunctionItem:
-			// XTDE0450: function items cannot appear in result tree content.
+		case xpath3.FunctionItem, xpath3.MapItem, *xpath3.ArrayItem:
+			// XTDE0450: function items (including maps and arrays) cannot
+			// appear in result tree content.
 			if !out.captureItems {
 				return dynamicError(errCodeXTDE0450,
-					"cannot add function item to result tree content")
+					"cannot add a %T to the result tree", item)
 			}
 			out.pendingItems = append(out.pendingItems, item)
 		default:
 			if out.captureItems {
 				out.pendingItems = append(out.pendingItems, item)
 			}
-			// Maps/arrays are silently skipped from non-capture output.
-			// A future enhancement may serialize them with item-separator.
 		}
 	}
 	out.prevWasAtomic = prevWasAtomic

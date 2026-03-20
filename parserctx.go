@@ -676,6 +676,27 @@ func (ctx *parserCtx) switchEncoding() error {
 
 var xmlDeclHint = []byte{'<', '?', 'x', 'm', 'l'}
 
+// looksLikeXMLDecl returns true when the byte cursor starts with "<?xml"
+// followed by a blank character (space/tab/CR/LF).  Processing instructions
+// whose target starts with "xml" (e.g. <?xml-stylesheet …?>) are NOT XML
+// declarations and must be parsed by parseMisc, not parseXMLDecl.
+func looksLikeXMLDecl(bcur *strcursor.ByteCursor) bool {
+	if !bcur.HasPrefix(xmlDeclHint) {
+		return false
+	}
+	sixth := bcur.PeekN(6)
+	return sixth == ' ' || sixth == '\t' || sixth == '\r' || sixth == '\n'
+}
+
+// looksLikeXMLDeclString is the rune-cursor variant of looksLikeXMLDecl.
+func looksLikeXMLDeclString(cur strcursor.Cursor) bool {
+	if !cur.HasPrefixString("<?xml") {
+		return false
+	}
+	sixth := cur.PeekN(6)
+	return sixth == ' ' || sixth == '\t' || sixth == '\r' || sixth == '\n'
+}
+
 func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START parseDocument")
@@ -755,14 +776,14 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 		}
 		// Parse the XML declaration from the decoded rune cursor.
 		cur := pctx.getCursor()
-		if cur != nil && cur.HasPrefixString("<?xml") {
+		if cur != nil && looksLikeXMLDeclString(cur) {
 			if err := pctx.parseXMLDeclFromCursor(ctx); err != nil {
 				return pctx.error(ctx, err)
 			}
 		}
 	default:
 		// XML prolog (byte-level for ASCII-compatible encodings)
-		if bcur.HasPrefix(xmlDeclHint) {
+		if looksLikeXMLDecl(bcur) {
 			if err := pctx.parseXMLDecl(ctx); err != nil {
 				return pctx.error(ctx, err)
 			}
@@ -5315,7 +5336,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 
 	bcur := newctx.getByteCursor()
-	if bcur != nil && bcur.HasPrefix(xmlDeclHint) {
+	if bcur != nil && looksLikeXMLDecl(bcur) {
 		if err := newctx.parseXMLDecl(innerCtx); err != nil {
 			return nil, err
 		}
