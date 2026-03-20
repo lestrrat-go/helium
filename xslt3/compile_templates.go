@@ -31,11 +31,9 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		if err != nil {
 			return err
 		}
-		// Validate function calls in the pattern against known functions.
-		if err := c.validatePatternFunctions(p, matchAttr); err != nil {
-			return err
-		}
 		tmpl.Match = p
+		// Defer function validation until after all xsl:function declarations are processed.
+		c.pendingPatternValidations = append(c.pendingPatternValidations, pendingPatternValidation{p, matchAttr})
 	}
 
 	tmpl.Name = resolveQName(getAttr(elem, "name"), c.nsBindings)
