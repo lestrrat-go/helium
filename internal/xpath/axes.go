@@ -1,8 +1,19 @@
 package xpath
 
 import (
+	"reflect"
+
 	helium "github.com/lestrrat-go/helium"
 )
+
+// isNilNode checks for both interface nil and typed nil (Go interface nil trap).
+func isNilNode(n helium.Node) bool {
+	if n == nil {
+		return true
+	}
+	v := reflect.ValueOf(n)
+	return v.Kind() == reflect.Pointer && v.IsNil()
+}
 
 // AxisType identifies one of the 13 XPath axes.
 type AxisType int
@@ -62,6 +73,9 @@ func AxisFromName(name string) (AxisType, bool) {
 // in the order defined by the XPath spec. maxNodes limits the result size
 // for unbounded axes; use DefaultMaxNodeSetLength if unsure.
 func TraverseAxis(axis AxisType, node helium.Node, maxNodes int) ([]helium.Node, error) {
+	if isNilNode(node) {
+		return nil, nil
+	}
 	switch axis {
 	case AxisDescendant:
 		return axisDescendant(node, maxNodes)
@@ -77,6 +91,9 @@ func TraverseAxis(axis AxisType, node helium.Node, maxNodes int) ([]helium.Node,
 
 // TraverseAxisSimple handles axes that cannot fail (bounded result size).
 func TraverseAxisSimple(axis AxisType, node helium.Node) []helium.Node {
+	if isNilNode(node) {
+		return nil
+	}
 	switch axis {
 	case AxisChild:
 		return axisChild(node)
@@ -179,6 +196,9 @@ func axisAncestor(node helium.Node) []helium.Node {
 }
 
 func axisAncestorOrSelf(node helium.Node) []helium.Node {
+	if isNilNode(node) {
+		return nil
+	}
 	result := []helium.Node{node}
 	for p := node.Parent(); p != nil; p = p.Parent() {
 		result = append(result, p)
