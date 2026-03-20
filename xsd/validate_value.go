@@ -79,7 +79,7 @@ func collapseSpaces(s string) string {
 
 // validateValue validates a text value against a simple type definition.
 // It writes any errors to out and returns an error if the value is invalid.
-func validateValue(value string, td *TypeDef, elemName, filename string, line int, out *strings.Builder) error {
+func validateValue(value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, out *strings.Builder) error {
 	// Apply whitespace normalization per the type's whiteSpace facet.
 	trimmed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
 
@@ -90,7 +90,7 @@ func validateValue(value string, td *TypeDef, elemName, filename string, line in
 
 	// Check if this is a union type.
 	if resolveVariety(td) == TypeVarietyUnion {
-		return validateUnionValue(value, td, elemName, filename, line, out)
+		return validateUnionValue(value, valueNS, td, elemName, filename, line, out)
 	}
 
 	// Find the builtin base type by walking the BaseType chain.
@@ -105,7 +105,7 @@ func validateValue(value string, td *TypeDef, elemName, filename string, line in
 	}
 
 	// Validate facets along the type chain.
-	return validateFacets(trimmed, td, builtinLocal, elemName, filename, line, out)
+	return validateFacets(trimmed, valueNS, td, builtinLocal, elemName, filename, line, out)
 }
 
 // resolveUnionMembers walks up the base type chain to find the union's member types.
@@ -122,7 +122,7 @@ func resolveUnionMembers(td *TypeDef) []*TypeDef {
 
 // validateUnionValue validates a value against a union type by trying each member type.
 // If all member types fail, a union-level error is reported.
-func validateUnionValue(value string, td *TypeDef, elemName, filename string, line int, out *strings.Builder) error {
+func validateUnionValue(value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, out *strings.Builder) error {
 	members := resolveUnionMembers(td)
 
 	// First, check restriction facets on the union type itself (e.g., enumeration).
@@ -130,7 +130,7 @@ func validateUnionValue(value string, td *TypeDef, elemName, filename string, li
 	trimmed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
 	if td.Facets != nil {
 		var facetBuf strings.Builder
-		if err := checkFacets(trimmed, td.Facets, "", elemName, filename, line, &facetBuf); err != nil {
+		if err := checkFacets(trimmed, valueNS, td.Facets, "", elemName, filename, line, &facetBuf); err != nil {
 			// Report union-level error instead of facet-specific error.
 			typeName := unionTypeDisplayName(td)
 			msg := fmt.Sprintf("'%s' is not a valid value of the %s.", trimmed, typeName)
@@ -142,7 +142,7 @@ func validateUnionValue(value string, td *TypeDef, elemName, filename string, li
 	// Try each member type. If any accepts the value, it's valid.
 	for _, member := range members {
 		var buf strings.Builder
-		if err := validateValue(value, member, elemName, filename, line, &buf); err == nil {
+		if err := validateValue(value, valueNS, member, elemName, filename, line, &buf); err == nil {
 			return nil
 		}
 	}
@@ -626,13 +626,13 @@ func validateSpaceSeparatedList(value string, validateItem func(string) error) e
 }
 
 // validateFacets checks all applicable facets for a type and its ancestors.
-func validateFacets(value string, td *TypeDef, builtinLocal, elemName, filename string, line int, out *strings.Builder) error {
+func validateFacets(value string, valueNS map[string]string, td *TypeDef, builtinLocal, elemName, filename string, line int, out *strings.Builder) error {
 	// Collect all facets along the type chain (most derived first).
 	var anyErr error
 	cur := td
 	for cur != nil {
 		if cur.Facets != nil {
-			if err := checkFacets(value, cur.Facets, builtinLocal, elemName, filename, line, out); err != nil {
+			if err := checkFacets(value, valueNS, cur.Facets, builtinLocal, elemName, filename, line, out); err != nil {
 				anyErr = err
 			}
 		}
@@ -641,16 +641,33 @@ func validateFacets(value string, td *TypeDef, builtinLocal, elemName, filename 
 	return anyErr
 }
 
-func checkFacets(value string, fs *FacetSet, builtinLocal, elemName, filename string, line int, out *strings.Builder) error {
+func checkFacets(value string, valueNS map[string]string, fs *FacetSet, builtinLocal, elemName, filename string, line int, out *strings.Builder) error {
 	var anyErr error
 
 	// Enumeration.
 	if len(fs.Enumeration) > 0 {
 		found := false
-		for _, ev := range fs.Enumeration {
-			if value == ev {
-				found = true
-				break
+		if builtinLocal == "QName" || builtinLocal == "NOTATION" {
+			valueQN, err := resolveLexicalQName(value, valueNS)
+			if err == nil {
+				for i, ev := range fs.Enumeration {
+					var enumNS map[string]string
+					if i < len(fs.EnumerationNS) {
+						enumNS = fs.EnumerationNS[i]
+					}
+					enumQN, enumErr := resolveLexicalQName(ev, enumNS)
+					if enumErr == nil && valueQN == enumQN {
+						found = true
+						break
+					}
+				}
+			}
+		} else {
+			for _, ev := range fs.Enumeration {
+				if value == ev {
+					found = true
+					break
+				}
 			}
 		}
 		if !found {
@@ -755,6 +772,21 @@ func checkFacets(value string, fs *FacetSet, builtinLocal, elemName, filename st
 	}
 
 	return anyErr
+}
+
+func resolveLexicalQName(value string, ns map[string]string) (QName, error) {
+	if err := validateQName(value); err != nil {
+		return QName{}, err
+	}
+	parts := strings.SplitN(value, ":", 2)
+	if len(parts) == 1 {
+		return QName{Local: value, NS: ns[""]}, nil
+	}
+	uri, ok := ns[parts[0]]
+	if !ok {
+		return QName{}, fmt.Errorf("undeclared prefix %q", parts[0])
+	}
+	return QName{Local: parts[1], NS: uri}, nil
 }
 
 // compareValues dispatches to type-specific comparison.

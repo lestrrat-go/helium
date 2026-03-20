@@ -212,6 +212,7 @@ type TypeDef struct {
 // FacetSet holds facet constraints for a simple type restriction.
 type FacetSet struct {
 	Enumeration    []string
+	EnumerationNS  []map[string]string
 	MinInclusive   *string
 	MaxInclusive   *string
 	MinExclusive   *string

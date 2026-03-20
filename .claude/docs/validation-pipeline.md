@@ -40,6 +40,11 @@ Files: `xsd/xsd.go` (API), `parse.go` (compiler), `parse_check.go` (constraints)
      - Simple: no child elements, validate text vs type facets
      - Element-only/Mixed: match children against ModelGroup (`matchSequence()`/`matchChoice()`)
 
+QName/NOTATION simple-value validation compares enumeration facets in value
+space, not raw prefix text. Instance lexical QNames are resolved against the
+instance node's in-scope namespaces; facet lexical QNames are resolved against
+the schema facet's in-scope namespaces.
+
 **Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
 - For elements with IDCs (xs:unique, xs:key, xs:keyref):
   1. Evaluate selector XPath → node set

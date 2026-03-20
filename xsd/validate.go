@@ -183,7 +183,7 @@ func validateSimpleContent(elem *helium.Element, edecl *ElementDecl, td *TypeDef
 
 	// Validate the text value against the type.
 	if td != nil && (td.Facets != nil || resolveVariety(td) == TypeVarietyList || resolveVariety(td) == TypeVarietyUnion || builtinBaseLocal(td) != "" && builtinBaseLocal(td) != "string" && builtinBaseLocal(td) != "anySimpleType") {
-		return validateValue(effectiveValue, td, elemDisplayName(elem), filename, elem.Line(), out)
+		return validateValue(effectiveValue, collectNSContext(elem), td, elemDisplayName(elem), filename, elem.Line(), out)
 	}
 
 	return nil
@@ -313,7 +313,7 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, cfg *
 			if au.TypeName.Local != "" {
 				attrTD, tdOK := schema.LookupType(au.TypeName.Local, au.TypeName.NS)
 				if tdOK && attrTD.ContentType == ContentTypeSimple {
-					if err := ValidateSimpleValue(a.Value(), attrTD); err != nil {
+					if err := ValidateSimpleValueWithNS(a.Value(), collectNSContext(elem), attrTD); err != nil {
 						ad := attrDisplayName(a)
 						msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
 						out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
@@ -615,7 +615,7 @@ func xsdTypeName(td *TypeDef) string {
 		return "Q{" + td.Name.NS + "}" + td.Name.Local
 	}
 	if td.Name.Local != "" {
-		return td.Name.Local
+		return "Q{}" + td.Name.Local
 	}
 	// Anonymous type: walk up the base type chain to find a named type.
 	for cur := td.BaseType; cur != nil; cur = cur.BaseType {

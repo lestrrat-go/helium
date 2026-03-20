@@ -1254,6 +1254,12 @@ func (c *compiler) parseFacets(restriction *helium.Element) *FacetSet {
 				fs = &FacetSet{}
 			}
 			fs.Enumeration = append(fs.Enumeration, val)
+			nsCtx := collectNSContext(ce)
+			nsCopy := make(map[string]string, len(nsCtx))
+			for prefix, uri := range nsCtx {
+				nsCopy[prefix] = uri
+			}
+			fs.EnumerationNS = append(fs.EnumerationNS, nsCopy)
 		case "minInclusive":
 			if fs == nil {
 				fs = &FacetSet{}

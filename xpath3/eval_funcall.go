@@ -18,7 +18,7 @@ func evalFunctionCall(ec *evalContext, e FunctionCall) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		args[i] = a
+		args[i] = enrichNodeItems(ec, a)
 	}
 
 	// Partial application: if any args are placeholders, return FunctionItem
@@ -64,7 +64,7 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 		if err != nil {
 			return nil, err
 		}
-		args[i] = a
+		args[i] = enrichNodeItems(ec, a)
 	}
 
 	if hasPlaceholders {

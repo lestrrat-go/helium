@@ -54,7 +54,7 @@ func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, e
 	ec := newEvalContext(ctx, node)
 
 	// Static analysis: validate all namespace prefixes in the AST
-	if err := e.prefixPlan.Validate(ec.namespaces, ec.strictPrefixes); err != nil {
+	if err := e.prefixPlan.Validate(ec.namespaces, ec.strictPrefixes, ec.schemaDeclarations); err != nil {
 		return nil, err
 	}
 

@@ -76,6 +76,9 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 	savedBase := c.baseURI
 	c.baseURI = uri
 	defer func() { c.baseURI = savedBase }()
+	savedModuleKey := c.moduleKey
+	c.moduleKey = importKey
+	defer func() { c.moduleKey = savedModuleKey }()
 
 	c.collectNamespaces(root)
 
@@ -200,6 +203,9 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 	savedBase := c.baseURI
 	c.baseURI = uri
 	defer func() { c.baseURI = savedBase }()
+	savedModuleKey := c.moduleKey
+	c.moduleKey = importKey
+	defer func() { c.moduleKey = savedModuleKey }()
 
 	savedDefaultMode := c.defaultMode
 	if dm := getAttr(root, "default-mode"); dm != "" {
@@ -371,6 +377,9 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 	savedBase := c.baseURI
 	c.baseURI = uri
 	defer func() { c.baseURI = savedBase }()
+	savedModuleKey := c.moduleKey
+	c.moduleKey = importKey
+	defer func() { c.moduleKey = savedModuleKey }()
 
 	// Store the module document for document("") resolution.
 	if c.stylesheet.moduleDocs == nil {

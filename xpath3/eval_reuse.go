@@ -61,6 +61,10 @@ func NewEvalState(ctx context.Context, node helium.Node) *EvalState {
 		ec.uriResolver = cfg.uriResolver
 		ec.collectionResolver = cfg.collectionResolver
 		ec.httpClient = cfg.httpClient
+		ec.typeAnnotations = cfg.typeAnnotations
+		ec.variableResolver = cfg.variableResolver
+		ec.strictPrefixes = cfg.strictPrefixes
+		ec.schemaDeclarations = cfg.schemaDeclarations
 		if cfg.position > 0 {
 			ec.position = cfg.position
 		}
@@ -120,7 +124,7 @@ func (e *Expression) EvaluateReuse(state *EvalState, node helium.Node) (Result, 
 		return Result{seq: state.oneItem[:]}, nil
 	}
 
-	if err := e.prefixPlan.Validate(ec.namespaces, ec.strictPrefixes); err != nil {
+	if err := e.prefixPlan.Validate(ec.namespaces, ec.strictPrefixes, ec.schemaDeclarations); err != nil {
 		return Result{}, err
 	}
 	seq, err := eval(ec, e.ast)

@@ -896,7 +896,7 @@ func TestWithAnnotations(t *testing.T) {
 		}
 	}
 
-	require.Equal(t, "rootType", byName["elem:root"])
+	require.Equal(t, "Q{}rootType", byName["elem:root"])
 	require.Equal(t, "xs:string", byName["elem:name"])
 	require.Equal(t, "xs:integer", byName["elem:age"])
 	require.Equal(t, "xs:ID", byName["attr:id"])

@@ -89,9 +89,12 @@ Check each item against SequenceType at runtime → boolean.
 
 ### CastExpr
 Atomize → `CastAtomic(src, targetType)`. `AllowEmpty` allows empty sequence.
+Disallowed targets such as `xs:anyAtomicType`, `xs:anySimpleType`, `xs:anyType`,
+and `xs:NOTATION` raise `XPST0080` before operand cardinality is considered.
 
 ### CastableExpr
-Same as CastExpr but return boolean; never errors.
+Same as CastExpr but return boolean for castability checks.
+Disallowed targets such as `xs:NOTATION` still raise `XPST0080`.
 
 ### TreatAsExpr
 Check instance-of → error `XPDY0050` if not.

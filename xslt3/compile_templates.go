@@ -269,6 +269,9 @@ func (c *compiler) compileTemplateBody(elem *helium.Element) ([]Instruction, []*
 }
 
 func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
+	savedNS := c.pushElementNamespaces(elem)
+	defer func() { c.nsBindings = savedNS }()
+
 	// Validate attributes on xsl:param
 	if err := validateXSLTAttrs(elem, paramAllowedAttrs); err != nil {
 		return nil, err
@@ -346,6 +349,9 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 }
 
 func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
+	savedNS := c.pushElementNamespaces(elem)
+	defer func() { c.nsBindings = savedNS }()
+
 	// Validate attributes on xsl:variable
 	if err := validateXSLTAttrs(elem, variableAllowedAttrs); err != nil {
 		return err

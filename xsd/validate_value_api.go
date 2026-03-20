@@ -9,6 +9,12 @@ import (
 
 // ValidateSimpleValue validates a lexical value against a compiled simple type.
 func ValidateSimpleValue(value string, td *TypeDef) error {
+	return ValidateSimpleValueWithNS(value, nil, td)
+}
+
+// ValidateSimpleValueWithNS validates a lexical value against a compiled simple
+// type using the supplied in-scope namespaces for QName/NOTATION resolution.
+func ValidateSimpleValueWithNS(value string, ns map[string]string, td *TypeDef) error {
 	if td == nil {
 		return fmt.Errorf("nil type definition")
 	}
@@ -16,7 +22,7 @@ func ValidateSimpleValue(value string, td *TypeDef) error {
 		return fmt.Errorf("type %q is not a simple type", typeQualifiedName(td))
 	}
 	var out strings.Builder
-	return validateValue(value, td, "", "", 0, &out)
+	return validateValue(value, ns, td, "", "", 0, &out)
 }
 
 // ValidateElementAgainstType validates an element's content against a compiled

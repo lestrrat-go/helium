@@ -95,7 +95,7 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 		if fc.contextItem != nil {
 			args = []Sequence{{fc.contextItem}}
 		} else if fc.node != nil {
-			args = []Sequence{{NodeItem{Node: fc.node}}}
+			args = []Sequence{{nodeItemFor(fc, fc.node)}}
 		} else {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "data() requires a context item"}
 		}

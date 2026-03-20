@@ -19,16 +19,31 @@ func (c *compiler) compileGlobalContextItem(elem *helium.Element) error {
 	if def.Use == "" {
 		def.Use = "optional"
 	}
-	// XTSE3087: duplicate xsl:global-context-item declarations must agree
+	if def.Use == "absent" && def.As != "" {
+		return staticError("XTSE3089", "xsl:global-context-item with use=\"absent\" must not specify @as")
+	}
+	moduleKey := c.moduleKey
+	if moduleKey == "" {
+		moduleKey = "<main>"
+	}
+	if c.stylesheet.globalContextModules == nil {
+		c.stylesheet.globalContextModules = make(map[string]*GlobalContextItemDef)
+	}
+	// XTSE3087: more than one declaration in the same stylesheet module.
+	if _, exists := c.stylesheet.globalContextModules[moduleKey]; exists {
+		return staticError(errCodeXTSE3087, "multiple xsl:global-context-item declarations in stylesheet module")
+	}
+	c.stylesheet.globalContextModules[moduleKey] = def
+
+	// XTSE3087: declarations in different modules of one package must agree.
 	if existing := c.stylesheet.globalContextItem; existing != nil {
-		// Same values (after whitespace normalization) are OK — ignore duplicate
 		normalizeAs := func(s string) string {
-			return strings.Join(strings.Fields(strings.NewReplacer(" ", "").Replace(s)), "")
+			return strings.Join(strings.Fields(s), "")
 		}
-		if existing.Use == def.Use && normalizeAs(existing.As) == normalizeAs(def.As) {
-			return nil
+		if existing.Use != def.Use || normalizeAs(existing.As) != normalizeAs(def.As) {
+			return staticError(errCodeXTSE3087, "conflicting xsl:global-context-item declarations")
 		}
-		return staticError(errCodeXTSE3087, "conflicting xsl:global-context-item declarations")
+		return nil
 	}
 	c.stylesheet.globalContextItem = def
 	return nil

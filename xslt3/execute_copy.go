@@ -10,11 +10,13 @@ import (
 )
 
 func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
+	contextNode := normalizeNode(ec.contextNode)
+
 	// Resolve shadow attributes (AVTs) at runtime; fall back to static values.
 	copyNS := inst.CopyNamespaces
 	inheritNS := inst.InheritNamespaces
 	if inst.CopyNamespacesAVT != nil {
-		v, err := inst.CopyNamespacesAVT.evaluate(ctx, ec.contextNode)
+		v, err := inst.CopyNamespacesAVT.evaluate(ctx, contextNode)
 		if err != nil {
 			return err
 		}
@@ -23,7 +25,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		}
 	}
 	if inst.InheritNamespacesAVT != nil {
-		v, err := inst.InheritNamespacesAVT.evaluate(ctx, ec.contextNode)
+		v, err := inst.InheritNamespacesAVT.evaluate(ctx, contextNode)
 		if err != nil {
 			return err
 		}
@@ -34,8 +36,8 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 
 	if inst.Select != nil {
 		// XSLT 3.0: xsl:copy with select — iterate over selected items
-		xpathCtx := ec.newXPathContext(ec.contextNode)
-		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		xpathCtx := ec.newXPathContext(contextNode)
+		result, err := inst.Select.Evaluate(xpathCtx, contextNode)
 		if err != nil {
 			return err
 		}
@@ -85,10 +87,10 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		return nil
 	}
 
-	if ec.contextNode == nil {
+	if contextNode == nil {
 		return dynamicError(errCodeXTTE0945, "xsl:copy: no context item")
 	}
-	if err := ec.execCopyNode(ctx, ec.contextNode, copyNodeOpts{
+	if err := ec.execCopyNode(ctx, contextNode, copyNodeOpts{
 		body:              inst.Body,
 		useAttrSets:       inst.UseAttrSets,
 		copyNamespaces:    copyNS,
@@ -101,8 +103,8 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 	if inst.TypeName != "" {
 		// For xsl:copy, the type attribute is only applied to element/attribute
 		// context nodes. For text/comment/PI, it is silently ignored.
-		isElemOrAttr := ec.contextNode != nil &&
-			(ec.contextNode.Type() == helium.ElementNode || ec.contextNode.Type() == helium.AttributeNode)
+		isElemOrAttr := contextNode != nil &&
+			(contextNode.Type() == helium.ElementNode || contextNode.Type() == helium.AttributeNode)
 		// XTTE1535: complex type on non-element node.
 		if !isElemOrAttr && ec.schemaRegistry != nil {
 			td, _, found := ec.schemaRegistry.LookupTypeDef(inst.TypeName)
@@ -110,7 +112,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 			// or mixed content) cannot be applied to non-element nodes.
 			if found && isComplexTypeDef(td) {
 				return dynamicError(errCodeXTTE1535,
-					"copy: complex type %s cannot be applied to %s node", inst.TypeName, ec.contextNode.Type())
+					"copy: complex type %s cannot be applied to %s node", inst.TypeName, contextNode.Type())
 			}
 		}
 		if isElemOrAttr {

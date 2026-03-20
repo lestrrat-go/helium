@@ -43,6 +43,22 @@ func (ec *execContext) makeSchemaConstructor(td *xsd.TypeDef) func(context.Conte
 		if err != nil {
 			return nil, err
 		}
+		if baseType == xpath3.TypeQName || baseType == xpath3.TypeNOTATION {
+			if err := xsd.ValidateSimpleValueWithNS(lexical, ec.stylesheet.namespaces, td); err != nil {
+				return nil, &xpath3.XPathError{
+					Code:    "FORG0001",
+					Message: fmt.Sprintf("cannot cast %q to %s", lexical, typeName),
+				}
+			}
+			qv, err := schemaConstructorQNameValue(av, ec)
+			if err != nil {
+				return nil, err
+			}
+			return xpath3.SingleAtomic(xpath3.AtomicValue{
+				TypeName: typeName,
+				Value:    qv,
+			}), nil
+		}
 		if err := xsd.ValidateSimpleValue(lexical, td); err != nil {
 			return nil, &xpath3.XPathError{
 				Code:    "FORG0001",
@@ -68,6 +84,63 @@ func (ec *execContext) makeSchemaConstructor(td *xsd.TypeDef) func(context.Conte
 			Value:    cast.Value,
 		}), nil
 	}
+}
+
+func schemaConstructorQNameValue(av xpath3.AtomicValue, ec *execContext) (xpath3.QNameValue, error) {
+	promoted := xpath3.PromoteSchemaType(av)
+	if promoted.TypeName == xpath3.TypeQName {
+		return promoted.QNameVal(), nil
+	}
+	if qv, ok := av.Value.(xpath3.QNameValue); ok {
+		return qv, nil
+	}
+	if av.TypeName == xpath3.TypeNOTATION {
+		s, err := xpath3.AtomicToString(av)
+		if err != nil {
+			return xpath3.QNameValue{}, err
+		}
+		return resolveQNameFromMap(s, ec.stylesheet.namespaces)
+	}
+
+	if av.TypeName != xpath3.TypeString && av.TypeName != xpath3.TypeUntypedAtomic {
+		return xpath3.QNameValue{}, &xpath3.XPathError{
+			Code:    "XPTY0004",
+			Message: fmt.Sprintf("cannot cast %s to schema-derived QName/NOTATION type", av.TypeName),
+		}
+	}
+	return resolveQNameFromMap(av.StringVal(), ec.stylesheet.namespaces)
+}
+
+func resolveQNameFromMap(s string, ns map[string]string) (xpath3.QNameValue, error) {
+	s = strings.TrimSpace(s)
+	prefix := ""
+	local := s
+	if idx := strings.IndexByte(s, ':'); idx >= 0 {
+		prefix = s[:idx]
+		local = s[idx+1:]
+	}
+	if !isValidNCName(local) || (prefix != "" && !isValidNCName(prefix)) {
+		return xpath3.QNameValue{}, &xpath3.XPathError{
+			Code:    "FORG0001",
+			Message: fmt.Sprintf("invalid QName: %q", s),
+		}
+	}
+
+	uri := ""
+	if prefix != "" {
+		var ok bool
+		uri, ok = ns[prefix]
+		if !ok {
+			return xpath3.QNameValue{}, &xpath3.XPathError{
+				Code:    "FONS0004",
+				Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),
+			}
+		}
+	} else if ns != nil {
+		uri = ns[""]
+	}
+
+	return xpath3.QNameValue{Prefix: prefix, Local: local, URI: uri}, nil
 }
 
 func schemaConstructorArg(seq xpath3.Sequence, typeName string) (xpath3.AtomicValue, bool, error) {

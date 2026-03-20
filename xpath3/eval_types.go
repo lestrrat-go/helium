@@ -10,15 +10,15 @@ import (
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
-func evalInstanceOfExpr(ec *evalContext, e InstanceOfExpr) (Sequence, error) {
-	seq, err := eval(ec, e.Expr)
+func evalInstanceOfExpr(evalFn exprEvaluator, ec *evalContext, e InstanceOfExpr) (Sequence, error) {
+	seq, err := evalFn(ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
 	return SingleBoolean(matchesSequenceType(seq, e.Type, ec)), nil
 }
 
-func evalCastExpr(ec *evalContext, e CastExpr) (Sequence, error) {
+func evalCastExpr(evalFn exprEvaluator, ec *evalContext, e CastExpr) (Sequence, error) {
 	targetType := resolveAtomicTypeName(e.Type, ec)
 	if isAbstractCastTarget(targetType) {
 		return nil, &XPathError{
@@ -26,20 +26,20 @@ func evalCastExpr(ec *evalContext, e CastExpr) (Sequence, error) {
 			Message: fmt.Sprintf("cannot use abstract type %s as cast target", targetType),
 		}
 	}
-	seq, err := eval(ec, e.Expr)
+	seq, err := evalFn(ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		if e.AllowEmpty {
 			return nil, nil
 		}
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "cast requires non-empty sequence"}
 	}
-	if len(seq) > 1 {
+	if seqLen(seq) > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "cast requires singleton"}
 	}
-	av, err := AtomizeItem(seq[0])
+	av, err := AtomizeItem(seq.Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func evalCastExpr(ec *evalContext, e CastExpr) (Sequence, error) {
 	return SingleAtomic(result), nil
 }
 
-func evalCastableExpr(ec *evalContext, e CastableExpr) (Sequence, error) {
+func evalCastableExpr(evalFn exprEvaluator, ec *evalContext, e CastableExpr) (Sequence, error) {
 	targetType := resolveAtomicTypeName(e.Type, ec)
 	// Abstract types raise a static error even for castable (XPST0080)
 	if isAbstractCastTarget(targetType) {
@@ -108,17 +108,17 @@ func evalCastableExpr(ec *evalContext, e CastableExpr) (Sequence, error) {
 			Message: fmt.Sprintf("cannot use abstract type %s as castable target", targetType),
 		}
 	}
-	seq, err := eval(ec, e.Expr)
+	seq, err := evalFn(ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return SingleBoolean(e.AllowEmpty), nil
 	}
-	if len(seq) > 1 {
+	if seqLen(seq) > 1 {
 		return SingleBoolean(false), nil
 	}
-	av, err := AtomizeItem(seq[0])
+	av, err := AtomizeItem(seq.Get(0))
 	if err != nil {
 		return SingleBoolean(false), nil
 	}
@@ -143,25 +143,42 @@ func evalCastableExpr(ec *evalContext, e CastableExpr) (Sequence, error) {
 		}
 		annName := QAnnotation(ns, e.Type.Name)
 		if builtinBase := resolveToBuiltinBase(e.Type.Name, ns, ec.schemaDeclarations); builtinBase != "" {
-			result, baseErr := CastAtomic(av, builtinBase)
-			if baseErr == nil {
-				s, _ := AtomicToString(result)
-				castErr = ec.schemaDeclarations.ValidateCast(s, annName)
+			// NOTATION and QName derived types require namespace context
+			// for resolution. The abstract base type (xs:NOTATION, xs:QName)
+			// cannot be used as a cast target directly, so validate with
+			// namespace context instead.
+			if builtinBase == TypeNOTATION || builtinBase == TypeQName {
+				// Only string, untypedAtomic, QName, and NOTATION types
+				// (or schema-derived variants holding QNameValue) can be
+				// cast to QName/NOTATION derived types.
+				_, isQV := av.Value.(QNameValue)
+				srcOK := av.TypeName == TypeString || av.TypeName == TypeUntypedAtomic ||
+					av.TypeName == TypeQName || av.TypeName == TypeNOTATION || isQV
+				if srcOK {
+					s, _ := AtomicToString(av)
+					castErr = ec.schemaDeclarations.ValidateCastWithNS(s, annName, ec.namespaces)
+				}
 			} else {
-				castErr = baseErr
+				result, baseErr := CastAtomic(av, builtinBase)
+				if baseErr == nil {
+					s, _ := AtomicToString(result)
+					castErr = ec.schemaDeclarations.ValidateCast(s, annName)
+				} else {
+					castErr = baseErr
+				}
 			}
 		}
 	}
 	return SingleBoolean(castErr == nil), nil
 }
 
-func evalTreatAsExpr(ec *evalContext, e TreatAsExpr) (Sequence, error) {
-	seq, err := eval(ec, e.Expr)
+func evalTreatAsExpr(evalFn exprEvaluator, ec *evalContext, e TreatAsExpr) (Sequence, error) {
+	seq, err := evalFn(ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
 	if !matchesSequenceType(seq, e.Type, ec) {
-		return nil, &XPathError{Code: errCodeXPDY0050, Message: fmt.Sprintf("treat as: sequence does not match required type %v (actual length %d)", e.Type, len(seq))}
+		return nil, &XPathError{Code: errCodeXPDY0050, Message: fmt.Sprintf("treat as: sequence does not match required type %v (actual length %d)", e.Type, seqLen(seq))}
 	}
 	return seq, nil
 }
@@ -191,27 +208,30 @@ func resolveToBuiltinBase(local, ns string, decls SchemaDeclarations) string {
 	return ""
 }
 
-// resolveAtomicTypeName maps an AtomicTypeName to an internal xs:-prefixed type string.
-// Per XPath 3.1, unprefixed type names in cast/instance-of default to the xs: namespace.
-// This is a pragmatic simplification; a strict implementation would require checking
-// the default element namespace and raising XPST0081 if it is not XSD.
+// resolveAtomicTypeName maps an AtomicTypeName to the internal type name format.
+// Unprefixed names first try an imported no-namespace schema type, then fall
+// back to the existing xs: shorthand behavior when no schema declaration exists.
 func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 	if tn.Prefix == "" {
 		// Check if a default element namespace is set.
 		if ec != nil && ec.namespaces != nil {
 			if defNS, ok := ec.namespaces[""]; ok && defNS != "" {
-				if defNS == lexicon.XSD {
+				if defNS == lexicon.NamespaceXSD {
 					return "xs:" + tn.Name
 				}
 				return QAnnotation(defNS, tn.Name)
 			}
 		}
-		// No default namespace: check if this is a known xs: type.
-		// If not, treat as a no-namespace user-defined type.
-		if IsKnownXSDType("xs:" + tn.Name) {
-			return "xs:" + tn.Name
+		if ec != nil && ec.schemaDeclarations != nil {
+			if _, ok := ec.schemaDeclarations.LookupSchemaType(tn.Name, ""); ok {
+				return QAnnotation("", tn.Name)
+			}
 		}
-		return "Q{}" + tn.Name
+		// No default namespace: assume xs: namespace for known types.
+		// For unknown names, only use Q{} form when schema declarations
+		// are available (XSLT schema-aware mode); otherwise keep xs:
+		// prefix so static type checking can report XPST0051.
+		return "xs:" + tn.Name
 	}
 	if tn.Prefix == "xs" || tn.Prefix == "xsd" {
 		return "xs:" + tn.Name
@@ -219,7 +239,7 @@ func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 	// Resolve via namespace context
 	if ec.namespaces != nil {
 		if uri, ok := ec.namespaces[tn.Prefix]; ok {
-			if uri == lexicon.XSD {
+			if uri == lexicon.NamespaceXSD {
 				return "xs:" + tn.Name
 			}
 			// Non-XSD namespace: use Q{ns}local annotation format
@@ -229,19 +249,24 @@ func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 	return tn.Prefix + ":" + tn.Name
 }
 
-// coerceToSequenceType applies XPath 3.1 function coercion rules (§3.1.5.2):
+// CoerceToSequenceType applies XPath 3.1 function coercion rules (§3.1.5.2):
 // atomization, numeric promotion (integer→float/double, float→double),
-// and URI-to-string promotion. Returns the coerced sequence and true if
-// coercion succeeded, or the original sequence and false if it did not.
+// URI-to-string promotion, and function coercion.  Returns the coerced
+// sequence and true on success, or the original sequence and false on failure.
+func CoerceToSequenceType(seq Sequence, st SequenceType) (Sequence, bool) {
+	return coerceToSequenceType(seq, st, nil)
+}
+
+// coerceToSequenceType is the internal version with an evalContext.
 func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Sequence, bool) {
 	if matchesSequenceType(seq, st, ec) {
 		return seq, true
 	}
-	if len(seq) == 1 {
+	if seqLen(seq) == 1 {
 		if fnTest, ok := st.ItemTest.(FunctionTest); ok {
-			adapted, ok := coerceFunctionItem(seq[0], fnTest, ec)
+			adapted, ok := coerceFunctionItem(seq.Get(0), fnTest, ec)
 			if ok {
-				return Sequence{adapted}, true
+				return ItemSlice{adapted}, true
 			}
 		}
 	}
@@ -253,8 +278,9 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 	default:
 		return seq, false
 	}
-	result := make(Sequence, len(seq))
-	for i, item := range seq {
+	result := make(ItemSlice, seqLen(seq))
+	i := 0
+	for item := range seqItems(seq) {
 		av, ok := item.(AtomicValue)
 		if !ok {
 			// Try atomization
@@ -274,6 +300,7 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 					return seq, false
 				}
 				result[i] = promoted
+				i++
 				continue
 			}
 		case TypeFloat:
@@ -284,25 +311,34 @@ func coerceToSequenceType(seq Sequence, st SequenceType, ec *evalContext) (Seque
 					return seq, false
 				}
 				result[i] = promoted
+				i++
 				continue
 			}
 		case TypeString:
 			if av.TypeName == TypeAnyURI {
 				result[i] = AtomicValue{TypeName: TypeString, Value: av.Value}
+				i++
 				continue
 			}
 		}
 		// Untypedatomic → target type
 		if av.TypeName == TypeUntypedAtomic {
-			cast, err := CastAtomic(av, targetType)
+			// xs:numeric is a union type — cast untypedAtomic to xs:double
+			castTarget := targetType
+			if castTarget == TypeNumeric {
+				castTarget = TypeDouble
+			}
+			cast, err := CastAtomic(av, castTarget)
 			if err != nil {
 				return seq, false
 			}
 			result[i] = cast
+			i++
 			continue
 		}
 		if isSubtypeOf(av.TypeName, targetType) {
 			result[i] = av
+			i++
 			continue
 		}
 		return seq, false
@@ -392,27 +428,59 @@ func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, 
 	}, true
 }
 
+// MatchesSequenceType checks if a sequence matches a SequenceType using
+// the XPath 3.1 SequenceType matching rules (no coercion).
+func MatchesSequenceType(seq Sequence, st SequenceType) bool {
+	return matchesSequenceType(seq, st, nil)
+}
+
+// CheckFunctionParamCompat checks whether a FunctionItem's declared parameter
+// types are compatible with a target FunctionTest's parameter types using
+// contravariance. Returns true if each target param type is a subtype of the
+// corresponding function param type (i.e., the function can accept the target's
+// argument types). If the function has no declared param types, returns true
+// (unknown types are assumed compatible).
+func CheckFunctionParamCompat(fi FunctionItem, st SequenceType) bool {
+	ft, ok := st.ItemTest.(FunctionTest)
+	if !ok || ft.AnyFunction {
+		return true
+	}
+	if len(fi.ParamTypes) == 0 || len(ft.ParamTypes) == 0 {
+		return true // no type info → assume compatible
+	}
+	if len(fi.ParamTypes) != len(ft.ParamTypes) {
+		return false
+	}
+	for i, testParam := range ft.ParamTypes {
+		// Contravariant: the function's param must be a supertype of the target's param
+		if !isSequenceSubtype(testParam, fi.ParamTypes[i], nil) {
+			return false
+		}
+	}
+	return true
+}
+
 func matchesSequenceType(seq Sequence, st SequenceType, ec *evalContext) bool {
 	if st.Void {
-		return len(seq) == 0
+		return seqLen(seq) == 0
 	}
 	switch st.Occurrence {
 	case OccurrenceExactlyOne:
-		if len(seq) != 1 {
+		if seqLen(seq) != 1 {
 			return false
 		}
 	case OccurrenceZeroOrOne:
-		if len(seq) > 1 {
+		if seqLen(seq) > 1 {
 			return false
 		}
 	case OccurrenceOneOrMore:
-		if len(seq) == 0 {
+		if seqLen(seq) == 0 {
 			return false
 		}
 	case OccurrenceZeroOrMore:
 		// any length ok
 	}
-	for _, item := range seq {
+	for item := range seqItems(seq) {
 		if !matchesItemType(item, st.ItemTest, ec) {
 			return false
 		}
@@ -485,16 +553,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if ec == nil || ec.schemaDeclarations == nil {
 			return false
 		}
-		prefix, local := splitQName(t.Name)
-		ns := ""
-		if ec.namespaces != nil {
-			if prefix != "" {
-				ns = ec.namespaces[prefix]
-			} else {
-				// Unprefixed names use the default element namespace.
-				ns = ec.namespaces[""]
-			}
-		}
+		local, ns := resolveSchemaTestName(t.Name, ec)
 		// The node must have the same name as the declared element
 		// (or a substitution group member — checked separately below).
 		nameMatch := ixpath.LocalNameOf(ni.Node) == local && ixpath.NodeNamespaceURI(ni.Node) == ns
@@ -503,9 +562,6 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			if ec.schemaDeclarations == nil {
 				return false
 			}
-			// Try to find if this node's name is a substitution group member of the declared element.
-			memberLocal := ixpath.LocalNameOf(ni.Node)
-			memberNS := ixpath.NodeNamespaceURI(ni.Node)
 			headType, headFound := ec.schemaDeclarations.LookupSchemaElement(local, ns)
 			if !headFound {
 				return false
@@ -515,10 +571,9 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			if ann == "" {
 				ann = TypeUntyped
 			}
+			// Untyped elements do NOT match schema-element().
 			if ann == TypeUntyped {
-				// Check if member is declared in schema
-				_, memberFound := ec.schemaDeclarations.LookupSchemaElement(memberLocal, memberNS)
-				return memberFound
+				return false
 			}
 			if isSubtypeOf(ann, headType) || ec.schemaDeclarations.IsSubtypeOf(ann, headType) {
 				return true
@@ -552,11 +607,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if ec == nil || ec.schemaDeclarations == nil {
 			return false
 		}
-		prefix, local := splitQName(t.Name)
-		ns := ""
-		if prefix != "" && ec.namespaces != nil {
-			ns = ec.namespaces[prefix]
-		}
+		local, ns := resolveSchemaTestName(t.Name, ec)
 		// The node must have the same name as the declared attribute.
 		if ixpath.LocalNameOf(ni.Node) != local || ixpath.NodeNamespaceURI(ni.Node) != ns {
 			return false
@@ -633,7 +684,7 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 					// Contravariant: the function's declared param type must be a supertype
 					// of (or same as) the test's param type. In practice, this means the
 					// test's param type must be a subtype of the function's param type.
-					if !isSequenceSubtype(testParam, v.ParamTypes[i], ec) {
+						if !isSequenceSubtype(testParam, v.ParamTypes[i], ec) {
 						return false
 					}
 				}
@@ -719,6 +770,12 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 			}
 		}
 		return true
+	case NamespaceNodeTest:
+		ni, ok := item.(NodeItem)
+		if !ok {
+			return false
+		}
+		return ni.Node.Type() == helium.NamespaceNode
 	}
 	return false
 }
@@ -832,10 +889,31 @@ func isItemTypeSubtype(a, b NodeTest, ec *evalContext) bool {
 		if !ok {
 			return false
 		}
-		if bt.Name == "" {
+		if bt.Name == "" && bt.TypeName == "" {
 			return true // element() matches any element
 		}
-		return at.Name == bt.Name
+		// Check name: if bt has a specific name, at must match
+		if bt.Name != "" && bt.Name != "*" && at.Name != bt.Name {
+			return false
+		}
+		// Check type annotation: if bt specifies a type, at must have a
+		// compatible type annotation. element(N) without TypeName
+		// is equivalent to element(N, xs:anyType?) (nillable), which
+		// is NOT a subtype of element(N, T) (non-nillable).
+		if bt.TypeName != "" {
+			if at.TypeName == "" {
+				return false // untyped element(N) is not subtype of typed element(N, T)
+			}
+			bType := resolveTestTypeName(bt.TypeName, ec)
+			if !isSubtypeOf(at.TypeName, bType) {
+				return false
+			}
+			// Nillable: element(N, T?) is not subtype of element(N, T)
+			if at.Nillable && !bt.Nillable {
+				return false
+			}
+		}
+		return true
 	case AttributeTest:
 		at, ok := a.(AttributeTest)
 		if !ok {
@@ -899,6 +977,14 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 	// QName → QName: identity
 	if v.TypeName == TypeQName {
 		return v, nil
+	}
+
+	// NOTATION → QName: NOTATION values are QName-like.
+	if v.TypeName == TypeNOTATION {
+		return AtomicValue{TypeName: TypeQName, Value: v.Value}, nil
+	}
+	if _, ok := v.Value.(QNameValue); ok {
+		return AtomicValue{TypeName: TypeQName, Value: v.Value}, nil
 	}
 
 	// Only string and untypedAtomic can be cast to QName
