@@ -20,11 +20,14 @@ type Expression struct {
     program *vmProgram
 }
 func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error)
+func (e *Expression) DumpVM(w io.Writer) error
 func (e *Expression) AST() Expr
 func (e *Expression) String() string
 ```
 
 `Compile()` first tries a direct fast path for simple path-like expressions on the lexer token stream, then falls back to parse+lower through the VM backend on the same lexer if the fast path does not apply. It does not retain the parsed AST on the `Expression`; `AST()` and streamability helpers reparse from `source` on demand. `CompileExpr()` keeps the caller-provided AST and lowers it without mutating the input tree.
+
+`DumpVM()` writes a textual disassembly of compiled VM instructions. Use it for debugging or tooling around lowered expressions.
 
 ## Result
 

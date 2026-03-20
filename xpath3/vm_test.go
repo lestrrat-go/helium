@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/lestrrat-go/helium/xpath3"
@@ -117,4 +118,20 @@ func TestAttributeEqualityPredicateReverseOperandsVM(t *testing.T) {
 	value, ok := result.IsString()
 	require.True(t, ok)
 	require.Equal(t, "XPath Mastery", value)
+}
+
+func TestDumpVM(t *testing.T) {
+	compiled, err := xpath3.Compile(`count(/library/book[@lang="en"])`)
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	err = compiled.DumpVM(&buf)
+	require.NoError(t, err)
+
+	dump := buf.String()
+	require.Contains(t, dump, "root @3\n")
+	require.Contains(t, dump, " 0000 location-path      attribute::lang\n")
+	require.Contains(t, dump, " 0001 binary             binary(=, @0, \"en\")\n")
+	require.Contains(t, dump, " 0002 location-path      /child::library/child::book[attribute-equals(lang, \"en\")]\n")
+	require.Contains(t, dump, "*0003 function-call      count(@2)\n")
 }

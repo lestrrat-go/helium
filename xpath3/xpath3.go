@@ -5,6 +5,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/lestrrat-go/helium"
 )
@@ -83,6 +84,14 @@ func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, e
 // String returns the original XPath expression string.
 func (e *Expression) String() string {
 	return e.source
+}
+
+// DumpVM writes a textual dump of compiled VM instructions.
+func (e *Expression) DumpVM(w io.Writer) error {
+	if e == nil || e.program == nil {
+		return fmt.Errorf("xpath3: expression has no compiled program")
+	}
+	return e.program.dumpTo(w)
 }
 
 // Result holds the outcome of an XPath 3.1 evaluation.

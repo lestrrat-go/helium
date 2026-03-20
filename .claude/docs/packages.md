@@ -55,6 +55,7 @@ XPath 3.1 expression parsing and evaluation.
 
 - **Compile(string) → (*Expression, error)** / **MustCompile(string) → *Expression** — parse XPath 3.1
 - **Expression.Evaluate(ctx, Node) → (*Result, error)**
+- **Expression.DumpVM(io.Writer) → error** — write compiled VM instruction dump for debugging/tooling
 - **Find(ctx, Node, string) → ([]Node, error)** — convenience: compile+evaluate→node-set
 - **Evaluate(ctx, Node, string) → (*Result, error)** — convenience: compile+evaluate
 - **WithNamespaces(ctx, ns) → context.Context** / **WithVariables(ctx, vars) → context.Context** / **WithOpLimit(ctx, n) → context.Context** — attach XPath 3.1 evaluation settings to `context.Context`
@@ -69,7 +70,7 @@ XPath 3.1 expression parsing and evaluation.
 - Structured errors: XPathError with W3C error codes (XPTY0004, FOER0000, etc.)
 - Limits: recursion 5000, node-set 10M, configurable op limit
 - Runtime: `Compile()` first tries a direct fast path for simple path-like expressions and simple predicate comparisons, otherwise lowers AST to a VM instruction graph while collecting the prefix-validation plan, keeping trivial leaves inline in parent payloads and reusing parsed slices on the owned compile path; `Evaluate()` executes compiled refs by opcode and reuses shared eval helpers for semantics; AST/streamability access reparses from `Expression.source` on demand
-- Files: `xpath3.go` (API), `parser.go`, `lexer.go`, `expr.go`, `token.go`, `eval.go`, `eval_dispatch.go`, `vm.go`, `compare.go`, `cast.go`, `types.go`, `sequence.go`, `context.go`, `errors.go`, `functions*.go` (15 files)
+- Files: `xpath3.go` (API), `parser.go`, `lexer.go`, `expr.go`, `token.go`, `eval.go`, `eval_dispatch.go`, `vm.go`, `vm_dump.go`, `compare.go`, `cast.go`, `types.go`, `sequence.go`, `context.go`, `errors.go`, `functions*.go` (15 files)
 - Imports: helium, internal/xpath, internal/lexicon
 
 ## xslt3/
