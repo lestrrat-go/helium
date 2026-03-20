@@ -127,7 +127,7 @@ func (e *Expression) EvaluateReuse(state *EvalState, node helium.Node) (Result, 
 	if err := e.prefixPlan.Validate(ec.namespaces, ec.strictPrefixes, ec.schemaDeclarations); err != nil {
 		return Result{}, err
 	}
-	seq, err := eval(ec, e.ast)
+	seq, err := e.evaluate(ec)
 	if err != nil {
 		return Result{}, err
 	}

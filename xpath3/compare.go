@@ -14,18 +14,18 @@ import (
 // evalGeneralComparison implements general comparison (= != < <= > >=).
 // Per XPath 3.1 Section 3.7.1: atomize both operands, then existentially
 // quantify — true if ANY pair satisfies the value comparison.
-func evalGeneralComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
-	if result, ok, err := evalGeneralComparisonAgainstRange(ec, e); ok {
+func evalGeneralComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	if result, ok, err := evalGeneralComparisonAgainstRange(evalFn, ec, e); ok {
 		if err != nil {
 			return nil, err
 		}
 		return SingleBoolean(result), nil
 	}
-	left, err := eval(ec, e.Left)
+	left, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := eval(ec, e.Right)
+	right, err := evalFn(ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -37,18 +37,18 @@ func evalGeneralComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	return SingleBoolean(result), nil
 }
 
-func evalGeneralComparisonAgainstRange(ec *evalContext, e BinaryExpr) (bool, bool, error) {
+func evalGeneralComparisonAgainstRange(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (bool, bool, error) {
 	if re, ok := e.Right.(RangeExpr); ok {
-		return compareSingletonAgainstRange(ec, e.Op, e.Left, re, false)
+		return compareSingletonAgainstRange(evalFn, ec, e.Op, e.Left, re, false)
 	}
 	if re, ok := e.Left.(RangeExpr); ok {
-		return compareSingletonAgainstRange(ec, e.Op, e.Right, re, true)
+		return compareSingletonAgainstRange(evalFn, ec, e.Op, e.Right, re, true)
 	}
 	return false, false, nil
 }
 
-func compareSingletonAgainstRange(ec *evalContext, op TokenType, singletonExpr Expr, rangeExpr RangeExpr, rangeOnLeft bool) (bool, bool, error) {
-	singletonSeq, err := eval(ec, singletonExpr)
+func compareSingletonAgainstRange(evalFn exprEvaluator, ec *evalContext, op TokenType, singletonExpr Expr, rangeExpr RangeExpr, rangeOnLeft bool) (bool, bool, error) {
+	singletonSeq, err := evalFn(ec, singletonExpr)
 	if err != nil {
 		return false, true, err
 	}
@@ -66,7 +66,7 @@ func compareSingletonAgainstRange(ec *evalContext, op TokenType, singletonExpr E
 	if err != nil {
 		return false, false, nil
 	}
-	start, end, empty, err := evalRangeBounds(ec, rangeExpr)
+	start, end, empty, err := evalRangeBounds(evalFn, ec, rangeExpr)
 	if err != nil {
 		return false, true, err
 	}
@@ -76,12 +76,12 @@ func compareSingletonAgainstRange(ec *evalContext, op TokenType, singletonExpr E
 	return compareRangeBounds(op, singletonInt.BigInt(), start, end, rangeOnLeft), true, nil
 }
 
-func evalRangeBounds(ec *evalContext, e RangeExpr) (*big.Int, *big.Int, bool, error) {
-	startSeq, err := eval(ec, e.Start)
+func evalRangeBounds(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (*big.Int, *big.Int, bool, error) {
+	startSeq, err := evalFn(ec, e.Start)
 	if err != nil {
 		return nil, nil, false, err
 	}
-	endSeq, err := eval(ec, e.End)
+	endSeq, err := evalFn(ec, e.End)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -148,12 +148,12 @@ func compareRangeBounds(op TokenType, singleton, start, end *big.Int, rangeOnLef
 
 // evalValueComparison implements value comparison (eq ne lt le gt ge).
 // Per XPath 3.1 Section 3.7.2: both operands must be single atomic values.
-func evalValueComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := eval(ec, e.Left)
+func evalValueComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := eval(ec, e.Right)
+	right, err := evalFn(ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -184,12 +184,12 @@ func evalValueComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	return SingleBoolean(result), nil
 }
 
-func evalNodeComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := eval(ec, e.Left)
+func evalNodeComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := eval(ec, e.Right)
+	right, err := evalFn(ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -677,7 +677,7 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 	}
 
 	// Fallback for user-defined date/time types (only when at least one is non-built-in).
-	if (!IsKnownXSDType(a.TypeName) || !IsKnownXSDType(b.TypeName)) {
+	if !IsKnownXSDType(a.TypeName) || !IsKnownXSDType(b.TypeName) {
 		if ta, ok := a.Value.(time.Time); ok {
 			if tb, ok := b.Value.(time.Time); ok {
 				return compareDate(op, ta, tb, implicitTZ), nil

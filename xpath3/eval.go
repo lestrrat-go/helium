@@ -2,7 +2,6 @@ package xpath3
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -264,87 +263,9 @@ func (ec *evalContext) countOps(n int) error {
 // Depth tracking: withNode/withContextItem copy the parent's depth into the
 // new context, so each nested eval chain inherits and increments correctly.
 func eval(ec *evalContext, expr Expr) (Sequence, error) {
-	ec.depth++
-	if ec.depth > maxRecursionDepth {
-		return nil, ErrRecursionLimit
-	}
-	defer func() { ec.depth-- }()
+	return evalWith(evalBody, ec, expr)
+}
 
-	switch e := expr.(type) {
-	case LiteralExpr:
-		return evalLiteral(e)
-	case VariableExpr:
-		return evalVariable(ec, e)
-	case ContextItemExpr:
-		if ec.contextItem != nil {
-			return Sequence{ec.contextItem}, nil
-		}
-		if ec.node == nil {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
-		}
-		return Sequence{nodeItemFor(ec, ec.node)}, nil
-	case RootExpr:
-		if ec.node == nil {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
-		}
-		return Sequence{nodeItemFor(ec, ixpath.DocumentRoot(ec.node))}, nil
-	case SequenceExpr:
-		return evalSequenceExpr(ec, e)
-	case *LocationPath:
-		return evalLocationPath(ec, e)
-	case BinaryExpr:
-		return evalBinaryExpr(ec, e)
-	case UnaryExpr:
-		return evalUnaryExpr(ec, e)
-	case ConcatExpr:
-		return evalConcatExpr(ec, e)
-	case SimpleMapExpr:
-		return evalSimpleMapExpr(ec, e)
-	case RangeExpr:
-		return evalRangeExpr(ec, e)
-	case UnionExpr:
-		return evalUnionExpr(ec, e)
-	case IntersectExceptExpr:
-		return evalIntersectExceptExpr(ec, e)
-	case FilterExpr:
-		return evalFilterExpr(ec, e)
-	case PathExpr:
-		return evalPathExpr(ec, e)
-	case PathStepExpr:
-		return evalPathStepExpr(ec, e)
-	case LookupExpr:
-		return evalLookupExpr(ec, e)
-	case UnaryLookupExpr:
-		return evalUnaryLookupExpr(ec, e)
-	case FLWORExpr:
-		return evalFLWOR(ec, e)
-	case QuantifiedExpr:
-		return evalQuantifiedExpr(ec, e)
-	case IfExpr:
-		return evalIfExpr(ec, e)
-	case TryCatchExpr:
-		return evalTryCatchExpr(ec, e)
-	case InstanceOfExpr:
-		return evalInstanceOfExpr(ec, e)
-	case CastExpr:
-		return evalCastExpr(ec, e)
-	case CastableExpr:
-		return evalCastableExpr(ec, e)
-	case TreatAsExpr:
-		return evalTreatAsExpr(ec, e)
-	case FunctionCall:
-		return evalFunctionCall(ec, e)
-	case DynamicFunctionCall:
-		return evalDynamicFunctionCall(ec, e)
-	case NamedFunctionRef:
-		return evalNamedFunctionRef(ec, e)
-	case InlineFunctionExpr:
-		return evalInlineFunctionExpr(ec, e)
-	case MapConstructorExpr:
-		return evalMapConstructorExpr(ec, e)
-	case ArrayConstructorExpr:
-		return evalArrayConstructorExpr(ec, e)
-	default:
-		return nil, fmt.Errorf("%w: %T", ErrUnsupportedExpr, expr)
-	}
+func evalBody(ec *evalContext, expr Expr) (Sequence, error) {
+	return dispatchExpr(eval, ec, expr)
 }

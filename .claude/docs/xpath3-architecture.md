@@ -20,7 +20,7 @@ xpath1 → internal/xpath → helium
 ## Data Flow
 
 ```
-string → lexer ([]Token) → parser (Expr AST) → eval(evalContext, Expr) → Sequence → Result
+string → lexer ([]Token) → parser (Expr AST) → VM lowering (`vmProgram`) → VM execution → Sequence → Result
 ```
 
 ## `internal/xpath` Files
@@ -70,7 +70,9 @@ func NodePrefix(n helium.Node) string
 | `token.go` | `TokenType` constants (60+) |
 | `lexer.go` | One-pass tokenizer |
 | `parser.go` | Recursive descent parser |
-| `eval.go` | `evalContext`, main `eval()` dispatch switch |
+| `eval.go` | `evalContext`, raw AST eval trampoline |
+| `eval_dispatch.go` | Shared dispatch used by raw eval + VM |
+| `vm.go` | AST lowering to indexed instruction graph + VM executor |
 | `eval_path.go` | Location paths, node tests, predicates, literal/variable/sequence eval |
 | `eval_operators.go` | Binary/unary logic ops, concat, simple map, range, union, intersect/except, filter, path steps |
 | `eval_arithmetic.go` | Integer/decimal/float arithmetic, unary negation, type promotion helpers |
@@ -96,3 +98,11 @@ func NodePrefix(n helium.Node) string
 | `functions_error.go` | error, trace |
 | `functions_misc.go` | static-base-uri, default-collation, environment-variable, current-dateTime, generate-id |
 | `errors.go` | `XPathError` (structured error with code), standard error constructors |
+
+## Runtime Model
+
+- `Compile()` parses AST, builds prefix validation plan, lowers to `vmProgram`
+- Each lowered node becomes one indexed `vmInstruction`
+- Child Expr references inside lowered payloads become `compiledExprRef`
+- VM recursion reuses existing `eval_*` helpers via `exprEvaluator`
+- Raw `eval()` remains as fallback for unlowered `CompileExpr` inputs

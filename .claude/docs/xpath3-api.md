@@ -17,6 +17,7 @@ func Find(ctx context.Context, node helium.Node, expr string) ([]helium.Node, er
 type Expression struct {
     source string
     ast    Expr
+    program *vmProgram
 }
 func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error)
 func (e *Expression) String() string
@@ -72,6 +73,8 @@ type CollectionResolver interface {
 ```
 
 User functions registered via `WithFunctionsNS` CANNOT override built-ins in `fn:` namespace.
+
+`Compile()` lowers parsed AST to VM program. `CompileExpr()` attempts same lowering, with raw AST fallback for unsupported custom Expr implementations.
 
 ## Errors
 

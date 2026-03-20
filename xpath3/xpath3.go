@@ -13,6 +13,7 @@ import (
 type Expression struct {
 	source     string
 	ast        Expr
+	program    *vmProgram
 	prefixPlan prefixValidationPlan
 }
 
@@ -22,9 +23,14 @@ func Compile(expr string) (*Expression, error) {
 	if err != nil {
 		return nil, err
 	}
+	program, err := compileVMProgram(ast)
+	if err != nil {
+		return nil, err
+	}
 	return &Expression{
 		source:     expr,
 		ast:        ast,
+		program:    program,
 		prefixPlan: buildPrefixValidationPlan(ast),
 	}, nil
 }
@@ -34,6 +40,7 @@ func CompileExpr(ast Expr) *Expression {
 	return &Expression{
 		source:     "",
 		ast:        ast,
+		program:    compileVMProgramLoose(ast),
 		prefixPlan: buildPrefixValidationPlan(ast),
 	}
 }
@@ -64,7 +71,7 @@ func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, e
 		return nil, err
 	}
 
-	seq, err := eval(ec, e.ast)
+	seq, err := e.evaluate(ec)
 	if err != nil {
 		return nil, err
 	}
@@ -201,9 +208,17 @@ func Evaluate(ctx context.Context, node helium.Node, expr string) (*Result, erro
 // and want to evaluate it without going through Compile.
 func EvaluateExpr(ctx context.Context, expr Expr, node helium.Node) (*Result, error) {
 	ec := newEvalContext(ctx, node)
-	seq, err := eval(ec, expr)
+	compiled := CompileExpr(expr)
+	seq, err := compiled.evaluate(ec)
 	if err != nil {
 		return nil, err
 	}
 	return &Result{seq: seq}, nil
+}
+
+func (e *Expression) evaluate(ec *evalContext) (Sequence, error) {
+	if e.program != nil {
+		return e.program.execute(ec)
+	}
+	return eval(ec, e.ast)
 }

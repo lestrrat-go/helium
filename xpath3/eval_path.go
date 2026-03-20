@@ -91,13 +91,13 @@ func enrichNodeItems(ec *evalContext, seq Sequence) Sequence {
 	return result
 }
 
-func evalSequenceExpr(ec *evalContext, e SequenceExpr) (Sequence, error) {
+func evalSequenceExpr(evalFn exprEvaluator, ec *evalContext, e SequenceExpr) (Sequence, error) {
 	if len(e.Items) == 0 {
 		return nil, nil
 	}
 	var result Sequence
 	for _, item := range e.Items {
-		seq, err := eval(ec, item)
+		seq, err := evalFn(ec, item)
 		if err != nil {
 			return nil, err
 		}
@@ -106,7 +106,7 @@ func evalSequenceExpr(ec *evalContext, e SequenceExpr) (Sequence, error) {
 	return result, nil
 }
 
-func evalLocationPath(ec *evalContext, lp *LocationPath) (Sequence, error) {
+func evalLocationPath(evalFn exprEvaluator, ec *evalContext, lp *LocationPath) (Sequence, error) {
 	var nodes []helium.Node
 
 	if lp.Absolute {
@@ -125,7 +125,7 @@ func evalLocationPath(ec *evalContext, lp *LocationPath) (Sequence, error) {
 	var err error
 	for _, step := range lp.Steps {
 		if len(step.Predicates) > 0 {
-			nodes, err = evalStepWithPredicates(ec, nodes, step)
+			nodes, err = evalStepWithPredicates(evalFn, ec, nodes, step)
 		} else {
 			nodes, err = evalStepNoPredicates(ec, nodes, step)
 		}
@@ -156,7 +156,7 @@ func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
 	return ni
 }
 
-func evalStepWithPredicates(ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
+func evalStepWithPredicates(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
 	var allFiltered []helium.Node
 	for _, n := range nodes {
 		candidates, err := ixpath.TraverseAxis(step.Axis, n, ec.maxNodes)
@@ -168,7 +168,7 @@ func evalStepWithPredicates(ec *evalContext, nodes []helium.Node, step Step) ([]
 		}
 		matched := filterByNodeTest(candidates, step.NodeTest, step.Axis, ec)
 		for _, pred := range step.Predicates {
-			matched, err = applyPredicate(ec, matched, pred)
+			matched, err = applyPredicate(evalFn, ec, matched, pred)
 			if err != nil {
 				return nil, err
 			}
@@ -403,7 +403,7 @@ func matchTypeTest(test TypeTest, n helium.Node) bool {
 	return false
 }
 
-func applyPredicate(ec *evalContext, nodes []helium.Node, pred Expr) ([]helium.Node, error) {
+func applyPredicate(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, pred Expr) ([]helium.Node, error) {
 	if err := ec.countOps(len(nodes)); err != nil {
 		return nil, err
 	}
@@ -411,7 +411,7 @@ func applyPredicate(ec *evalContext, nodes []helium.Node, pred Expr) ([]helium.N
 	var result []helium.Node
 	for i, n := range nodes {
 		pctx := ec.withNode(n, i+1, size)
-		r, err := eval(pctx, pred)
+		r, err := evalFn(pctx, pred)
 		if err != nil {
 			return nil, err
 		}

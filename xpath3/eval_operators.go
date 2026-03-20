@@ -8,26 +8,26 @@ import (
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
-func evalBinaryExpr(ec *evalContext, e BinaryExpr) (Sequence, error) {
+func evalBinaryExpr(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
 	switch e.Op {
 	case TokenOr:
-		return evalLogicOr(ec, e)
+		return evalLogicOr(evalFn, ec, e)
 	case TokenAnd:
-		return evalLogicAnd(ec, e)
+		return evalLogicAnd(evalFn, ec, e)
 	case TokenEquals, TokenNotEquals, TokenLess, TokenLessEq, TokenGreater, TokenGreaterEq:
-		return evalGeneralComparison(ec, e)
+		return evalGeneralComparison(evalFn, ec, e)
 	case TokenEq, TokenNe, TokenLt, TokenLe, TokenGt, TokenGe:
-		return evalValueComparison(ec, e)
+		return evalValueComparison(evalFn, ec, e)
 	case TokenIs, TokenNodePre, TokenNodeFol:
-		return evalNodeComparison(ec, e)
+		return evalNodeComparison(evalFn, ec, e)
 	case TokenPlus, TokenMinus, TokenStar, TokenDiv, TokenIdiv, TokenMod:
-		return evalArithmetic(ec, e)
+		return evalArithmetic(evalFn, ec, e)
 	}
 	return nil, fmt.Errorf("%w: %s", ErrUnsupportedBinaryOp, e.Op)
 }
 
-func evalLogicOr(ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := eval(ec, e.Left)
+func evalLogicOr(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func evalLogicOr(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	if lb {
 		return SingleBoolean(true), nil
 	}
-	right, err := eval(ec, e.Right)
+	right, err := evalFn(ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -49,8 +49,8 @@ func evalLogicOr(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	return SingleBoolean(rb), nil
 }
 
-func evalLogicAnd(ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := eval(ec, e.Left)
+func evalLogicAnd(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func evalLogicAnd(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	if !lb {
 		return SingleBoolean(false), nil
 	}
-	right, err := eval(ec, e.Right)
+	right, err := evalFn(ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -72,12 +72,12 @@ func evalLogicAnd(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	return SingleBoolean(rb), nil
 }
 
-func evalConcatExpr(ec *evalContext, e ConcatExpr) (Sequence, error) {
-	left, err := eval(ec, e.Left)
+func evalConcatExpr(evalFn exprEvaluator, ec *evalContext, e ConcatExpr) (Sequence, error) {
+	left, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := eval(ec, e.Right)
+	right, err := evalFn(ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +112,8 @@ func concatToString(seq Sequence) (string, error) {
 	return seqToStringErr(seq)
 }
 
-func evalSimpleMapExpr(ec *evalContext, e SimpleMapExpr) (Sequence, error) {
-	left, err := eval(ec, e.Left)
+func evalSimpleMapExpr(evalFn exprEvaluator, ec *evalContext, e SimpleMapExpr) (Sequence, error) {
+	left, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func evalSimpleMapExpr(ec *evalContext, e SimpleMapExpr) (Sequence, error) {
 		} else {
 			subCtx = ec.withContextItem(item, i+1, size)
 		}
-		r, err := eval(subCtx, e.Right)
+		r, err := evalFn(subCtx, e.Right)
 		if err != nil {
 			return nil, err
 		}
@@ -135,12 +135,12 @@ func evalSimpleMapExpr(ec *evalContext, e SimpleMapExpr) (Sequence, error) {
 	return result, nil
 }
 
-func evalRangeExpr(ec *evalContext, e RangeExpr) (Sequence, error) {
-	startSeq, err := eval(ec, e.Start)
+func evalRangeExpr(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (Sequence, error) {
+	startSeq, err := evalFn(ec, e.Start)
 	if err != nil {
 		return nil, err
 	}
-	endSeq, err := eval(ec, e.End)
+	endSeq, err := evalFn(ec, e.End)
 	if err != nil {
 		return nil, err
 	}
@@ -185,12 +185,12 @@ func evalRangeExpr(ec *evalContext, e RangeExpr) (Sequence, error) {
 	return result, nil
 }
 
-func evalUnionExpr(ec *evalContext, e UnionExpr) (Sequence, error) {
-	left, err := eval(ec, e.Left)
+func evalUnionExpr(evalFn exprEvaluator, ec *evalContext, e UnionExpr) (Sequence, error) {
+	left, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := eval(ec, e.Right)
+	right, err := evalFn(ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -210,12 +210,12 @@ func evalUnionExpr(ec *evalContext, e UnionExpr) (Sequence, error) {
 	return result, nil
 }
 
-func evalIntersectExceptExpr(ec *evalContext, e IntersectExceptExpr) (Sequence, error) {
-	left, err := eval(ec, e.Left)
+func evalIntersectExceptExpr(evalFn exprEvaluator, ec *evalContext, e IntersectExceptExpr) (Sequence, error) {
+	left, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := eval(ec, e.Right)
+	right, err := evalFn(ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -255,8 +255,8 @@ func evalIntersectExceptExpr(ec *evalContext, e IntersectExceptExpr) (Sequence, 
 	return seq, nil
 }
 
-func evalFilterExpr(ec *evalContext, e FilterExpr) (Sequence, error) {
-	base, err := eval(ec, e.Expr)
+func evalFilterExpr(evalFn exprEvaluator, ec *evalContext, e FilterExpr) (Sequence, error) {
+	base, err := evalFn(ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +264,7 @@ func evalFilterExpr(ec *evalContext, e FilterExpr) (Sequence, error) {
 	// Try node-set path (optimized for node predicates)
 	if nodes, ok := NodesFrom(base); ok {
 		for _, pred := range e.Predicates {
-			nodes, err = applyPredicate(ec, nodes, pred)
+			nodes, err = applyPredicate(evalFn, ec, nodes, pred)
 			if err != nil {
 				return nil, err
 			}
@@ -279,7 +279,7 @@ func evalFilterExpr(ec *evalContext, e FilterExpr) (Sequence, error) {
 	// General sequence filtering (XPath 3.1)
 	seq := base
 	for _, pred := range e.Predicates {
-		seq, err = applySequencePredicate(ec, seq, pred)
+		seq, err = applySequencePredicate(evalFn, ec, seq, pred)
 		if err != nil {
 			return nil, err
 		}
@@ -289,7 +289,7 @@ func evalFilterExpr(ec *evalContext, e FilterExpr) (Sequence, error) {
 
 // applySequencePredicate filters a sequence by a predicate expression.
 // Each item becomes the context item; numeric predicates select by position.
-func applySequencePredicate(ec *evalContext, seq Sequence, pred Expr) (Sequence, error) {
+func applySequencePredicate(evalFn exprEvaluator, ec *evalContext, seq Sequence, pred Expr) (Sequence, error) {
 	var result Sequence
 	size := len(seq)
 	for i, item := range seq {
@@ -299,7 +299,7 @@ func applySequencePredicate(ec *evalContext, seq Sequence, pred Expr) (Sequence,
 		} else {
 			subCtx = ec.withContextItem(item, i+1, size)
 		}
-		r, err := eval(subCtx, pred)
+		r, err := evalFn(subCtx, pred)
 		if err != nil {
 			return nil, err
 		}
@@ -325,8 +325,8 @@ func applySequencePredicate(ec *evalContext, seq Sequence, pred Expr) (Sequence,
 	return result, nil
 }
 
-func evalPathExpr(ec *evalContext, e PathExpr) (Sequence, error) {
-	base, err := eval(ec, e.Filter)
+func evalPathExpr(evalFn exprEvaluator, ec *evalContext, e PathExpr) (Sequence, error) {
+	base, err := evalFn(ec, e.Filter)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +340,7 @@ func evalPathExpr(ec *evalContext, e PathExpr) (Sequence, error) {
 	var result []helium.Node
 	for _, n := range baseNodes {
 		subCtx := ec.withNode(n, 1, 1)
-		subResult, err := evalLocationPath(subCtx, e.Path)
+		subResult, err := evalLocationPath(evalFn, subCtx, e.Path)
 		if err != nil {
 			return nil, err
 		}
@@ -368,8 +368,8 @@ func evalPathExpr(ec *evalContext, e PathExpr) (Sequence, error) {
 // Per XPath 3.1: E1 must produce a node sequence; E2 is evaluated for each node
 // with that node as context. If all results are nodes, they are sorted in
 // document order and deduplicated.
-func evalPathStepExpr(ec *evalContext, e PathStepExpr) (Sequence, error) {
-	base, err := eval(ec, e.Left)
+func evalPathStepExpr(evalFn exprEvaluator, ec *evalContext, e PathStepExpr) (Sequence, error) {
+	base, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
@@ -383,7 +383,7 @@ func evalPathStepExpr(ec *evalContext, e PathStepExpr) (Sequence, error) {
 
 	for i, n := range baseNodes {
 		subCtx := ec.withNode(n, i+1, len(baseNodes))
-		r, err := eval(subCtx, e.Right)
+		r, err := evalFn(subCtx, e.Right)
 		if err != nil {
 			return nil, err
 		}

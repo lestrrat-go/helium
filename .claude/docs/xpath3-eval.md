@@ -27,7 +27,27 @@ func (ec *evalContext) withVar(name string, val Sequence) *evalContext  // new m
 
 ## Dispatch
 
-`eval(ec, expr) (Sequence, error)` — main recursive dispatch with depth check.
+- `Compile()` lowers AST to `vmProgram`
+- `Expression.Evaluate()` executes `vmProgram` when present
+- `evalWith()` enforces recursion depth for raw eval + VM eval
+- `dispatchExpr()` contains shared Expr-type dispatch
+- Raw `eval(ec, expr)` remains fallback for unlowered AST execution
+
+### VM Shape
+
+```go
+type vmProgram struct {
+    root int
+    instructions []vmInstruction
+}
+type vmInstruction struct {
+    op   vmOpcode
+    expr Expr
+}
+type compiledExprRef struct { index int }
+```
+
+Lowering is structural: one instruction per AST node. Lowered payload Exprs keep node metadata, but recursive children become `compiledExprRef` indexes. Existing `eval_*` helpers still implement semantics; only recursion target changes.
 
 ## Evaluation Rules by Expr Type
 

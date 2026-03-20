@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-func evalFunctionCall(ec *evalContext, e FunctionCall) (Sequence, error) {
+func evalFunctionCall(evalFn exprEvaluator, ec *evalContext, e FunctionCall) (Sequence, error) {
 	// Evaluate arguments
 	args := make([]Sequence, len(e.Args))
 	hasPlaceholders := false
@@ -14,7 +14,7 @@ func evalFunctionCall(ec *evalContext, e FunctionCall) (Sequence, error) {
 			hasPlaceholders = true
 			continue
 		}
-		a, err := eval(ec, argExpr)
+		a, err := evalFn(ec, argExpr)
 		if err != nil {
 			return nil, err
 		}
@@ -36,8 +36,8 @@ func evalFunctionCall(ec *evalContext, e FunctionCall) (Sequence, error) {
 	return fn.Call(fctx, args)
 }
 
-func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, error) {
-	funcSeq, err := eval(ec, e.Func)
+func evalDynamicFunctionCall(evalFn exprEvaluator, ec *evalContext, e DynamicFunctionCall) (Sequence, error) {
+	funcSeq, err := evalFn(ec, e.Func)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func evalDynamicFunctionCall(ec *evalContext, e DynamicFunctionCall) (Sequence, 
 		if _, ok := argExpr.(PlaceholderExpr); ok {
 			continue
 		}
-		a, err := eval(ec, argExpr)
+		a, err := evalFn(ec, argExpr)
 		if err != nil {
 			return nil, err
 		}
@@ -199,7 +199,7 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 	return Sequence{fi}, nil
 }
 
-func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, error) {
+func evalInlineFunctionExpr(evalFn exprEvaluator, ec *evalContext, e InlineFunctionExpr) (Sequence, error) {
 	// Capture current variable scope snapshot
 	closedVars := ec.vars
 	// Collect parameter types for subtype checking
@@ -245,7 +245,7 @@ func evalInlineFunctionExpr(ec *evalContext, e InlineFunctionExpr) (Sequence, er
 				}
 				innerCtx.vars = scopeWithBinding(innerCtx.vars, param.Name, arg)
 			}
-			result, err := eval(&innerCtx, e.Body)
+			result, err := evalFn(&innerCtx, e.Body)
 			if err != nil {
 				return nil, err
 			}
@@ -315,11 +315,11 @@ func partialApply(ec *evalContext, e FunctionCall, fixedArgs []Sequence) (Sequen
 	return Sequence{fi}, nil
 }
 
-func evalMapConstructorExpr(ec *evalContext, e MapConstructorExpr) (Sequence, error) {
+func evalMapConstructorExpr(evalFn exprEvaluator, ec *evalContext, e MapConstructorExpr) (Sequence, error) {
 	entries := make([]MapEntry, len(e.Pairs))
 	seen := make(map[mapKey]struct{}, len(e.Pairs))
 	for i, pair := range e.Pairs {
-		keySeq, err := eval(ec, pair.Key)
+		keySeq, err := evalFn(ec, pair.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -336,7 +336,7 @@ func evalMapConstructorExpr(ec *evalContext, e MapConstructorExpr) (Sequence, er
 			return nil, &XPathError{Code: "XQDY0137", Message: fmt.Sprintf("duplicate key in map constructor: %v", ka.Value)}
 		}
 		seen[nk] = struct{}{}
-		valSeq, err := eval(ec, pair.Value)
+		valSeq, err := evalFn(ec, pair.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -345,12 +345,12 @@ func evalMapConstructorExpr(ec *evalContext, e MapConstructorExpr) (Sequence, er
 	return Sequence{NewMap(entries)}, nil
 }
 
-func evalArrayConstructorExpr(ec *evalContext, e ArrayConstructorExpr) (Sequence, error) {
+func evalArrayConstructorExpr(evalFn exprEvaluator, ec *evalContext, e ArrayConstructorExpr) (Sequence, error) {
 	if e.SquareBracket {
 		// [a, b, c] — each expr is one member
 		members := make([]Sequence, len(e.Items))
 		for i, item := range e.Items {
-			seq, err := eval(ec, item)
+			seq, err := evalFn(ec, item)
 			if err != nil {
 				return nil, err
 			}
@@ -362,7 +362,7 @@ func evalArrayConstructorExpr(ec *evalContext, e ArrayConstructorExpr) (Sequence
 	if len(e.Items) == 0 {
 		return Sequence{NewArray(nil)}, nil
 	}
-	seq, err := eval(ec, e.Items[0])
+	seq, err := evalFn(ec, e.Items[0])
 	if err != nil {
 		return nil, err
 	}
