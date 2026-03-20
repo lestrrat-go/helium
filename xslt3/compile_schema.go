@@ -67,6 +67,17 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 			if err != nil {
 				return fmt.Errorf("xsl:import-schema: cannot copy inline schema: %w", err)
 			}
+			// Propagate in-scope namespace declarations from ancestor
+			// elements (e.g., xmlns:foo on xsl:stylesheet) to the
+			// inline schema element so that prefix references like
+			// ref="foo:type" can be resolved by the XSD compiler.
+			if copiedElem, ok := copied.(*helium.Element); ok {
+				for prefix, uri := range c.nsBindings {
+					if prefix != "" && !hasNSDeclForPrefix(copiedElem, prefix) {
+						_ = copiedElem.DeclareNamespace(prefix, uri)
+					}
+				}
+			}
 			if err := inlineDoc.AddChild(copied); err != nil {
 				return fmt.Errorf("xsl:import-schema: cannot build inline schema doc: %w", err)
 			}
@@ -86,6 +97,16 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 
 	// Namespace-only declaration — no schema to compile, accepted silently
 	return nil
+}
+
+// hasNSDeclForPrefix checks if an element already declares a namespace for the given prefix.
+func hasNSDeclForPrefix(elem *helium.Element, prefix string) bool {
+	for _, ns := range elem.Namespaces() {
+		if ns.Prefix() == prefix {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveXSDTypeName normalizes a QName type reference (e.g., "xs:ID",

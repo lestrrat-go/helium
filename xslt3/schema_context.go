@@ -57,6 +57,30 @@ func (r *schemaRegistry) LookupTypeDef(typeName string) (*xsd.TypeDef, *xsd.Sche
 	return nil, nil, false
 }
 
+// LookupAllTypeDefs returns all matching TypeDef/Schema pairs for a type name.
+// Used when multiple schemas define the same type in the same namespace (e.g.,
+// different schema versions imported via different xsl:import-schema declarations).
+func (r *schemaRegistry) LookupAllTypeDefs(typeName string) []struct {
+	TD     *xsd.TypeDef
+	Schema *xsd.Schema
+} {
+	local, ns := splitAnnotationName(typeName)
+	var results []struct {
+		TD     *xsd.TypeDef
+		Schema *xsd.Schema
+	}
+	for _, s := range r.schemas {
+		td, found := s.LookupType(local, ns)
+		if found {
+			results = append(results, struct {
+				TD     *xsd.TypeDef
+				Schema *xsd.Schema
+			}{td, s})
+		}
+	}
+	return results
+}
+
 // CastToSchemaType validates and normalizes a string value against a
 // user-defined schema type. Returns the normalized value and nil on success,
 // or an error if the value is invalid. The typeName must be in annotation

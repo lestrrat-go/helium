@@ -185,25 +185,33 @@ func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, 
 
 	// For user-defined types, look up the TypeDef from the schema registry.
 	// Complex types need structural validation, not just string casting.
+	// When multiple schemas define the same type (e.g., imported from
+	// different schema files), try each until one validates successfully.
 	if ec.schemaRegistry != nil {
-		td, schema, found := ec.schemaRegistry.LookupTypeDef(typeName)
-		if found {
-			switch td.ContentType {
-			case xsd.ContentTypeElementOnly, xsd.ContentTypeMixed, xsd.ContentTypeEmpty:
-				// Complex type: validate element structure against the content model.
-				if err := xsd.ValidateElementAgainstType(elem, td, schema); err != nil {
-					return dynamicError(errCodeXTTE1510,
-						"element content does not match declared type %s: %v", typeName, err)
+		allDefs := ec.schemaRegistry.LookupAllTypeDefs(typeName)
+		if len(allDefs) > 0 {
+			var lastErr error
+			for _, def := range allDefs {
+				td, schema := def.TD, def.Schema
+				switch td.ContentType {
+				case xsd.ContentTypeElementOnly, xsd.ContentTypeMixed, xsd.ContentTypeEmpty:
+					if err := xsd.ValidateElementAgainstType(elem, td, schema); err != nil {
+						lastErr = err
+						continue
+					}
+					return nil
+				case xsd.ContentTypeSimple:
+					content := strings.TrimSpace(elementTextContent(elem))
+					if err := xsd.ValidateSimpleValue(content, td); err != nil {
+						lastErr = err
+						continue
+					}
+					return nil
 				}
-				return nil
-			case xsd.ContentTypeSimple:
-				// Simple content in a complex type: validate text content.
-				content := strings.TrimSpace(elementTextContent(elem))
-				if err := xsd.ValidateSimpleValue(content, td); err != nil {
-					return dynamicError(errCodeXTTE1510,
-						"content %q is not a valid value for type %s: %v", content, typeName, err)
-				}
-				return nil
+			}
+			if lastErr != nil {
+				return dynamicError(errCodeXTTE1510,
+					"element content does not match declared type %s: %v", typeName, lastErr)
 			}
 		}
 	}
