@@ -219,9 +219,28 @@ func (c *compiler) compileTemplateBody(elem *helium.Element) ([]Instruction, []*
 	var body []Instruction
 
 	inParams := true
+	sawContextItem := false
+	pastContextItem := false
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		switch v := child.(type) {
 		case *helium.Element:
+			if v.URI() == NSXSLT && v.LocalName() == "context-item" {
+				if sawContextItem {
+					return nil, nil, staticError(errCodeXTSE0010, "duplicate xsl:context-item")
+				}
+				if !inParams && pastContextItem {
+					return nil, nil, staticError(errCodeXTSE0010, "xsl:context-item must appear before other children")
+				}
+				if len(params) > 0 {
+					return nil, nil, staticError(errCodeXTSE0010, "xsl:context-item must appear before xsl:param")
+				}
+				if err := c.validateContextItem(v); err != nil {
+					return nil, nil, err
+				}
+				sawContextItem = true
+				continue
+			}
+			pastContextItem = true
 			if v.URI() == NSXSLT && v.LocalName() == "param" && inParams {
 				p, err := c.compileParamDef(v)
 				if err != nil {
@@ -268,6 +287,27 @@ func (c *compiler) compileTemplateBody(elem *helium.Element) ([]Instruction, []*
 	}
 
 	return body, params, nil
+}
+
+// validateContextItem checks compile-time constraints on xsl:context-item.
+func (c *compiler) validateContextItem(elem *helium.Element) error {
+	asAttr := getAttr(elem, "as")
+	if asAttr != "" {
+		// XTSE0020: occurrence indicators (?, *, +) not allowed
+		last := asAttr[len(asAttr)-1]
+		if last == '?' || last == '*' || last == '+' {
+			return staticError(errCodeXTSE0020,
+				"xsl:context-item/@as must not have an occurrence indicator: %q", asAttr)
+		}
+	}
+
+	useAttr := getAttr(elem, "use")
+	if useAttr != "" && useAttr != "required" && useAttr != "optional" && useAttr != "absent" {
+		return staticError(errCodeXTSE0020,
+			"xsl:context-item/@use must be 'required', 'optional', or 'absent': %q", useAttr)
+	}
+
+	return nil
 }
 
 func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
