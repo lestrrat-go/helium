@@ -378,6 +378,15 @@ func (ec *execContext) mapAnnotationsFromValidation(ann xsd.TypeAnnotations, src
 	}
 }
 
+// stripSequenceAnnotations strips type annotations from all nodes in a sequence.
+func (ec *execContext) stripSequenceAnnotations(seq xpath3.Sequence) {
+	for _, item := range seq {
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			ec.stripAnnotations(ni.Node)
+		}
+	}
+}
+
 // stripAnnotations removes type annotations from a node and all its descendants.
 func (ec *execContext) stripAnnotations(node helium.Node) {
 	if ec.typeAnnotations == nil {
