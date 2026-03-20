@@ -440,6 +440,12 @@ func (l *lexer) scanNameOrKeyword() {
 		}
 		uri := collapseWhitespace(l.input[braceStart:l.pos])
 		l.pos++ // consume '}'
+		// Check for wildcard: Q{uri}*
+		if l.pos < len(l.input) && l.input[l.pos] == '*' {
+			l.pos++
+			l.emit(TokenName, "Q{"+uri+"}*")
+			return
+		}
 		local := l.scanNCName()
 		l.emit(TokenName, "Q{"+uri+"}"+local)
 		return
