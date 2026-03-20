@@ -107,7 +107,9 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 			return err
 		}
 	}
-	var opts []helium.WriteOption
+	opts := []helium.WriteOption{
+		helium.WithNoEscapeNonASCII(),
+	}
 	if outDef.Indent {
 		opts = append(opts, helium.WithFormat())
 	}

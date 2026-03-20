@@ -254,6 +254,13 @@ func WithSkipDTD() WriteOption {
 	return func(d *Writer) { d.skipDTD = true }
 }
 
+// WithNoEscapeNonASCII suppresses escaping of non-ASCII characters to
+// numeric character references. When set, non-ASCII characters are output
+// as raw UTF-8 bytes. Used by XSLT serialization.
+func WithNoEscapeNonASCII() WriteOption {
+	return func(d *Writer) { d.noEscapeNonASCII = true }
+}
+
 // Writer serializes an XML document tree (libxml2: xmlSaveCtxt).
 //
 // All serialization behavior is configured via WriteOption functional options
@@ -270,12 +277,13 @@ func WithSkipDTD() WriteOption {
 // U+0080-U+00FF are emitted as numeric character references (&#xNN;);
 // when an encoding handler is present they pass through for re-encoding.
 type Writer struct {
-	format         bool
-	indentString   string
-	skipDTD        bool
-	noEmpty        bool
-	noDecl         bool
-	escapeNonASCII bool
+	format            bool
+	indentString      string
+	skipDTD           bool
+	noEmpty           bool
+	noDecl            bool
+	noEscapeNonASCII  bool
+	escapeNonASCII    bool
 	isXHTML        bool
 	encoding       string // document encoding, used for XHTML meta injection
 	indent         int    // current indent depth (used when format is true)
@@ -375,7 +383,7 @@ func (d *Writer) WriteDoc(out io.Writer, doc *Document) error {
 	// Mirrors libxml2's xmlSaveWriteText: when output encoding is UTF-8
 	// (no encoder), escape non-ASCII chars 0x80-0xDF as numeric refs.
 	// When an encoder is present, pass them through for re-encoding.
-	d.escapeNonASCII = true
+	d.escapeNonASCII = !d.noEscapeNonASCII
 	if enc := doc.encoding; enc != "" {
 		lower := strings.ToLower(enc)
 		if lower != "utf-8" && lower != encUTF8 && lower != "us-ascii" && lower != "ascii" {
