@@ -34,15 +34,17 @@ func Compile(expr string) (*Expression, error) {
 	}, nil
 }
 
-// CompileExpr wraps a pre-parsed AST Expr into an Expression.
-func CompileExpr(ast Expr) *Expression {
-	program, prefixPlan := compileVMProgramLoose(ast)
+// CompileExpr compiles a pre-parsed AST Expr into an Expression.
+func CompileExpr(ast Expr) (*Expression, error) {
+	program, prefixPlan, err := compileVMProgram(ast)
+	if err != nil {
+		return nil, err
+	}
 	return &Expression{
-		source:     "",
 		ast:        ast,
 		program:    program,
 		prefixPlan: prefixPlan,
-	}
+	}, nil
 }
 
 // MustCompile is like Compile but panics on error.
@@ -219,8 +221,11 @@ func Evaluate(ctx context.Context, node helium.Node, expr string) (*Result, erro
 // This is useful when you already have the parsed Expr (e.g., from Parse)
 // and want to evaluate it without going through Compile.
 func EvaluateExpr(ctx context.Context, expr Expr, node helium.Node) (*Result, error) {
+	compiled, err := CompileExpr(expr)
+	if err != nil {
+		return nil, err
+	}
 	ec := newEvalContext(ctx, node)
-	compiled := CompileExpr(expr)
 	seq, err := compiled.evaluate(ec)
 	if err != nil {
 		return nil, err
@@ -229,10 +234,10 @@ func EvaluateExpr(ctx context.Context, expr Expr, node helium.Node) (*Result, er
 }
 
 func (e *Expression) evaluate(ec *evalContext) (Sequence, error) {
-	if e.program != nil {
-		return e.program.execute(ec)
+	if e.program == nil {
+		return nil, fmt.Errorf("xpath3: expression has no compiled program")
 	}
-	return eval(ec, e.astExpr())
+	return e.program.execute(ec)
 }
 
 func (e *Expression) astExpr() Expr {

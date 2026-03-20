@@ -302,12 +302,3 @@ func (ec *evalContext) countOps(n int) error {
 }
 
 // eval dispatches to the appropriate evaluator for each AST node type.
-// Depth tracking: withNode/withContextItem copy the parent's depth into the
-// new context, so each nested eval chain inherits and increments correctly.
-func eval(ec *evalContext, expr Expr) (Sequence, error) {
-	return evalWith(evalBody, ec, expr)
-}
-
-func evalBody(ec *evalContext, expr Expr) (Sequence, error) {
-	return dispatchExpr(eval, ec, expr)
-}

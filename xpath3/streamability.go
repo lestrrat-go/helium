@@ -6,6 +6,66 @@ func (e *Expression) AST() Expr {
 	return e.astExpr()
 }
 
+// computeStreamInfo performs a single AST walk to precompute all
+// streamability properties stored on vmProgram.stream.
+func computeStreamInfo(ast Expr) streamInfo {
+	si := streamInfo{
+		usedFunctions: make(map[string]bool),
+	}
+	if _, ok := derefExpr(ast).(ContextItemExpr); ok {
+		si.isContextItem = true
+	}
+	// Collect axis usage, function names, downward steps, and predicate motionlessness.
+	WalkExpr(ast, func(e Expr) bool {
+		switch v := e.(type) {
+		case LocationPath:
+			for _, step := range v.Steps {
+				si.axisUsed |= 1 << uint(step.Axis)
+				switch step.Axis {
+				case AxisChild, AxisDescendant, AxisDescendantOrSelf:
+					si.hasDownwardStep = true
+				}
+				for _, pred := range step.Predicates {
+					if predicateIsNonMotionless(pred) {
+						si.hasNonMotionlessPred = true
+					}
+				}
+			}
+		case vmLocationPathExpr:
+			for _, step := range v.Steps {
+				si.axisUsed |= 1 << uint(step.Axis)
+				switch step.Axis {
+				case AxisChild, AxisDescendant, AxisDescendantOrSelf:
+					si.hasDownwardStep = true
+				}
+				for _, pred := range step.Predicates {
+					if predicateIsNonMotionless(pred) {
+						si.hasNonMotionlessPred = true
+					}
+				}
+			}
+		case PathStepExpr:
+			if v.DescOrSelf {
+				si.hasDownwardStep = true
+				si.hasDescOrSelf = true
+			}
+		case FilterExpr:
+			for _, pred := range v.Predicates {
+				if predicateIsNonMotionless(pred) {
+					si.hasNonMotionlessPred = true
+				}
+			}
+		case FunctionCall:
+			if v.Prefix == "" {
+				si.usedFunctions[v.Name] = true
+			}
+		}
+		return true
+	})
+	si.downwardSelections = countDownwardSelectionsInExpr(ast)
+	return si
+}
+
 // WalkExpr walks an XPath 3.1 AST, calling fn for each Expr node.
 // If fn returns false, children of that node are not visited.
 func WalkExpr(expr Expr, fn func(Expr) bool) {
@@ -65,6 +125,13 @@ func walkChildren(expr Expr, fn func(Expr) bool) {
 			}
 		}
 
+	case vmLocationPathExpr:
+		for _, step := range e.Steps {
+			for _, pred := range step.Predicates {
+				WalkExpr(pred, fn)
+			}
+		}
+
 	case BinaryExpr:
 		WalkExpr(e.Left, fn)
 		WalkExpr(e.Right, fn)
@@ -99,6 +166,12 @@ func walkChildren(expr Expr, fn func(Expr) bool) {
 		}
 
 	case PathExpr:
+		WalkExpr(e.Filter, fn)
+		if e.Path != nil {
+			WalkExpr(*e.Path, fn)
+		}
+
+	case vmPathExpr:
 		WalkExpr(e.Filter, fn)
 		if e.Path != nil {
 			WalkExpr(*e.Path, fn)
@@ -195,23 +268,10 @@ func ExprUsesAxis(expr *Expression, axis AxisType) bool {
 	if expr == nil {
 		return false
 	}
-	ast := expr.astExpr()
-	found := false
-	WalkExpr(ast, func(e Expr) bool {
-		if found {
-			return false
-		}
-		if lp, ok := e.(LocationPath); ok {
-			for _, step := range lp.Steps {
-				if step.Axis == axis {
-					found = true
-					return false
-				}
-			}
-		}
-		return true
-	})
-	return found
+	if expr.program != nil {
+		return expr.program.stream.axisUsed&(1<<uint(axis)) != 0
+	}
+	return false
 }
 
 // ExprUsesFunction returns true if the expression contains a call to the named function
@@ -220,21 +280,10 @@ func ExprUsesFunction(expr *Expression, name string) bool {
 	if expr == nil {
 		return false
 	}
-	ast := expr.astExpr()
-	found := false
-	WalkExpr(ast, func(e Expr) bool {
-		if found {
-			return false
-		}
-		if fc, ok := e.(FunctionCall); ok {
-			if fc.Prefix == "" && fc.Name == name {
-				found = true
-				return false
-			}
-		}
-		return true
-	})
-	return found
+	if expr.program != nil {
+		return expr.program.stream.usedFunctions[name]
+	}
+	return false
 }
 
 // ExprHasDownwardStep returns true if the expression contains any child::, descendant::,
@@ -243,30 +292,10 @@ func ExprHasDownwardStep(expr *Expression) bool {
 	if expr == nil {
 		return false
 	}
-	ast := expr.astExpr()
-	found := false
-	WalkExpr(ast, func(e Expr) bool {
-		if found {
-			return false
-		}
-		switch v := e.(type) {
-		case LocationPath:
-			for _, step := range v.Steps {
-				switch step.Axis {
-				case AxisChild, AxisDescendant, AxisDescendantOrSelf:
-					found = true
-					return false
-				}
-			}
-		case PathStepExpr:
-			if v.DescOrSelf {
-				found = true
-				return false
-			}
-		}
-		return true
-	})
-	return found
+	if expr.program != nil {
+		return expr.program.stream.hasDownwardStep
+	}
+	return false
 }
 
 // ExprHasNonMotionlessPredicate returns true if any step in the expression has a
@@ -276,33 +305,10 @@ func ExprHasNonMotionlessPredicate(expr *Expression) bool {
 	if expr == nil {
 		return false
 	}
-	ast := expr.astExpr()
-	found := false
-	WalkExpr(ast, func(e Expr) bool {
-		if found {
-			return false
-		}
-		if lp, ok := e.(LocationPath); ok {
-			for _, step := range lp.Steps {
-				for _, pred := range step.Predicates {
-					if predicateIsNonMotionless(pred) {
-						found = true
-						return false
-					}
-				}
-			}
-		}
-		if fe, ok := e.(FilterExpr); ok {
-			for _, pred := range fe.Predicates {
-				if predicateIsNonMotionless(pred) {
-					found = true
-					return false
-				}
-			}
-		}
-		return true
-	})
-	return found
+	if expr.program != nil {
+		return expr.program.stream.hasNonMotionlessPred
+	}
+	return false
 }
 
 // predicateIsNonMotionless returns true if a predicate expression navigates
@@ -316,6 +322,14 @@ func predicateIsNonMotionless(pred Expr) bool {
 		}
 		switch v := e.(type) {
 		case LocationPath:
+			for _, step := range v.Steps {
+				switch step.Axis {
+				case AxisChild, AxisDescendant, AxisDescendantOrSelf:
+					nonMotionless = true
+					return false
+				}
+			}
+		case vmLocationPathExpr:
 			for _, step := range v.Steps {
 				switch step.Axis {
 				case AxisChild, AxisDescendant, AxisDescendantOrSelf:
@@ -352,7 +366,10 @@ func CountDownwardSelections(expr *Expression) int {
 	if expr == nil {
 		return 0
 	}
-	return countDownwardSelectionsInExpr(expr.astExpr())
+	if expr.program != nil {
+		return expr.program.stream.downwardSelections
+	}
+	return 0
 }
 
 func countDownwardSelectionsInExpr(expr Expr) int {
@@ -376,6 +393,20 @@ func countDownwardSelectionsInExpr(expr Expr) int {
 		if hasDown {
 			count++
 		}
+	case vmLocationPathExpr:
+		hasDown := false
+		for _, step := range e.Steps {
+			switch step.Axis {
+			case AxisChild, AxisDescendant, AxisDescendantOrSelf:
+				hasDown = true
+			}
+			for _, pred := range step.Predicates {
+				count += countDownwardSelectionsInExpr(pred)
+			}
+		}
+		if hasDown {
+			count++
+		}
 	case PathStepExpr:
 		// E1/E2 or E1//E2: each side can have downward selections
 		count += countDownwardSelectionsInExpr(e.Left)
@@ -385,6 +416,11 @@ func countDownwardSelectionsInExpr(expr Expr) int {
 		if e.Path != nil {
 			lp := *e.Path
 			count += countDownwardSelectionsInExpr(lp)
+		}
+	case vmPathExpr:
+		count += countDownwardSelectionsInExpr(e.Filter)
+		if e.Path != nil {
+			count += countDownwardSelectionsInExpr(*e.Path)
 		}
 	case BinaryExpr:
 		count += countDownwardSelectionsInExpr(e.Left)
@@ -441,24 +477,15 @@ func ExprUsesUpwardAxis(expr *Expression) bool {
 	if expr == nil {
 		return false
 	}
-	ast := expr.astExpr()
-	found := false
-	WalkExpr(ast, func(e Expr) bool {
-		if found {
-			return false
-		}
-		if lp, ok := e.(LocationPath); ok {
-			for _, step := range lp.Steps {
-				switch step.Axis {
-				case AxisParent, AxisAncestor, AxisAncestorOrSelf, AxisPreceding, AxisPrecedingSibling:
-					found = true
-					return false
-				}
-			}
-		}
-		return true
-	})
-	return found
+	if expr.program != nil {
+		const upwardMask = 1<<uint(AxisParent) |
+			1<<uint(AxisAncestor) |
+			1<<uint(AxisAncestorOrSelf) |
+			1<<uint(AxisPreceding) |
+			1<<uint(AxisPrecedingSibling)
+		return expr.program.stream.axisUsed&upwardMask != 0
+	}
+	return false
 }
 
 // ExprUsesDescendantOrSelf returns true if the expression uses descendant:: or
@@ -467,27 +494,10 @@ func ExprUsesDescendantOrSelf(expr *Expression) bool {
 	if expr == nil {
 		return false
 	}
-	ast := expr.astExpr()
-	found := false
-	WalkExpr(ast, func(e Expr) bool {
-		if found {
-			return false
-		}
-		switch v := e.(type) {
-		case LocationPath:
-			for _, step := range v.Steps {
-				if step.Axis == AxisDescendant || step.Axis == AxisDescendantOrSelf {
-					found = true
-					return false
-				}
-			}
-		case PathStepExpr:
-			if v.DescOrSelf {
-				found = true
-				return false
-			}
-		}
-		return true
-	})
-	return found
+	if expr.program != nil {
+		const descMask = 1<<uint(AxisDescendant) | 1<<uint(AxisDescendantOrSelf)
+		return expr.program.stream.axisUsed&descMask != 0 ||
+			expr.program.stream.hasDescOrSelf
+	}
+	return false
 }

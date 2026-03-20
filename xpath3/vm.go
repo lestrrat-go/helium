@@ -91,9 +91,22 @@ type vmInstruction struct {
 	payload any
 }
 
+// streamInfo holds precomputed static-analysis properties so that
+// streamability queries are O(1) field reads instead of O(n) AST walks.
+type streamInfo struct {
+	axisUsed             uint16          // bitmask of AxisType values present
+	hasDownwardStep      bool            // child/descendant/descendant-or-self axis or //
+	hasDescOrSelf        bool            // PathStepExpr with // shorthand
+	hasNonMotionlessPred bool            // predicate with downward nav or last()
+	downwardSelections   int             // independent downward selection count
+	usedFunctions        map[string]bool // unprefixed function names called
+	isContextItem        bool            // expression is just "."
+}
+
 type vmProgram struct {
 	root         int
 	instructions []vmInstruction
+	stream       streamInfo
 }
 
 func compileVMProgram(ast Expr) (*vmProgram, prefixValidationPlan, error) {
@@ -105,6 +118,9 @@ func compileOwnedVMProgram(ast Expr) (*vmProgram, prefixValidationPlan, error) {
 }
 
 func compileVMProgramWithOptions(ast Expr, reuseInput bool) (*vmProgram, prefixValidationPlan, error) {
+	// Compute streamability info from AST before lowering.
+	si := computeStreamInfo(ast)
+
 	builder := vmBuilder{
 		instructions: make([]vmInstruction, 0, 8),
 		prefixPlan:   newPrefixPlanBuilder(),
@@ -117,16 +133,10 @@ func compileVMProgramWithOptions(ast Expr, reuseInput bool) (*vmProgram, prefixV
 	return &vmProgram{
 		root:         root.index,
 		instructions: builder.instructions,
+		stream:       si,
 	}, builder.prefixPlan.plan(), nil
 }
 
-func compileVMProgramLoose(ast Expr) (*vmProgram, prefixValidationPlan) {
-	program, plan, err := compileVMProgram(ast)
-	if err != nil {
-		return nil, prefixValidationPlan{}
-	}
-	return program, plan
-}
 
 type vmBuilder struct {
 	instructions []vmInstruction

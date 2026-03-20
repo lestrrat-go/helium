@@ -13,6 +13,10 @@ func NewLexerForTesting(input string) (*lexer, error) {
 
 // EvalForTesting evaluates a parsed expression against a node for testing.
 func EvalForTesting(ctx context.Context, node helium.Node, expr Expr) (Sequence, error) {
+	compiled, err := CompileExpr(expr)
+	if err != nil {
+		return nil, err
+	}
 	ec := newEvalContext(ctx, node)
-	return eval(ec, expr)
+	return compiled.evaluate(ec)
 }

@@ -112,7 +112,7 @@ func (e *Expression) EvaluateReuse(state *EvalState, node helium.Node) (Result, 
 	*ec.opCount = 0
 
 	// Fast path for "." — skip eval entirely, reuse backing array
-	if _, ok := e.astExpr().(ContextItemExpr); ok {
+	if e.program != nil && e.program.stream.isContextItem {
 		if ec.contextItem != nil {
 			state.oneItem[0] = ec.contextItem
 			return Result{seq: state.oneItem[:]}, nil

@@ -1,22 +1,26 @@
 package xslt3
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
-// Pattern is a compiled XSLT match pattern.
-type Pattern struct {
-	Alternatives   []*PatternAlt
+// pattern is a compiled XSLT match pattern.
+type pattern struct {
+	Alternatives   []*patternAlt
 	source         string
-	xpathDefaultNS string // xpath-default-namespace at compile site
+	xpathDefaultNS string            // xpath-default-namespace at compile site
+	nsBindings     map[string]string // prefix→URI bindings from compile context
 }
 
-// PatternAlt is one alternative in a union pattern (separated by |).
-type PatternAlt struct {
+// patternAlt is one alternative in a union pattern (separated by |).
+type patternAlt struct {
 	expr         xpath3.Expr // the parsed XPath AST
 	priority     float64
 	neverMatches bool // true for syntactically valid but semantically empty patterns (e.g., child::document-node())
@@ -27,16 +31,22 @@ type PatternAlt struct {
 // never matches because document nodes cannot be children; similarly,
 // child::attribute() never matches because attributes are not children.
 func isNeverMatchingPattern(alt string) bool {
+	// NOTE: this is a heuristic based on source text, not AST analysis.
+	// It may miss patterns with unusual whitespace around "::" but is
+	// safe in the false-negative direction (worst case: we compile a
+	// pattern that never matches at runtime).
+	s := strings.TrimSpace(alt)
 	// child::document-node() — document nodes are never children
-	if strings.Contains(alt, "child::document-node") {
+	if strings.HasPrefix(s, "child::document-node") || strings.Contains(s, "/child::document-node") {
 		return true
 	}
 	// child::attribute() / child::schema-attribute() — attributes are never children
-	if strings.Contains(alt, "child::attribute") || strings.Contains(alt, "child::schema-attribute") {
+	if strings.HasPrefix(s, "child::attribute") || strings.Contains(s, "/child::attribute") ||
+		strings.HasPrefix(s, "child::schema-attribute") || strings.Contains(s, "/child::schema-attribute") {
 		return true
 	}
 	// child::namespace-node() — namespace nodes are never children
-	if strings.Contains(alt, "child::namespace-node") {
+	if strings.HasPrefix(s, "child::namespace-node") || strings.Contains(s, "/child::namespace-node") {
 		return true
 	}
 	return false
@@ -44,15 +54,15 @@ func isNeverMatchingPattern(alt string) bool {
 
 // compilePattern compiles an XSLT match pattern string.
 // XSLT patterns are a restricted subset of XPath expressions.
-func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS string) (*Pattern, error) {
+func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS string) (*pattern, error) {
 	alts := splitPatternUnion(s)
-	p := &Pattern{source: s, xpathDefaultNS: xpathDefaultNS}
+	p := &pattern{source: s, xpathDefaultNS: xpathDefaultNS, nsBindings: nsBindings}
 	for _, alt := range alts {
 		alt = strings.TrimSpace(alt)
 		if alt == "" {
 			continue
 		}
-		compiled, err := xpath3.Compile(alt)
+		compiled, err := xpath3.NewCompiler().Compile(alt)
 		if err != nil {
 			return nil, staticError(errCodeXTSE0500, "invalid pattern %q: %v", alt, err)
 		}
@@ -76,7 +86,11 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 		if err := validatePatternExpr(ast); err != nil {
 			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %s", alt, err)
 		}
-		pa := &PatternAlt{
+		// XTSE3500: current-merge-key() must not be used within a pattern.
+		if err := checkPatternForbiddenFunctions(ast); err != nil {
+			return nil, err
+		}
+		pa := &patternAlt{
 			expr:         ast,
 			priority:     computeDefaultPriority(ast),
 			neverMatches: isNeverMatchingPattern(alt),
@@ -89,11 +103,15 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 	// Union patterns (multiple alternatives separated by |) require each
 	// alternative to be a PathPattern. PredicatePatterns (FilterExpr like
 	// .[pred]) are only valid as standalone patterns, not in unions.
+	// Note: FilterExpr wrapping a parenthesized node test with predicates
+	// (e.g. (* except xsl:*)[@attr]) is valid in a union.
 	if len(p.Alternatives) > 1 {
 		for _, pa := range p.Alternatives {
-			if _, ok := pa.expr.(xpath3.FilterExpr); ok {
-				return nil, staticError(errCodeXTSE0340,
-					"invalid match pattern %q: predicate pattern not allowed in union", s)
+			if fe, ok := pa.expr.(xpath3.FilterExpr); ok {
+				if _, isCtx := fe.Expr.(xpath3.ContextItemExpr); isCtx {
+					return nil, staticError(errCodeXTSE0340,
+						"invalid match pattern %q: predicate pattern not allowed in union", s)
+				}
 			}
 		}
 	}
@@ -153,7 +171,7 @@ func validatePatternExprInner(expr xpath3.Expr, topLevel bool) error {
 		// E1/E2 or E1//E2 where E2 is a non-axis expression
 		return validatePatternPathStepExpr(e)
 	case xpath3.VariableExpr:
-		// Variable references are allowed in XSLT 3.0 patterns
+		// variable references are allowed in XSLT 3.0 patterns
 		return nil
 	case xpath3.FunctionCall:
 		// Function calls: key(), id(), doc() with literal args are allowed
@@ -187,8 +205,16 @@ func validateLocationPathPattern(expr xpath3.Expr) error {
 	case *xpath3.LocationPath:
 		steps = e.Steps
 	}
-	// Check each step for disallowed constructs in predicates
 	for _, step := range steps {
+		// XTSE0340: reverse axes (parent, ancestor, preceding,
+		// preceding-sibling, ancestor-or-self) are not allowed in match
+		// patterns. Forward axes are allowed in XSLT 3.0.
+		switch step.Axis {
+		case xpath3.AxisParent, xpath3.AxisAncestor, xpath3.AxisAncestorOrSelf,
+			xpath3.AxisPreceding, xpath3.AxisPrecedingSibling:
+			return fmt.Errorf("axis %v not allowed in match pattern", step.Axis)
+		}
+		// Check each step for disallowed constructs in predicates
 		for _, pred := range step.Predicates {
 			if err := validatePredicateExpr(pred); err != nil {
 				return err
@@ -214,7 +240,7 @@ func validatePatternPathExpr(e xpath3.PathExpr) error {
 		// FilterExpr at the start of a path
 		return validatePatternExprInner(f, false)
 	case xpath3.VariableExpr:
-		// Variable references are allowed in XSLT 3.0 patterns
+		// variable references are allowed in XSLT 3.0 patterns
 	case xpath3.PathStepExpr:
 		// Nested path step (e.g., x/(a|b)/text())
 		return validatePatternPathStepExpr(f)
@@ -230,7 +256,7 @@ func validatePatternPathStepExpr(e xpath3.PathStepExpr) error {
 	// Check left side
 	switch l := e.Left.(type) {
 	case xpath3.VariableExpr:
-		// Variable references are allowed in XSLT 3.0 patterns
+		// variable references are allowed in XSLT 3.0 patterns
 	case xpath3.FunctionCall:
 		if !isAllowedPatternFunction(l) {
 			return fmt.Errorf("function call %s() not allowed in pattern", l.Name)
@@ -244,16 +270,42 @@ func validatePatternPathStepExpr(e xpath3.PathStepExpr) error {
 			return err
 		}
 	}
-	// Check right side
+	// Check right side: must be a valid step (axis step / node test), not
+	// an arbitrary expression like a numeric literal.
+	if !isValidPatternStep(e.Right) {
+		return fmt.Errorf("expression %T not allowed as step in pattern", e.Right)
+	}
 	switch r := e.Right.(type) {
 	case xpath3.VariableExpr:
-		// Variable references are allowed in XSLT 3.0 patterns
+		// variable references are allowed in XSLT 3.0 patterns
 	case xpath3.FunctionCall:
 		return fmt.Errorf("function call %s() not allowed in middle of pattern", r.Name)
 	case xpath3.ArrayConstructorExpr:
 		return fmt.Errorf("array constructor not allowed in pattern")
 	}
 	return nil
+}
+
+// isValidPatternStep checks whether an expression is valid as a step in a
+// match pattern (i.e., an axis step or node test, not a literal or arbitrary expr).
+func isValidPatternStep(expr xpath3.Expr) bool {
+	switch expr.(type) {
+	case xpath3.LocationPath, *xpath3.LocationPath:
+		return true
+	case xpath3.FilterExpr:
+		return true
+	case xpath3.ContextItemExpr:
+		return true
+	case xpath3.VariableExpr:
+		return true
+	case xpath3.FunctionCall:
+		return true
+	case xpath3.UnionExpr:
+		return true
+	case xpath3.IntersectExceptExpr:
+		return true
+	}
+	return false
 }
 
 // isAllowedPatternFunction returns true if a function call is allowed at the
@@ -288,7 +340,7 @@ func isPatternFunctionArg(expr xpath3.Expr) bool {
 // validatePatternFunctions checks that all function calls in a pattern
 // reference known functions (built-in XPath or declared xsl:function).
 // Unknown functions like f:special() raise XPST0017 at compile time.
-func (c *compiler) validatePatternFunctions(p *Pattern, source string) error {
+func (c *compiler) validatePatternFunctions(p *pattern, source string) error {
 	for _, alt := range p.Alternatives {
 		var walkErr error
 		xpath3.WalkExpr(alt.expr, func(e xpath3.Expr) bool {
@@ -308,20 +360,18 @@ func (c *compiler) validatePatternFunctions(p *Pattern, source string) error {
 			displayName := fc.Prefix + ":" + local
 			// Known XPath/XSLT function namespaces are always OK.
 			switch nsURI {
-			case "http://www.w3.org/2005/xpath-functions",
-				"http://www.w3.org/2005/xpath-functions/math",
-				"http://www.w3.org/2005/xpath-functions/map",
-				"http://www.w3.org/2005/xpath-functions/array",
-				"http://www.w3.org/2001/XMLSchema",
-				NSXSLT:
+			case lexicon.NamespaceFn, lexicon.NamespaceMath, lexicon.NamespaceMap, lexicon.NamespaceArray,
+				lexicon.NamespaceXSD, lexicon.NamespaceXSLT:
 				return true
 			}
 			// Check if declared as xsl:function in the stylesheet.
 			qn := xpath3.QualifiedName{Name: local, URI: nsURI}
-			if _, ok := c.stylesheet.functions[qn]; ok {
-				return true
+			for fk := range c.stylesheet.functions {
+				if fk.Name == qn {
+					return true
+				}
 			}
-			walkErr = staticError("XPST0017",
+			walkErr = staticError(errCodeXPST0017,
 				"unknown function %s() in match pattern %q", displayName, source)
 			return false
 		})
@@ -341,7 +391,43 @@ func validatePredicateExpr(_ xpath3.Expr) error {
 	return nil
 }
 
-// validatePatternFunctionCalls walks the pattern AST and checks that all
+// checkPatternForbiddenFunctions checks that a pattern AST does not
+// contain calls to functions forbidden in patterns per XSLT 3.0.
+// XTSE3500: current-merge-key() must not be used within a pattern.
+// XTSE3470: current-merge-group() must not be used within a pattern.
+// XTSE1060: current-group()/current-grouping-key() must not be used within a pattern.
+func checkPatternForbiddenFunctions(ast xpath3.Expr) error {
+	var walkErr error
+	xpath3.WalkExpr(ast, func(e xpath3.Expr) bool {
+		if walkErr != nil {
+			return false
+		}
+		fc, ok := e.(xpath3.FunctionCall)
+		if !ok {
+			return true
+		}
+		if fc.Prefix != "" {
+			return true
+		}
+		switch fc.Name {
+		case "current-merge-key":
+			walkErr = staticError(errCodeXTSE3500, "current-merge-key() must not be used within a pattern")
+			return false
+		case "current-merge-group":
+			walkErr = staticError(errCodeXTSE3470, "current-merge-group() must not be used within a pattern")
+			return false
+		case "current-group":
+			walkErr = staticError(errCodeXTSE1060, "current-group() must not be used within a pattern")
+			return false
+		case "current-grouping-key":
+			walkErr = staticError(errCodeXTSE1070, "current-grouping-key() must not be used within a pattern")
+			return false
+		}
+		return true
+	})
+	return walkErr
+}
+
 // splitPatternUnion splits a pattern string by | at the top level.
 // It respects brackets, parentheses and string literals.
 func splitPatternUnion(s string) []string {
@@ -419,8 +505,9 @@ func computeDefaultPriority(expr xpath3.Expr) float64 {
 		}
 		return 0.5
 	}
-	// Per XSLT 3.0 §6.4: path patterns with multiple steps get priority 0.5
-	if len(steps) > 1 {
+	// Per XSLT 3.0 §6.4: path patterns with multiple steps get priority 0.5.
+	// An absolute path like "/doc" counts as multi-step (root + step).
+	if len(steps) > 1 || (len(steps) == 1 && isAbsolute(expr)) {
 		return 0.5
 	}
 	lastStep := steps[0]
@@ -515,7 +602,7 @@ func nodeTestPriority(test xpath3.NodeTest) float64 {
 }
 
 // matchPattern tests whether a node matches the pattern.
-func (p *Pattern) matchPattern(ctx *execContext, node helium.Node) bool {
+func (p *pattern) matchPattern(ctx *execContext, node helium.Node) bool {
 	// Temporarily set xpath-default-namespace from pattern's compile-time value.
 	// Also clear contextItem so predicates evaluate with the candidate node
 	// as the context item (not an atomic value from an enclosing instruction
@@ -528,12 +615,14 @@ func (p *Pattern) matchPattern(ctx *execContext, node helium.Node) bool {
 	savedContext := ctx.contextNode
 	savedCurrent := ctx.currentNode
 	savedItem := ctx.contextItem
+	savedInPattern := ctx.inPatternMatch
 	ctx.xpathDefaultNS = p.xpathDefaultNS
 	ctx.hasXPathDefaultNS = p.xpathDefaultNS != ""
 	ctx.regexGroups = nil
 	ctx.contextNode = node
 	ctx.currentNode = node
 	ctx.contextItem = nil
+	ctx.inPatternMatch = true
 	defer func() {
 		ctx.xpathDefaultNS = saved
 		ctx.hasXPathDefaultNS = savedHas
@@ -541,6 +630,7 @@ func (p *Pattern) matchPattern(ctx *execContext, node helium.Node) bool {
 		ctx.contextNode = savedContext
 		ctx.currentNode = savedCurrent
 		ctx.contextItem = savedItem
+		ctx.inPatternMatch = savedInPattern
 	}()
 
 	for _, alt := range p.Alternatives {
@@ -556,7 +646,7 @@ func (p *Pattern) matchPattern(ctx *execContext, node helium.Node) bool {
 // values it evaluates the pattern expression with the item as context and
 // checks whether it produces a non-empty result. This is needed for
 // group-starting-with / group-ending-with over non-node sequences (XSLT 3.0).
-func (p *Pattern) matchPatternItem(ctx *execContext, item xpath3.Item) bool {
+func (p *pattern) matchPatternItem(ctx *execContext, item xpath3.Item) bool {
 	if ni, ok := item.(xpath3.NodeItem); ok {
 		return p.matchPattern(ctx, ni.Node)
 	}
@@ -567,32 +657,37 @@ func (p *Pattern) matchPatternItem(ctx *execContext, item xpath3.Item) bool {
 	savedHas := ctx.hasXPathDefaultNS
 	savedGroups := ctx.regexGroups
 	savedItem := ctx.contextItem
+	savedInPattern := ctx.inPatternMatch
 	ctx.xpathDefaultNS = p.xpathDefaultNS
 	ctx.hasXPathDefaultNS = p.xpathDefaultNS != ""
 	ctx.regexGroups = nil
 	ctx.contextItem = item
+	ctx.inPatternMatch = true
 	defer func() {
 		ctx.xpathDefaultNS = saved
 		ctx.hasXPathDefaultNS = savedHas
 		ctx.regexGroups = savedGroups
 		ctx.contextItem = savedItem
+		ctx.inPatternMatch = savedInPattern
 	}()
 
 	for _, alt := range p.Alternatives {
-		// Variable reference patterns (e.g., match="$var") only match nodes,
+		// variable reference patterns (e.g., match="$var") only match nodes,
 		// never atomic items. Per XSLT 3.0 §5.5.3, the semantics require
 		// root(N)//(V) which is undefined for non-node items.
 		if _, isVar := alt.expr.(xpath3.VariableExpr); isVar {
 			continue
 		}
-		compiled := xpath3.CompileExpr(alt.expr)
-		xpathCtx := ctx.newXPathContext(nil)
-		result, err := compiled.Evaluate(xpathCtx, nil)
+		compiled, compErr := xpath3.NewCompiler().CompileExpr(alt.expr)
+		if compErr != nil {
+			continue
+		}
+		result, err := ctx.evalXPath(compiled, nil)
 		if err != nil {
 			continue
 		}
 		seq := result.Sequence()
-		if len(seq) > 0 {
+		if seq != nil && sequence.Len(seq) > 0 {
 			return true
 		}
 	}
@@ -602,14 +697,14 @@ func (p *Pattern) matchPatternItem(ctx *execContext, item xpath3.Item) bool {
 // matchesAttributes returns true if the pattern source could potentially match
 // attribute nodes. This is a conservative heuristic used by key table building
 // to decide whether to visit attribute nodes during the document walk.
-func (p *Pattern) matchesAttributes() bool {
+func (p *pattern) matchesAttributes() bool {
 	return strings.Contains(p.source, "@") || strings.Contains(p.source, "attribute")
 }
 
 // matchPatternAlt tests whether a node matches a single pattern alternative.
 // XSLT patterns evaluate by checking if the node would be selected by the
 // equivalent XPath expression when evaluated in the right context.
-func matchPatternAlt(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
+func matchPatternAlt(ctx *execContext, alt *patternAlt, node helium.Node) bool {
 	if alt.neverMatches {
 		return false
 	}
@@ -637,8 +732,8 @@ func matchPatternAlt(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
 		return matchByEvaluation(ctx, alt, node)
 	case xpath3.UnionExpr:
 		// Union pattern: (a|b) matches if node matches either operand.
-		leftAlt := &PatternAlt{expr: e.Left}
-rightAlt := &PatternAlt{expr: e.Right}
+		leftAlt := &patternAlt{expr: e.Left}
+		rightAlt := &patternAlt{expr: e.Right}
 		return matchPatternAlt(ctx, leftAlt, node) || matchPatternAlt(ctx, rightAlt, node)
 	case xpath3.IntersectExceptExpr:
 		// intersect/except patterns require evaluation-based matching to
@@ -674,7 +769,7 @@ rightAlt := &PatternAlt{expr: e.Right}
 func matchPathExprPattern(ctx *execContext, e xpath3.PathExpr, node helium.Node) bool {
 	if e.Path == nil || len(e.Path.Steps) == 0 {
 		// No path steps: just check the filter
-		filterAlt := &PatternAlt{expr: e.Filter}
+		filterAlt := &patternAlt{expr: e.Filter}
 		return matchPatternAlt(ctx, filterAlt, node)
 	}
 
@@ -686,7 +781,7 @@ func matchPathExprPattern(ctx *execContext, e xpath3.PathExpr, node helium.Node)
 
 	// If there's only one step, check the filter against the parent
 	if len(e.Path.Steps) == 1 {
-		filterAlt := &PatternAlt{expr: e.Filter}
+		filterAlt := &patternAlt{expr: e.Filter}
 		parent := node.Parent()
 		if parent != nil && matchPatternAlt(ctx, filterAlt, parent) {
 			return true
@@ -704,7 +799,7 @@ func matchPathExprPattern(ctx *execContext, e xpath3.PathExpr, node helium.Node)
 		return false
 	}
 	// Walk up to find where the remaining steps matched, then check filter
-	filterAlt := &PatternAlt{expr: e.Filter}
+	filterAlt := &patternAlt{expr: e.Filter}
 	// The filter needs to match the ancestor above the remaining steps
 	cur := parent
 	for i := len(remaining) - 1; i >= 0; i-- {
@@ -721,7 +816,7 @@ func matchPathExprPattern(ctx *execContext, e xpath3.PathExpr, node helium.Node)
 // that an ancestor matches the left part (E1).
 func matchPathStepPattern(ctx *execContext, e xpath3.PathStepExpr, node helium.Node) bool {
 	// Check if node matches the right part.
-	rightAlt := &PatternAlt{expr: e.Right}
+	rightAlt := &patternAlt{expr: e.Right}
 	if !matchPatternAlt(ctx, rightAlt, node) {
 		return false
 	}
@@ -730,7 +825,7 @@ func matchPathStepPattern(ctx *execContext, e xpath3.PathStepExpr, node helium.N
 	// the left part may match ANY ancestor, not just the parent.
 	checkAllAncestors := e.DescOrSelf || rightPartUsesDescendantAxis(e.Right)
 	// Check ancestors for the left part.
-	leftAlt := &PatternAlt{expr: e.Left}
+	leftAlt := &patternAlt{expr: e.Left}
 	if checkAllAncestors {
 		for ancestor := node.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
 			if matchPatternAlt(ctx, leftAlt, ancestor) {
@@ -816,30 +911,54 @@ func matchLocationPath(ctx *execContext, path xpath3.LocationPath, node helium.N
 			// Position predicates on descendant axis are relative to the full
 			// descendant set of the ancestor node. Walk up to find ancestors
 			// that match the preceding steps, then evaluate predicates in that context.
-			for cur := node.Parent(); cur != nil; cur = cur.Parent() {
-				if matchStepsUpward(ctx, remaining, path.Absolute, cur) {
-					// Collect all descendants of cur that match the name test
-					descendants := collectDescendants(ctx, lastStep.NodeTest, cur)
-					// Find position of node in the descendant set
-					pos := 0
-					for j, d := range descendants {
-						if d == node {
-							pos = j + 1
-							break
-						}
+			checkDescPreds := func(cur helium.Node, includeSelf bool) bool {
+				if !matchStepsUpward(ctx, remaining, path.Absolute, cur) {
+					return false
+				}
+				// Collect all descendants of cur that match the name test.
+				// For descendant-or-self, include cur itself if it matches.
+				var descendants []helium.Node
+				if includeSelf && nodeMatchesTest(ctx, lastStep.NodeTest, cur) {
+					descendants = append(descendants, cur)
+				}
+				descendants = append(descendants, collectDescendants(ctx, lastStep.NodeTest, cur)...)
+				// Find position of node in the descendant set
+				pos := 0
+				for j, d := range descendants {
+					if d == node {
+						pos = j + 1
+						break
 					}
-					if pos == 0 {
-						continue
+				}
+				if pos == 0 {
+					return false
+				}
+				// Evaluate predicates with position context
+				for _, pred := range lastStep.Predicates {
+					if !evaluatePredicateWithPosition(ctx, pred, node, pos, len(descendants)) {
+						return false
 					}
-					// Evaluate predicates with position context
-					allMatch := true
-					for _, pred := range lastStep.Predicates {
-						if !evaluatePredicateWithPosition(ctx, pred, node, pos, len(descendants)) {
-							allMatch = false
-							break
-						}
-					}
-					if allMatch {
+				}
+				return true
+			}
+			isSelfAxis := lastStep.Axis == xpath3.AxisDescendantOrSelf
+			// For descendant-or-self, start from the node itself (it IS a
+			// descendant-or-self of itself) and walk upward through ancestors.
+			// For descendant (without self), start from parent.
+			startNode := node.Parent()
+			if isSelfAxis {
+				startNode = node
+			}
+			for cur := startNode; cur != nil; cur = cur.Parent() {
+				if checkDescPreds(cur, isSelfAxis) {
+					return true
+				}
+			}
+			// Child-or-top: parentless nodes try matching remaining steps
+			// from the node itself (XSLT 3.0 §19.2).
+			if node.Parent() == nil && node.Type() != helium.DocumentNode {
+				if isSelfAxis && !path.Absolute {
+					if checkDescPreds(node, true) {
 						return true
 					}
 				}
@@ -849,6 +968,13 @@ func matchLocationPath(ctx *execContext, path xpath3.LocationPath, node helium.N
 		// descendant / descendant-or-self axis: any ancestor may contain the preceding step
 		for cur := node.Parent(); cur != nil; cur = cur.Parent() {
 			if matchStepsUpward(ctx, remaining, path.Absolute, cur) {
+				return true
+			}
+		}
+		// Child-or-top: parentless non-document nodes try matching
+		// remaining steps from the node itself.
+		if node.Parent() == nil && node.Type() != helium.DocumentNode && !path.Absolute {
+			if matchStepsUpward(ctx, remaining, false, node) {
 				return true
 			}
 		}
@@ -902,53 +1028,32 @@ func matchStepsUpward(ctx *execContext, steps []xpath3.Step, absolute bool, node
 
 // nodeMatchesStep checks if a node matches a single step's node test and predicates.
 func nodeMatchesStep(ctx *execContext, step xpath3.Step, node helium.Node) bool {
+	nodeType := node.Type()
+
 	// Document nodes are matched by document-node() patterns, or by node()
 	// on the self axis (as in match=".").  On the child/descendant axes,
 	// document nodes are never selected.
-	if node.Type() == helium.DocumentNode {
-		// In patterns, document-node() with an explicit child axis like
-		// "child::document-node()" never matches because document nodes
-		// cannot be children. But document-node() without explicit axis
-		// (just "document-node()") should match document nodes.
-		// We distinguish by checking: if DocumentTest + child axis + parent exists,
-		// it's an explicit child step that shouldn't match.
-		// However, the XPath parser gives default axis "child" to all steps,
-		// so we need another way to distinguish. For now, we only prevent
-		// matching when the node has a parent (i.e., it IS a child of something).
-		// Document nodes at the root have no parent, so they pass.
-		if _, isDocTest := step.NodeTest.(xpath3.DocumentTest); isDocTest {
-			// document-node() in a pattern only matches actual document nodes.
-			// Since document nodes are never children of anything, a
-			// child::document-node() step only matches root document nodes
-			// (which have no parent).
-			if node.Type() != helium.DocumentNode {
+	if nodeType == helium.DocumentNode {
+		if _, isDocTest := step.NodeTest.(xpath3.DocumentTest); !isDocTest {
+			// Allow self::node() to match document nodes.
+			if step.Axis != xpath3.AxisSelf {
 				return false
 			}
-		} else {
-			// Allow self::node() to match document nodes.
-			if step.Axis == xpath3.AxisSelf {
-				if tt, ok := step.NodeTest.(xpath3.TypeTest); !ok || tt.Kind != xpath3.NodeKindNode {
-					return false
-				}
-			} else {
+			if tt, ok := step.NodeTest.(xpath3.TypeTest); !ok || tt.Kind != xpath3.NodeKindNode {
 				return false
 			}
 		}
 	}
 	// Attribute nodes are only matched by the attribute axis (e.g., @*, attribute::node()).
 	// The default child axis does not include attributes.
-	if node.Type() == helium.AttributeNode && step.Axis != xpath3.AxisAttribute {
-		return false
-	}
 	// Conversely, the attribute axis only matches attribute nodes.
-	if node.Type() != helium.AttributeNode && step.Axis == xpath3.AxisAttribute {
+	isAttr := nodeType == helium.AttributeNode
+	if isAttr != (step.Axis == xpath3.AxisAttribute) {
 		return false
 	}
 	// Namespace nodes are only matched by the namespace axis or namespace-node() test.
-	if node.Type() == helium.NamespaceNode && step.Axis != xpath3.AxisNamespace {
-		return false
-	}
-	if node.Type() != helium.NamespaceNode && step.Axis == xpath3.AxisNamespace {
+	isNS := nodeType == helium.NamespaceNode
+	if isNS != (step.Axis == xpath3.AxisNamespace) {
 		return false
 	}
 	if !nodeMatchesTest(ctx, step.NodeTest, node) {
@@ -1087,31 +1192,26 @@ func matchTypeTest(tt xpath3.TypeTest, node helium.Node) bool {
 }
 
 func matchNameTest(ctx *execContext, nt xpath3.NameTest, node helium.Node) bool {
-	if node.Type() != helium.ElementNode && node.Type() != helium.AttributeNode &&
-		node.Type() != helium.NamespaceNode {
+	var nodeLocal, nodeURI string
+	var isElem bool
+	switch v := node.(type) {
+	case *helium.Element:
+		isElem = true
+		nodeLocal = v.LocalName()
+		nodeURI = v.URI()
+	case *helium.Attribute:
+		nodeLocal = v.LocalName()
+		nodeURI = v.URI()
+	case *helium.NamespaceNodeWrapper:
+		nodeLocal = v.Name()
+		nodeURI = ""
+	default:
 		return false
 	}
-	elem, isElem := node.(*helium.Element)
-	attr, isAttr := node.(*helium.Attribute)
-	nsNode, isNS := node.(*helium.NamespaceNodeWrapper)
 
 	if nt.Local == "*" && nt.Prefix == "" && nt.URI == "" {
 		// * matches all elements/attributes/namespace-nodes
 		return true
-	}
-
-	var nodeLocal, nodeURI string
-	if isElem {
-		nodeLocal = elem.LocalName()
-		nodeURI = elem.URI()
-	} else if isAttr {
-		nodeLocal = attr.LocalName()
-		nodeURI = attr.URI()
-	} else if isNS {
-		nodeLocal = nsNode.Name()
-		nodeURI = ""
-	} else {
-		return false
 	}
 
 	if nt.Local == "*" {
@@ -1135,7 +1235,7 @@ func matchNameTest(ctx *execContext, nt xpath3.NameTest, node helium.Node) bool 
 	expectedURI := ""
 	if nt.Prefix != "" && ctx != nil {
 		expectedURI = ctx.resolvePrefix(nt.Prefix)
-	} else if nt.Prefix == "" && ctx != nil && node.Type() == helium.ElementNode {
+	} else if nt.Prefix == "" && ctx != nil && isElem {
 		// Unprefixed element names use xpath-default-namespace
 		expectedURI = ctx.xpathDefaultNS
 	}
@@ -1171,11 +1271,11 @@ func matchNameTest(ctx *execContext, nt xpath3.NameTest, node helium.Node) bool 
 func isTypedStrictMode(ctx *execContext) bool {
 	mode := ctx.currentMode
 	if md := ctx.stylesheet.modeDefs[mode]; md != nil {
-		return md.Typed == "strict" || md.Typed == "yes" || md.Typed == "true" || md.Typed == "1"
+		return md.Typed == validationStrict || md.Typed == lexicon.ValueYes || md.Typed == "true" || md.Typed == "1"
 	}
 	if mode == "" {
-		if md := ctx.stylesheet.modeDefs["#default"]; md != nil {
-			return md.Typed == "strict" || md.Typed == "yes" || md.Typed == "true" || md.Typed == "1"
+		if md := ctx.stylesheet.modeDefs[modeDefault]; md != nil {
+			return md.Typed == validationStrict || md.Typed == lexicon.ValueYes || md.Typed == "true" || md.Typed == "1"
 		}
 	}
 	return false
@@ -1242,7 +1342,15 @@ func matchElementTest(ctx *execContext, et xpath3.ElementTest, node helium.Node)
 	}
 	// Check type annotation if specified
 	if et.TypeName != "" {
-		return matchTypeAnnotation(ctx, node, et.TypeName)
+		if !matchTypeAnnotation(ctx, node, et.TypeName) {
+			return false
+		}
+		// element(name, type) without ? does not match nilled elements;
+		// element(name, type?) with ? matches even when nilled.
+		if !et.Nillable && ctx != nil && ctx.isNilled(elem) {
+			return false
+		}
+		return true
 	}
 	return true
 }
@@ -1391,7 +1499,7 @@ func matchDocumentTest(ctx *execContext, dt xpath3.DocumentTest, node helium.Nod
 		return false
 	}
 	var docElem helium.Node
-	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(doc) {
 		if child.Type() == helium.ElementNode {
 			if docElem != nil {
 				return false // more than one element child
@@ -1449,7 +1557,7 @@ func evaluateChainedPredicates(ctx *execContext, step xpath3.Step, node helium.N
 // given node test, in document order.
 func collectDescendants(ctx *execContext, test xpath3.NodeTest, root helium.Node) []helium.Node {
 	var result []helium.Node
-	_ = helium.Walk(root, func(n helium.Node) error {
+	_ = helium.Walk(root, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n == root {
 			return nil // skip the root itself
 		}
@@ -1457,7 +1565,7 @@ func collectDescendants(ctx *execContext, test xpath3.NodeTest, root helium.Node
 			result = append(result, n)
 		}
 		return nil
-	})
+	}))
 	return result
 }
 
@@ -1486,7 +1594,7 @@ func collectMatchingSiblings(ctx *execContext, test xpath3.NodeTest, node helium
 	}
 
 	// Iterate through all children of the parent
-	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(parent) {
 		if nodeMatchesTest(ctx, test, child) {
 			siblings = append(siblings, child)
 		}
@@ -1496,12 +1604,24 @@ func collectMatchingSiblings(ctx *execContext, test xpath3.NodeTest, node helium
 
 // evaluatePredicateWithPosition evaluates a pattern predicate with explicit
 // position and size context.
-func evaluatePredicateWithPosition(ctx *execContext, pred xpath3.Expr, node helium.Node, pos, size int) bool {
-	xpathCtx := ctx.newXPathContext(node)
-	xpathCtx = xpath3.WithPosition(xpathCtx, pos)
-	xpathCtx = xpath3.WithSize(xpathCtx, size)
-	result, err := xpath3.EvaluateExpr(xpathCtx, pred, node)
+func evaluatePredicateWithPosition(ec *execContext, pred xpath3.Expr, node helium.Node, pos, size int) bool {
+	compiled, compErr := xpath3.NewCompiler().CompileExpr(pred)
+	if compErr != nil {
+		return false
+	}
+	eval := ec.xpathEvaluator().
+		Position(pos).
+		Size(size)
+	result, err := eval.Evaluate(ec.xpathContext(), compiled, node)
 	if err != nil {
+		// Propagate fatal errors (like XTDE0640 circular key or
+		// ErrCircularRef from variable/param evaluation) through
+		// the exec context so they can be raised after pattern matching.
+		if isXSLTError(err, errCodeXTDE0640) {
+			ec.patternMatchErr = err
+		} else if errors.Is(err, ErrCircularRef) {
+			ec.patternMatchErr = dynamicError(errCodeXTDE0640, "%s", err.Error())
+		}
 		return false
 	}
 	// Numeric predicates: compare to the provided position
@@ -1519,15 +1639,25 @@ func evaluatePredicateWithPosition(ctx *execContext, pred xpath3.Expr, node heli
 // evaluating the pattern expression and checking whether the candidate node
 // appears in the result sequence. It tries the candidate node as context first,
 // then walks up the ancestor chain trying each ancestor as context.
-func matchByEvaluation(ctx *execContext, alt *PatternAlt, node helium.Node) bool {
-	compiled := xpath3.CompileExpr(alt.expr)
+func matchByEvaluation(ctx *execContext, alt *patternAlt, node helium.Node) bool {
+	compiled, compErr := xpath3.NewCompiler().CompileExpr(alt.expr)
+	if compErr != nil {
+		return false
+	}
 
 	// Try evaluating with the node itself as context first.
 	// Needed for document-node patterns like (/)[doc].
-	xpathCtx := ctx.newXPathContext(node)
-	result, err := compiled.Evaluate(xpathCtx, node)
+	result, err := ctx.evalXPath(compiled, node)
+	if err != nil {
+		// Propagate fatal errors (like XTDE0640 circular key) through
+		// the exec context so they can be raised after pattern matching.
+		if isXSLTError(err, errCodeXTDE0640) {
+			ctx.patternMatchErr = err
+			return false
+		}
+	}
 	if err == nil {
-		for _, item := range result.Sequence() {
+		for item := range sequence.Items(result.Sequence()) {
 			if ni, ok := item.(xpath3.NodeItem); ok && ni.Node == node {
 				return true
 			}
@@ -1535,12 +1665,15 @@ func matchByEvaluation(ctx *execContext, alt *PatternAlt, node helium.Node) bool
 	}
 	// Then try evaluating from each ancestor up to the document root.
 	for ancestor := node.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
-		xpathCtx := ctx.newXPathContext(ancestor)
-		result, err := compiled.Evaluate(xpathCtx, ancestor)
+		result, err := ctx.evalXPath(compiled, ancestor)
 		if err != nil {
+			if isXSLTError(err, errCodeXTDE0640) {
+				ctx.patternMatchErr = err
+				return false
+			}
 			continue
 		}
-		for _, item := range result.Sequence() {
+		for item := range sequence.Items(result.Sequence()) {
 			if ni, ok := item.(xpath3.NodeItem); ok && ni.Node == node {
 				return true
 			}
