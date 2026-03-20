@@ -91,6 +91,23 @@ func TestAttributeExistencePredicateVM(t *testing.T) {
 	require.Equal(t, 3.0, value)
 }
 
+func TestContextItemCompiledIsContextItem(t *testing.T) {
+	doc := parseTestDoc(t)
+	root := doc.DocumentElement()
+
+	compiled, err := xpath3.Compile(".")
+	require.NoError(t, err)
+
+	state := xpath3.NewEvalState(t.Context(), root)
+	result, err := compiled.EvaluateReuse(state, root)
+	require.NoError(t, err)
+
+	nodes, err := result.Nodes()
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	require.Equal(t, root, nodes[0])
+}
+
 func TestAttributeEqualityPredicateReverseOperandsVM(t *testing.T) {
 	doc := parseTestDoc(t)
 

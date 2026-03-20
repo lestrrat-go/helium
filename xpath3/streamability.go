@@ -12,8 +12,19 @@ func computeStreamInfo(ast Expr) streamInfo {
 	si := streamInfo{
 		usedFunctions: make(map[string]bool),
 	}
-	if _, ok := derefExpr(ast).(ContextItemExpr); ok {
+	switch v := derefExpr(ast).(type) {
+	case ContextItemExpr:
 		si.isContextItem = true
+	case vmLocationPathExpr:
+		// The direct compiler lowers "." to self::node(); recognize it.
+		if !v.Absolute && len(v.Steps) == 1 {
+			s := v.Steps[0]
+			if s.Axis == AxisSelf && len(s.Predicates) == 0 {
+				if tt, ok := s.NodeTest.(TypeTest); ok && tt.Kind == NodeKindNode {
+					si.isContextItem = true
+				}
+			}
+		}
 	}
 	// Collect axis usage, function names, downward steps, and predicate motionlessness.
 	WalkExpr(ast, func(e Expr) bool {
