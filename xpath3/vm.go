@@ -46,9 +46,29 @@ type compiledExprRef struct {
 
 func (compiledExprRef) exprNode() {}
 
+type vmLocationStep struct {
+	Axis       AxisType
+	NodeTest   NodeTest
+	Predicates []Expr
+}
+
+type vmLocationPathExpr struct {
+	Absolute bool
+	Steps    []vmLocationStep
+}
+
+func (vmLocationPathExpr) exprNode() {}
+
+type vmPathExpr struct {
+	Filter Expr
+	Path   *vmLocationPathExpr
+}
+
+func (vmPathExpr) exprNode() {}
+
 type vmInstruction struct {
-	op   vmOpcode
-	expr Expr
+	op      vmOpcode
+	payload any
 }
 
 type vmProgram struct {
@@ -106,8 +126,8 @@ func (b *vmBuilder) compileExpr(expr Expr) (compiledExprRef, error) {
 func (b *vmBuilder) appendInstruction(lowered Expr) compiledExprRef {
 	ref := compiledExprRef{index: len(b.instructions)}
 	b.instructions = append(b.instructions, vmInstruction{
-		op:   opcodeForExpr(lowered),
-		expr: lowered,
+		op:      opcodeForExpr(lowered),
+		payload: lowered,
 	})
 	return ref
 }
@@ -356,35 +376,27 @@ func (b *vmBuilder) lowerExpr(expr Expr) (Expr, error) {
 }
 
 func (b *vmBuilder) lowerLocationPath(expr LocationPath) (Expr, error) {
-	var steps []Step
-	if b.reuseInput {
-		steps = expr.Steps
-	} else {
-		steps = make([]Step, len(expr.Steps))
-	}
-	for i, step := range expr.Steps {
+	return b.lowerLocationPathSteps(expr.Absolute, expr.Steps)
+}
+
+func (b *vmBuilder) lowerOwnedLocationPath(expr *LocationPath) (Expr, error) {
+	return b.lowerLocationPathSteps(expr.Absolute, expr.Steps)
+}
+
+func (b *vmBuilder) lowerLocationPathSteps(absolute bool, steps []Step) (Expr, error) {
+	loweredSteps := make([]vmLocationStep, len(steps))
+	for i, step := range steps {
 		preds, err := b.lowerChildExprSlice(step.Predicates)
 		if err != nil {
 			return nil, err
 		}
-		steps[i] = Step{
+		loweredSteps[i] = vmLocationStep{
 			Axis:       step.Axis,
 			NodeTest:   step.NodeTest,
 			Predicates: preds,
 		}
 	}
-	return &LocationPath{Absolute: expr.Absolute, Steps: steps}, nil
-}
-
-func (b *vmBuilder) lowerOwnedLocationPath(expr *LocationPath) (Expr, error) {
-	for i := range expr.Steps {
-		preds, err := b.lowerChildExprSlice(expr.Steps[i].Predicates)
-		if err != nil {
-			return nil, err
-		}
-		expr.Steps[i].Predicates = preds
-	}
-	return expr, nil
+	return vmLocationPathExpr{Absolute: absolute, Steps: loweredSteps}, nil
 }
 
 func (b *vmBuilder) lowerBinaryExpr(expr BinaryExpr) (Expr, error) {
@@ -502,15 +514,16 @@ func (b *vmBuilder) lowerPathExpr(expr PathExpr) (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	var path *LocationPath
+	var path *vmLocationPathExpr
 	if expr.Path != nil {
 		lowered, err := b.lowerLocationPath(*expr.Path)
 		if err != nil {
 			return nil, err
 		}
-		path = lowered.(*LocationPath)
+		lp := lowered.(vmLocationPathExpr)
+		path = &lp
 	}
-	return PathExpr{Filter: filter, Path: path}, nil
+	return vmPathExpr{Filter: filter, Path: path}, nil
 }
 
 func (b *vmBuilder) lowerPathStepExpr(expr PathStepExpr) (Expr, error) {
@@ -765,7 +778,7 @@ func opcodeForExpr(expr Expr) vmOpcode {
 		return vmOpRoot
 	case ContextItemExpr:
 		return vmOpContextItem
-	case *LocationPath:
+	case vmLocationPathExpr:
 		return vmOpLocationPath
 	case BinaryExpr:
 		return vmOpBinary
@@ -783,7 +796,7 @@ func opcodeForExpr(expr Expr) vmOpcode {
 		return vmOpIntersectExcept
 	case FilterExpr:
 		return vmOpFilter
-	case PathExpr:
+	case vmPathExpr:
 		return vmOpPath
 	case PathStepExpr:
 		return vmOpPathStep
@@ -864,69 +877,69 @@ func (v *vm) evalInstruction(ec *evalContext, ref compiledExprRef) (Sequence, er
 	inst := v.program.instructions[ref.index]
 	switch inst.op {
 	case vmOpLiteral:
-		return evalLiteral(inst.expr.(LiteralExpr))
+		return evalLiteral(inst.payload.(LiteralExpr))
 	case vmOpVariable:
-		return evalVariable(ec, inst.expr.(VariableExpr))
+		return evalVariable(ec, inst.payload.(VariableExpr))
 	case vmOpRoot:
 		return evalRootExpr(ec)
 	case vmOpContextItem:
 		return evalContextItemExpr(ec)
 	case vmOpLocationPath:
-		return evalLocationPath(v.evalExpr, ec, inst.expr.(*LocationPath))
+		return evalVMLocationPath(v.evalExpr, ec, inst.payload.(vmLocationPathExpr))
 	case vmOpBinary:
-		return evalBinaryExpr(v.evalExpr, ec, inst.expr.(BinaryExpr))
+		return evalBinaryExpr(v.evalExpr, ec, inst.payload.(BinaryExpr))
 	case vmOpUnary:
-		return evalUnaryExpr(v.evalExpr, ec, inst.expr.(UnaryExpr))
+		return evalUnaryExpr(v.evalExpr, ec, inst.payload.(UnaryExpr))
 	case vmOpConcat:
-		return evalConcatExpr(v.evalExpr, ec, inst.expr.(ConcatExpr))
+		return evalConcatExpr(v.evalExpr, ec, inst.payload.(ConcatExpr))
 	case vmOpSimpleMap:
-		return evalSimpleMapExpr(v.evalExpr, ec, inst.expr.(SimpleMapExpr))
+		return evalSimpleMapExpr(v.evalExpr, ec, inst.payload.(SimpleMapExpr))
 	case vmOpRange:
-		return evalRangeExpr(v.evalExpr, ec, inst.expr.(RangeExpr))
+		return evalRangeExpr(v.evalExpr, ec, inst.payload.(RangeExpr))
 	case vmOpUnion:
-		return evalUnionExpr(v.evalExpr, ec, inst.expr.(UnionExpr))
+		return evalUnionExpr(v.evalExpr, ec, inst.payload.(UnionExpr))
 	case vmOpIntersectExcept:
-		return evalIntersectExceptExpr(v.evalExpr, ec, inst.expr.(IntersectExceptExpr))
+		return evalIntersectExceptExpr(v.evalExpr, ec, inst.payload.(IntersectExceptExpr))
 	case vmOpFilter:
-		return evalFilterExpr(v.evalExpr, ec, inst.expr.(FilterExpr))
+		return evalFilterExpr(v.evalExpr, ec, inst.payload.(FilterExpr))
 	case vmOpPath:
-		return evalPathExpr(v.evalExpr, ec, inst.expr.(PathExpr))
+		return evalVMPathExpr(v.evalExpr, ec, inst.payload.(vmPathExpr))
 	case vmOpPathStep:
-		return evalPathStepExpr(v.evalExpr, ec, inst.expr.(PathStepExpr))
+		return evalPathStepExpr(v.evalExpr, ec, inst.payload.(PathStepExpr))
 	case vmOpLookup:
-		return evalLookupExpr(v.evalExpr, ec, inst.expr.(LookupExpr))
+		return evalLookupExpr(v.evalExpr, ec, inst.payload.(LookupExpr))
 	case vmOpUnaryLookup:
-		return evalUnaryLookupExpr(v.evalExpr, ec, inst.expr.(UnaryLookupExpr))
+		return evalUnaryLookupExpr(v.evalExpr, ec, inst.payload.(UnaryLookupExpr))
 	case vmOpFLWOR:
-		return evalFLWOR(v.evalExpr, ec, inst.expr.(FLWORExpr))
+		return evalFLWOR(v.evalExpr, ec, inst.payload.(FLWORExpr))
 	case vmOpQuantified:
-		return evalQuantifiedExpr(v.evalExpr, ec, inst.expr.(QuantifiedExpr))
+		return evalQuantifiedExpr(v.evalExpr, ec, inst.payload.(QuantifiedExpr))
 	case vmOpIf:
-		return evalIfExpr(v.evalExpr, ec, inst.expr.(IfExpr))
+		return evalIfExpr(v.evalExpr, ec, inst.payload.(IfExpr))
 	case vmOpTryCatch:
-		return evalTryCatchExpr(v.evalExpr, ec, inst.expr.(TryCatchExpr))
+		return evalTryCatchExpr(v.evalExpr, ec, inst.payload.(TryCatchExpr))
 	case vmOpInstanceOf:
-		return evalInstanceOfExpr(v.evalExpr, ec, inst.expr.(InstanceOfExpr))
+		return evalInstanceOfExpr(v.evalExpr, ec, inst.payload.(InstanceOfExpr))
 	case vmOpCast:
-		return evalCastExpr(v.evalExpr, ec, inst.expr.(CastExpr))
+		return evalCastExpr(v.evalExpr, ec, inst.payload.(CastExpr))
 	case vmOpCastable:
-		return evalCastableExpr(v.evalExpr, ec, inst.expr.(CastableExpr))
+		return evalCastableExpr(v.evalExpr, ec, inst.payload.(CastableExpr))
 	case vmOpTreatAs:
-		return evalTreatAsExpr(v.evalExpr, ec, inst.expr.(TreatAsExpr))
+		return evalTreatAsExpr(v.evalExpr, ec, inst.payload.(TreatAsExpr))
 	case vmOpFunctionCall:
-		return evalFunctionCall(v.evalExpr, ec, inst.expr.(FunctionCall))
+		return evalFunctionCall(v.evalExpr, ec, inst.payload.(FunctionCall))
 	case vmOpDynamicFunctionCall:
-		return evalDynamicFunctionCall(v.evalExpr, ec, inst.expr.(DynamicFunctionCall))
+		return evalDynamicFunctionCall(v.evalExpr, ec, inst.payload.(DynamicFunctionCall))
 	case vmOpNamedFunctionRef:
-		return evalNamedFunctionRef(ec, inst.expr.(NamedFunctionRef))
+		return evalNamedFunctionRef(ec, inst.payload.(NamedFunctionRef))
 	case vmOpInlineFunction:
-		return evalInlineFunctionExpr(v.evalExpr, ec, inst.expr.(InlineFunctionExpr))
+		return evalInlineFunctionExpr(v.evalExpr, ec, inst.payload.(InlineFunctionExpr))
 	case vmOpMapConstructor:
-		return evalMapConstructorExpr(v.evalExpr, ec, inst.expr.(MapConstructorExpr))
+		return evalMapConstructorExpr(v.evalExpr, ec, inst.payload.(MapConstructorExpr))
 	case vmOpArrayConstructor:
-		return evalArrayConstructorExpr(v.evalExpr, ec, inst.expr.(ArrayConstructorExpr))
+		return evalArrayConstructorExpr(v.evalExpr, ec, inst.payload.(ArrayConstructorExpr))
 	case vmOpSequence:
-		return evalSequenceExpr(v.evalExpr, ec, inst.expr.(SequenceExpr))
+		return evalSequenceExpr(v.evalExpr, ec, inst.payload.(SequenceExpr))
 	case vmOpPlaceholder:
 		return nil, fmt.Errorf("%w: placeholder outside partial application", ErrUnsupportedExpr)
 	default:

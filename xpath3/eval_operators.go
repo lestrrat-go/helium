@@ -367,6 +367,44 @@ func evalPathExpr(evalFn exprEvaluator, ec *evalContext, e PathExpr) (Sequence, 
 	return seq, nil
 }
 
+func evalVMPathExpr(evalFn exprEvaluator, ec *evalContext, e vmPathExpr) (Sequence, error) {
+	base, err := evalFn(ec, e.Filter)
+	if err != nil {
+		return nil, err
+	}
+	if e.Path == nil {
+		return base, nil
+	}
+	baseNodes, ok := NodesFrom(base)
+	if !ok {
+		return nil, ErrPathNotNodeSet
+	}
+	var result []helium.Node
+	for _, n := range baseNodes {
+		frame := ec.pushNodeContext(n, 1, 1)
+		subResult, err := evalVMLocationPath(evalFn, ec, *e.Path)
+		ec.restoreContext(frame)
+		if err != nil {
+			return nil, err
+		}
+		subNodes, _ := NodesFrom(subResult)
+		result = append(result, subNodes...)
+	}
+	seen := make(map[helium.Node]struct{}, len(result))
+	deduped := make([]helium.Node, 0, len(result))
+	for _, n := range result {
+		if _, ok := seen[n]; !ok {
+			seen[n] = struct{}{}
+			deduped = append(deduped, n)
+		}
+	}
+	seq := make(Sequence, len(deduped))
+	for i, n := range deduped {
+		seq[i] = nodeItemFor(ec, n)
+	}
+	return seq, nil
+}
+
 // evalPathStepExpr evaluates E1/E2 where E2 is a non-axis expression.
 // Per XPath 3.1: E1 must produce a node sequence; E2 is evaluated for each node
 // with that node as context. If all results are nodes, they are sorted in

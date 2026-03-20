@@ -88,6 +88,18 @@ type Result struct {
 	seq Sequence
 }
 
+// Copy returns a deep copy of the Result whose backing storage is
+// independent of any EvalState. Use this to retain a Result beyond
+// the next EvaluateReuse call.
+func (r Result) Copy() Result {
+	if len(r.seq) == 0 {
+		return Result{}
+	}
+	cp := make(Sequence, len(r.seq))
+	copy(cp, r.seq)
+	return Result{seq: cp}
+}
+
 // Sequence returns the raw result sequence.
 func (r *Result) Sequence() Sequence {
 	return r.seq

@@ -42,13 +42,13 @@ type vmProgram struct {
     instructions []vmInstruction
 }
 type vmInstruction struct {
-    op   vmOpcode
-    expr Expr
+    op      vmOpcode
+    payload any
 }
 type compiledExprRef struct { index int }
 ```
 
-Lowering is structural for non-trivial nodes: lowered payload Exprs keep node metadata, recursive children usually become `compiledExprRef` indexes, and trivial leaves such as literals or variable refs can stay inline in the parent payload. VM execution switches on `vmOpcode` for compiled refs, then reuses existing `eval_*` helpers for language semantics.
+Lowering is structural for non-trivial nodes: recursive children usually become `compiledExprRef` indexes, trivial leaves such as literals or variable refs can stay inline in the parent payload, and hot path forms now use VM-specific payloads instead of AST nodes. `LocationPath` / `PathExpr` lower to `vmLocationPathExpr` / `vmPathExpr` with `vmLocationStep` slices. VM execution switches on `vmOpcode` for compiled refs, then reuses existing `eval_*` helpers for language semantics.
 
 ## Evaluation Rules by Expr Type
 
