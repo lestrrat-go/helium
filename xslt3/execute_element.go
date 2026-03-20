@@ -911,6 +911,14 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 	}
 
 	out := ec.currentOutput()
+	// In sequence mode, capture the namespace node as a standalone item.
+	if out.sequenceMode {
+		ns := helium.NewNamespace(name, value)
+		nsNode := helium.NewNamespaceNodeWrapper(ns, nil)
+		out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: nsNode})
+		out.noteOutput()
+		return nil
+	}
 	elem, ok := out.current.(*helium.Element)
 	if !ok {
 		return dynamicError(errCodeXTDE0420,
