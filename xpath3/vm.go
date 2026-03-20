@@ -832,7 +832,12 @@ func (b *vmBuilder) lowerPredicateSlice(items []Expr) ([]Expr, error) {
 	if len(items) == 0 {
 		return nil, nil
 	}
-	result := make([]Expr, len(items))
+	var result []Expr
+	if b.reuseInput {
+		result = items
+	} else {
+		result = make([]Expr, len(items))
+	}
 	for i, item := range items {
 		lowered, err := b.lowerPredicate(item)
 		if err != nil {
