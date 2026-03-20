@@ -105,14 +105,27 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		// context nodes. For text/comment/PI, it is silently ignored.
 		isElemOrAttr := contextNode != nil &&
 			(contextNode.Type() == helium.ElementNode || contextNode.Type() == helium.AttributeNode)
-		// XTTE1535: complex type on non-element node.
-		if !isElemOrAttr && ec.schemaRegistry != nil {
+		isDocument := contextNode != nil && contextNode.Type() == helium.DocumentNode
+		// XTTE1535: complex type on non-element, non-document node.
+		if !isElemOrAttr && !isDocument && ec.schemaRegistry != nil {
 			td, _, found := ec.schemaRegistry.LookupTypeDef(inst.TypeName)
-			// XTTE1535: complex type (any type with attributes, element content,
-			// or mixed content) cannot be applied to non-element nodes.
 			if found && isComplexTypeDef(td) {
 				return dynamicError(errCodeXTTE1535,
 					"copy: complex type %s cannot be applied to %s node", inst.TypeName, contextNode.Type())
+			}
+		}
+		// For document nodes, apply the type to the root element.
+		if isDocument {
+			out := ec.currentOutput()
+			// Find the root element in the copied output.
+			for child := out.current.FirstChild(); child != nil; child = child.NextSibling() {
+				if copiedElem, ok := child.(*helium.Element); ok {
+					if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
+						return err
+					}
+					ec.annotateNode(copiedElem, inst.TypeName)
+					break
+				}
 			}
 		}
 		if isElemOrAttr {
