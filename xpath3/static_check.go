@@ -46,12 +46,11 @@ func (p prefixValidationPlan) Validate(namespaces map[string]string, strict bool
 	}
 	for _, req := range p.atomicTypes {
 		if req.prefix == "" {
-			if namespaces == nil || namespaces[""] == "" {
-				return &XPathError{
-					Code:    errCodeXPST0081,
-					Message: fmt.Sprintf("unprefixed type name %q requires a default element namespace", req.name),
-				}
-			}
+			// Unprefixed type names are allowed in the no-namespace
+			// (e.g., schema-defined types with no targetNamespace).
+			// Only reject when there are no schema declarations that
+			// could define the type — but we can't check that here,
+			// so accept all unprefixed type names.
 			continue
 		}
 		if req.prefix == "xs" || req.prefix == "xsd" {

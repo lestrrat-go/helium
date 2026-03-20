@@ -6,6 +6,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 // SequenceType represents a parsed XSLT/XPath sequence type declaration
@@ -422,6 +423,24 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execConte
 		}
 	}
 
+	// User-defined types (union or restriction): check if the value's type
+	// is a subtype of the target type using the schema registry.
+	if len(ec) > 0 && ec[0] != nil && ec[0].schemaRegistry != nil {
+		if ec[0].schemaRegistry.IsSubtypeOf(av.TypeName, target) {
+			return av, nil
+		}
+		// For union types, check if the value's type is a member type.
+		td, _, found := ec[0].schemaRegistry.LookupTypeDef(target)
+		if found && td != nil && td.Variety == xsd.TypeVarietyUnion {
+			for _, member := range td.MemberTypes {
+				memberName := xsdTypeNameFromDef(member)
+				if av.TypeName == memberName || ec[0].schemaRegistry.IsSubtypeOf(av.TypeName, memberName) {
+					return av, nil
+				}
+			}
+		}
+	}
+
 	// General fallback: try string-based casting
 	s, err := xpath3.AtomicToString(av)
 	if err != nil {
@@ -449,20 +468,33 @@ func trySchemaCast(s, target string, ec ...*execContext) (xpath3.Item, bool) {
 	// Resolve to the built-in base type by walking the schema type chain.
 	local, ns := splitAnnotationName(target)
 	builtinBase := resolveToBuiltin(local, ns, reg)
-	if builtinBase == "" {
-		return nil, false
+	if builtinBase != "" {
+		cast, err := xpath3.CastFromString(s, builtinBase)
+		if err != nil {
+			return nil, false
+		}
+		// Validate facets.
+		castStr, _ := xpath3.AtomicToString(cast)
+		if facetErr := reg.ValidateCast(castStr, target); facetErr != nil {
+			return nil, false
+		}
+		cast.TypeName = target
+		return cast, true
 	}
-	cast, err := xpath3.CastFromString(s, builtinBase)
-	if err != nil {
-		return nil, false
+	// For union types, try each member type until one succeeds.
+	td, _, found := reg.LookupTypeDef(target)
+	if found && td != nil && td.Variety == xsd.TypeVarietyUnion {
+		for _, member := range td.MemberTypes {
+			memberName := xsdTypeNameFromDef(member)
+			cast, err := xpath3.CastFromString(s, memberName)
+			if err == nil {
+				// Keep the member's type name (not the union name) so that
+				// instance-of checks like "instance of xs:time" work.
+				return cast, true
+			}
+		}
 	}
-	// Validate facets.
-	castStr, _ := xpath3.AtomicToString(cast)
-	if facetErr := reg.ValidateCast(castStr, target); facetErr != nil {
-		return nil, false
-	}
-	cast.TypeName = target
-	return cast, true
+	return nil, false
 }
 
 // resolveToBuiltin walks the schema type chain from a user-defined type to

@@ -125,7 +125,28 @@ func (r *schemaRegistry) IsSubtypeOf(typeName, baseTypeName string) bool {
 	}
 	// Delegate built-in XSD types to the static hierarchy.
 	if isXSBuiltin(typeName) {
-		return isBuiltinSubtypeOf(typeName, baseTypeName)
+		if isBuiltinSubtypeOf(typeName, baseTypeName) {
+			return true
+		}
+		// Also check if baseTypeName is a union type with typeName as a member.
+		if !isXSBuiltin(baseTypeName) {
+			baseLocal, baseNS := splitAnnotationName(baseTypeName)
+			for _, s := range r.schemas {
+				baseTD, found := s.LookupType(baseLocal, baseNS)
+				if !found {
+					continue
+				}
+				if baseTD.Variety == xsd.TypeVarietyUnion {
+					for _, member := range baseTD.MemberTypes {
+						memberName := xsdTypeNameFromDef(member)
+						if typeName == memberName || isBuiltinSubtypeOf(typeName, memberName) {
+							return true
+						}
+					}
+				}
+			}
+		}
+		return false
 	}
 	// For user-defined types, walk the BaseType chain in the schemas.
 	local, ns := splitAnnotationName(typeName)
@@ -146,6 +167,22 @@ func (r *schemaRegistry) IsSubtypeOf(typeName, baseTypeName string) bool {
 			cur = cur.BaseType
 		}
 		return false
+	}
+	// Check if baseTypeName is a union type and typeName is a member type.
+	baseLocal, baseNS := splitAnnotationName(baseTypeName)
+	for _, s := range r.schemas {
+		baseTD, found := s.LookupType(baseLocal, baseNS)
+		if !found {
+			continue
+		}
+		if baseTD.Variety == xsd.TypeVarietyUnion {
+			for _, member := range baseTD.MemberTypes {
+				memberName := xsdTypeNameFromDef(member)
+				if typeName == memberName || r.IsSubtypeOf(typeName, memberName) {
+					return true
+				}
+			}
+		}
 	}
 	return false
 }
@@ -177,6 +214,19 @@ func (r *schemaRegistry) ListItemType(typeName string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// UnionMemberTypes implements xpath3.SchemaDeclarations.
+func (r *schemaRegistry) UnionMemberTypes(typeName string) []string {
+	td, _, found := r.LookupTypeDef(typeName)
+	if !found || td == nil || td.Variety != xsd.TypeVarietyUnion {
+		return nil
+	}
+	members := make([]string, 0, len(td.MemberTypes))
+	for _, member := range td.MemberTypes {
+		members = append(members, xsdTypeNameFromDef(member))
+	}
+	return members
 }
 
 // IsSubstitutionGroupMember checks if an element (memberLocal, memberNS) is in

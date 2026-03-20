@@ -60,6 +60,9 @@ type SchemaDeclarations interface {
 	// ListItemType returns the item type name for a list type. If the type
 	// is not a list, returns ("", false).
 	ListItemType(typeName string) (itemType string, ok bool)
+	// UnionMemberTypes returns the member type names for a union type.
+	// If the type is not a union, returns nil.
+	UnionMemberTypes(typeName string) []string
 }
 
 type evalConfig struct {

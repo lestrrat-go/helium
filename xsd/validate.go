@@ -244,6 +244,16 @@ func isSpecialAttr(a *helium.Attribute) bool {
 	return false
 }
 
+// attrLocalName returns the true local name of an attribute, stripping
+// any prefix that may be embedded in LocalName() (parser/API quirk).
+func attrLocalName(a *helium.Attribute) string {
+	ln := a.LocalName()
+	if i := strings.IndexByte(ln, ':'); i >= 0 {
+		return ln[i+1:]
+	}
+	return ln
+}
+
 func elemDisplayName(elem *helium.Element) string {
 	if elem.URI() != "" {
 		return "{" + elem.URI() + "}" + elem.LocalName()
@@ -291,7 +301,7 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, cfg *
 		if isSpecialAttr(a) {
 			continue
 		}
-		aqn := QName{Local: a.LocalName(), NS: a.URI()}
+		aqn := QName{Local: attrLocalName(a), NS: a.URI()}
 		if au, ok := allowed[aqn]; ok {
 			if au.Fixed != nil && a.Value() != *au.Fixed {
 				ad := attrDisplayName(a)
@@ -335,7 +345,7 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, cfg *
 		}
 		found := false
 		for _, a := range elem.Attributes() {
-			aqn := QName{Local: a.LocalName(), NS: a.URI()}
+			aqn := QName{Local: attrLocalName(a), NS: a.URI()}
 			if aqn == au.Name {
 				found = true
 				break
@@ -364,7 +374,7 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, cfg *
 		// Check if the attribute is already present.
 		found := false
 		for _, a := range elem.Attributes() {
-			aqn := QName{Local: a.LocalName(), NS: a.URI()}
+			aqn := QName{Local: attrLocalName(a), NS: a.URI()}
 			if aqn == au.Name {
 				found = true
 				break
@@ -592,6 +602,8 @@ func resolveXsiType(elem *helium.Element, declaredType *TypeDef, schema *Schema,
 }
 
 // xsdTypeName converts a TypeDef to a type name string suitable for annotations.
+// For anonymous types (no name), it walks up the base type chain to find the
+// nearest named ancestor type, since XPath type checks need a concrete type name.
 func xsdTypeName(td *TypeDef) string {
 	if td == nil {
 		return "xs:untyped"
@@ -604,6 +616,18 @@ func xsdTypeName(td *TypeDef) string {
 	}
 	if td.Name.Local != "" {
 		return td.Name.Local
+	}
+	// Anonymous type: walk up the base type chain to find a named type.
+	for cur := td.BaseType; cur != nil; cur = cur.BaseType {
+		if cur.Name.NS == xsdNS {
+			return "xs:" + cur.Name.Local
+		}
+		if cur.Name.NS != "" {
+			return "Q{" + cur.Name.NS + "}" + cur.Name.Local
+		}
+		if cur.Name.Local != "" {
+			return cur.Name.Local
+		}
 	}
 	return "xs:untyped"
 }

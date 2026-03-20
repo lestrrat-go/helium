@@ -384,6 +384,12 @@ func (ec *execContext) stripAnnotations(node helium.Node) {
 		return
 	}
 	delete(ec.typeAnnotations, node)
+	// Also strip annotations from attributes on elements.
+	if elem, ok := node.(*helium.Element); ok {
+		for _, attr := range elem.Attributes() {
+			delete(ec.typeAnnotations, attr)
+		}
+	}
 	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 		ec.stripAnnotations(child)
 	}
@@ -460,7 +466,16 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 	// standalone item rather than attaching it to an element.
 	out := ec.currentOutput()
 	if out.sequenceMode {
-		attr, attrErr := out.doc.CreateAttribute(name, value, nil)
+		// Resolve namespace for prefixed attribute names.
+		var attrNS *helium.Namespace
+		if idx := strings.IndexByte(name, ':'); idx >= 0 {
+			prefix := name[:idx]
+			if nsURI := ec.resolvePrefix(prefix); nsURI != "" {
+				ns, _ := out.doc.CreateNamespace(prefix, nsURI)
+				attrNS = ns
+			}
+		}
+		attr, attrErr := out.doc.CreateAttribute(name, value, attrNS)
 		if attrErr != nil {
 			return attrErr
 		}

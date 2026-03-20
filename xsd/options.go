@@ -7,6 +7,7 @@ type CompileOption func(*compileConfig)
 
 type compileConfig struct {
 	filename     string               // XSD filename for error messages
+	baseDir      string               // base directory for resolving relative includes
 	errorHandler helium.ErrorHandler
 }
 
@@ -14,6 +15,14 @@ type compileConfig struct {
 func WithSchemaFilename(name string) CompileOption {
 	return func(c *compileConfig) {
 		c.filename = name
+	}
+}
+
+// WithBaseDir sets the base directory used to resolve relative paths in
+// xs:include and xs:redefine elements during schema compilation.
+func WithBaseDir(dir string) CompileOption {
+	return func(c *compileConfig) {
+		c.baseDir = dir
 	}
 }
 

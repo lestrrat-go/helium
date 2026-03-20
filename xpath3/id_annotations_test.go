@@ -36,6 +36,9 @@ func (idSubtypeDecls) ValidateCast(value, typeName string) error {
 func (idSubtypeDecls) ListItemType(typeName string) (string, bool) {
 	return "", false
 }
+func (idSubtypeDecls) UnionMemberTypes(typeName string) []string {
+	return nil
+}
 
 func TestFnIDUsesTypeAnnotationsForIDSubtype(t *testing.T) {
 	doc := mustParseXML(t, `<root id="alpha"/>`)

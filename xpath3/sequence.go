@@ -104,7 +104,14 @@ func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
 				for _, tok := range tokens {
 					cast, err := CastFromString(tok, listItem)
 					if err != nil {
-						return nil, err
+						// For user-defined schema types (Q{ns}local),
+						// the value was already validated during
+						// construction; store as string with the type name.
+						if strings.HasPrefix(listItem, "Q{") {
+							cast = AtomicValue{TypeName: listItem, Value: tok}
+						} else {
+							return nil, err
+						}
 					}
 					result = append(result, cast)
 				}

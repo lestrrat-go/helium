@@ -57,7 +57,11 @@ func LocalNameOf(n helium.Node) string {
 	case *helium.Element:
 		return v.LocalName()
 	case *helium.Attribute:
-		return v.LocalName()
+		ln := v.LocalName()
+		if i := strings.IndexByte(ln, ':'); i >= 0 {
+			return ln[i+1:]
+		}
+		return ln
 	case *helium.ProcessingInstruction:
 		return v.Name()
 	case *helium.NamespaceNodeWrapper:

@@ -84,6 +84,15 @@ func evalCastExpr(ec *evalContext, e CastExpr) (Sequence, error) {
 				result.TypeName = targetType
 				return SingleAtomic(result), nil
 			}
+			// For union types, try each member type.
+			if members := ec.schemaDeclarations.UnionMemberTypes(targetType); len(members) > 0 {
+				for _, memberType := range members {
+					result, castErr := CastAtomic(av, memberType)
+					if castErr == nil {
+						return SingleAtomic(result), nil
+					}
+				}
+			}
 		}
 		return nil, err
 	}
@@ -188,7 +197,21 @@ func resolveToBuiltinBase(local, ns string, decls SchemaDeclarations) string {
 // the default element namespace and raising XPST0081 if it is not XSD.
 func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 	if tn.Prefix == "" {
-		return "xs:" + tn.Name
+		// Check if a default element namespace is set.
+		if ec != nil && ec.namespaces != nil {
+			if defNS, ok := ec.namespaces[""]; ok && defNS != "" {
+				if defNS == lexicon.XSD {
+					return "xs:" + tn.Name
+				}
+				return QAnnotation(defNS, tn.Name)
+			}
+		}
+		// No default namespace: check if this is a known xs: type.
+		// If not, treat as a no-namespace user-defined type.
+		if IsKnownXSDType("xs:" + tn.Name) {
+			return "xs:" + tn.Name
+		}
+		return "Q{}" + tn.Name
 	}
 	if tn.Prefix == "xs" || tn.Prefix == "xsd" {
 		return "xs:" + tn.Name

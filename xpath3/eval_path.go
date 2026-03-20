@@ -468,7 +468,9 @@ func resolveTestTypeName(raw string, ec *evalContext) string {
 			return QAnnotation(defNS, raw)
 		}
 	}
-	return raw
+	// No namespace: use Q{} annotation form for consistency with
+	// xsdTypeNameFromDef which produces Q{}local for no-namespace types.
+	return "Q{}" + raw
 }
 
 // predicateTrue evaluates a predicate result per XPath spec:

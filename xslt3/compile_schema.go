@@ -71,7 +71,11 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 				return fmt.Errorf("xsl:import-schema: cannot build inline schema doc: %w", err)
 			}
 			ctx := context.Background()
-			schema, err := xsd.Compile(ctx, inlineDoc)
+			var inlineOpts []xsd.CompileOption
+			if c.baseURI != "" {
+				inlineOpts = append(inlineOpts, xsd.WithBaseDir(filepath.Dir(c.baseURI)))
+			}
+			schema, err := xsd.Compile(ctx, inlineDoc, inlineOpts...)
 			if err != nil {
 				return fmt.Errorf("xsl:import-schema: cannot compile inline schema: %w", err)
 			}
@@ -119,7 +123,9 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 			return xpath3.QAnnotation(uri, local)
 		}
 	}
-	return qname
+	// Bare name (no prefix, no Q{} wrapper): treat as user-defined type
+	// in no namespace. Use Q{} annotation form to match xsdTypeNameFromDef.
+	return "Q{}" + qname
 }
 
 // validateAsSequenceType checks compile-time validity of an as= SequenceType
