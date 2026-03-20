@@ -1131,17 +1131,24 @@ func matchElementTest(ctx *execContext, et xpath3.ElementTest, node helium.Node)
 	if !ok {
 		return false
 	}
-	// Check local name match (may contain prefix:local)
+	// Check local name match (may contain prefix:local or Q{uri}local)
 	name := et.Name
 	nameMatch := false
-	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+	if strings.HasPrefix(name, "Q{") {
+		closeIdx := strings.IndexByte(name, '}')
+		if closeIdx > 0 {
+			uri := name[2:closeIdx]
+			local := name[closeIdx+1:]
+			nameMatch = elem.LocalName() == local && string(elem.URI()) == uri
+		}
+	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
 		prefix := name[:idx]
 		local := name[idx+1:]
 		uri := ""
 		if ctx != nil {
 			uri = ctx.resolvePrefix(prefix)
 		}
-		nameMatch = elem.LocalName() == local && elem.URI() == uri
+		nameMatch = elem.LocalName() == local && string(elem.URI()) == uri
 	} else {
 		nameMatch = elem.LocalName() == name
 	}
@@ -1205,14 +1212,29 @@ func matchTypeAnnotation(ctx *execContext, node helium.Node, typeName string) bo
 		return s
 	}
 
+	// Resolve prefixed type name to Q{uri}local form
+	resolveType := func(s string) string {
+		if strings.HasPrefix(s, "Q{") {
+			return s
+		}
+		if idx := strings.IndexByte(s, ':'); idx >= 0 {
+			prefix := s[:idx]
+			local := s[idx+1:]
+			if ctx != nil {
+				uri := ctx.resolvePrefix(prefix)
+				if uri != "" {
+					return "Q{" + uri + "}" + local
+				}
+			}
+		}
+		return s
+	}
+
 	var ann string
 	if ctx != nil && ctx.typeAnnotations != nil {
 		ann = ctx.typeAnnotations[node]
 	}
 	if ann == "" {
-		// In a non-schema-aware processor, elements have implicit type
-		// xs:untyped and attributes have implicit type xs:untypedAtomic
-		// (XDM 3.1 Section 6.2.1 / 6.3.1).
 		switch node.Type() {
 		case helium.ElementNode:
 			ann = "untyped"
@@ -1222,6 +1244,14 @@ func matchTypeAnnotation(ctx *execContext, node helium.Node, typeName string) bo
 			return false
 		}
 	}
+
+	// Try direct comparison after resolving prefixes
+	resolvedAnn := resolveType(ann)
+	resolvedType := resolveType(typeName)
+	if resolvedAnn == resolvedType {
+		return true
+	}
+
 	normAnn := normalize(ann)
 	normType := normalize(typeName)
 	if normAnn == normType {
@@ -1241,6 +1271,10 @@ func matchTypeAnnotation(ctx *execContext, node helium.Node, typeName string) bo
 	}
 	// Check via schema declarations for user-defined types.
 	if ctx != nil && ctx.schemaRegistry != nil {
+		// Also try with resolved QName forms
+		if ctx.schemaRegistry.IsSubtypeOf(resolvedAnn, resolvedType) {
+			return true
+		}
 		return ctx.schemaRegistry.IsSubtypeOf(fullAnn, fullType)
 	}
 	return false
