@@ -972,14 +972,16 @@ func matchTypeTest(tt xpath3.TypeTest, node helium.Node) bool {
 }
 
 func matchNameTest(ctx *execContext, nt xpath3.NameTest, node helium.Node) bool {
-	if node.Type() != helium.ElementNode && node.Type() != helium.AttributeNode {
+	if node.Type() != helium.ElementNode && node.Type() != helium.AttributeNode &&
+		node.Type() != helium.NamespaceNode {
 		return false
 	}
 	elem, isElem := node.(*helium.Element)
 	attr, isAttr := node.(*helium.Attribute)
+	nsNode, isNS := node.(*helium.NamespaceNodeWrapper)
 
 	if nt.Local == "*" && nt.Prefix == "" && nt.URI == "" {
-		// * matches all elements/attributes
+		// * matches all elements/attributes/namespace-nodes
 		return true
 	}
 
@@ -990,6 +992,9 @@ func matchNameTest(ctx *execContext, nt xpath3.NameTest, node helium.Node) bool 
 	} else if isAttr {
 		nodeLocal = attr.LocalName()
 		nodeURI = attr.URI()
+	} else if isNS {
+		nodeLocal = nsNode.Name()
+		nodeURI = ""
 	} else {
 		return false
 	}
