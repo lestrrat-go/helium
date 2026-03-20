@@ -65,6 +65,18 @@ func (p prefixValidationPlan) Validate(namespaces map[string]string, strict bool
 					Code:    errCodeXPST0081,
 					Message: fmt.Sprintf("unprefixed type name %q requires a default element namespace", req.name),
 				}
+				// Schema declarations present but type not found in
+				// no-namespace — still allow (may be resolved via default
+				// namespace at evaluation time).
+				continue
+			}
+			// No schema declarations: unprefixed non-builtin names are
+			// an error (XPST0081) in pure XPath mode.
+			if namespaces == nil || namespaces[""] == "" {
+				return &XPathError{
+					Code:    errCodeXPST0081,
+					Message: fmt.Sprintf("unprefixed type name %q requires a default element namespace", req.name),
+				}
 			}
 			continue
 		}
