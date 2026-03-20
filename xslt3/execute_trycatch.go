@@ -159,7 +159,10 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 		return err
 	}
 
-	ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpRoot})
+	// Inherit captureItems from the parent frame so that function items
+	// (maps, arrays) produced inside the try body can flow through.
+	parentCapture := ec.currentOutput().captureItems
+	ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpRoot, captureItems: parentCapture})
 
 	// Push a new variable scope for the try body so variables
 	// declared inside the try are not visible in catch.
@@ -183,6 +186,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 		return nil
 	}()
 
+	tryFrame := ec.outputStack[len(ec.outputStack)-1]
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
 	// xsl:break and xsl:next-iteration are control flow signals, not errors.
@@ -211,6 +215,12 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 			if err := ec.addNode(copied); err != nil {
 				return err
 			}
+		}
+		// Transfer captured items (maps, arrays, function items) to parent.
+		if len(tryFrame.pendingItems) > 0 {
+			out := ec.currentOutput()
+			out.pendingItems = append(out.pendingItems, tryFrame.pendingItems...)
+			out.noteOutput()
 		}
 		return nil
 	}
