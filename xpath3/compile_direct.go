@@ -198,16 +198,14 @@ func (p *parser) tryParseDirectStep() (Step, bool, error) {
 	}
 
 	if axis == AxisChild && isNameLikeToken(tok.Type) {
-		p.lexer.Next()
-		if p.lexer.Peek().Type == TokenColonColon {
+		if p.lexer.PeekAt(1).Type == TokenColonColon {
 			a, ok := ixpath.AxisFromName(tok.Value)
 			if !ok {
 				return Step{}, false, fmt.Errorf("%w: %q", ErrUnknownAxis, tok.Value)
 			}
 			axis = a
 			p.lexer.Next()
-		} else {
-			p.lexer.Backup()
+			p.lexer.Next()
 		}
 	}
 
@@ -233,16 +231,17 @@ func (p *parser) tryParseDirectNodeTest(axis AxisType) (NodeTest, bool, error) {
 
 	switch tok.Type {
 	case TokenStar:
-		p.lexer.Next()
-		if p.lexer.Peek().Type == TokenColon {
-			p.lexer.Next()
-			localTok := p.lexer.Peek()
+		if p.lexer.PeekAt(1).Type == TokenColon {
+			localTok := p.lexer.PeekAt(2)
 			if !isNameLikeToken(localTok.Type) {
 				return nil, false, nil
 			}
 			p.lexer.Next()
+			p.lexer.Next()
+			p.lexer.Next()
 			return NameTest{Prefix: "*", Local: localTok.Value}, true, nil
 		}
+		p.lexer.Next()
 		return NameTest{Local: "*"}, true, nil
 	default:
 		if !isNameLikeToken(tok.Type) {
@@ -250,8 +249,7 @@ func (p *parser) tryParseDirectNodeTest(axis AxisType) (NodeTest, bool, error) {
 		}
 	}
 
-	p.lexer.Next()
-	if p.lexer.Peek().Type == TokenLParen {
+	if p.lexer.PeekAt(1).Type == TokenLParen {
 		return nil, false, nil
 	}
 
@@ -265,13 +263,15 @@ func (p *parser) tryParseDirectNodeTest(axis AxisType) (NodeTest, bool, error) {
 		if uri == lexicon.XMLNS {
 			return nil, false, &XPathError{Code: errCodeXPST0081, Message: "the xmlns namespace URI cannot be used in name tests"}
 		}
+		p.lexer.Next()
 		return NameTest{URI: uri, Local: local}, true, nil
 	}
 
-	if p.lexer.Peek().Type == TokenColon {
-		p.lexer.Next()
-		next := p.lexer.Peek()
+	if p.lexer.PeekAt(1).Type == TokenColon {
+		next := p.lexer.PeekAt(2)
 		if next.Type == TokenStar {
+			p.lexer.Next()
+			p.lexer.Next()
 			p.lexer.Next()
 			return NameTest{Prefix: tok.Value, Local: "*"}, true, nil
 		}
@@ -279,9 +279,12 @@ func (p *parser) tryParseDirectNodeTest(axis AxisType) (NodeTest, bool, error) {
 			return nil, false, nil
 		}
 		p.lexer.Next()
+		p.lexer.Next()
+		p.lexer.Next()
 		return NameTest{Prefix: tok.Value, Local: next.Value}, true, nil
 	}
 
+	p.lexer.Next()
 	if axis == AxisAttribute {
 		return NameTest{Local: tok.Value}, true, nil
 	}
