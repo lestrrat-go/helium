@@ -52,12 +52,6 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 		if alt == "" {
 			continue
 		}
-		// Reject patterns wrapped in outer parentheses: "(pattern)"
-		// These are not valid in the XSLT pattern grammar even though
-		// they parse as valid XPath.
-		if isOuterParenthesized(alt) {
-			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: parenthesized pattern not allowed", alt)
-		}
 		compiled, err := xpath3.Compile(alt)
 		if err != nil {
 			return nil, staticError(errCodeXTSE0500, "invalid pattern %q: %v", alt, err)
@@ -116,21 +110,27 @@ func validatePatternExprInner(expr xpath3.Expr, topLevel bool) error {
 		return nil
 	case xpath3.FilterExpr:
 		// FilterExpr: a primary expression with predicates.
-		// In patterns, "." and "/" with predicates are allowed in XSLT 3.0.
-		// E.g., .[pred] or (/)[doc]
-		if _, ok := e.Expr.(xpath3.ContextItemExpr); ok {
-			return nil // .[pred] is valid
-		}
-		// (/)[pred] — root with predicate: the parser represents (/) as
-		// LocationPath{Absolute: true, Steps: nil}
-		if lp, ok := e.Expr.(xpath3.LocationPath); ok && lp.Absolute && len(lp.Steps) == 0 {
-			return nil
-		}
-		if lp, ok := e.Expr.(*xpath3.LocationPath); ok && lp.Absolute && len(lp.Steps) == 0 {
-			return nil
-		}
-		if _, ok := e.Expr.(xpath3.RootExpr); ok {
-			return nil
+		// XSLT 3.0 allows various filter patterns:
+		//   .[pred], (/)[pred], $var[pred], (union)[pred], etc.
+		switch e.Expr.(type) {
+		case xpath3.ContextItemExpr:
+			return nil // .[pred]
+		case xpath3.RootExpr:
+			return nil // (/)[pred]
+		case xpath3.VariableExpr:
+			return nil // $var[pred]
+		case xpath3.UnionExpr:
+			return nil // (a|b)[pred]
+		case xpath3.IntersectExceptExpr:
+			return nil // (a except b)[pred]
+		case xpath3.LocationPath:
+			return nil // (path)[pred]
+		case *xpath3.LocationPath:
+			lp := e.Expr.(*xpath3.LocationPath)
+			if lp.Absolute && len(lp.Steps) == 0 {
+				return nil // (/)[pred]
+			}
+			return nil // (path)[pred]
 		}
 		return fmt.Errorf("filter expression not allowed in pattern")
 	case xpath3.PathExpr:
