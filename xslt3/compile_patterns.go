@@ -1226,6 +1226,9 @@ func matchTypeAnnotation(ctx *execContext, node helium.Node, typeName string) bo
 					return "Q{" + uri + "}" + local
 				}
 			}
+		} else if ctx != nil && ctx.xpathDefaultNS != "" {
+			// Unprefixed type name: resolve via xpath-default-namespace
+			return "Q{" + ctx.xpathDefaultNS + "}" + s
 		}
 		return s
 	}
