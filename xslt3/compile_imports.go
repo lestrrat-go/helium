@@ -213,6 +213,34 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 	}
 	defer func() { c.defaultMode = savedDefaultMode }()
 
+	// Evaluate static params so they're available for shadow attributes.
+	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+		elem, ok := child.(*helium.Element)
+		if !ok || elem.URI() != NSXSLT || elem.LocalName() != "param" {
+			continue
+		}
+		if getAttr(elem, "static") == "yes" {
+			name := getAttr(elem, "name")
+			sel := getAttr(elem, "select")
+			if name != "" && sel != "" {
+				compiled, err := xpath3.Compile(sel)
+				if err == nil {
+					ctx := context.Background()
+					if len(c.staticVars) > 0 {
+						ctx = xpath3.WithVariables(ctx, c.staticVars)
+					}
+					result, err := compiled.Evaluate(ctx, nil)
+					if err == nil {
+						if c.staticVars == nil {
+							c.staticVars = make(map[string]xpath3.Sequence)
+						}
+						c.staticVars[name] = result.Sequence()
+					}
+				}
+			}
+		}
+	}
+
 	// Compile non-import elements in document order, with includes
 	// interleaved to preserve effective document order.
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
