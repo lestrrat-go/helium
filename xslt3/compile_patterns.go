@@ -652,9 +652,12 @@ rightAlt := &PatternAlt{expr: e.Right}
 		// then verify the left part matches an ancestor.
 		return matchPathStepPattern(ctx, e, node)
 	case xpath3.PathExpr:
-		// PathExpr: filter/steps. Match bottom-up: check if the node
-		// matches the path steps, then check the filter against an ancestor.
-		return matchPathExprPattern(ctx, e, node)
+		// PathExpr: filter/steps. Try bottom-up matching first; fall back
+		// to evaluation-based matching for complex cases (key()//union, etc.).
+		if matchPathExprPattern(ctx, e, node) {
+			return true
+		}
+		return matchByEvaluation(ctx, alt, node)
 	case xpath3.VariableExpr:
 		// $var pattern: matches if node is in the variable's value.
 		return matchByEvaluation(ctx, alt, node)
