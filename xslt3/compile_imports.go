@@ -221,6 +221,11 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 			continue
 		}
 
+		// Resolve shadow attributes before processing.
+		if err := c.resolveShadowAttributes(ce); err != nil {
+			return err
+		}
+
 		switch ce.LocalName() {
 		case "import", "namespace-alias":
 			// Already processed in collectIncludeImports
