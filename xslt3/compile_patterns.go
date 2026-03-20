@@ -215,6 +215,11 @@ func validatePatternPathExpr(e xpath3.PathExpr) error {
 		return validatePatternExprInner(f, false)
 	case xpath3.VariableExpr:
 		// Variable references are allowed in XSLT 3.0 patterns
+	case xpath3.PathStepExpr:
+		// Nested path step (e.g., x/(a|b)/text())
+		return validatePatternPathStepExpr(f)
+	case *xpath3.PathStepExpr:
+		return validatePatternPathStepExpr(*f)
 	default:
 		return fmt.Errorf("expression type %T not allowed at start of path pattern", e.Filter)
 	}
