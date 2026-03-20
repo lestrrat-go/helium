@@ -57,8 +57,9 @@ Evaluate each item, concatenate sequences.
 
 ### LocationPath
 1. Start: root node (absolute) or context node (relative)
-2. Per step: `ixpath.TraverseAxis` → filter by NodeTest → apply predicates → dedup doc order
-3. Return merged node-set
+2. Per step: traverse axis → filter by NodeTest → apply predicates → dedup doc order
+3. Hot axes (`child`, `attribute`, `self`, `parent`) fuse traversal and node-test filtering directly in `xpath3`, avoiding the generic `TraverseAxis` + extra filtered-slice path
+4. Return merged node-set
 
 ### Predicates
 - Numeric atomic → compare to position (1-based)

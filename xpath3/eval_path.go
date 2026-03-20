@@ -159,14 +159,13 @@ func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
 func evalStepWithPredicates(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
 	var allFiltered []helium.Node
 	for _, n := range nodes {
-		candidates, err := ixpath.TraverseAxis(step.Axis, n, ec.maxNodes)
+		matched, traversed, err := appendAxisNodeMatches(nil, ec, n, step)
 		if err != nil {
 			return nil, err
 		}
-		if err := ec.countOps(len(candidates)); err != nil {
+		if err := ec.countOps(traversed); err != nil {
 			return nil, err
 		}
-		matched := filterByNodeTest(candidates, step.NodeTest, step.Axis, ec)
 		for _, pred := range step.Predicates {
 			matched, err = applyPredicate(evalFn, ec, matched, pred)
 			if err != nil {
@@ -181,26 +180,73 @@ func evalStepWithPredicates(evalFn exprEvaluator, ec *evalContext, nodes []heliu
 func evalStepNoPredicates(ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
 	var next []helium.Node
 	for _, n := range nodes {
-		candidates, err := ixpath.TraverseAxis(step.Axis, n, ec.maxNodes)
+		var traversed int
+		var err error
+		next, traversed, err = appendAxisNodeMatches(next, ec, n, step)
 		if err != nil {
 			return nil, err
 		}
-		if err := ec.countOps(len(candidates)); err != nil {
+		if err := ec.countOps(traversed); err != nil {
 			return nil, err
 		}
-		next = append(next, filterByNodeTest(candidates, step.NodeTest, step.Axis, ec)...)
 	}
 	return ixpath.DeduplicateNodes(next, ec.docOrder, ec.maxNodes)
 }
 
-func filterByNodeTest(candidates []helium.Node, nt NodeTest, axis AxisType, ec *evalContext) []helium.Node {
-	var matched []helium.Node
-	for _, c := range candidates {
-		if matchNodeTest(nt, c, axis, ec) {
-			matched = append(matched, c)
+func appendAxisNodeMatches(dst []helium.Node, ec *evalContext, node helium.Node, step Step) ([]helium.Node, int, error) {
+	switch step.Axis {
+	case AxisChild:
+		if _, ok := node.(*helium.Attribute); ok {
+			return dst, 0, nil
 		}
+		traversed := 0
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			traversed++
+			if matchNodeTest(step.NodeTest, child, step.Axis, ec) {
+				dst = append(dst, child)
+			}
+		}
+		return dst, traversed, nil
+	case AxisAttribute:
+		elem, ok := node.(*helium.Element)
+		if !ok {
+			return dst, 0, nil
+		}
+		traversed := 0
+		elem.ForEachAttribute(func(attr *helium.Attribute) bool {
+			traversed++
+			if matchNodeTest(step.NodeTest, attr, step.Axis, ec) {
+				dst = append(dst, attr)
+			}
+			return true
+		})
+		return dst, traversed, nil
+	case AxisSelf:
+		if matchNodeTest(step.NodeTest, node, step.Axis, ec) {
+			dst = append(dst, node)
+		}
+		return dst, 1, nil
+	case AxisParent:
+		parent := node.Parent()
+		if parent == nil {
+			return dst, 0, nil
+		}
+		if matchNodeTest(step.NodeTest, parent, step.Axis, ec) {
+			dst = append(dst, parent)
+		}
+		return dst, 1, nil
+	default:
+		candidates, err := ixpath.TraverseAxis(step.Axis, node, ec.maxNodes)
+		if err != nil {
+			return nil, 0, err
+		}
+		for _, candidate := range candidates {
+			if matchNodeTest(step.NodeTest, candidate, step.Axis, ec) {
+				dst = append(dst, candidate)
+			}
+		}
+		return dst, len(candidates), nil
 	}
-	return matched
 }
 
 func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) bool {
