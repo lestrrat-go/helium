@@ -1337,6 +1337,18 @@ func collectMatchingSiblings(ctx *execContext, test xpath3.NodeTest, node helium
 		return []helium.Node{node}
 	}
 
+	// For attribute nodes, iterate the element's attributes instead of children
+	if node.Type() == helium.AttributeNode {
+		if elem, ok := parent.(*helium.Element); ok {
+			for _, attr := range elem.Attributes() {
+				if nodeMatchesTest(ctx, test, attr) {
+					siblings = append(siblings, attr)
+				}
+			}
+			return siblings
+		}
+	}
+
 	// Iterate through all children of the parent
 	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
 		if nodeMatchesTest(ctx, test, child) {
