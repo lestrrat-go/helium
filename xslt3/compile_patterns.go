@@ -31,8 +31,8 @@ func isNeverMatchingPattern(alt string) bool {
 	if strings.Contains(alt, "child::document-node") {
 		return true
 	}
-	// child::attribute() — attributes are never children
-	if strings.Contains(alt, "child::attribute") {
+	// child::attribute() / child::schema-attribute() — attributes are never children
+	if strings.Contains(alt, "child::attribute") || strings.Contains(alt, "child::schema-attribute") {
 		return true
 	}
 	// child::namespace-node() — namespace nodes are never children
