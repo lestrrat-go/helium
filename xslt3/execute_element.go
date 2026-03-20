@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xsd"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error {
@@ -375,15 +375,6 @@ func (ec *execContext) mapAnnotationsFromValidation(ann xsd.TypeAnnotations, src
 		ec.mapAnnotationsFromValidation(ann, srcChild, dstChild)
 		srcChild = srcChild.NextSibling()
 		dstChild = dstChild.NextSibling()
-	}
-}
-
-// stripSequenceAnnotations strips type annotations from all nodes in a sequence.
-func (ec *execContext) stripSequenceAnnotations(seq xpath3.Sequence) {
-	for _, item := range seq {
-		if ni, ok := item.(xpath3.NodeItem); ok {
-			ec.stripAnnotations(ni.Node)
-		}
 	}
 }
 

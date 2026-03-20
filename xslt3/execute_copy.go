@@ -154,10 +154,7 @@ func isComplexTypeDef(td *xsd.TypeDef) bool {
 	case xsd.ContentTypeElementOnly, xsd.ContentTypeMixed, xsd.ContentTypeEmpty:
 		return true
 	}
-	if td.ContentModel != nil {
-		return true
-	}
-	return false
+	return td.ContentModel != nil
 }
 
 // effectiveValidation returns the validation mode for a copy/copy-of instruction,
