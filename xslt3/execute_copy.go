@@ -477,6 +477,23 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 			return nil
 		}
 		out := ec.currentOutput()
+		// In sequence mode, capture the attribute as a standalone item.
+		if out.sequenceMode {
+			var attrNS *helium.Namespace
+			if attr.URI() != "" {
+				ns, nsErr := out.doc.CreateNamespace(attr.Prefix(), attr.URI())
+				if nsErr == nil {
+					attrNS = ns
+				}
+			}
+			copiedAttr, err := out.doc.CreateAttribute(attr.Name(), attr.Value(), attrNS)
+			if err != nil {
+				return err
+			}
+			out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: copiedAttr})
+			out.noteOutput()
+			return nil
+		}
 		elem, ok := out.current.(*helium.Element)
 		if !ok {
 			// XTDE0410: adding attribute to non-element
