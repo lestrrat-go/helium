@@ -256,8 +256,8 @@ func validatePatternPathStepExpr(e xpath3.PathStepExpr) error {
 // with literal arguments.
 func isAllowedPatternFunction(fc xpath3.FunctionCall) bool {
 	switch fc.Name {
-	case "key", "id", "idref", "doc":
-		// Check that all arguments are literals
+	case "key", "id", "idref", "doc", "element-with-id", "root":
+		// Check that all arguments are literals or variable refs
 		for _, arg := range fc.Args {
 			if !isPatternFunctionArg(arg) {
 				return false
