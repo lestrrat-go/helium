@@ -22,14 +22,14 @@ func evalContextItemExpr(ec *evalContext) (Sequence, error) {
 	if ec.contextItem != nil {
 		return Sequence{ec.contextItem}, nil
 	}
-	if ec.node == nil {
+	if ixpath.IsNilNode(ec.node) {
 		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 	}
 	return Sequence{nodeItemFor(ec, ec.node)}, nil
 }
 
 func evalRootExpr(ec *evalContext) (Sequence, error) {
-	if ec.node == nil {
+	if ixpath.IsNilNode(ec.node) {
 		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 	}
 	return Sequence{nodeItemFor(ec, ixpath.DocumentRoot(ec.node))}, nil

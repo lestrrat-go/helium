@@ -7,7 +7,9 @@ import (
 )
 
 // isNilNode checks for both interface nil and typed nil (Go interface nil trap).
-func isNilNode(n helium.Node) bool {
+// IsNilNode returns true if n is nil or a nil pointer wrapped in a
+// non-nil interface.
+func IsNilNode(n helium.Node) bool {
 	if n == nil {
 		return true
 	}
@@ -73,7 +75,7 @@ func AxisFromName(name string) (AxisType, bool) {
 // in the order defined by the XPath spec. maxNodes limits the result size
 // for unbounded axes; use DefaultMaxNodeSetLength if unsure.
 func TraverseAxis(axis AxisType, node helium.Node, maxNodes int) ([]helium.Node, error) {
-	if isNilNode(node) {
+	if IsNilNode(node) {
 		return nil, nil
 	}
 	switch axis {
@@ -91,7 +93,7 @@ func TraverseAxis(axis AxisType, node helium.Node, maxNodes int) ([]helium.Node,
 
 // TraverseAxisSimple handles axes that cannot fail (bounded result size).
 func TraverseAxisSimple(axis AxisType, node helium.Node) []helium.Node {
-	if isNilNode(node) {
+	if IsNilNode(node) {
 		return nil
 	}
 	switch axis {
@@ -196,7 +198,7 @@ func axisAncestor(node helium.Node) []helium.Node {
 }
 
 func axisAncestorOrSelf(node helium.Node) []helium.Node {
-	if isNilNode(node) {
+	if IsNilNode(node) {
 		return nil
 	}
 	result := []helium.Node{node}

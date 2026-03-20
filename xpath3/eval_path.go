@@ -111,13 +111,13 @@ func evalLocationPath(evalFn exprEvaluator, ec *evalContext, lp *LocationPath) (
 	var nodes []helium.Node
 
 	if lp.Absolute {
-		if ec.node == nil {
+		if ixpath.IsNilNode(ec.node) {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		root := ixpath.DocumentRoot(ec.node)
 		nodes = []helium.Node{root}
 	} else {
-		if ec.node == nil {
+		if ixpath.IsNilNode(ec.node) {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		nodes = []helium.Node{ec.node}
@@ -146,13 +146,13 @@ func evalVMLocationPath(evalFn exprEvaluator, ec *evalContext, lp vmLocationPath
 	var nodes []helium.Node
 
 	if lp.Absolute {
-		if ec.node == nil {
+		if ixpath.IsNilNode(ec.node) {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		root := ixpath.DocumentRoot(ec.node)
 		nodes = []helium.Node{root}
 	} else {
-		if ec.node == nil {
+		if ixpath.IsNilNode(ec.node) {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		nodes = []helium.Node{ec.node}
