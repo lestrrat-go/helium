@@ -651,6 +651,10 @@ rightAlt := &PatternAlt{expr: e.Right}
 		// Match bottom-up: check if the candidate matches the right part,
 		// then verify the left part matches an ancestor.
 		return matchPathStepPattern(ctx, e, node)
+	case xpath3.PathExpr:
+		// PathExpr: filter/steps. Match bottom-up: check if the node
+		// matches the path steps, then check the filter against an ancestor.
+		return matchPathExprPattern(ctx, e, node)
 	case xpath3.VariableExpr:
 		// $var pattern: matches if node is in the variable's value.
 		return matchByEvaluation(ctx, alt, node)
@@ -659,6 +663,54 @@ rightAlt := &PatternAlt{expr: e.Right}
 		// and checking if node is in the result set.
 		return matchByEvaluation(ctx, alt, node)
 	}
+}
+
+// matchPathExprPattern matches a PathExpr pattern (Filter/Path) bottom-up.
+// First checks if the node matches the path's last step, then works upward
+// through the remaining steps, and finally checks the filter against an ancestor.
+func matchPathExprPattern(ctx *execContext, e xpath3.PathExpr, node helium.Node) bool {
+	if e.Path == nil || len(e.Path.Steps) == 0 {
+		// No path steps: just check the filter
+		filterAlt := &PatternAlt{expr: e.Filter}
+		return matchPatternAlt(ctx, filterAlt, node)
+	}
+
+	// Match the path steps bottom-up (like matchLocationPath)
+	lastStep := e.Path.Steps[len(e.Path.Steps)-1]
+	if !nodeMatchesStep(ctx, lastStep, node) {
+		return false
+	}
+
+	// If there's only one step, check the filter against the parent
+	if len(e.Path.Steps) == 1 {
+		filterAlt := &PatternAlt{expr: e.Filter}
+		parent := node.Parent()
+		if parent != nil && matchPatternAlt(ctx, filterAlt, parent) {
+			return true
+		}
+		return false
+	}
+
+	// Multiple steps: match remaining steps upward, then check filter
+	remaining := e.Path.Steps[:len(e.Path.Steps)-1]
+	parent := node.Parent()
+	if parent == nil {
+		return false
+	}
+	if !matchStepsUpward(ctx, remaining, false, parent) {
+		return false
+	}
+	// Walk up to find where the remaining steps matched, then check filter
+	filterAlt := &PatternAlt{expr: e.Filter}
+	// The filter needs to match the ancestor above the remaining steps
+	cur := parent
+	for i := len(remaining) - 1; i >= 0; i-- {
+		cur = cur.Parent()
+		if cur == nil {
+			return false
+		}
+	}
+	return matchPatternAlt(ctx, filterAlt, cur)
 }
 
 // matchPathStepPattern matches a PathStepExpr pattern (E1/E2 or E1//E2) bottom-up.
