@@ -2380,8 +2380,16 @@ func (c *compiler) resolveQName(elem *helium.Element, ref string) QName {
 			prefix := ref[:i]
 			local = ref[i+1:]
 			ns = lookupNS(elem, prefix)
-			break
+			return QName{Local: local, NS: ns}
 		}
+	}
+
+	// Unprefixed name: use the default namespace from the element context.
+	// This is critical for inline schemas where the default namespace is
+	// the XSD namespace — unprefixed type refs like "string" must resolve
+	// to xs:string, not to {targetNamespace}string.
+	if defNS := lookupNS(elem, ""); defNS != "" {
+		ns = defNS
 	}
 
 	return QName{Local: local, NS: ns}
