@@ -81,6 +81,17 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 	if len(p.Alternatives) == 0 {
 		return nil, staticError(errCodeXTSE0500, "empty pattern %q", s)
 	}
+	// Union patterns (multiple alternatives separated by |) require each
+	// alternative to be a PathPattern. PredicatePatterns (FilterExpr like
+	// .[pred]) are only valid as standalone patterns, not in unions.
+	if len(p.Alternatives) > 1 {
+		for _, pa := range p.Alternatives {
+			if _, ok := pa.expr.(xpath3.FilterExpr); ok {
+				return nil, staticError(errCodeXTSE0340,
+					"invalid match pattern %q: predicate pattern not allowed in union", s)
+			}
+		}
+	}
 	return p, nil
 }
 
