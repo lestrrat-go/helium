@@ -706,6 +706,11 @@ rightAlt := &PatternAlt{expr: e.Right}
 			return leftMatch && rightMatch
 		}
 		return leftMatch && !rightMatch // except
+	case xpath3.PathStepExpr:
+		// Path step pattern: E1/E2 or E1//E2 where E2 is a non-axis step.
+		// Match bottom-up: check if the candidate matches the right part,
+		// then verify the left part matches an ancestor.
+		return matchPathStepPattern(ctx, e, node)
 	case xpath3.VariableExpr:
 		// $var pattern: matches if node is in the variable's value.
 		return matchByEvaluation(ctx, alt, node)
@@ -714,6 +719,61 @@ rightAlt := &PatternAlt{expr: e.Right}
 		// and checking if node is in the result set.
 		return matchByEvaluation(ctx, alt, node)
 	}
+}
+
+// matchPathStepPattern matches a PathStepExpr pattern (E1/E2 or E1//E2) bottom-up.
+// First checks if the candidate node matches the right part (E2), then verifies
+// that an ancestor matches the left part (E1).
+func matchPathStepPattern(ctx *execContext, e xpath3.PathStepExpr, node helium.Node) bool {
+	// Check if node matches the right part.
+	rightAlt := &PatternAlt{expr: e.Right}
+	if !matchPatternAlt(ctx, rightAlt, node) {
+		return false
+	}
+	// Determine if the right part uses descendant-axis steps.
+	// When the right part (or any union branch) uses descendant::,
+	// the left part may match ANY ancestor, not just the parent.
+	checkAllAncestors := e.DescOrSelf || rightPartUsesDescendantAxis(e.Right)
+	// Check ancestors for the left part.
+	leftAlt := &PatternAlt{expr: e.Left}
+	if checkAllAncestors {
+		for ancestor := node.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
+			if matchPatternAlt(ctx, leftAlt, ancestor) {
+				return true
+			}
+		}
+	} else {
+		// E1/E2 with child axis: check immediate parent only
+		parent := node.Parent()
+		if parent != nil && matchPatternAlt(ctx, leftAlt, parent) {
+			return true
+		}
+	}
+	return false
+}
+
+// rightPartUsesDescendantAxis checks if an expression (typically the right
+// side of a PathStepExpr) contains any descendant:: or descendant-or-self::
+// axis steps. This determines whether ancestor matching should walk all the
+// way up the tree.
+func rightPartUsesDescendantAxis(expr xpath3.Expr) bool {
+	found := false
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		switch lp := e.(type) {
+		case xpath3.LocationPath:
+			for _, step := range lp.Steps {
+				if step.Axis == xpath3.AxisDescendant || step.Axis == xpath3.AxisDescendantOrSelf {
+					found = true
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return found
 }
 
 // matchLocationPath matches a LocationPath pattern against a node.
