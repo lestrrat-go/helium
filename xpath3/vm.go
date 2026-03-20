@@ -56,28 +56,29 @@ type vmProgram struct {
 	instructions []vmInstruction
 }
 
-func compileVMProgram(ast Expr) (*vmProgram, error) {
-	builder := vmBuilder{}
+func compileVMProgram(ast Expr) (*vmProgram, prefixValidationPlan, error) {
+	builder := vmBuilder{prefixPlan: newPrefixPlanBuilder()}
 	root, err := builder.compileExpr(ast)
 	if err != nil {
-		return nil, err
+		return nil, prefixValidationPlan{}, err
 	}
 	return &vmProgram{
 		root:         root.index,
 		instructions: builder.instructions,
-	}, nil
+	}, builder.prefixPlan.plan(), nil
 }
 
-func compileVMProgramLoose(ast Expr) *vmProgram {
-	program, err := compileVMProgram(ast)
+func compileVMProgramLoose(ast Expr) (*vmProgram, prefixValidationPlan) {
+	program, plan, err := compileVMProgram(ast)
 	if err != nil {
-		return nil
+		return nil, prefixValidationPlan{}
 	}
-	return program
+	return program, plan
 }
 
 type vmBuilder struct {
 	instructions []vmInstruction
+	prefixPlan   prefixPlanBuilder
 }
 
 func (b *vmBuilder) compileExpr(expr Expr) (compiledExprRef, error) {
@@ -85,6 +86,7 @@ func (b *vmBuilder) compileExpr(expr Expr) (compiledExprRef, error) {
 	if err != nil {
 		return compiledExprRef{}, err
 	}
+	appendExprLocalPrefixChecks(&b.prefixPlan, lowered)
 	return b.appendInstruction(lowered), nil
 }
 
@@ -102,6 +104,7 @@ func (b *vmBuilder) lowerChildExpr(expr Expr) (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
+	appendExprLocalPrefixChecks(&b.prefixPlan, lowered)
 	if isImmediateVMExpr(lowered) {
 		return lowered, nil
 	}

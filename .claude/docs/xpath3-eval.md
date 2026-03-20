@@ -27,7 +27,7 @@ func (ec *evalContext) withVar(name string, val Sequence) *evalContext  // new m
 
 ## Dispatch
 
-- `Compile()` lowers AST to `vmProgram`
+- `Compile()` lowers AST to `vmProgram` and collects prefix-validation requirements during the same pass
 - `Expression.Evaluate()` executes `vmProgram` when present
 - `evalWith()` enforces recursion depth for raw eval + VM eval
 - `dispatchExpr()` contains shared Expr-type dispatch

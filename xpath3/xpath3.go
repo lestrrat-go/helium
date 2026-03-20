@@ -23,7 +23,7 @@ func Compile(expr string) (*Expression, error) {
 	if err != nil {
 		return nil, err
 	}
-	program, err := compileVMProgram(ast)
+	program, prefixPlan, err := compileVMProgram(ast)
 	if err != nil {
 		return nil, err
 	}
@@ -31,17 +31,18 @@ func Compile(expr string) (*Expression, error) {
 		source:     expr,
 		ast:        ast,
 		program:    program,
-		prefixPlan: buildPrefixValidationPlan(ast),
+		prefixPlan: prefixPlan,
 	}, nil
 }
 
 // CompileExpr wraps a pre-parsed AST Expr into an Expression.
 func CompileExpr(ast Expr) *Expression {
+	program, prefixPlan := compileVMProgramLoose(ast)
 	return &Expression{
 		source:     "",
 		ast:        ast,
-		program:    compileVMProgramLoose(ast),
-		prefixPlan: buildPrefixValidationPlan(ast),
+		program:    program,
+		prefixPlan: prefixPlan,
 	}
 }
 
