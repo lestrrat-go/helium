@@ -163,6 +163,9 @@ func (b *vmBuilder) lowerExpr(expr Expr) (Expr, error) {
 		if e == nil {
 			return nil, fmt.Errorf("%w: nil *LocationPath", ErrUnsupportedExpr)
 		}
+		if b.reuseInput {
+			return b.lowerOwnedLocationPath(e)
+		}
 		return b.lowerLocationPath(*e)
 	case BinaryExpr:
 		return b.lowerBinaryExpr(e)
@@ -370,6 +373,17 @@ func (b *vmBuilder) lowerLocationPath(expr LocationPath) (Expr, error) {
 		}
 	}
 	return &LocationPath{Absolute: expr.Absolute, Steps: steps}, nil
+}
+
+func (b *vmBuilder) lowerOwnedLocationPath(expr *LocationPath) (Expr, error) {
+	for i := range expr.Steps {
+		preds, err := b.lowerChildExprSlice(expr.Steps[i].Predicates)
+		if err != nil {
+			return nil, err
+		}
+		expr.Steps[i].Predicates = preds
+	}
+	return expr, nil
 }
 
 func (b *vmBuilder) lowerBinaryExpr(expr BinaryExpr) (Expr, error) {

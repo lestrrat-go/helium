@@ -46,3 +46,14 @@ func TestLocationPathPredicateVM(t *testing.T) {
 	require.Equal(t, "Go Programming", atomics[0].StringVal())
 	require.Equal(t, "XPath Mastery", atomics[1].StringVal())
 }
+
+func TestCountPathWithPredicateWhitespaceVM(t *testing.T) {
+	doc := parseTestDoc(t)
+
+	result, err := xpath3.Evaluate(t.Context(), doc, `count( /library/book [ @lang = "en" ] /title )`)
+	require.NoError(t, err)
+
+	value, ok := result.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, 2.0, value)
+}
