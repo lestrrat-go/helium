@@ -66,8 +66,9 @@ func compileOwnedVMProgram(ast Expr) (*vmProgram, prefixValidationPlan, error) {
 
 func compileVMProgramWithOptions(ast Expr, reuseInput bool) (*vmProgram, prefixValidationPlan, error) {
 	builder := vmBuilder{
-		prefixPlan: newPrefixPlanBuilder(),
-		reuseInput: reuseInput,
+		instructions: make([]vmInstruction, 0, 8),
+		prefixPlan:   newPrefixPlanBuilder(),
+		reuseInput:   reuseInput,
 	}
 	root, err := builder.compileExpr(ast)
 	if err != nil {
