@@ -292,16 +292,22 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 	resolvedName := resolveQName(name, c.nsBindings)
 
 	// Check that the variable exists in the package
-	found := false
+	var pkgVar *Variable
 	for _, v := range pkg.globalVars {
 		if v.Name == resolvedName {
-			found = true
+			pkgVar = v
 			break
 		}
 	}
-	if !found {
+	if pkgVar == nil {
 		return nil, staticError(errCodeXTSE3058,
 			"xsl:override variable %q not found in used package", name)
+	}
+
+	// Check visibility: cannot override final variable
+	if pkgVar.Visibility == visFinal {
+		return nil, staticError(errCodeXTSE3060,
+			"cannot override final variable %q", name)
 	}
 
 	v := &Variable{Name: resolvedName, As: getAttr(elem, "as")}
@@ -360,9 +366,16 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 		return nil, staticError(errCodeXTSE3058,
 			"xsl:override attribute-set %q not found in used package", name)
 	}
-	if _, exists := pkg.attributeSets[resolvedName]; !exists {
+	pkgAS, exists := pkg.attributeSets[resolvedName]
+	if !exists {
 		return nil, staticError(errCodeXTSE3058,
 			"xsl:override attribute-set %q not found in used package", name)
+	}
+
+	// Check visibility: cannot override final attribute-set
+	if pkgAS != nil && pkgAS.Visibility == visFinal {
+		return nil, staticError(errCodeXTSE3060,
+			"cannot override final attribute-set %q", name)
 	}
 
 	asd := &AttributeSetDef{Name: resolvedName}
