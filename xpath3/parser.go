@@ -2054,13 +2054,35 @@ func (p *parser) scanQName() string {
 	if p.lexer.Peek().Type == TokenColon {
 		p.lexer.Next()
 		localTok := p.lexer.Peek()
-		if localTok.Type == TokenName {
+		// Accept both plain names and keywords (map, array, etc.)
+		// as the local part of a prefixed QName.
+		if localTok.Type == TokenName || isKeywordToken(localTok.Type) {
 			p.lexer.Next()
 			return name + ":" + localTok.Value
 		}
 		p.lexer.Backup() // put ':' back
 	}
 	return name
+}
+
+// isKeywordToken returns true if the token type is an XPath keyword
+// that can still be used as a local name in a QName (e.g., prefix:map).
+func isKeywordToken(t TokenType) bool {
+	switch t {
+	case TokenMap, TokenArray, TokenFunction,
+		TokenAs, TokenOf, TokenIn,
+		TokenReturn, TokenFor, TokenLet,
+		TokenSome, TokenEvery, TokenIf, TokenThen, TokenElse,
+		TokenInstanceOf, TokenCastAs, TokenCastableAs, TokenTreatAs,
+		TokenAnd, TokenOr, TokenDiv, TokenMod, TokenIdiv,
+		TokenTo, TokenUnion, TokenIntersect, TokenExcept,
+		TokenEq, TokenNe, TokenLt, TokenLe, TokenGt, TokenGe,
+		TokenIs, TokenSatisfies, TokenWhere, TokenBy,
+		TokenAscending, TokenDescending, TokenStable,
+		TokenTry, TokenCatch:
+		return true
+	}
+	return false
 }
 
 // splitQName splits "prefix:local" into (prefix, local) or ("", name).
