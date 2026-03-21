@@ -628,7 +628,7 @@ func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) error 
 		return err
 	}
 	elements := getAttr(elem, "elements")
-	if elements == "" {
+	if !elem.HasAttribute("elements") {
 		kind := "strip-space"
 		if !strip {
 			kind = "preserve-space"

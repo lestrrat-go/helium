@@ -738,18 +738,16 @@ func predicateIsNonMotionless(pred xpath3.Expr) bool {
 func checkMultipleDownwardInst(inst Instruction) error {
 	switch v := inst.(type) {
 	case *ForkInst:
-		// Each branch of xsl:fork that has a downward selection consumes the stream.
-		// Multiple consuming branches = error.
-		consumingBranches := 0
+		// xsl:fork is specifically designed to allow multiple consuming branches.
+		// Each branch processes the input stream independently, so multiple
+		// downward selections across branches are permitted.
+		// However, within a single branch, multiple downward selections are still an error.
 		for _, branch := range v.Branches {
 			branchDown := countDownwardInInstructions(branch)
-			if branchDown > 0 {
-				consumingBranches++
+			if branchDown > 1 {
+				return staticError(errCodeXTSE3430,
+					"xsl:fork branch has multiple consuming operations, which is not streamable")
 			}
-		}
-		if consumingBranches > 1 {
-			return staticError(errCodeXTSE3430,
-				"xsl:fork has multiple consuming branches, which is not streamable")
 		}
 
 	case *IterateInst:
