@@ -479,8 +479,9 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 				existing[name] = struct{}{}
 			}
 			for _, name := range strings.Fields(v) {
-				if _, ok := existing[name]; !ok {
-					base.CDATASections = append(base.CDATASections, name)
+				resolved := resolveQName(name, inst.NSBindings)
+				if _, ok := existing[resolved]; !ok {
+					base.CDATASections = append(base.CDATASections, resolved)
 				}
 			}
 		}

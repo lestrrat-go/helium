@@ -227,7 +227,12 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 
 	cdataStr := getAttr(elem, "cdata-section-elements")
 	if cdataStr != "" {
-		outDef.CDATASections = strings.Fields(cdataStr)
+		names := strings.Fields(cdataStr)
+		resolved := make([]string, len(names))
+		for i, n := range names {
+			resolved[i] = resolveQName(n, c.nsBindings)
+		}
+		outDef.CDATASections = resolved
 	}
 
 	if is := getAttr(elem, "item-separator"); is != "" {
