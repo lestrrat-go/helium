@@ -702,6 +702,16 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 		v.OwnerPackage = c.stylesheet
 	}
 
+	// For static variables, use the pre-computed value from compile-time
+	// evaluation instead of the runtime select expression. This ensures
+	// static variables reference other static variables' values, not
+	// runtime non-static variables with the same name.
+	if xsdBoolTrue(getAttr(elem, "static")) {
+		if sv, ok := c.staticVars[name]; ok {
+			v.StaticValue = sv
+		}
+	}
+
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		// XTSE0620: select and non-empty content are mutually exclusive.

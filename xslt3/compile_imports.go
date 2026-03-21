@@ -286,7 +286,9 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 					}
 					result, err := compiled.Evaluate(ctx, nil)
 					if err == nil {
-						c.setStaticVar(name, result.Sequence())
+						if setErr := c.setStaticVarWithKind(name, ln, result.Sequence()); setErr != nil {
+							return setErr
+						}
 					}
 				}
 			}
