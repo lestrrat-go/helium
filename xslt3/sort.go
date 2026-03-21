@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -80,6 +81,8 @@ type keyedNode1 struct {
 	key   sortValue
 	index int
 }
+
+func (k keyedNode1) keyType() string { return k.key.typeName }
 
 // keyedItem1 pairs an item with a single inline sort key and original index.
 type keyedItem1 struct {
@@ -298,6 +301,11 @@ func checkSortKeyTypeConsistency[T interface{ keyType() string }](entries []T) e
 		if tn == "" || tn == xpath3.TypeString || tn == xpath3.TypeUntypedAtomic {
 			continue
 		}
+		// xs:duration is only partially ordered and cannot be used as a sort key
+		if tn == xpath3.TypeDuration {
+			return dynamicError(errCodeXTDE1030,
+				"sort keys of type %s are only partially ordered", tn)
+		}
 		fam := sortKeyFamily(tn)
 		if firstNonString == "" {
 			firstNonString = tn
@@ -412,14 +420,15 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 
 		seq := result.Sequence()
 
+		implicitTZ := ec.currentTime.Location()
 		if *dtMode == dataTypeNumber {
 			// Explicit data-type="number": use number() semantics.
 			// Dates/times are not numeric → convert via string → NaN.
-			return extractNumericValueExplicit(seq, result), nil
+			return extractNumericValueExplicit(seq, result, implicitTZ), nil
 		}
 		if *dtMode == dataTypeNumberAuto {
 			// Auto-detected numeric: preserve date/time ordering.
-			return extractNumericValueFromResult(seq, result), nil
+			return extractNumericValueFromResult(seq, result, implicitTZ), nil
 		}
 
 		sv := sortValue{kind: sortValueText, str: result.StringValue()}
@@ -447,12 +456,20 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 						*dtMode = dataTypeNumberAuto
 					}
 				}
-				// Date/time types: use Unix nanoseconds for numeric comparison
+				// Date/time types: use Unix seconds for numeric comparison
 				switch v.TypeName {
-				case xpath3.TypeDateTime, xpath3.TypeDateTimeStamp, xpath3.TypeDate, xpath3.TypeTime:
-					t := v.TimeVal()
-					// Use seconds with sub-second precision for ordering
-					sv = sortValue{kind: sortValueNumber, num: float64(t.UnixNano()) / 1e9, typeName: v.TypeName}
+				case xpath3.TypeDateTime, xpath3.TypeDateTimeStamp, xpath3.TypeDate:
+					t := xpath3.ApplyImplicitTZ(v.TimeVal(), implicitTZ)
+					f := float64(t.Unix()) + float64(t.Nanosecond())/1e9
+					sv = sortValue{kind: sortValueNumber, num: f, typeName: v.TypeName}
+					if *dtMode == dataTypeAuto {
+						*dtMode = dataTypeNumberAuto
+					}
+				case xpath3.TypeTime:
+					// xs:time comparison uses reference date 1972-12-31 per F&O §10.4.4
+					t := xpath3.TimeToReferenceDateTime(xpath3.ApplyImplicitTZ(v.TimeVal(), implicitTZ))
+					f := float64(t.Unix()) + float64(t.Nanosecond())/1e9
+					sv = sortValue{kind: sortValueNumber, num: f, typeName: v.TypeName}
 					if *dtMode == dataTypeAuto {
 						*dtMode = dataTypeNumberAuto
 					}
@@ -489,11 +506,12 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 		return sortValue{}, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
 	}
 
+	implicitTZBody := ec.currentTime.Location()
 	if *dtMode == dataTypeNumber {
-		return extractNumericValueExplicitSeq(val), nil
+		return extractNumericValueExplicitSeq(val, implicitTZBody), nil
 	}
 	if *dtMode == dataTypeNumberAuto {
-		return extractNumericValueFromSeq(val), nil
+		return extractNumericValueFromSeq(val, implicitTZBody), nil
 	}
 
 	sv := sortValue{kind: sortValueText, str: stringifySequence(val)}
@@ -539,10 +557,10 @@ func extractSortValues(ctx context.Context, ec *execContext, sortKeys []*SortKey
 // Per XSLT spec, sort key values are converted using number() semantics.
 // Only actual numeric types use direct conversion; others (date, duration)
 // fall through to string → double (producing NaN for dates).
-func extractNumericValueExplicit(seq xpath3.Sequence, result xpath3.Result) sortValue {
+func extractNumericValueExplicit(seq xpath3.Sequence, result xpath3.Result, implicitTZ *time.Location) sortValue {
 	if len(seq) == 1 {
 		if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
-			if sv, ok := atomicToNumericSortValue(av); ok {
+			if sv, ok := atomicToNumericSortValue(av, implicitTZ); ok {
 				return sv
 			}
 		}
@@ -550,10 +568,10 @@ func extractNumericValueExplicit(seq xpath3.Sequence, result xpath3.Result) sort
 	return parseToNumericSortValue(result.StringValue())
 }
 
-func extractNumericValueExplicitSeq(seq xpath3.Sequence) sortValue {
+func extractNumericValueExplicitSeq(seq xpath3.Sequence, implicitTZ *time.Location) sortValue {
 	if len(seq) == 1 {
 		if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
-			if sv, ok := atomicToNumericSortValue(av); ok {
+			if sv, ok := atomicToNumericSortValue(av, implicitTZ); ok {
 				return sv
 			}
 		}
@@ -561,10 +579,10 @@ func extractNumericValueExplicitSeq(seq xpath3.Sequence) sortValue {
 	return parseToNumericSortValue(stringifySequence(seq))
 }
 
-func extractNumericValueFromResult(seq xpath3.Sequence, result xpath3.Result) sortValue {
+func extractNumericValueFromResult(seq xpath3.Sequence, result xpath3.Result, implicitTZ *time.Location) sortValue {
 	if len(seq) == 1 {
 		if av, ok := seq[0].(xpath3.AtomicValue); ok {
-			if sv, ok := atomicToNumericSortValue(av); ok {
+			if sv, ok := atomicToNumericSortValue(av, implicitTZ); ok {
 				return sv
 			}
 		}
@@ -572,10 +590,10 @@ func extractNumericValueFromResult(seq xpath3.Sequence, result xpath3.Result) so
 	return parseToNumericSortValue(result.StringValue())
 }
 
-func extractNumericValueFromSeq(seq xpath3.Sequence) sortValue {
+func extractNumericValueFromSeq(seq xpath3.Sequence, implicitTZ *time.Location) sortValue {
 	if len(seq) == 1 {
 		if av, ok := seq[0].(xpath3.AtomicValue); ok {
-			if sv, ok := atomicToNumericSortValue(av); ok {
+			if sv, ok := atomicToNumericSortValue(av, implicitTZ); ok {
 				return sv
 			}
 		}
@@ -593,7 +611,9 @@ func parseToNumericSortValue(s string) sortValue {
 
 // atomicToNumericSortValue converts an atomic value to a numeric sort value
 // for types that support ordering: numeric, duration, date/time.
-func atomicToNumericSortValue(av xpath3.AtomicValue) (sortValue, bool) {
+// implicitTZ is used for xs:time values that lack an explicit timezone;
+// pass nil to fall back to the system local timezone.
+func atomicToNumericSortValue(av xpath3.AtomicValue, implicitTZ *time.Location) (sortValue, bool) {
 	if av.IsNumeric() {
 		f := av.ToFloat64()
 		if math.IsNaN(f) {
@@ -616,9 +636,16 @@ func atomicToNumericSortValue(av xpath3.AtomicValue) (sortValue, bool) {
 			f = -f
 		}
 		return sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}, true
-	case xpath3.TypeDateTime, xpath3.TypeDateTimeStamp, xpath3.TypeDate, xpath3.TypeTime:
+	case xpath3.TypeDateTime, xpath3.TypeDateTimeStamp, xpath3.TypeDate:
 		t := av.TimeVal()
+		t = xpath3.ApplyImplicitTZ(t, implicitTZ)
 		// Use Unix seconds + fractional nanoseconds to avoid int64 overflow for large years
+		f := float64(t.Unix()) + float64(t.Nanosecond())/1e9
+		return sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}, true
+	case xpath3.TypeTime:
+		t := av.TimeVal()
+		// xs:time comparison uses reference date 1972-12-31 per F&O §10.4.4
+		t = xpath3.TimeToReferenceDateTime(xpath3.ApplyImplicitTZ(t, implicitTZ))
 		f := float64(t.Unix()) + float64(t.Nanosecond())/1e9
 		return sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}, true
 	}
@@ -806,6 +833,11 @@ func sortNodes1(ctx context.Context, ec *execContext, nodes []helium.Node, sk *S
 			return nil, err
 		}
 		entries[i] = keyedNode1{item: node, key: sv, index: i}
+	}
+
+	// XTDE1030: check for incompatible or non-orderable sort key types.
+	if err := checkSortKeyTypeConsistency(entries); err != nil {
+		return nil, err
 	}
 
 	level, err := resolveLevel1(ctx, ec, sk)

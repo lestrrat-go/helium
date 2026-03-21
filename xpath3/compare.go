@@ -753,12 +753,25 @@ func compareTimeOfDay(op TokenType, a, b time.Time, implicitTZ *time.Location) b
 	return compareTime(op, ra, rb)
 }
 
+// TimeToReferenceDateTime converts an xs:time to an xs:dateTime using the
+// XPath reference date 1972-12-31, preserving the timezone offset.
+// This is the canonical conversion for comparing xs:time values per F&O §10.4.4.
+func TimeToReferenceDateTime(t time.Time) time.Time {
+	return timeToReferenceDateTime(t)
+}
+
 // timeToReferenceDateTime converts an xs:time to an xs:dateTime using the
 // XPath reference date 1972-12-31, preserving the timezone offset.
 func timeToReferenceDateTime(t time.Time) time.Time {
 	_, offset := t.Zone()
 	loc := time.FixedZone("", offset)
 	return time.Date(1972, 12, 31, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
+}
+
+// ApplyImplicitTZ applies the implicit timezone to a time that has
+// no explicit timezone. Times with explicit timezones are returned as-is.
+func ApplyImplicitTZ(t time.Time, implicitTZ *time.Location) time.Time {
+	return applyImplicitTZ(t, implicitTZ)
 }
 
 // applyImplicitTZ applies the system's implicit timezone to a time that has

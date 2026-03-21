@@ -222,7 +222,7 @@ func formatComponent(t time.Time, spec, lang, calendar, typeName string) (string
 		}
 		value = int64(h)
 	case 'P':
-		return formatAMPM(t, presentation), nil
+		return formatAMPM(t, presentation, width), nil
 	case 'm':
 		value = int64(t.Minute())
 	case 's':
@@ -667,7 +667,7 @@ func formatDayOfWeek(t time.Time, p dtPresentation, w dtWidth, lang string) stri
 	}
 }
 
-func formatAMPM(t time.Time, p dtPresentation) string {
+func formatAMPM(t time.Time, p dtPresentation, w dtWidth) string {
 	var s string
 	if t.Hour() < 12 {
 		s = "am"
@@ -676,14 +676,17 @@ func formatAMPM(t time.Time, p dtPresentation) string {
 	}
 	switch p.format {
 	case "N":
-		return strings.ToUpper(s)
+		s = strings.ToUpper(s)
 	case "n":
-		return strings.ToLower(s)
+		s = strings.ToLower(s)
 	case "Nn":
-		return strings.ToUpper(s[:1]) + s[1:]
-	default:
-		return s
+		s = strings.ToUpper(s[:1]) + s[1:]
 	}
+	// Apply maximum width constraint: truncate to maxWidth characters
+	if w.maxWidth > 0 && len(s) > w.maxWidth {
+		s = s[:w.maxWidth]
+	}
+	return s
 }
 
 func formatFractionalSeconds(t time.Time, p dtPresentation, w dtWidth) string {
