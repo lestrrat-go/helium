@@ -20,6 +20,7 @@ type SortKey struct {
 	DataType  *AVT          // "text" or "number"
 	CaseOrder *AVT          // "upper-first" or "lower-first"
 	Lang      *AVT
+	Collation *AVT // collation URI
 }
 
 // sortMode determines how a sort level compares keys.
@@ -59,8 +60,9 @@ type sortValue struct {
 
 // resolvedLevel holds the fully resolved configuration for one sort level.
 type resolvedLevel struct {
-	mode sortMode
-	desc bool
+	mode    sortMode
+	desc    bool
+	compare func(a, b string) int // collation comparator; nil = codepoint
 }
 
 // resolvedSort holds the fully resolved per-level sort configuration.
@@ -147,6 +149,18 @@ func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*SortKey
 		levels[i] = resolvedLevel{
 			desc: order == "descending",
 		}
+		if sk.Collation != nil {
+			uri, err := sk.Collation.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return resolvedSort{}, err
+			}
+			cmpFn, err := xpath3.ResolveCollationCompareFunc(uri)
+			if err != nil {
+				return resolvedSort{}, dynamicError(errCodeXTDE1035,
+					"unknown collation URI %q", uri)
+			}
+			levels[i].compare = cmpFn
+		}
 	}
 	return resolvedSort{levels: levels}, nil
 }
@@ -171,10 +185,23 @@ func resolveLevel1(ctx context.Context, ec *execContext, sk *SortKey) (resolvedL
 				"invalid language tag %q in xsl:sort", lang)
 		}
 	}
-	return resolvedLevel{desc: order == "descending"}, nil
+	rl := resolvedLevel{desc: order == "descending"}
+	if sk.Collation != nil {
+		uri, err := sk.Collation.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return resolvedLevel{}, err
+		}
+		cmpFn, err := xpath3.ResolveCollationCompareFunc(uri)
+		if err != nil {
+			return resolvedLevel{}, dynamicError(errCodeXTDE1035,
+				"unknown collation URI %q", uri)
+		}
+		rl.compare = cmpFn
+	}
+	return rl, nil
 }
 
-// validateSortKeyAttrs validates sort key attribute values (lang, etc.)
+// validateSortKeyAttrs validates sort key attribute values (lang, collation, etc.)
 // regardless of whether there are nodes to sort.
 func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *SortKey) error {
 	if sk.Lang != nil {
@@ -185,6 +212,16 @@ func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *SortKey) err
 		if !isValidLanguageTag(lang) {
 			return dynamicError(errCodeXTDE0030,
 				"invalid language tag %q in xsl:sort", lang)
+		}
+	}
+	if sk.Collation != nil {
+		uri, err := sk.Collation.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		if _, err := xpath3.ResolveCollationCompareFunc(uri); err != nil {
+			return dynamicError(errCodeXTDE1035,
+				"unknown collation URI %q", uri)
 		}
 	}
 	return nil
@@ -242,7 +279,11 @@ func compareSortValues(a, b sortValue, level resolvedLevel) int {
 	case sortModeNumber:
 		c = compareFloat64(a, b)
 	default:
-		c = cmp.Compare(a.str, b.str)
+		if level.compare != nil {
+			c = level.compare(a.str, b.str)
+		} else {
+			c = cmp.Compare(a.str, b.str)
+		}
 	}
 	if level.desc {
 		c = -c

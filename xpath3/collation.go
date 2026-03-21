@@ -676,3 +676,13 @@ func ResolveCollationKeyFunc(uri string) (func(string) string, error) {
 		return string(coll.key(s))
 	}, nil
 }
+
+// ResolveCollationCompareFunc returns a comparison function for the given
+// collation URI. Returns an error for unrecognized collation URIs.
+func ResolveCollationCompareFunc(uri string) (func(a, b string) int, error) {
+	coll, err := resolveCollation(uri, "")
+	if err != nil {
+		return nil, err
+	}
+	return coll.compare, nil
+}

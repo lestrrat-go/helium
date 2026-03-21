@@ -348,6 +348,14 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 		sk.Lang = avt
 	}
 
+	if col := getAttr(elem, "collation"); col != "" {
+		avt, err := compileAVT(col, c.nsBindings)
+		if err != nil {
+			return nil, err
+		}
+		sk.Collation = avt
+	}
+
 	return sk, nil
 }
 
