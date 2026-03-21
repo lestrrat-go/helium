@@ -530,7 +530,10 @@ func walkExprCheckPredicates(expr xpath3.Expr, grounded bool, found *bool) {
 			}
 		}
 	case xpath3.FilterExpr:
-		g := grounded || isGroundingExpr(e.Expr) || isAtomicResultExpr(e.Expr)
+		// Variable references are always grounded — they hold materialized
+		// sequences, not streaming nodes. Treat them like grounding exprs.
+		_, isVarRef := derefXPathExpr(e.Expr).(xpath3.VariableExpr)
+		g := grounded || isGroundingExpr(e.Expr) || isAtomicResultExpr(e.Expr) || isVarRef
 		walkExprCheckPredicates(e.Expr, grounded, found)
 		if !g {
 			for _, pred := range e.Predicates {
@@ -889,8 +892,27 @@ func checkForEachStreamable(_ *Stylesheet, inst Instruction) error {
 // forEachBodyConsumesContext returns true if any instruction in the body
 // consumes the context item (e.g., value-of select="."). This is checked
 // when a for-each has a crawling select expression.
+//
+// Grounding instructions (xsl:copy select=".", xsl:copy-of select=".",
+// xsl:copy without select) are excluded because they produce deep copies
+// of the current node and are allowed inside a crawling for-each.
 func forEachBodyConsumesContext(body []Instruction) bool {
 	for _, inst := range body {
+		// xsl:copy with select="." or no select is a grounding operation.
+		if ci, ok := inst.(*CopyInst); ok {
+			if ci.Select == nil {
+				continue // xsl:copy (shallow copy + body) — grounding
+			}
+			if _, isCtx := ci.Select.AST().(xpath3.ContextItemExpr); isCtx {
+				continue // xsl:copy select="." — grounding
+			}
+		}
+		// xsl:copy-of select="." is a grounding operation.
+		if coi, ok := inst.(*CopyOfInst); ok && coi.Select != nil {
+			if _, isCtx := coi.Select.AST().(xpath3.ContextItemExpr); isCtx {
+				continue // copy-of select="." — grounding
+			}
+		}
 		for _, expr := range getInstructionExprs(inst) {
 			if expr == nil {
 				continue
