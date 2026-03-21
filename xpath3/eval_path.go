@@ -573,6 +573,12 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ec *evalContext)
 		if test.Local == "*" {
 			return true
 		}
+		// Namespace nodes have simple NCName prefixes, not QNames.
+		// A name test with a prefix (e.g. namespace::b:a) cannot
+		// match any namespace node.
+		if test.Prefix != "" {
+			return false
+		}
 		return n.Name() == test.Local
 	default:
 		if n.Type() != helium.ElementNode {
@@ -608,7 +614,12 @@ func matchNameTest(test NameTest, n helium.Node, axis AxisType, ec *evalContext)
 	// Only applies to element axis, not attributes.
 	// Per XPath 3.1 §3.3.2.1: when default element namespace is absent,
 	// unprefixed names match only no-namespace elements.
-	if axis != AxisAttribute && ec.namespaces != nil {
+	if axis == AxisAttribute {
+		// Per XPath 3.1 §3.3.2.1: an unprefixed attribute name test
+		// matches only attributes with no namespace URI.
+		return ixpath.NodeNamespaceURI(n) == ""
+	}
+	if ec.namespaces != nil {
 		return ixpath.NodeNamespaceURI(n) == ec.namespaces[""]
 	}
 	// No namespace context at all: permissive match (any namespace).
