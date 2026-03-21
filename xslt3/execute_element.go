@@ -743,6 +743,11 @@ func copyAttributeToElement(elem *helium.Element, attr *helium.Attribute) {
 		}
 		ns := helium.NewNamespace(prefix, uri)
 		elem.SetLiteralAttributeNS(localName, attr.Value(), ns)
+		// Ensure the namespace declaration is present on the element
+		// so that the prefix is properly declared in the serialized output.
+		if prefix != "" && !hasNSDecl(elem, prefix, uri) {
+			_ = elem.DeclareNamespace(prefix, uri)
+		}
 		return
 	}
 	elem.SetLiteralAttribute(attr.Name(), attr.Value())
