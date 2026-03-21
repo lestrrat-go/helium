@@ -281,10 +281,7 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 					}
 					result, err := compiled.Evaluate(ctx, nil)
 					if err == nil {
-						if c.staticVars == nil {
-							c.staticVars = make(map[string]xpath3.Sequence)
-						}
-						c.staticVars[name] = result.Sequence()
+						c.setStaticVar(name, result.Sequence())
 					}
 				}
 			}

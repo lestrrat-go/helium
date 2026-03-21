@@ -1,0 +1,1 @@
+<xsl:variable name="sbu" select="static-base-uri()" static="yes" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"/>
