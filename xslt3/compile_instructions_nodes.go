@@ -51,8 +51,14 @@ func (c *compiler) compileValueOf(elem *helium.Element) (*ValueOfInst, error) {
 		inst.Body = body
 	}
 
-	doe, _ := parseXSDBool(getAttr(elem, "disable-output-escaping"))
-	inst.DisableOutputEscaping = doe
+	doeAttr := getAttr(elem, "disable-output-escaping")
+	if doeAttr != "" {
+		doe, err := parseDOEAttr(doeAttr)
+		if err != nil {
+			return nil, err
+		}
+		inst.DisableOutputEscaping = doe
+	}
 
 	return inst, nil
 }
@@ -70,10 +76,17 @@ func (c *compiler) compileText(elem *helium.Element) (*TextInst, error) {
 	}
 
 	text := sb.String()
-	textDOE, _ := parseXSDBool(getAttr(elem, "disable-output-escaping"))
 	inst := &TextInst{
-		Value:                 text,
-		DisableOutputEscaping: textDOE,
+		Value: text,
+	}
+
+	doeAttr := getAttr(elem, "disable-output-escaping")
+	if doeAttr != "" {
+		doe, err := parseDOEAttr(doeAttr)
+		if err != nil {
+			return nil, err
+		}
+		inst.DisableOutputEscaping = doe
 	}
 
 	if c.expandText && strings.ContainsAny(text, "{}") {
