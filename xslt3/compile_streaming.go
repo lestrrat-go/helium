@@ -402,6 +402,9 @@ func (c *compiler) compileNextIteration(elem *helium.Element) (Instruction, erro
 			if err != nil {
 				return nil, err
 			}
+			if wp == nil {
+				continue
+			}
 			if _, dup := wpNames[wp.Name]; dup {
 				return nil, staticError(errCodeXTSE0670, "duplicate xsl:with-param name %q in xsl:next-iteration", wp.Name)
 			}

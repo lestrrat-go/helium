@@ -75,7 +75,9 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 			if err != nil {
 				return nil, err
 			}
-			inst.Params = append(inst.Params, wp)
+			if wp != nil {
+				inst.Params = append(inst.Params, wp)
+			}
 		}
 	}
 
@@ -100,7 +102,9 @@ func (c *compiler) compileCallTemplate(elem *helium.Element) (*CallTemplateInst,
 			if err != nil {
 				return nil, err
 			}
-			inst.Params = append(inst.Params, wp)
+			if wp != nil {
+				inst.Params = append(inst.Params, wp)
+			}
 		}
 	}
 
@@ -405,6 +409,17 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 }
 
 func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
+	// Check use-when before compiling: skip this with-param if excluded.
+	if uw := getAttr(elem, "use-when"); uw != "" {
+		include, err := c.evaluateUseWhen(uw)
+		if err != nil {
+			return nil, err
+		}
+		if !include {
+			return nil, nil
+		}
+	}
+
 	// Push element-local namespace declarations (for EQName variable refs)
 	saved := c.pushElementNamespaces(elem)
 	defer func() { c.nsBindings = saved }()
@@ -525,7 +540,9 @@ func (c *compiler) compileNextMatch(elem *helium.Element) (*NextMatchInst, error
 			if err != nil {
 				return nil, err
 			}
-			inst.Params = append(inst.Params, wp)
+			if wp != nil {
+				inst.Params = append(inst.Params, wp)
+			}
 		}
 	}
 	return inst, nil
@@ -543,7 +560,9 @@ func (c *compiler) compileApplyImports(elem *helium.Element) (*ApplyImportsInst,
 			if err != nil {
 				return nil, err
 			}
-			inst.Params = append(inst.Params, wp)
+			if wp != nil {
+				inst.Params = append(inst.Params, wp)
+			}
 		}
 	}
 	return inst, nil
@@ -908,7 +927,9 @@ func (c *compiler) compileEvaluate(elem *helium.Element) (Instruction, error) {
 			if err != nil {
 				return nil, err
 			}
-			inst.Params = append(inst.Params, wp)
+			if wp != nil {
+				inst.Params = append(inst.Params, wp)
+			}
 		} else if childElem.LocalName() == "fallback" {
 			// skip
 		} else {
