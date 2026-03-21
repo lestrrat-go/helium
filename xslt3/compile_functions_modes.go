@@ -354,7 +354,8 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 			}
 			return nil
 		}
-		// Different precedence: higher precedence wins.
+		// Different precedence: higher precedence wins, but inherit
+		// unspecified attributes from the lower-precedence declaration.
 		if c.importPrec > existing.ImportPrec {
 			// Preserve conflict flags from the lower-precedence entry,
 			// but clear them for attributes the higher-prec explicitly specifies.
@@ -363,9 +364,35 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 			md.conflictVisibility = existing.conflictVisibility && md.Visibility == ""
 			md.conflictOnMultiple = existing.conflictOnMultiple && md.OnMultipleMatch == ""
 			md.conflictAccumulator = existing.conflictAccumulator && md.UseAccumulators == ""
+			// Inherit attributes not explicitly set in higher-precedence decl
+			if md.OnNoMatch == "" {
+				md.OnNoMatch = existing.OnNoMatch
+			}
+			if md.OnMultipleMatch == "" {
+				md.OnMultipleMatch = existing.OnMultipleMatch
+			}
+			if md.UseAccumulators == "" {
+				md.UseAccumulators = existing.UseAccumulators
+			}
+			if md.Visibility == "" {
+				md.Visibility = existing.Visibility
+			}
 			c.stylesheet.modeDefs[name] = md
+		} else {
+			// Lower precedence than existing: merge unspecified attrs into existing.
+			if existing.OnNoMatch == "" && md.OnNoMatch != "" {
+				existing.OnNoMatch = md.OnNoMatch
+			}
+			if existing.OnMultipleMatch == "" && md.OnMultipleMatch != "" {
+				existing.OnMultipleMatch = md.OnMultipleMatch
+			}
+			if existing.UseAccumulators == "" && md.UseAccumulators != "" {
+				existing.UseAccumulators = md.UseAccumulators
+			}
+			if existing.Visibility == "" && md.Visibility != "" {
+				existing.Visibility = md.Visibility
+			}
 		}
-		// Lower precedence than existing: existing already won, ignore this decl.
 		return nil
 	}
 
