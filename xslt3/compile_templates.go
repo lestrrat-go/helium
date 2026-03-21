@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 var templateAllowedAttrs = map[string]struct{}{
@@ -723,6 +724,12 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 		if err != nil {
 			return err
 		}
+		// XPST0008: a global variable is out of scope within its own
+		// declaration. Detect self-references in the select expression.
+		if xpathExprReferencesVar(expr.AST(), name, c.nsBindings) {
+			return staticError("XPST0008",
+				"global variable %q references itself in its select expression", name)
+		}
 		v.Select = expr
 	} else {
 		body, err := c.compileChildren(elem)
@@ -772,4 +779,189 @@ func (c *compiler) compileGlobalParam(elem *helium.Element) error {
 	p.ImportPrec = c.importPrec
 	c.stylesheet.globalParams = append(c.stylesheet.globalParams, p)
 	return nil
+}
+
+// xpathExprReferencesVar walks an XPath AST and returns true if any
+// VariableExpr references the given variable name. The name parameter
+// is the raw XSLT name attribute (may be prefixed like "ns:local");
+// nsBindings are used to resolve prefixes for matching.
+func xpathExprReferencesVar(expr xpath3.Expr, name string, nsBindings map[string]string) bool {
+	if expr == nil {
+		return false
+	}
+
+	// Determine the local name and optional resolved name for matching.
+	// In XPath AST, VariableExpr stores Prefix and Name separately.
+	rawLocal := name
+	var rawPrefix string
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		rawPrefix = name[:idx]
+		rawLocal = name[idx+1:]
+	}
+
+	return xpathExprRefsVarWalk(expr, rawLocal, rawPrefix)
+}
+
+func xpathExprRefsVarWalk(e xpath3.Expr, local, prefix string) bool {
+	switch n := e.(type) {
+	case xpath3.VariableExpr:
+		return n.Name == local && n.Prefix == prefix
+	case xpath3.BinaryExpr:
+		return xpathExprRefsVarWalk(n.Left, local, prefix) ||
+			xpathExprRefsVarWalk(n.Right, local, prefix)
+	case xpath3.UnaryExpr:
+		return xpathExprRefsVarWalk(n.Operand, local, prefix)
+	case xpath3.ConcatExpr:
+		return xpathExprRefsVarWalk(n.Left, local, prefix) ||
+			xpathExprRefsVarWalk(n.Right, local, prefix)
+	case xpath3.SimpleMapExpr:
+		return xpathExprRefsVarWalk(n.Left, local, prefix) ||
+			xpathExprRefsVarWalk(n.Right, local, prefix)
+	case xpath3.RangeExpr:
+		return xpathExprRefsVarWalk(n.Start, local, prefix) ||
+			xpathExprRefsVarWalk(n.End, local, prefix)
+	case xpath3.UnionExpr:
+		return xpathExprRefsVarWalk(n.Left, local, prefix) ||
+			xpathExprRefsVarWalk(n.Right, local, prefix)
+	case xpath3.IntersectExceptExpr:
+		return xpathExprRefsVarWalk(n.Left, local, prefix) ||
+			xpathExprRefsVarWalk(n.Right, local, prefix)
+	case xpath3.FilterExpr:
+		if xpathExprRefsVarWalk(n.Expr, local, prefix) {
+			return true
+		}
+		for _, pred := range n.Predicates {
+			if xpathExprRefsVarWalk(pred, local, prefix) {
+				return true
+			}
+		}
+		return false
+	case xpath3.PathExpr:
+		if n.Filter != nil && xpathExprRefsVarWalk(n.Filter, local, prefix) {
+			return true
+		}
+		if n.Path != nil {
+			for _, step := range n.Path.Steps {
+				for _, pred := range step.Predicates {
+					if xpathExprRefsVarWalk(pred, local, prefix) {
+						return true
+					}
+				}
+			}
+		}
+		return false
+	case xpath3.PathStepExpr:
+		return xpathExprRefsVarWalk(n.Left, local, prefix) ||
+			xpathExprRefsVarWalk(n.Right, local, prefix)
+	case xpath3.LookupExpr:
+		if xpathExprRefsVarWalk(n.Expr, local, prefix) {
+			return true
+		}
+		return n.Key != nil && xpathExprRefsVarWalk(n.Key, local, prefix)
+	case xpath3.UnaryLookupExpr:
+		return n.Key != nil && xpathExprRefsVarWalk(n.Key, local, prefix)
+	case xpath3.FunctionCall:
+		for _, arg := range n.Args {
+			if xpathExprRefsVarWalk(arg, local, prefix) {
+				return true
+			}
+		}
+		return false
+	case xpath3.DynamicFunctionCall:
+		if xpathExprRefsVarWalk(n.Func, local, prefix) {
+			return true
+		}
+		for _, arg := range n.Args {
+			if xpathExprRefsVarWalk(arg, local, prefix) {
+				return true
+			}
+		}
+		return false
+	case xpath3.InlineFunctionExpr:
+		// Check if the inline function's parameters shadow the variable.
+		for _, p := range n.Params {
+			if p.Name == local {
+				return false // shadowed
+			}
+		}
+		return xpathExprRefsVarWalk(n.Body, local, prefix)
+	case xpath3.FLWORExpr:
+		for _, cl := range n.Clauses {
+			switch c := cl.(type) {
+			case xpath3.ForClause:
+				if xpathExprRefsVarWalk(c.Expr, local, prefix) {
+					return true
+				}
+				if c.Var == local {
+					return false // shadowed
+				}
+			case xpath3.LetClause:
+				if xpathExprRefsVarWalk(c.Expr, local, prefix) {
+					return true
+				}
+				if c.Var == local {
+					return false // shadowed
+				}
+			}
+		}
+		return xpathExprRefsVarWalk(n.Return, local, prefix)
+	case xpath3.QuantifiedExpr:
+		for _, b := range n.Bindings {
+			if xpathExprRefsVarWalk(b.Domain, local, prefix) {
+				return true
+			}
+			if b.Var == local {
+				return false // shadowed
+			}
+		}
+		return xpathExprRefsVarWalk(n.Satisfies, local, prefix)
+	case xpath3.IfExpr:
+		return xpathExprRefsVarWalk(n.Cond, local, prefix) ||
+			xpathExprRefsVarWalk(n.Then, local, prefix) ||
+			xpathExprRefsVarWalk(n.Else, local, prefix)
+	case xpath3.TryCatchExpr:
+		if xpathExprRefsVarWalk(n.Try, local, prefix) {
+			return true
+		}
+		for _, c := range n.Catches {
+			if xpathExprRefsVarWalk(c.Expr, local, prefix) {
+				return true
+			}
+		}
+		return false
+	case xpath3.InstanceOfExpr:
+		return xpathExprRefsVarWalk(n.Expr, local, prefix)
+	case xpath3.CastExpr:
+		return xpathExprRefsVarWalk(n.Expr, local, prefix)
+	case xpath3.CastableExpr:
+		return xpathExprRefsVarWalk(n.Expr, local, prefix)
+	case xpath3.TreatAsExpr:
+		return xpathExprRefsVarWalk(n.Expr, local, prefix)
+	case xpath3.MapConstructorExpr:
+		for _, pair := range n.Pairs {
+			if xpathExprRefsVarWalk(pair.Key, local, prefix) ||
+				xpathExprRefsVarWalk(pair.Value, local, prefix) {
+				return true
+			}
+		}
+		return false
+	case xpath3.ArrayConstructorExpr:
+		for _, item := range n.Items {
+			if xpathExprRefsVarWalk(item, local, prefix) {
+				return true
+			}
+		}
+		return false
+	case xpath3.SequenceExpr:
+		for _, item := range n.Items {
+			if xpathExprRefsVarWalk(item, local, prefix) {
+				return true
+			}
+		}
+		return false
+	default:
+		// LiteralExpr, RootExpr, ContextItemExpr, LocationPath,
+		// NamedFunctionRef, PlaceholderExpr — no sub-expressions
+		return false
+	}
 }
