@@ -172,6 +172,23 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 			"cannot override final function %q", name)
 	}
 
+	// XTSE3070: new-each-time on the override must match the base component.
+	// The base defaults to "maybe" (empty string) when not specified.
+	if pkgFn != nil {
+		overrideNET := getAttr(elem, "new-each-time")
+		if overrideNET != "" {
+			baseNET := pkgFn.NewEachTime
+			if baseNET == "" {
+				baseNET = "maybe" // default per spec
+			}
+			if overrideNET != baseNET {
+				return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE3070,
+					"override function %q: new-each-time=%q does not match base component value %q",
+					name, overrideNET, baseNET)
+			}
+		}
+	}
+
 	// Handle expand-text
 	savedExpandText := c.expandText
 	if et, hasET := elem.GetAttribute("expand-text"); hasET {

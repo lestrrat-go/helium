@@ -493,12 +493,16 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 		// boundary of their own import tree (for xsl:apply-imports).
 		savedMinImportPrec := c.minImportPrec
 		c.minImportPrec = c.importPrec
+		savedInsideImport := c.insideImport
+		c.insideImport = true
 		c.collectNamespaces(importedRoot)
 		if err := c.compileTopLevel(importedRoot); err != nil {
 			c.minImportPrec = savedMinImportPrec
+			c.insideImport = savedInsideImport
 			return err
 		}
 		c.minImportPrec = savedMinImportPrec
+		c.insideImport = savedInsideImport
 		c.importPrec++
 	} else {
 		// Include: same precedence as the including module.

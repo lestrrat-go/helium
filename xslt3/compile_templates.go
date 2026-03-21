@@ -414,6 +414,9 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 		As:         asAttr,
 		Visibility: getAttr(elem, "visibility"),
 	}
+	if c.stylesheet.isPackage {
+		v.OwnerPackage = c.stylesheet
+	}
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {

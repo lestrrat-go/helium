@@ -132,11 +132,23 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		Cache:         xsdBoolTrue(getAttr(elem, "cache")),
 		Streamability: getAttr(elem, "streamability"),
 		Visibility:    getAttr(elem, "visibility"),
+		NewEachTime:   getAttr(elem, "new-each-time"),
+		ImportPrec:    c.importPrec,
 	}
 	if c.stylesheet.isPackage {
 		fn.OwnerPackage = c.stylesheet
 	}
 
+	// XTSE0770: it is a static error if a stylesheet contains two or more
+	// functions with the same expanded QName, the same arity, and the same
+	// import precedence. Functions from different import levels are allowed;
+	// the one with the highest precedence wins.
+	if existing, ok := c.stylesheet.functions[qn]; ok {
+		if len(existing.Params) == len(fn.Params) && existing.ImportPrec == fn.ImportPrec {
+			return staticError(errCodeXTSE0770,
+				"duplicate xsl:function %s with arity %d", name, len(fn.Params))
+		}
+	}
 	c.stylesheet.functions[qn] = fn
 	return nil
 }
