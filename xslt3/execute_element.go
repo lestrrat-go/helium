@@ -733,11 +733,38 @@ func copyAttributeToElement(elem *helium.Element, attr *helium.Attribute) {
 		if prefix != "" {
 			localName = name[len(prefix)+1:]
 		}
+		// Namespace fixup: if the prefix is already used by another attribute
+		// or namespace declaration on this element with a different URI,
+		// generate a unique prefix to avoid conflict.
+		if prefix != "" {
+			if conflictingAttrPrefix(elem, prefix, uri) {
+				prefix = uniqueNSPrefix(elem, prefix+"_0", uri)
+			}
+		}
 		ns := helium.NewNamespace(prefix, uri)
 		elem.SetLiteralAttributeNS(localName, attr.Value(), ns)
 		return
 	}
 	elem.SetLiteralAttribute(attr.Name(), attr.Value())
+}
+
+// conflictingAttrPrefix returns true if the given prefix is already used
+// on the element (by a namespace declaration or an existing attribute)
+// with a different namespace URI.
+func conflictingAttrPrefix(elem *helium.Element, prefix, uri string) bool {
+	// Check namespace declarations
+	for _, ns := range elem.Namespaces() {
+		if ns.Prefix() == prefix && ns.URI() != uri {
+			return true
+		}
+	}
+	// Check existing attributes
+	for _, a := range elem.Attributes() {
+		if a.Prefix() == prefix && a.URI() != "" && a.URI() != uri {
+			return true
+		}
+	}
+	return false
 }
 
 // hasNSDecl checks if an element already has a namespace declaration for

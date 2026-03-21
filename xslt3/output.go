@@ -510,27 +510,152 @@ func nodeStringValue(n helium.Node) string {
 	return string(n.Content())
 }
 
-// applyUnicodeNormalization applies the specified Unicode normalization form
-// to the given UTF-8 data.
-func applyUnicodeNormalization(data []byte, form string) []byte {
-	var nf norm.Form
+// resolveNormForm returns the norm.Form for the given normalization form name.
+// Returns (form, true) on success or (0, false) for unknown/NONE forms.
+func resolveNormForm(form string) (norm.Form, bool) {
 	switch form {
-	case "NFC":
-		nf = norm.NFC
+	case "NFC", "FULLY-NORMALIZED":
+		return norm.NFC, true
 	case "NFD":
-		nf = norm.NFD
+		return norm.NFD, true
 	case "NFKC":
-		nf = norm.NFKC
+		return norm.NFKC, true
 	case "NFKD":
-		nf = norm.NFKD
-	case "FULLY-NORMALIZED":
-		// Fully-normalized is NFC plus additional constraints.
-		// For practical purposes, NFC is sufficient.
-		nf = norm.NFC
+		return norm.NFKD, true
 	default:
+		return 0, false
+	}
+}
+
+// applyUnicodeNormalization applies the specified Unicode normalization form
+// to text content and attribute values in serialized XML/HTML output, while
+// leaving element/attribute names and markup untouched (per XSLT 3.0 spec).
+func applyUnicodeNormalization(data []byte, form string) []byte {
+	nf, ok := resolveNormForm(form)
+	if !ok {
 		return data
 	}
-	return nf.Bytes(data)
+	return normalizeXMLContent(data, nf)
+}
+
+// normalizeXMLContent applies Unicode normalization to text content and
+// attribute values in serialized XML, preserving element/attribute names
+// and other markup verbatim.
+func normalizeXMLContent(data []byte, nf norm.Form) []byte {
+	var out bytes.Buffer
+	out.Grow(len(data))
+	i := 0
+	for i < len(data) {
+		if data[i] == '<' {
+			// Inside a tag — copy the tag verbatim but normalize attribute values.
+			j := i + 1
+			if j < len(data) && data[j] == '!' {
+				// Comment (<!-- ... -->) or CDATA (<![CDATA[ ... ]]>)
+				if j+1 < len(data) && data[j+1] == '-' {
+					// Comment: copy verbatim until -->
+					end := bytes.Index(data[i:], []byte("-->"))
+					if end < 0 {
+						out.Write(data[i:])
+						return out.Bytes()
+					}
+					out.Write(data[i : i+end+3])
+					i += end + 3
+					continue
+				}
+				if j+7 < len(data) && string(data[j:j+7]) == "[CDATA[" {
+					// CDATA: normalize content inside
+					end := bytes.Index(data[i:], []byte("]]>"))
+					if end < 0 {
+						out.Write(data[i:])
+						return out.Bytes()
+					}
+					cdataStart := i + 9 // after <![CDATA[
+					cdataEnd := i + end
+					out.Write(data[i:cdataStart])
+					out.Write(nf.Bytes(data[cdataStart:cdataEnd]))
+					out.Write([]byte("]]>"))
+					i += end + 3
+					continue
+				}
+			}
+			if j < len(data) && data[j] == '?' {
+				// Processing instruction: copy verbatim
+				end := bytes.Index(data[i:], []byte("?>"))
+				if end < 0 {
+					out.Write(data[i:])
+					return out.Bytes()
+				}
+				out.Write(data[i : i+end+2])
+				i += end + 2
+				continue
+			}
+			// Regular tag: copy tag name verbatim, normalize attribute values
+			normalizeTag(&out, data, &i, nf)
+			continue
+		}
+		// Text content outside tags — normalize it
+		j := bytes.IndexByte(data[i:], '<')
+		if j < 0 {
+			out.Write(nf.Bytes(data[i:]))
+			i = len(data)
+		} else {
+			out.Write(nf.Bytes(data[i : i+j]))
+			i += j
+		}
+	}
+	return out.Bytes()
+}
+
+// normalizeTag copies an XML tag, normalizing only attribute values.
+func normalizeTag(out *bytes.Buffer, data []byte, pos *int, nf norm.Form) {
+	i := *pos
+	out.WriteByte('<')
+	i++ // skip '<'
+
+	// Copy tag name (and optional '/' for closing tags) verbatim
+	for i < len(data) && data[i] != '>' && data[i] != ' ' && data[i] != '\t' && data[i] != '\n' && data[i] != '\r' && data[i] != '/' {
+		out.WriteByte(data[i])
+		i++
+	}
+
+	// Process attributes and whitespace until '>'
+	for i < len(data) && data[i] != '>' {
+		if data[i] == '/' {
+			out.WriteByte(data[i])
+			i++
+			continue
+		}
+		if data[i] == ' ' || data[i] == '\t' || data[i] == '\n' || data[i] == '\r' {
+			// Whitespace — copy verbatim
+			out.WriteByte(data[i])
+			i++
+			continue
+		}
+		if data[i] == '"' || data[i] == '\'' {
+			// Attribute value — normalize content
+			quote := data[i]
+			out.WriteByte(quote)
+			i++
+			start := i
+			for i < len(data) && data[i] != quote {
+				i++
+			}
+			out.Write(nf.Bytes(data[start:i]))
+			if i < len(data) {
+				out.WriteByte(quote)
+				i++
+			}
+			continue
+		}
+		// Attribute name or '=' — copy verbatim
+		out.WriteByte(data[i])
+		i++
+	}
+	if i < len(data) {
+		out.WriteByte('>') // closing '>'
+		i++
+	}
+	*pos = i
 }
 
 // transcodeToEncoding converts UTF-8 bytes to the target encoding,
