@@ -504,11 +504,7 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 			_, local := splitQName(test.Name)
 			return ixpath.LocalNameOf(n) == local
 		}
-		prefix, local := splitQName(test.Name)
-		ns := ""
-		if prefix != "" && ec.namespaces != nil {
-			ns = ec.namespaces[prefix]
-		}
+		local, ns := resolveSchemaTestName(test.Name, ec)
 		if ixpath.LocalNameOf(n) != local || ixpath.NodeNamespaceURI(n) != ns {
 			return false
 		}
@@ -673,6 +669,24 @@ func nodeTypeAnnotation(n helium.Node, ec *evalContext) string {
 		return ""
 	}
 	return ec.typeAnnotations[n]
+}
+
+// resolveSchemaTestName resolves a name from a SchemaElementTest or
+// SchemaAttributeTest. Handles Q{uri}local (EQName) and prefix:local forms.
+func resolveSchemaTestName(name string, ec *evalContext) (local, ns string) {
+	if strings.HasPrefix(name, "Q{") {
+		if idx := strings.Index(name, "}"); idx >= 0 {
+			return name[idx+1:], name[2:idx]
+		}
+	}
+	prefix, loc := splitQName(name)
+	if prefix != "" && ec != nil && ec.namespaces != nil {
+		return loc, ec.namespaces[prefix]
+	}
+	if prefix == "" && ec != nil && ec.namespaces != nil {
+		return loc, ec.namespaces[""]
+	}
+	return loc, ""
 }
 
 // resolveTestTypeName normalizes a type name from an ElementTest/AttributeTest
