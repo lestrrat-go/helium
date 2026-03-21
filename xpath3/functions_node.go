@@ -481,7 +481,7 @@ func fnGenerateID(ctx context.Context, args []Sequence) (Sequence, error) {
 	if n == nil {
 		return SingleString(""), nil
 	}
-	return SingleString(stableNodeID(n)), nil
+	return SingleString(StableNodeID(n)), nil
 }
 
 func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {

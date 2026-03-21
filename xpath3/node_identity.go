@@ -39,18 +39,21 @@ func makeNodeIdentityKey(n helium.Node) nodeIdentityKey {
 	return nodeIdentityKey{node: n}
 }
 
-func stableNodeID(n helium.Node) string {
+// StableNodeID returns a unique string identifier for a node.  For
+// namespace nodes (which are recreated on each axis traversal) the ID
+// is derived from the parent element pointer and the namespace prefix
+// so that the same logical namespace node always gets the same ID.
+func StableNodeID(n helium.Node) string {
 	if n == nil {
 		return ""
 	}
-	if n.Type() != helium.NamespaceNode {
-		return fmt.Sprintf("id%p", n)
+	if n.Type() == helium.NamespaceNode {
+		parentHex := strings.TrimPrefix(fmt.Sprintf("%p", n.Parent()), "0x")
+		prefixHex := hex.EncodeToString([]byte(n.Name()))
+		if prefixHex == "" {
+			prefixHex = "00"
+		}
+		return "idns" + parentHex + prefixHex
 	}
-
-	parentHex := strings.TrimPrefix(fmt.Sprintf("%p", n.Parent()), "0x")
-	prefixHex := hex.EncodeToString([]byte(n.Name()))
-	if prefixHex == "" {
-		prefixHex = "00"
-	}
-	return "idns" + parentHex + prefixHex
+	return fmt.Sprintf("id%p", n)
 }
