@@ -124,6 +124,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 						return err
 					}
 					ec.annotateNode(copiedElem, inst.TypeName)
+					ec.annotateAttributesFromType(copiedElem, inst.TypeName)
 					break
 				}
 			}
@@ -140,6 +141,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 						return err
 					}
 					ec.annotateNode(copiedElem, inst.TypeName)
+					ec.annotateAttributesFromType(copiedElem, inst.TypeName)
 				}
 			}
 		}
@@ -411,6 +413,7 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 							return err
 						}
 						ec.annotateNode(copiedElem, inst.TypeName)
+						ec.annotateAttributesFromType(copiedElem, inst.TypeName)
 					}
 				}
 			} else if preserve {

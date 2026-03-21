@@ -152,6 +152,7 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		if err := ec.validateAndNormalizeElementContent(elem, inst.TypeName); err != nil {
 			return err
 		}
+		ec.annotateAttributesFromType(elem, inst.TypeName)
 	}
 
 	if inst.Validation != "" {
@@ -412,6 +413,41 @@ func (ec *execContext) stripAnnotations(node helium.Node) {
 	}
 	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 		ec.stripAnnotations(child)
+	}
+}
+
+// annotateAttributesFromType annotates each attribute on elem with the type
+// declared in the complex type definition identified by typeName.  This is
+// needed so that "instance of attribute(*, xs:integer)" works on attributes
+// of elements constructed with xsl:type or type="…".
+func (ec *execContext) annotateAttributesFromType(elem *helium.Element, typeName string) {
+	if ec.schemaRegistry == nil {
+		return
+	}
+	allDefs := ec.schemaRegistry.LookupAllTypeDefs(typeName)
+	if len(allDefs) == 0 {
+		return
+	}
+	td := allDefs[0].TD
+	if len(td.Attributes) == 0 {
+		return
+	}
+	const nsXSD = "http://www.w3.org/2001/XMLSchema"
+	for _, attr := range elem.Attributes() {
+		for _, au := range td.Attributes {
+			if au.Name.Local == attr.LocalName() && au.Name.NS == attr.URI() {
+				if au.TypeName.Local != "" {
+					var ann string
+					if au.TypeName.NS == nsXSD {
+						ann = "xs:" + au.TypeName.Local
+					} else {
+						ann = xpath3.QAnnotation(au.TypeName.NS, au.TypeName.Local)
+					}
+					ec.annotateNode(attr, ann)
+				}
+				break
+			}
+		}
 	}
 }
 
