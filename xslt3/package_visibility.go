@@ -61,6 +61,29 @@ func visibilityLevel(vis string) int {
 	}
 }
 
+// checkExposeVisibility validates whether setting a component's visibility via
+// xsl:expose is allowed. Returns an error code and message, or "" if valid.
+// Rules:
+// - XTSE3010: declared visibility is explicitly set and expose tries to change
+//   it to a different "kind" (e.g., public→abstract) or to a higher level.
+func checkExposeVisibility(name, newVis, declaredVis string) (string, string) {
+	// Check against declared visibility (XTSE3010)
+	if declaredVis != "" {
+		if visibilityLevel(newVis) > visibilityLevel(declaredVis) {
+			return errCodeXTSE3010, fmt.Sprintf(
+				"xsl:expose: cannot increase visibility of %q from %s to %s", name, declaredVis, newVis)
+		}
+		// Cannot make a non-abstract component abstract (changes semantics).
+		// public→final and final→public are allowed (same accessibility level).
+		if newVis == visAbstract && declaredVis != visAbstract {
+			return errCodeXTSE3010, fmt.Sprintf(
+				"xsl:expose: cannot change visibility of %q from %s to abstract", name, declaredVis)
+		}
+	}
+
+	return "", ""
+}
+
 // acceptRule describes one xsl:accept child of xsl:use-package.
 type acceptRule struct {
 	component  string // "template", "function", "variable", "attribute-set", "mode", "*"
@@ -462,15 +485,18 @@ func (c *compiler) applyExposeToTemplates(pattern, visibility string, isWildcard
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.templateVisibility {
 		if componentNameMatches(name, pattern) {
-			// XTSE3010: cannot increase visibility beyond declared level
-			// (only checked for non-wildcard patterns; wildcards silently skip)
-			if declared, ok := c.declaredTemplateVis[name]; ok {
+			declared := c.declaredTemplateVis[name] // "" if not explicitly declared
+			// Only check conflicts for non-wildcard patterns
+			if !isWild {
+				code, msg := checkExposeVisibility(name, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
+				}
+	
+			} else if declared != "" {
+				// Wildcard: skip components with explicit visibility that would conflict
 				if visibilityLevel(visibility) > visibilityLevel(declared) {
-					if isWild {
-						continue // skip this component for wildcard patterns
-					}
-					return staticError(errCodeXTSE3010,
-						"xsl:expose: cannot increase visibility of template %q from %s to %s", name, declared, visibility)
+					continue
 				}
 			}
 			c.stylesheet.templateVisibility[name] = visibility
@@ -488,14 +514,15 @@ func (c *compiler) applyExposeToFunctions(pattern, visibility string) error {
 	isWild := isWildcard(pattern)
 	for key := range c.stylesheet.functionVisibility {
 		if componentNameMatches(key, pattern) {
-			if declared, ok := c.declaredFunctionVis[key]; ok {
-				if visibilityLevel(visibility) > visibilityLevel(declared) {
-					if isWild {
-						continue
-					}
-					return staticError(errCodeXTSE3010,
-						"xsl:expose: cannot increase visibility of function %q from %s to %s", key, declared, visibility)
+			declared := c.declaredFunctionVis[key]
+			if !isWild {
+				code, msg := checkExposeVisibility(key, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
 				}
+	
+			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+				continue
 			}
 			c.stylesheet.functionVisibility[key] = visibility
 			matched = true
@@ -513,14 +540,15 @@ func (c *compiler) applyExposeToFunctionsStrict(pattern, visibility string) erro
 	isWild := isWildcard(pattern)
 	for key := range c.stylesheet.functionVisibility {
 		if componentNameMatches(key, pattern) {
-			if declared, ok := c.declaredFunctionVis[key]; ok {
-				if visibilityLevel(visibility) > visibilityLevel(declared) {
-					if isWild {
-						continue
-					}
-					return staticError(errCodeXTSE3010,
-						"xsl:expose: cannot increase visibility of function %q from %s to %s", key, declared, visibility)
+			declared := c.declaredFunctionVis[key]
+			if !isWild {
+				code, msg := checkExposeVisibility(key, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
 				}
+	
+			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+				continue
 			}
 			c.stylesheet.functionVisibility[key] = visibility
 			matched = true
@@ -537,14 +565,15 @@ func (c *compiler) applyExposeToVariables(pattern, visibility string) error {
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.variableVisibility {
 		if componentNameMatches(name, pattern) {
-			if declared, ok := c.declaredVariableVis[name]; ok {
-				if visibilityLevel(visibility) > visibilityLevel(declared) {
-					if isWild {
-						continue
-					}
-					return staticError(errCodeXTSE3010,
-						"xsl:expose: cannot increase visibility of variable %q from %s to %s", name, declared, visibility)
+			declared := c.declaredVariableVis[name]
+			if !isWild {
+				code, msg := checkExposeVisibility(name, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
 				}
+	
+			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+				continue
 			}
 			c.stylesheet.variableVisibility[name] = visibility
 			matched = true
@@ -552,14 +581,15 @@ func (c *compiler) applyExposeToVariables(pattern, visibility string) error {
 	}
 	for name := range c.stylesheet.globalParamVisibility {
 		if componentNameMatches(name, pattern) {
-			if declared, ok := c.declaredParamVis[name]; ok {
-				if visibilityLevel(visibility) > visibilityLevel(declared) {
-					if isWild {
-						continue
-					}
-					return staticError(errCodeXTSE3010,
-						"xsl:expose: cannot increase visibility of parameter %q from %s to %s", name, declared, visibility)
+			declared := c.declaredParamVis[name]
+			if !isWild {
+				code, msg := checkExposeVisibility(name, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
 				}
+	
+			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+				continue
 			}
 			c.stylesheet.globalParamVisibility[name] = visibility
 			matched = true
@@ -576,14 +606,15 @@ func (c *compiler) applyExposeToVariablesStrict(pattern, visibility string) erro
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.variableVisibility {
 		if componentNameMatches(name, pattern) {
-			if declared, ok := c.declaredVariableVis[name]; ok {
-				if visibilityLevel(visibility) > visibilityLevel(declared) {
-					if isWild {
-						continue
-					}
-					return staticError(errCodeXTSE3010,
-						"xsl:expose: cannot increase visibility of variable %q from %s to %s", name, declared, visibility)
+			declared := c.declaredVariableVis[name]
+			if !isWild {
+				code, msg := checkExposeVisibility(name, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
 				}
+	
+			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+				continue
 			}
 			c.stylesheet.variableVisibility[name] = visibility
 			matched = true
@@ -591,14 +622,15 @@ func (c *compiler) applyExposeToVariablesStrict(pattern, visibility string) erro
 	}
 	for name := range c.stylesheet.globalParamVisibility {
 		if componentNameMatches(name, pattern) {
-			if declared, ok := c.declaredParamVis[name]; ok {
-				if visibilityLevel(visibility) > visibilityLevel(declared) {
-					if isWild {
-						continue
-					}
-					return staticError(errCodeXTSE3010,
-						"xsl:expose: cannot increase visibility of parameter %q from %s to %s", name, declared, visibility)
+			declared := c.declaredParamVis[name]
+			if !isWild {
+				code, msg := checkExposeVisibility(name, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
 				}
+	
+			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+				continue
 			}
 			c.stylesheet.globalParamVisibility[name] = visibility
 			matched = true
@@ -615,14 +647,15 @@ func (c *compiler) applyExposeToAttrSets(pattern, visibility string, strict bool
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.attrSetVisibility {
 		if componentNameMatches(name, pattern) {
-			if declared, ok := c.declaredAttrSetVis[name]; ok {
-				if visibilityLevel(visibility) > visibilityLevel(declared) {
-					if isWild {
-						continue
-					}
-					return staticError(errCodeXTSE3010,
-						"xsl:expose: cannot increase visibility of attribute-set %q from %s to %s", name, declared, visibility)
+			declared := c.declaredAttrSetVis[name]
+			if !isWild {
+				code, msg := checkExposeVisibility(name, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
 				}
+	
+			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+				continue
 			}
 			c.stylesheet.attrSetVisibility[name] = visibility
 			matched = true
@@ -642,8 +675,16 @@ func (c *compiler) applyExposeToModes(pattern, visibility string, strict bool) e
 		return nil
 	}
 	matched := false
+	isWild := isWildcard(pattern)
 	for _, md := range c.stylesheet.modeDefs {
 		if componentNameMatches(md.Name, pattern) {
+			if !isWild {
+				code, msg := checkExposeVisibility(md.Name, visibility, "")
+				if code != "" {
+					return staticError(code, "%s", msg)
+				}
+	
+			}
 			md.Visibility = visibility
 			matched = true
 		}
