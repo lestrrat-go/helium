@@ -75,6 +75,9 @@ func NewEvalState(ctx context.Context, node helium.Node) *EvalState {
 			ec.contextItem = cfg.contextItem
 			ec.node = nil
 		}
+		if cfg.docOrder != nil {
+			ec.docOrder = cfg.docOrder
+		}
 	}
 	return s
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/helium"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 type contextKey struct{}
@@ -100,6 +101,7 @@ type evalConfig struct {
 	strictPrefixes     bool                   // when true, only user-declared namespaces are valid (no defaultPrefixNS fallback)
 	schemaDeclarations SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
 	allowXML11Chars    bool                   // when true, codepoints-to-string allows XML 1.1 restricted characters (0x01-0x1F)
+	docOrder           *ixpath.DocOrderCache  // shared document-order cache (nil = create per-evaluation)
 }
 
 func getEvalConfig(ctx context.Context) *evalConfig {
@@ -492,6 +494,26 @@ func WithSchemaDeclarations(ctx context.Context, decls SchemaDeclarations) conte
 func WithAllowXML11Chars(ctx context.Context) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) bool {
 		c.allowXML11Chars = true
+		return false
+	})
+}
+
+// DocOrderCache is a shared document-order cache that can be passed
+// across evaluations to ensure consistent cross-document ordering.
+type DocOrderCache = ixpath.DocOrderCache
+
+// NewDocOrderCache creates a new shared document-order cache.
+func NewDocOrderCache() *DocOrderCache {
+	return &ixpath.DocOrderCache{}
+}
+
+// WithDocOrderCache attaches a shared document-order cache to the
+// evaluation context. When set, all evaluations using this context
+// share the same cache, ensuring consistent cross-document ordering
+// of nodes from different temporary trees.
+func WithDocOrderCache(ctx context.Context, cache *DocOrderCache) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) bool {
+		c.docOrder = cache
 		return false
 	})
 }
