@@ -196,9 +196,10 @@ func ParsePicture(pic string, df DecimalFormat) (ParsedPicture, error) {
 	percentCount := 0
 	perMilleCount := 0
 	for _, r := range mantissaRunes {
-		if r == df.Percent {
+		switch r {
+		case df.Percent:
 			percentCount++
-		} else if r == df.PerMille {
+		case df.PerMille:
 			perMilleCount++
 		}
 	}

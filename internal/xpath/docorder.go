@@ -188,16 +188,6 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 	return result, nil
 }
 
-// isIndexed returns true if the document containing n is already indexed.
-func (c *DocOrderCache) isIndexed(n helium.Node) bool {
-	if c.documents == nil {
-		return false
-	}
-	root := DocumentRoot(n)
-	_, ok := c.documents[root]
-	return ok
-}
-
 // CompareNodeOrder compares two nodes by document order using ancestor-chain
 // walking. Returns -1 if a comes before b, +1 if after, 0 if same node.
 // This is O(depth) per call, avoiding the need to index the entire document.

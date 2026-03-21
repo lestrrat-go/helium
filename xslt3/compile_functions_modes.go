@@ -219,9 +219,10 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	streamability := getAttr(elem, "streamability")
 	if streamability == "" {
 		streamability = getAttr(elem, "streamable")
-		if streamability == "yes" {
+		switch streamability {
+		case "yes":
 			streamability = "absorbing"
-		} else if streamability == "no" || streamability == "" {
+		case "no", "":
 			streamability = ""
 		}
 	}

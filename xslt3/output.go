@@ -323,12 +323,12 @@ func wrapNodeInHTMLDoc(node helium.Node) *helium.Document {
 		// Remove redundant namespace declarations from descendants
 		removeRedundantNamespaces(copiedElem)
 		if strings.EqualFold(string(copiedElem.LocalName()), "html") {
-			doc.AddChild(copiedElem)
+			_ = doc.AddChild(copiedElem)
 		} else {
 			// Wrap in an <html> element
 			htmlElem, _ := doc.CreateElement("html")
-			doc.AddChild(htmlElem)
-			htmlElem.AddChild(copiedElem)
+			_ = doc.AddChild(htmlElem)
+			_ = htmlElem.AddChild(copiedElem)
 		}
 	}
 	return doc
@@ -343,7 +343,7 @@ func removeRedundantNamespaces(root *helium.Element) {
 	for _, ns := range root.Namespaces() {
 		rootNS[ns.Prefix()] = ns.URI()
 	}
-	helium.Walk(root, func(n helium.Node) error {
+	_ = helium.Walk(root, func(n helium.Node) error {
 		if n == root {
 			return nil
 		}
@@ -371,7 +371,7 @@ func wrapNodeInDoc(node helium.Node) *helium.Document {
 	if elem, ok := node.(*helium.Element); ok {
 		copied, err := helium.CopyNode(elem, doc)
 		if err == nil {
-			doc.AddChild(copied)
+			_ = doc.AddChild(copied)
 		}
 	}
 	return doc
@@ -406,7 +406,7 @@ func serializeMapJSON(m xpath3.MapItem, nodeMethod string) (string, error) {
 	buf.WriteByte('{')
 	first := true
 	var serErr error
-	m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
+	_ = m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
 		if serErr != nil {
 			return serErr
 		}
@@ -527,7 +527,7 @@ func jsonEscapeString(s string) string {
 			buf.WriteString("\\f")
 		default:
 			if r < 0x20 {
-				buf.WriteString(fmt.Sprintf("\\u%04x", r))
+				fmt.Fprintf(&buf, "\\u%04x", r)
 			} else {
 				buf.WriteRune(r)
 			}
@@ -547,9 +547,9 @@ func serializeItemAdaptive(item xpath3.Item) string {
 	case xpath3.NodeItem:
 		var buf bytes.Buffer
 		if elem, ok := v.Node.(*helium.Element); ok {
-			elem.XML(&buf, helium.WithNoDecl())
+			_ = elem.XML(&buf, helium.WithNoDecl())
 		} else if doc, ok := v.Node.(*helium.Document); ok {
-			doc.XML(&buf, helium.WithNoDecl())
+			_ = doc.XML(&buf, helium.WithNoDecl())
 		} else {
 			buf.WriteString(string(v.Node.Content()))
 		}
@@ -571,7 +571,7 @@ func serializeMapAdaptive(m xpath3.MapItem) string {
 	var buf bytes.Buffer
 	buf.WriteString("map{")
 	first := true
-	m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
+	_ = m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
 		if !first {
 			buf.WriteByte(',')
 		}
@@ -1000,13 +1000,13 @@ func checkFullyNormalized(doc *helium.Document) error {
 	_ = helium.Walk(doc, func(n helium.Node) error {
 		if n.Type() == helium.TextNode || n.Type() == helium.CDATASectionNode {
 			content := string(n.Content())
-			for _, r := range content {
+			if len(content) > 0 {
+				r, _ := utf8.DecodeRuneInString(content)
 				if unicode.In(r, unicode.Mn, unicode.Mc, unicode.Me) {
 					firstErr = dynamicError(errCodeSERE0012,
 						"fully-normalized output begins with combining character U+%04X", r)
 					return firstErr
 				}
-				break // only check first character
 			}
 		}
 		return nil
@@ -1866,7 +1866,7 @@ func percentEncodeNonASCII(s string) string {
 	for i := 0; i < len(b); i++ {
 		c := b[i]
 		if c > 0x7E {
-			buf.WriteString(fmt.Sprintf("%%%02X", c))
+			fmt.Fprintf(&buf, "%%%02X", c)
 		} else {
 			buf.WriteByte(c)
 		}
@@ -1882,7 +1882,7 @@ func escapeC1ControlsInString(s string) string {
 	changed := false
 	for _, r := range s {
 		if r >= 0x80 && r <= 0x9F {
-			buf.WriteString(fmt.Sprintf("&#%d;", r))
+			fmt.Fprintf(&buf, "&#%d;", r)
 			changed = true
 		} else {
 			buf.WriteRune(r)

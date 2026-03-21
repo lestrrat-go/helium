@@ -160,7 +160,7 @@ func validateJSONItems(items xpath3.Sequence) error {
 func validateMapDuplicateKeys(m xpath3.MapItem) error {
 	seenKeys := make(map[string]struct{})
 	var dupErr error
-	m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
+	_ = m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
 		if dupErr != nil {
 			return dupErr
 		}
