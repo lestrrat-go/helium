@@ -350,6 +350,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	// Resolve accumulator QNames to expanded names for proper comparison
 	// across modules with different namespace prefixes.
 	rawUA := getAttr(elem, "use-accumulators")
+	_, hasUseAccumulators := elem.GetAttribute("use-accumulators")
 	var resolvedParts []string
 	for _, tok := range strings.Fields(rawUA) {
 		if tok == "#all" {
@@ -363,14 +364,15 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	typed := getAttr(elem, "typed")
 
 	md := &ModeDef{
-		Name:            name,
-		OnNoMatch:       onNoMatch,
-		Typed:           typed,
-		Streamable:      streamable,
-		Visibility:      visibility,
-		OnMultipleMatch: onMultipleMatch,
-		UseAccumulators: useAccumulators,
-		ImportPrec:      c.importPrec,
+		Name:               name,
+		OnNoMatch:          onNoMatch,
+		Typed:              typed,
+		Streamable:         streamable,
+		Visibility:         visibility,
+		OnMultipleMatch:    onMultipleMatch,
+		UseAccumulators:    useAccumulators,
+		HasUseAccumulators: hasUseAccumulators,
+		ImportPrec:         c.importPrec,
 	}
 
 	if c.stylesheet.modeDefs == nil {
