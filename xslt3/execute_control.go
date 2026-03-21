@@ -427,9 +427,17 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 				order = append(order, lookupKey)
 			}
 		} else {
-			// Non-composite: each value creates a separate group key
+			// Non-composite: each value creates a separate group key.
+			// Track which groups this item has already been added to,
+			// since an item with duplicate key values (e.g., pop=5
+			// and name-length=5) should appear only once in a group.
+			addedToGroup := make(map[string]struct{})
 			for _, keyItem := range resultSeq {
 				lookupKey, keySeq := groupLookupKey(keyItem, collationKeyFn)
+				if _, already := addedToGroup[lookupKey]; already {
+					continue
+				}
+				addedToGroup[lookupKey] = struct{}{}
 				if e, ok := groupMap[lookupKey]; ok {
 					e.items = append(e.items, item)
 				} else {
