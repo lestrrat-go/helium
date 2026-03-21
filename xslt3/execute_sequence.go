@@ -320,6 +320,24 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 				}
 				continue
 			}
+			if v.Node.Type() == helium.NamespaceNode {
+				// Namespace nodes: add as namespace declaration to current element.
+				// This supports xsl:sequence select="namespace::*[...]" patterns
+				// where namespace nodes must be added before attributes/children.
+				nsw, ok := v.Node.(*helium.NamespaceNodeWrapper)
+				if ok {
+					elem, eok := out.current.(*helium.Element)
+					if eok {
+						prefix := nsw.Name()
+						uri := string(nsw.Content())
+						if !hasNSDecl(elem, prefix, uri) {
+							_ = elem.DeclareNamespace(prefix, uri)
+						}
+						out.noteOutput()
+					}
+				}
+				continue
+			}
 			if v.Node.Type() == helium.DocumentNode {
 				// Document nodes: output their children (per XSLT spec,
 				// a document node in a sequence constructor is replaced

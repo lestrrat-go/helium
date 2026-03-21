@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -793,7 +794,14 @@ func undeclareInheritedNamespaces(parent *helium.Element) {
 		if !ok {
 			continue
 		}
-		for prefix, parentURI := range inScope {
+		// Sort prefixes for deterministic namespace declaration order.
+		sortedPrefixes := make([]string, 0, len(inScope))
+		for prefix := range inScope {
+			sortedPrefixes = append(sortedPrefixes, prefix)
+		}
+		sort.Strings(sortedPrefixes)
+		for _, prefix := range sortedPrefixes {
+			parentURI := inScope[prefix]
 			// Check if the child already has an explicit declaration for this prefix.
 			alreadyDeclared := false
 			var childNSURI string
