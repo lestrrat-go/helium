@@ -335,15 +335,20 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
+			// XTSE0010: text content not allowed in xsl:attribute-set
+			if isNonWhitespaceTextNode(child) {
+				return staticError(errCodeXTSE0010, "text is not allowed as a child of xsl:attribute-set")
+			}
 			continue
 		}
-		if childElem.URI() == NSXSLT && childElem.LocalName() == "attribute" {
-			inst, err := c.compileAttribute(childElem)
-			if err != nil {
-				return err
-			}
-			asd.Attrs = append(asd.Attrs, inst)
+		if childElem.URI() != NSXSLT || childElem.LocalName() != "attribute" {
+			return staticError(errCodeXTSE0010, "only xsl:attribute is allowed as a child of xsl:attribute-set")
 		}
+		inst, err := c.compileAttribute(childElem)
+		if err != nil {
+			return err
+		}
+		asd.Attrs = append(asd.Attrs, inst)
 	}
 
 	if c.stylesheet.attributeSets == nil {
@@ -616,10 +621,19 @@ func firstRune(s string) rune {
 	return 0
 }
 
-func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) {
+func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) error {
+	if err := validateXSLTAttrs(elem, map[string]struct{}{
+		"elements": {},
+	}); err != nil {
+		return err
+	}
 	elements := getAttr(elem, "elements")
 	if elements == "" {
-		return
+		kind := "strip-space"
+		if !strip {
+			kind = "preserve-space"
+		}
+		return staticError(errCodeXTSE0010, "xsl:%s requires the elements attribute", kind)
 	}
 
 	for _, name := range strings.Fields(elements) {
@@ -644,6 +658,7 @@ func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) {
 			c.stylesheet.preserveSpace = append(c.stylesheet.preserveSpace, nt)
 		}
 	}
+	return nil
 }
 
 // nameTestKey returns a canonical key for a NameTest by resolving the prefix

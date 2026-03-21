@@ -50,10 +50,14 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
+			// XTSE0010: non-element content not allowed in xsl:apply-templates
+			if isNonWhitespaceTextNode(child) {
+				return nil, staticError(errCodeXTSE0010, "text is not allowed as a child of xsl:apply-templates")
+			}
 			continue
 		}
 		if childElem.URI() != NSXSLT {
-			continue
+			return nil, staticError(errCodeXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:apply-templates", childElem.Name())
 		}
 		switch childElem.LocalName() {
 		case "sort":
@@ -80,6 +84,9 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 			if wp != nil {
 				inst.Params = append(inst.Params, wp)
 			}
+		default:
+			// XTSE0010: only xsl:sort and xsl:with-param are allowed
+			return nil, staticError(errCodeXTSE0010, "xsl:%s is not allowed as a child of xsl:apply-templates", childElem.LocalName())
 		}
 	}
 
@@ -102,16 +109,23 @@ func (c *compiler) compileCallTemplate(elem *helium.Element) (*CallTemplateInst,
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
+			if isNonWhitespaceTextNode(child) {
+				return nil, staticError(errCodeXTSE0010, "text is not allowed as a child of xsl:call-template")
+			}
 			continue
 		}
-		if childElem.URI() == NSXSLT && childElem.LocalName() == "with-param" {
-			wp, err := c.compileWithParam(childElem)
-			if err != nil {
-				return nil, err
-			}
-			if wp != nil {
-				inst.Params = append(inst.Params, wp)
-			}
+		if childElem.URI() != NSXSLT {
+			return nil, staticError(errCodeXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:call-template", childElem.Name())
+		}
+		if childElem.LocalName() != "with-param" {
+			return nil, staticError(errCodeXTSE0010, "xsl:%s is not allowed as a child of xsl:call-template", childElem.LocalName())
+		}
+		wp, err := c.compileWithParam(childElem)
+		if err != nil {
+			return nil, err
+		}
+		if wp != nil {
+			inst.Params = append(inst.Params, wp)
 		}
 	}
 
@@ -142,12 +156,22 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 	hasOtherwise := false
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		childElem, ok := child.(*helium.Element)
-		if !ok {
+		// XTSE0010: xsl:choose must contain only xsl:when and xsl:otherwise elements
+		switch v := child.(type) {
+		case *helium.Text, *helium.CDATASection:
+			if !isWhitespaceOnly(string(child.Content())) {
+				return nil, staticError(errCodeXTSE0010, "text is not allowed as a child of xsl:choose")
+			}
+			continue
+		case *helium.Element:
+			_ = v
+			// handled below
+		default:
 			continue
 		}
+		childElem := child.(*helium.Element)
 		if childElem.URI() != NSXSLT {
-			continue
+			return nil, staticError(errCodeXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:choose", childElem.Name())
 		}
 
 		switch childElem.LocalName() {
@@ -233,7 +257,15 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 				return nil, err
 			}
 			inst.Otherwise = body
+		default:
+			// XTSE0010: only xsl:when and xsl:otherwise are allowed inside xsl:choose
+			return nil, staticError(errCodeXTSE0010, "xsl:%s is not allowed as a child of xsl:choose", childElem.LocalName())
 		}
+	}
+
+	// XTSE0010: xsl:choose must contain at least one xsl:when
+	if len(inst.When) == 0 {
+		return nil, staticError(errCodeXTSE0010, "xsl:choose must contain at least one xsl:when")
 	}
 
 	return inst, nil
@@ -575,16 +607,23 @@ func (c *compiler) compileApplyImports(elem *helium.Element) (*ApplyImportsInst,
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
+			if isNonWhitespaceTextNode(child) {
+				return nil, staticError(errCodeXTSE0010, "text is not allowed as a child of xsl:apply-imports")
+			}
 			continue
 		}
-		if childElem.URI() == NSXSLT && childElem.LocalName() == "with-param" {
-			wp, err := c.compileWithParam(childElem)
-			if err != nil {
-				return nil, err
-			}
-			if wp != nil {
-				inst.Params = append(inst.Params, wp)
-			}
+		if childElem.URI() != NSXSLT {
+			return nil, staticError(errCodeXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:apply-imports", childElem.Name())
+		}
+		if childElem.LocalName() != "with-param" {
+			return nil, staticError(errCodeXTSE0010, "xsl:%s is not allowed as a child of xsl:apply-imports", childElem.LocalName())
+		}
+		wp, err := c.compileWithParam(childElem)
+		if err != nil {
+			return nil, err
+		}
+		if wp != nil {
+			inst.Params = append(inst.Params, wp)
 		}
 	}
 	return inst, nil

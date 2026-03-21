@@ -333,9 +333,13 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 				return err
 			}
 		case "strip-space":
-			c.compileSpaceHandling(ce, true)
+			if err := c.compileSpaceHandling(ce, true); err != nil {
+				return err
+			}
 		case "preserve-space":
-			c.compileSpaceHandling(ce, false)
+			if err := c.compileSpaceHandling(ce, false); err != nil {
+				return err
+			}
 		case "function":
 			if err := c.compileFunction(ce); err != nil {
 				return err
