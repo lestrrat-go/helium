@@ -415,19 +415,26 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execConte
 		return cast, nil
 	}
 
-	// Numeric subtype acceptance: a value whose type is a subtype of the
-	// target is accepted without changing its type (e.g., xs:integer IS xs:decimal).
-	// Only demotion (wider→narrower, e.g., double→float) is rejected (XTTE0570).
+	// Numeric promotion: a value whose numeric type is narrower than
+	// the target is promoted (cast) to the target type. Demotion
+	// (wider→narrower, e.g., double→float) is rejected (XTTE0570).
 	if isNumericType(target) && isNumericType(av.TypeName) {
 		srcRank := numericRank(av.TypeName)
 		tgtRank := numericRank(target)
 		if srcRank > tgtRank {
 			return nil, fmt.Errorf("cannot convert %s to %s", av.TypeName, targetType)
 		}
-		if srcRank <= tgtRank {
-			// Subtype: accept as-is without casting (preserves original type)
-			return av, nil
+		if srcRank < tgtRank {
+			// Promote: cast to wider type so instance-of checks work.
+			s, _ := xpath3.AtomicToString(av)
+			cast, err := xpath3.CastFromString(s, target)
+			if err != nil {
+				return nil, fmt.Errorf("cannot promote %s to %s: %w", av.TypeName, target, err)
+			}
+			return cast, nil
 		}
+		// Same rank: accept as-is
+		return av, nil
 	}
 
 	// User-defined types (union or restriction): check if the value's type

@@ -8,7 +8,7 @@ func (c *compiler) compileLocalVariable(elem *helium.Element) (*VariableInst, er
 		return nil, staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
 	}
 
-	asAttr := getAttr(elem, "as")
+	asAttr := c.resolveAsType(getAttr(elem, "as"))
 	if err := c.validateAsSequenceType(asAttr, "xsl:variable "+name); err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (c *compiler) compileLocalParam(elem *helium.Element) (*ParamInst, error) {
 		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
 	}
 
-	asAttr := getAttr(elem, "as")
+	asAttr := c.resolveAsType(getAttr(elem, "as"))
 	if err := c.validateAsSequenceType(asAttr, "xsl:param "+name); err != nil {
 		return nil, err
 	}

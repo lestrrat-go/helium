@@ -378,6 +378,8 @@ func (c *compiler) setInstructionXPathNS(inst instruction, hasLocal bool) {
 		set(&v.xpathNS)
 	case *literalResultElement:
 		set(&v.xpathNS)
+	case *LiteralResultElement:
+		set(&v.xpathNS)
 	}
 }
 
