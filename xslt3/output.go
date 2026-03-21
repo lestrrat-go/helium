@@ -1680,6 +1680,9 @@ func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMa
 	result := buf.String()
 
 	// Post-process for XHTML rules:
+	// 0. Replace &quot; with &#34; — XHTML uses numeric character references
+	//    for double quotes in attribute values, not the named entity.
+	result = strings.ReplaceAll(result, "&quot;", "&#34;")
 	// 1. URI attribute escaping (percent-encode non-ASCII in href, src, etc.)
 	escapeURI := outDef.EscapeURIAttributes == nil || *outDef.EscapeURIAttributes
 	if escapeURI {
