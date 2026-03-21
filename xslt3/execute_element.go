@@ -56,6 +56,10 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 			if err := elem.SetActiveNamespace(prefix, nsURI); err != nil {
 				return err
 			}
+		} else {
+			// namespace="" explicitly sets no namespace. Strip the prefix
+			// so the element is created without a namespace prefix.
+			prefix = ""
 		}
 	} else {
 		// No namespace attribute: resolve from compile-time namespace context.
