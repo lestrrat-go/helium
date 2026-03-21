@@ -56,7 +56,16 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 			return err
 		}
 		termStr = strings.TrimSpace(termStr)
-		terminate = termStr == "yes" || termStr == "true" || termStr == "1"
+		switch termStr {
+		case "yes", "true", "1":
+			terminate = true
+		case "no", "false", "0":
+			terminate = false
+		default:
+			// XTDE0030: AVT value is not a valid xs:boolean
+			return dynamicError(errCodeXTDE0030,
+				"xsl:message/@terminate value %q is not a valid boolean (yes|no|true|false|1|0)", termStr)
+		}
 	}
 
 	if ec.msgHandler != nil {

@@ -593,6 +593,12 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		return dynamicError(errCodeXTRE0540, "cannot add attribute to element after children have been added")
 	}
 
+	// XTDE0855: when no namespace attribute, name must not be "xmlns"
+	if inst.Namespace == nil && name == "xmlns" {
+		return dynamicError(errCodeXTDE0855,
+			"xsl:attribute name must not be %q when no namespace attribute is specified", name)
+	}
+
 	if inst.Namespace != nil {
 		nsURI, err := inst.Namespace.evaluate(ctx, ec.contextNode)
 		if err != nil {
@@ -1006,6 +1012,16 @@ func (ec *execContext) execPI(ctx context.Context, inst *PIInst) error {
 		value = stringifySequence(val)
 	}
 
+	// XTDE0890: name must be a valid NCName and PITarget
+	if !isValidNCName(name) {
+		return dynamicError(errCodeXTDE0890,
+			"xsl:processing-instruction name %q is not a valid NCName", name)
+	}
+	if strings.EqualFold(name, "xml") {
+		return dynamicError(errCodeXTDE0890,
+			"xsl:processing-instruction name must not be %q", name)
+	}
+
 	// XSLT 3.0 §11.6: replace "?>" in PI content with "? >" to avoid
 	// premature termination of the processing instruction.
 	value = strings.ReplaceAll(value, "?>", "? >")
@@ -1048,10 +1064,27 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 		value = stringifySequence(val)
 	}
 
-	// XTDE0920: the prefix "xmlns" is reserved and cannot be used
+	// XTDE0920: the name must be either a zero-length string or an NCName,
+	// and must not be "xmlns".
 	if name == "xmlns" {
 		return dynamicError(errCodeXTDE0920,
 			"cannot create namespace node with prefix %q", name)
+	}
+	if name != "" && !isValidNCName(name) {
+		return dynamicError(errCodeXTDE0920,
+			"xsl:namespace name %q is not a valid NCName", name)
+	}
+	// XTDE0925: xml prefix requires the XML namespace URI, and
+	// the XML namespace URI requires the xml prefix.
+	if name == "xml" && value != "http://www.w3.org/XML/1998/namespace" {
+		return dynamicError(errCodeXTDE0925,
+			"namespace prefix %q must be bound to %q, got %q",
+			name, "http://www.w3.org/XML/1998/namespace", value)
+	}
+	if value == "http://www.w3.org/XML/1998/namespace" && name != "xml" {
+		return dynamicError(errCodeXTDE0925,
+			"namespace URI %q can only be bound to prefix %q, got %q",
+			value, "xml", name)
 	}
 	// XTDE0905: the xmlns namespace URI is reserved
 	if value == "http://www.w3.org/2000/xmlns/" {
@@ -1093,6 +1126,13 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 			return dynamicError(errCodeXTDE0430,
 				"namespace prefix %q is already bound to %q; cannot rebind to %q", name, ns.URI(), value)
 		}
+	}
+
+	// XTDE0440: defining a default namespace when the element is in no namespace
+	if name == "" && value != "" && elem.URI() == "" && elem.Prefix() == "" {
+		return dynamicError(errCodeXTDE0440,
+			"cannot define default namespace %q on element %q which is in no namespace",
+			value, elem.Name())
 	}
 
 	// If the new namespace binding conflicts with the element's own prefix

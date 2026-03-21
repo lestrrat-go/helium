@@ -691,6 +691,16 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	c.breakAllowed = false
 	defer func() { c.breakAllowed = savedBreak }()
 
+	// XTDE0160: xsl:version < 2.0 on a LRE when backwards compatibility
+	// is not supported
+	if ver, ok := elem.GetAttributeNS("version", NSXSLT); ok {
+		ver = strings.TrimSpace(ver)
+		if ver != "" && ver < "2.0" {
+			return nil, dynamicError("XTDE0160",
+				"backwards-compatible behavior is not supported for XSLT version %s", ver)
+		}
+	}
+
 	lre := &LiteralResultElement{
 		Name:              elem.Name(),
 		Namespace:         elem.URI(),
