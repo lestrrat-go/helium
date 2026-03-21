@@ -196,10 +196,10 @@ func (ec *execContext) execText(inst *TextInst) error {
 	}
 	// xsl:text with empty literal content produces a zero-length text node
 	// only in sequenceMode (needed for as="text()" variables to receive
-	// exactly 1 item). Outside sequenceMode, empty literal text is
-	// transparent — it does not break atomic adjacency chains (XSLT 3.0
-	// §5.7.2: zero-length text nodes are eliminated before complex content
-	// construction rules apply).
+	// exactly 1 item). Outside sequenceMode, empty literal text is not
+	// added to the result tree but it DOES break atomic adjacency chains:
+	// <xsl:text/> between two xsl:sequence instructions prevents the
+	// inter-atomic space separator from being inserted (XSLT 3.0 §5.7.2).
 	if value == "" && inst.TVT == nil {
 		out := ec.currentOutput()
 		if out.sequenceMode {
@@ -209,6 +209,7 @@ func (ec *execContext) execText(inst *TextInst) error {
 			}
 			return ec.addNode(text)
 		}
+		out.prevWasAtomic = false
 		return nil
 	}
 	if inst.DisableOutputEscaping {
