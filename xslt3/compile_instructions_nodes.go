@@ -210,7 +210,7 @@ func (c *compiler) compileAttribute(elem *helium.Element) (*AttributeInst, error
 		inst.Namespace = nsAVT
 	}
 
-	if sep := getAttr(elem, "separator"); sep != "" {
+	if sep, hasSep := elem.GetAttribute("separator"); hasSep {
 		sepAVT, err := compileAVT(sep, c.nsBindings)
 		if err != nil {
 			return nil, err

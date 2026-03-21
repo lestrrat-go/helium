@@ -438,7 +438,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		if isV2TempOutput {
 			ec.temporaryOutputDepth++
 		}
-		val, err := ec.evaluateBodyFlat(ctx, inst.Body)
+		val, err := ec.evaluateBodyForAttr(ctx, inst.Body)
 		if isV2TempOutput {
 			ec.temporaryOutputDepth--
 		}
