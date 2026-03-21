@@ -168,7 +168,7 @@ func formatDateTimePicture(t time.Time, picture, lang, calendar, typeName string
 // isSupportedLanguage returns true if the language is supported for formatting.
 func isSupportedLanguage(lang string) bool {
 	switch lang {
-	case "en":
+	case "en", "de":
 		return true
 	default:
 		return false
