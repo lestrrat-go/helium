@@ -59,6 +59,12 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 
 	tmpl.Name = resolveQName(getAttr(elem, "name"), c.nsBindings)
 
+	// XTSE0080: template name must not be in the XSLT namespace
+	// Exception: xsl:initial-template is explicitly allowed (XSLT 3.0 §3.11).
+	if tmpl.Name != "" && strings.HasPrefix(tmpl.Name, "{"+NSXSLT+"}") && tmpl.Name != "{"+NSXSLT+"}initial-template" {
+		return staticError(errCodeXTSE0080, "xsl:template name %q is in the XSLT namespace", getAttr(elem, "name"))
+	}
+
 	// XTSE0500: template must have match or name (or both).
 	if matchAttr == "" && tmpl.Name == "" {
 		return staticError(errCodeXTSE0500, "xsl:template must have a @match or @name attribute")
