@@ -272,9 +272,18 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		ec.insideResultDocPrimary = false
 		ec.outputStack[0].itemSeparator = savedSep
 		ec.outputStack = savedStack
-		// Propagate character map names to the primary output frame
-		if len(inst.UseCharacterMaps) > 0 {
-			ec.primaryCharacterMaps = inst.UseCharacterMaps
+		// Propagate character map names to the primary output frame.
+		// Include maps from the named format (xsl:output) first, then
+		// maps from xsl:result-document itself (higher priority).
+		var allMaps []string
+		if inst.Format != "" {
+			if fmtDef, ok := ec.stylesheet.outputs[inst.Format]; ok {
+				allMaps = append(allMaps, fmtDef.UseCharacterMaps...)
+			}
+		}
+		allMaps = append(allMaps, inst.UseCharacterMaps...)
+		if len(allMaps) > 0 {
+			ec.primaryCharacterMaps = allMaps
 		}
 		return nil
 	}
