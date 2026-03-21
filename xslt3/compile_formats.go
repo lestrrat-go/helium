@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -210,7 +211,12 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	outDef.DoctypePublic = getAttr(elem, "doctype-public")
 	outDef.DoctypeSystem = getAttr(elem, "doctype-system")
 	outDef.MediaType = getAttr(elem, "media-type")
-	outDef.HTMLVersion = getAttr(elem, "html-version")
+	if hv := getAttr(elem, "html-version"); hv != "" {
+		if _, err := strconv.ParseFloat(hv, 64); err != nil {
+			return staticError(errCodeXTSE0020, "%q is not a valid value for xsl:output/@html-version", hv)
+		}
+		outDef.HTMLVersion = hv
+	}
 
 	cdataStr := getAttr(elem, "cdata-section-elements")
 	if cdataStr != "" {
