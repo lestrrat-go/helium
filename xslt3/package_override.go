@@ -406,16 +406,23 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 			"xsl:override attribute-set %q not found in used package", name)
 	}
 
-	// Check visibility: cannot override final/private/hidden attribute-set
+	// Check visibility: cannot override final/private/hidden attribute-set.
+	// Effective visibility comes from xsl:expose (attrSetVisibility map) or
+	// the declared visibility attribute on the xsl:attribute-set element.
+	effectiveVis := ""
 	if pkgAS != nil {
-		switch pkgAS.Visibility {
-		case visFinal:
-			return nil, staticError(errCodeXTSE3060,
-				"cannot override final attribute-set %q", name)
-		case visPrivate, visHidden:
-			return nil, staticError(errCodeXTSE3060,
-				"cannot override %s attribute-set %q", pkgAS.Visibility, name)
-		}
+		effectiveVis = pkgAS.Visibility
+	}
+	if v, ok := pkg.attrSetVisibility[resolvedName]; ok {
+		effectiveVis = v
+	}
+	switch effectiveVis {
+	case visFinal:
+		return nil, staticError(errCodeXTSE3060,
+			"cannot override final attribute-set %q", name)
+	case visPrivate, visHidden:
+		return nil, staticError(errCodeXTSE3060,
+			"cannot override %s attribute-set %q", effectiveVis, name)
 	}
 
 	asd := &AttributeSetDef{Name: resolvedName}

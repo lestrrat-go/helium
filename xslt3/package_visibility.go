@@ -470,6 +470,12 @@ func (c *compiler) compileExpose(elem *helium.Element) error {
 				return err
 			}
 		case xslElemFunction:
+			// XTSE3020 (erratum E36): non-wildcard function names must include
+			// arity (e.g., "f#2"). A bare name without "#" is an error.
+			if !isWildcard(resolvedName) && !strings.Contains(resolvedName, "#") {
+				return staticError(errCodeXTSE3020,
+					"xsl:expose: function name %q must include arity (e.g. %s#0)", name, name)
+			}
 			if err := c.applyExposeToFunctionsStrict(resolvedName, visibility); err != nil {
 				return err
 			}
@@ -685,7 +691,8 @@ func (c *compiler) applyExposeToVariables(pattern, visibility string) error {
 // applyExposeToVariablesStrict is like applyExposeToVariables but reports
 // XTSE3010 when a non-wildcard pattern has no match.
 func (c *compiler) applyExposeToVariablesStrict(pattern, visibility string) error {
-	matched := false
+	varMatched := false
+	paramMatched := false
 	isWild := isWildcard(pattern)
 	for name := range c.stylesheet.variableVisibility {
 		if componentNameMatches(name, pattern) {
@@ -695,7 +702,7 @@ func (c *compiler) applyExposeToVariablesStrict(pattern, visibility string) erro
 				if code != "" {
 					return staticError(code, "%s", msg)
 				}
-	
+
 			} else {
 				// For wildcard patterns, XTSE3025 (abstract) is still a
 				// hard error, but XTSE3010 (visibility increase) silently
@@ -709,18 +716,26 @@ func (c *compiler) applyExposeToVariablesStrict(pattern, visibility string) erro
 				}
 			}
 			c.stylesheet.variableVisibility[name] = visibility
-			matched = true
+			varMatched = true
 		}
 	}
 	for name := range c.stylesheet.globalParamVisibility {
 		if componentNameMatches(name, pattern) {
 			declared := c.declaredParamVis[name]
 			if !isWild {
+				// XTSE3020: component="variable" with a non-wildcard name
+				// that matches only a param (not a variable) is an error —
+				// you cannot change a param's visibility by masquerading
+				// it as a variable.
+				if !varMatched {
+					return staticError(errCodeXTSE3020,
+						"xsl:expose: %q is a stylesheet parameter, not a variable", name)
+				}
 				code, msg := checkExposeVisibility(name, visibility, declared)
 				if code != "" {
 					return staticError(code, "%s", msg)
 				}
-	
+
 			} else {
 				// For wildcard patterns, XTSE3025 (abstract) is still a
 				// hard error, but XTSE3010 (visibility increase) silently
@@ -734,10 +749,10 @@ func (c *compiler) applyExposeToVariablesStrict(pattern, visibility string) erro
 				}
 			}
 			c.stylesheet.globalParamVisibility[name] = visibility
-			matched = true
+			paramMatched = true
 		}
 	}
-	if !matched && !isWildcard(pattern) {
+	if !varMatched && !paramMatched && !isWildcard(pattern) {
 		return staticError(errCodeXTSE3010, "xsl:expose: no variable or parameter %q found in package", pattern)
 	}
 	return nil
