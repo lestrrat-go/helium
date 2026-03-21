@@ -772,15 +772,23 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 		}
 		lre.Namespaces[prefix] = uri
 	}
-	// Override/add from directly declared namespaces on this element
+	// Override/add from directly declared namespaces on this element.
+	// Include default namespace declarations (prefix="") when they have a
+	// non-empty URI — these are explicit xmlns="..." on the LRE and must
+	// be propagated to the result tree.
 	for _, ns := range elem.Namespaces() {
 		uri := ns.URI()
 		prefix := ns.Prefix()
-		if uri == NSXSLT || prefix == "" {
+		if uri == NSXSLT {
 			continue
 		}
+		if prefix == "" && uri == "" {
+			continue // skip xmlns="" undeclarations from inherited context
+		}
 		if isExcluded(prefix, uri) {
-			delete(lre.Namespaces, prefix)
+			if prefix != "" {
+				delete(lre.Namespaces, prefix)
+			}
 			continue
 		}
 		lre.Namespaces[prefix] = uri
