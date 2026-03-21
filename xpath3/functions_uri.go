@@ -132,10 +132,9 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 		return SingleString(relative), nil
 	}
 
-	// Convert absolute file paths to file: URIs, but only when the base
-	// is derived from context (1-arg form). When explicitly provided as
-	// the second argument, the base must already be an absolute URI.
-	if len(args) < 2 && strings.HasPrefix(base, "/") && !strings.Contains(base, "://") {
+	// Convert absolute file paths to file: URIs so that resolve-uri works
+	// correctly with file system paths (e.g. from static-base-uri()).
+	if strings.HasPrefix(base, "/") && !strings.Contains(base, "://") {
 		base = "file://" + base
 	}
 	parsedBase, err := parseURIReference(base)

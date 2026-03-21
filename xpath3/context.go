@@ -89,6 +89,7 @@ type evalConfig struct {
 	variableResolver   VariableResolver       // lazy resolver for variables not in static scope
 	strictPrefixes     bool                   // when true, only user-declared namespaces are valid (no defaultPrefixNS fallback)
 	schemaDeclarations SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
+	allowXML11Chars    bool                   // when true, codepoints-to-string allows XML 1.1 restricted characters (0x01-0x1F)
 }
 
 func getEvalConfig(ctx context.Context) *evalConfig {
@@ -461,6 +462,16 @@ func WithTypeAnnotations(ctx context.Context, annotations map[helium.Node]string
 func WithSchemaDeclarations(ctx context.Context, decls SchemaDeclarations) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) bool {
 		c.schemaDeclarations = decls
+		return false
+	})
+}
+
+// WithAllowXML11Chars enables XML 1.1 restricted characters (0x01-0x1F)
+// in functions like codepoints-to-string. XSLT 3.0 processors use this
+// so that control characters can flow through temporary trees.
+func WithAllowXML11Chars(ctx context.Context) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) bool {
+		c.allowXML11Chars = true
 		return false
 	})
 }

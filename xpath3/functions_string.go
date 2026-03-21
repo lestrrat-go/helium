@@ -78,8 +78,18 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 	return SingleString(s), nil
 }
 
-func fnCodepointsToString(_ context.Context, args []Sequence) (Sequence, error) {
+func fnCodepointsToString(ctx context.Context, args []Sequence) (Sequence, error) {
 	seq := args[0]
+
+	// Check whether XML 1.1 characters are allowed (e.g. XSLT 3.0 context).
+	xml11 := false
+	if cfg := getEvalConfig(ctx); cfg != nil {
+		xml11 = cfg.allowXML11Chars
+	}
+	isValid := isValidXMLCodepoint
+	if xml11 {
+		isValid = isValidXML11Codepoint
+	}
 
 	// Fast path: singleton integer (common in unicode-90 where each codepoint
 	// is mapped individually via codepoints-to-string(.))
@@ -88,7 +98,7 @@ func fnCodepointsToString(_ context.Context, args []Sequence) (Sequence, error) 
 		if err != nil {
 			return nil, err
 		}
-		if !isValidXMLCodepoint(cp) {
+		if !isValid(cp) {
 			return nil, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid XML character [x%X]", cp)}
 		}
 		return SingleString(string(rune(cp))), nil
@@ -100,7 +110,7 @@ func fnCodepointsToString(_ context.Context, args []Sequence) (Sequence, error) 
 		if err != nil {
 			return nil, err
 		}
-		if !isValidXMLCodepoint(cp) {
+		if !isValid(cp) {
 			return nil, &XPathError{Code: "FOCH0001", Message: fmt.Sprintf("invalid XML character [x%X]", cp)}
 		}
 		b.WriteRune(rune(cp))
@@ -137,6 +147,22 @@ func isValidXMLCodepoint(cp int) bool {
 		return true
 	}
 	if cp >= 0x20 && cp <= 0xD7FF {
+		return true
+	}
+	if cp >= 0xE000 && cp <= 0xFFFD {
+		return true
+	}
+	if cp >= 0x10000 && cp <= 0x10FFFF {
+		return true
+	}
+	return false
+}
+
+// isValidXML11Codepoint extends the XML 1.0 check to also accept XML 1.1
+// restricted characters (0x01-0x1F except 0x00). XSLT 3.0 processors need
+// these for features like xml-to-json with escaped="1".
+func isValidXML11Codepoint(cp int) bool {
+	if cp >= 0x1 && cp <= 0xD7FF {
 		return true
 	}
 	if cp >= 0xE000 && cp <= 0xFFFD {
