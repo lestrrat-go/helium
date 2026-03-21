@@ -629,9 +629,17 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 	}
 	name = resolveQName(name, c.nsBindings)
 
+	streamable := false
+	if s := getAttr(elem, "streamable"); s != "" {
+		if v, ok := parseXSDBool(s); ok {
+			streamable = v
+		}
+	}
+
 	asd := &AttributeSetDef{
 		Name:       name,
 		Visibility: getAttr(elem, "visibility"),
+		Streamable: streamable,
 	}
 
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
@@ -710,6 +718,29 @@ func checkAttributeSetCycles(ss *Stylesheet) error {
 	for name := range ss.attributeSets {
 		if err := visit(name); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// checkAttributeSetStreamable checks XTSE0730: if an attribute set specifies
+// streamable="yes", every attribute set referenced in its use-attribute-sets
+// must also specify streamable="yes".
+func checkAttributeSetStreamable(ss *Stylesheet) error {
+	for _, asd := range ss.attributeSets {
+		if !asd.Streamable {
+			continue
+		}
+		for _, ref := range asd.UseAttrSets {
+			used := ss.attributeSets[ref]
+			if used == nil {
+				continue
+			}
+			if !used.Streamable {
+				return staticError("XTSE0730",
+					"streamable attribute-set %q references non-streamable attribute-set %q",
+					asd.Name, ref)
+			}
 		}
 	}
 	return nil

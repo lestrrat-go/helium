@@ -422,12 +422,6 @@ func checkPatternForbiddenFunctions(ast xpath3.Expr) error {
 		case "current-grouping-key":
 			walkErr = staticError(errCodeXTSE1070, "current-grouping-key() must not be used within a pattern")
 			return false
-		case "current-group":
-			walkErr = staticError(errCodeXTSE1060, "current-group() must not be used within a pattern")
-			return false
-		case "current-grouping-key":
-			walkErr = staticError(errCodeXTSE1070, "current-grouping-key() must not be used within a pattern")
-			return false
 		}
 		return true
 	})
