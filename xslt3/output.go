@@ -226,7 +226,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	// serializeResult's transcoding layer.
 	targetEnc := strings.ToLower(outDef.Encoding)
 	isNonUTF8 := targetEnc != "" && targetEnc != "utf-8" && targetEnc != "utf8" && targetEnc != "utf-16" && targetEnc != "utf16"
-	if len(charMap) > 0 || hasDOEMarkers(doc) || isNonUTF8 {
+	if len(charMap) > 0 || hasDOEMarkers(doc) || isNonUTF8 || len(outDef.CDATASections) > 0 {
 		return serializeXMLWithCharMap(w, doc, outDef, charMap)
 	}
 	// Set encoding on the document so the XML declaration includes it.
@@ -338,14 +338,23 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 		}
 	}
 
-	err := serializeXMLNodeWithCharMap(sw, doc, charMap)
+	// Build CDATA section element set for fast lookup.
+	var cdataSet map[string]struct{}
+	if len(outDef.CDATASections) > 0 {
+		cdataSet = make(map[string]struct{}, len(outDef.CDATASections))
+		for _, name := range outDef.CDATASections {
+			cdataSet[name] = struct{}{}
+		}
+	}
+
+	err := serializeXMLNodeWithCharMap(sw, doc, charMap, cdataSet)
 	if err != nil {
 		return err
 	}
 	return sw.Flush()
 }
 
-func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[rune]string) error {
+func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[rune]string, cdataElems map[string]struct{}) error {
 	doeActive := false
 	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
 		// Handle DOE marker PIs
@@ -393,7 +402,7 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 				}
 			}
 			// Recurse into children
-			if err := serializeXMLNodeWithCharMap(sw, elem, charMap); err != nil {
+			if err := serializeXMLNodeWithCharMap(sw, elem, charMap, cdataElems); err != nil {
 				return err
 			}
 			if err := sw.EndElement(); err != nil {
@@ -403,6 +412,10 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 			text := string(child.Content())
 			if doeActive {
 				if err := sw.WriteRaw(text); err != nil {
+					return err
+				}
+			} else if inCDATAElement(n, cdataElems) {
+				if err := sw.WriteCDATA(text); err != nil {
 					return err
 				}
 			} else if err := writeTextWithCharMap(sw, text, charMap); err != nil {
@@ -759,6 +772,35 @@ func hasDOEMarkers(doc *helium.Document) bool {
 		return nil
 	})
 	return found
+}
+
+// inCDATAElement checks if the parent node is an element whose name matches
+// one of the cdata-section-elements. Names can be local names (e.g., "item2")
+// or Clark notation (e.g., "{http://ns}item2").
+func inCDATAElement(parent helium.Node, cdataElems map[string]struct{}) bool {
+	if len(cdataElems) == 0 {
+		return false
+	}
+	elem, ok := parent.(*helium.Element)
+	if !ok {
+		return false
+	}
+	// Check Clark notation: {uri}local
+	clark := "{" + string(elem.URI()) + "}" + string(elem.LocalName())
+	if _, ok := cdataElems[clark]; ok {
+		return true
+	}
+	// Check QName (prefix:local or just local)
+	name := elem.Name()
+	if _, ok := cdataElems[name]; ok {
+		return true
+	}
+	// Check local name only (for unprefixed elements)
+	local := string(elem.LocalName())
+	if _, ok := cdataElems[local]; ok {
+		return true
+	}
+	return false
 }
 
 // applyCharacterMap replaces characters in text according to the character map.

@@ -458,5 +458,23 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 		}
 		base.Encoding = strings.TrimSpace(v)
 	}
+	if inst.CDATASectionElements != nil {
+		v, err := evalAVT(inst.CDATASectionElements)
+		if err != nil {
+			return nil, err
+		}
+		if v = strings.TrimSpace(v); v != "" {
+			// Union with base cdata-section-elements from xsl:output.
+			existing := make(map[string]struct{}, len(base.CDATASections))
+			for _, name := range base.CDATASections {
+				existing[name] = struct{}{}
+			}
+			for _, name := range strings.Fields(v) {
+				if _, ok := existing[name]; !ok {
+					base.CDATASections = append(base.CDATASections, name)
+				}
+			}
+		}
+	}
 	return &base, nil
 }
