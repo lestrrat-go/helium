@@ -232,6 +232,23 @@ func (ec *execContext) evaluateWithParam(ctx context.Context, wp *WithParam) (xp
 	return val, nil
 }
 
+// resolveNamedTemplate looks up a named template by searching:
+// 1. The main stylesheet's namedTemplates map
+// 2. The current package context (if set) - allows private templates
+//    from the package to be called by other templates in the same package
+func (ec *execContext) resolveNamedTemplate(name string) (*Template, bool) {
+	if tmpl, ok := ec.stylesheet.namedTemplates[name]; ok {
+		return tmpl, true
+	}
+	if ec.currentPackage != nil {
+		if tmpl, ok := ec.currentPackage.namedTemplates[name]; ok {
+			return tmpl, true
+		}
+	}
+	return nil, false
+}
+
+
 func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateInst) error {
 	ec.depth++
 	if ec.depth > maxRecursionDepth {
@@ -245,7 +262,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 	ec.inMergeAction = false
 	defer func() { ec.inMergeAction = savedInMerge }()
 
-	tmpl, ok := ec.stylesheet.namedTemplates[inst.Name]
+	tmpl, ok := ec.resolveNamedTemplate(inst.Name)
 	if !ok {
 		return dynamicError(errCodeXTDE0060, "named template %q not found", inst.Name)
 	}

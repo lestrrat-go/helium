@@ -200,6 +200,7 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 
 		tmpl.ImportPrec = c.importPrec - 1
 		tmpl.MinImportPrec = tmpl.ImportPrec // package templates have no sub-imports
+		tmpl.OwnerPackage = pkg
 		c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
 		if tmpl.Name != "" {
 			if _, exists := c.stylesheet.namedTemplates[tmpl.Name]; !exists {
@@ -255,6 +256,7 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		if _, overridden := overrideNames[xslElemVariable+":"+v.Name]; overridden {
 			continue
 		}
+		v.OwnerPackage = pkg
 		c.stylesheet.globalVars = append(c.stylesheet.globalVars, v)
 	}
 
