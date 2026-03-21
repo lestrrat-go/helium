@@ -555,29 +555,9 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
 	isHTML5 := outDef.HTMLVersion == "5" || outDef.HTMLVersion == "5.0"
 
-	// For HTML5, replace the doctype with <!DOCTYPE html>
-	if isHTML5 {
-		// Override doctype: for XHTML5, the spec says to emit <!DOCTYPE html>
-		// regardless of doctype-public/doctype-system when html-version="5".
-		outDef = &OutputDef{
-			Name:               outDef.Name,
-			Method:             outDef.Method,
-			MethodExplicit:     outDef.MethodExplicit,
-			Encoding:           outDef.Encoding,
-			Indent:             outDef.Indent,
-			OmitDeclaration:    outDef.OmitDeclaration,
-			Standalone:         outDef.Standalone,
-			CDATASections:      outDef.CDATASections,
-			MediaType:          outDef.MediaType,
-			Version:            outDef.Version,
-			UndeclarePrefixes:  outDef.UndeclarePrefixes,
-			IncludeContentType: outDef.IncludeContentType,
-			ItemSeparator:      outDef.ItemSeparator,
-			HTMLVersion:        outDef.HTMLVersion,
-			NormalizationForm:  outDef.NormalizationForm,
-			UseCharacterMaps:   outDef.UseCharacterMaps,
-			ResolvedCharMap:    outDef.ResolvedCharMap,
-		}
+	// For HTML5: only use explicit doctype when doctype-system is specified.
+	// Without doctype-system (even if doctype-public is set), use <!DOCTYPE html>.
+	if isHTML5 && outDef.DoctypeSystem == "" {
 		// Remove existing DTD and replace with HTML5 DOCTYPE
 		if dtd := doc.IntSubset(); dtd != nil {
 			helium.UnlinkNode(dtd)
