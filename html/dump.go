@@ -272,6 +272,23 @@ func (d *htmlDumper) dumpElement(out io.Writer, e *helium.Element) error {
 	_, _ = io.WriteString(out, "<")
 	_, _ = io.WriteString(out, name)
 
+	// Namespace declarations (for non-HTML-namespace elements in HTML output)
+	if d.preserveCase {
+		for _, ns := range e.Namespaces() {
+			if ns.Prefix() == "" {
+				_, _ = io.WriteString(out, " xmlns=\"")
+				_, _ = io.WriteString(out, ns.URI())
+				_, _ = io.WriteString(out, "\"")
+			} else {
+				_, _ = io.WriteString(out, " xmlns:")
+				_, _ = io.WriteString(out, ns.Prefix())
+				_, _ = io.WriteString(out, "=\"")
+				_, _ = io.WriteString(out, ns.URI())
+				_, _ = io.WriteString(out, "\"")
+			}
+		}
+	}
+
 	// Attributes
 	if err := d.dumpAttributes(out, e); err != nil {
 		return err
