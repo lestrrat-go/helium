@@ -241,6 +241,13 @@ func (ec *execContext) evaluateWithParam(ctx context.Context, wp *WithParam) (xp
 // 2. The current package context (if set) - allows private templates
 //    from the package to be called by other templates in the same package
 func (ec *execContext) resolveNamedTemplate(name string) (*Template, bool) {
+	// Handle xsl:original — resolve to the original overridden template
+	if name == "{"+NSXSLT+"}original" {
+		if ec.overridingTemplate != nil && ec.overridingTemplate.OriginalTemplate != nil {
+			return ec.overridingTemplate.OriginalTemplate, true
+		}
+		return nil, false
+	}
 	if tmpl, ok := ec.stylesheet.namedTemplates[name]; ok {
 		return tmpl, true
 	}
@@ -286,6 +293,12 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 	// Do NOT set ec.currentTemplate here: xsl:call-template preserves the
 	// current template rule for xsl:apply-imports/xsl:next-match.
 
+	// Track overriding template for xsl:original support.
+	savedOverridingTemplate := ec.overridingTemplate
+	if tmpl.OriginalTemplate != nil {
+		ec.overridingTemplate = tmpl
+	}
+
 	// xsl:context-item use="absent": make the context item absent within the
 	// called template's body. This means xsl:next-match will fail with
 	// XTDE0560 because there is no context node to match against.
@@ -302,6 +315,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 	defer func() {
 		ec.cachedFnsNS = savedFnsNS
 		ec.currentPackage = savedPackage
+		ec.overridingTemplate = savedOverridingTemplate
 		if tmpl.ContextItemUse == "absent" {
 			ec.contextNode = savedContextNode
 			ec.contextItem = savedContextItem

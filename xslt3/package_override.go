@@ -71,7 +71,13 @@ func (c *compiler) compileOverrideChildren(overrideElem *helium.Element, pkg *St
 			if err != nil {
 				return err
 			}
-			oset.functions[funcKey{Name: qn, Arity: len(fn.Params)}] = fn
+			fk := funcKey{Name: qn, Arity: len(fn.Params)}
+			if _, dup := oset.functions[fk]; dup {
+				return staticError(errCodeXTSE0770,
+					"duplicate override of function %s#%d in xsl:override",
+					fmt.Sprintf("{%s}%s", qn.URI, qn.Name), len(fn.Params))
+			}
+			oset.functions[fk] = fn
 
 		case xslElemTemplate:
 			tmpl, err := c.compileOverrideTemplate(elem, pkg)
@@ -206,6 +212,15 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 		As:     getAttr(elem, "as"),
 	}
 
+	// Link the original function for xsl:original() calls.
+	// Try exact arity match first, then fall back to any match by name.
+	exactKey := funcKey{Name: qn, Arity: len(params)}
+	if orig, ok := pkg.functions[exactKey]; ok {
+		fn.OriginalFunc = orig
+	} else if pkgFn != nil {
+		fn.OriginalFunc = pkgFn
+	}
+
 	return fn, qn, nil
 }
 
@@ -307,6 +322,8 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 			if err := checkOverrideTemplateCompat(tmpl, existing); err != nil {
 				return nil, err
 			}
+			// Link the original template for xsl:original calls
+			tmpl.OriginalTemplate = existing
 		}
 	}
 
@@ -371,6 +388,11 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 	}
 
 	v := &Variable{Name: resolvedName, As: getAttr(elem, "as")}
+
+	// Link the original variable for $xsl:original references
+	if pkgVar != nil {
+		v.OriginalVar = pkgVar
+	}
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {

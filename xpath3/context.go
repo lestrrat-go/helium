@@ -43,6 +43,15 @@ type VariableResolver interface {
 	ResolveVariable(ctx context.Context, name string) (Sequence, bool, error)
 }
 
+// FunctionResolver provides lazy function resolution for functions not found
+// in the static function scope. Unlike fnsNS, functions registered via this
+// interface are NOT discoverable via fn:function-lookup — they are only
+// resolved for direct function calls. This is used by xslt3 to resolve
+// xsl:original() without exposing it to function-lookup.
+type FunctionResolver interface {
+	ResolveFunction(ctx context.Context, uri, name string, arity int) (Function, bool, error)
+}
+
 // SchemaDeclarations provides schema element/attribute/type lookup for
 // schema-element(), schema-attribute() node tests and schema-aware casting.
 type SchemaDeclarations interface {
@@ -87,6 +96,7 @@ type evalConfig struct {
 	contextItem        Item                   // non-nil when context is an atomic value, not a node
 	typeAnnotations    map[helium.Node]string // node → xs:... type annotation (set by xslt3)
 	variableResolver   VariableResolver       // lazy resolver for variables not in static scope
+	functionResolver   FunctionResolver       // lazy resolver for functions not in fnsNS (not visible to function-lookup)
 	strictPrefixes     bool                   // when true, only user-declared namespaces are valid (no defaultPrefixNS fallback)
 	schemaDeclarations SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
 	allowXML11Chars    bool                   // when true, codepoints-to-string allows XML 1.1 restricted characters (0x01-0x1F)
@@ -221,6 +231,16 @@ func WithAdditionalVariables(ctx context.Context, vars map[string]Sequence) cont
 func WithVariableResolver(ctx context.Context, resolver VariableResolver) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) bool {
 		c.variableResolver = resolver
+		return false
+	})
+}
+
+// WithFunctionResolver sets a callback for lazy function resolution.
+// Functions resolved via this interface are NOT discoverable via
+// fn:function-lookup — they are only resolved for direct function calls.
+func WithFunctionResolver(ctx context.Context, resolver FunctionResolver) context.Context {
+	return updateEvalConfig(ctx, func(c *evalConfig) bool {
+		c.functionResolver = resolver
 		return false
 	})
 }

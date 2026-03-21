@@ -124,6 +124,15 @@ func resolveFunctionByURI(ec *evalContext, uri, name string, arity int) (Functio
 		return fn, nil
 	}
 
+	// Check function resolver (not visible to function-lookup)
+	if ec.functionResolver != nil {
+		if fn, ok, err := ec.functionResolver.ResolveFunction(ec.goCtx, uri, name, arity); err != nil {
+			return nil, err
+		} else if ok {
+			return fn, nil
+		}
+	}
+
 	return nil, fmt.Errorf("%w: %s#%d", ErrUnknownFunction, name, arity)
 }
 
