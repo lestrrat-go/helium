@@ -138,6 +138,12 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		return err
 	}
 
+	// inherit-namespaces="no": undeclare parent namespaces on direct
+	// child elements so they do not inherit them via the DOM tree.
+	if !inst.InheritNamespaces {
+		undeclareInheritedNamespaces(elem)
+	}
+
 	// F.2: Type-based content validation and normalization.
 	// When type="xs:integer" (or similar) is set, validate and normalize the
 	// element's text content against the declared type, raising XTTE1510 on

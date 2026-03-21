@@ -116,7 +116,11 @@ func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
 		return nil, err
 	}
 
-	inst := &ElementInst{Name: nameAVT}
+	inst := &ElementInst{Name: nameAVT, InheritNamespaces: true}
+
+	if inAttr := getAttr(elem, "inherit-namespaces"); inAttr == "no" {
+		inst.InheritNamespaces = false
+	}
 
 	// Capture compile-time namespace bindings for runtime name resolution.
 	if len(c.nsBindings) > 0 {

@@ -846,15 +846,14 @@ func (d *Writer) dumpNsList(out io.Writer, nslist []*Namespace) error {
 }
 
 func (d *Writer) dumpNs(out io.Writer, ns *Namespace) error {
-	if ns.href == "" && ns.prefix != "" {
-		// Prefixed namespace with empty URI — skip (invalid)
-		return nil
-	}
 	if ns.href == "" && ns.prefix == "" {
 		// xmlns="" — namespace undeclaration; emit it
 		_, err := io.WriteString(out, ` xmlns=""`)
 		return err
 	}
+	// Prefixed namespace with empty URI (xmlns:prefix="") is a valid
+	// namespace undeclaration in XML 1.1 / XSLT 3.0. Fall through to
+	// the general case which writes xmlns:prefix="value".
 
 	// Skip the implicit xml: prefix namespace declaration.
 	// libxml2: xmlNsDumpOutput skips prefix "xml" unconditionally.
