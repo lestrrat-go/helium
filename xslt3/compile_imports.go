@@ -14,6 +14,11 @@ import (
 )
 
 func (c *compiler) compileImport(elem *helium.Element) error {
+	if err := validateXSLTAttrs(elem, map[string]struct{}{
+		"href": {}, "use-when": {},
+	}); err != nil {
+		return err
+	}
 	href := getAttr(elem, "href")
 	if href == "" {
 		return staticError(errCodeXTSE0110, "xsl:import requires href attribute")

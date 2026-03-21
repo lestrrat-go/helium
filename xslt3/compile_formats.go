@@ -10,6 +10,11 @@ import (
 )
 
 func (c *compiler) compileCharacterMap(elem *helium.Element) error {
+	if err := validateXSLTAttrs(elem, map[string]struct{}{
+		"name": {}, "use-character-maps": {}, "use-when": {},
+	}); err != nil {
+		return err
+	}
 	saved := c.pushElementNamespaces(elem)
 	defer func() { c.nsBindings = saved }()
 
@@ -78,6 +83,12 @@ func (c *compiler) compileCharacterMap(elem *helium.Element) error {
 }
 
 func (c *compiler) compileKey(elem *helium.Element) error {
+	if err := validateXSLTAttrs(elem, map[string]struct{}{
+		"name": {}, "match": {}, "use": {}, "collation": {}, "composite": {},
+		"use-when": {},
+	}); err != nil {
+		return err
+	}
 	// Collect local namespace declarations (e.g., xmlns:ex="..." on xsl:key)
 	c.collectNamespaces(elem)
 
@@ -142,6 +153,20 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 }
 
 func (c *compiler) compileOutput(elem *helium.Element) error {
+	if err := validateXSLTAttrs(elem, map[string]struct{}{
+		"name": {}, "method": {}, "version": {}, "encoding": {},
+		"omit-xml-declaration": {}, "standalone": {}, "doctype-public": {},
+		"doctype-system": {}, "cdata-section-elements": {}, "indent": {},
+		"media-type": {}, "byte-order-mark": {}, "escape-uri-attributes": {},
+		"include-content-type": {}, "normalization-form": {},
+		"undeclare-prefixes": {}, "use-character-maps": {},
+		"suppress-indentation": {}, "html-version": {},
+		"item-separator": {}, "json-node-output-method": {},
+		"parameter-document": {}, "build-tree": {},
+		"use-when": {},
+	}); err != nil {
+		return err
+	}
 	saved := c.pushElementNamespaces(elem)
 	defer func() { c.nsBindings = saved }()
 
@@ -326,6 +351,12 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 }
 
 func (c *compiler) compileAttributeSet(elem *helium.Element) error {
+	if err := validateXSLTAttrs(elem, map[string]struct{}{
+		"name": {}, "use-attribute-sets": {}, "visibility": {},
+		"streamable": {}, "use-when": {},
+	}); err != nil {
+		return err
+	}
 	name := getAttr(elem, "name")
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:attribute-set requires name attribute")
@@ -418,6 +449,15 @@ func checkAttributeSetCycles(ss *Stylesheet) error {
 }
 
 func (c *compiler) compileDecimalFormat(elem *helium.Element) error {
+	if err := validateXSLTAttrs(elem, map[string]struct{}{
+		"name": {}, "decimal-separator": {}, "grouping-separator": {},
+		"infinity": {}, "minus-sign": {}, "NaN": {}, "percent": {},
+		"per-mille": {}, "zero-digit": {}, "digit": {},
+		"pattern-separator": {}, "exponent-separator": {},
+		"use-when": {},
+	}); err != nil {
+		return err
+	}
 	// Push element-local namespace declarations so prefixed names resolve correctly
 	saved := c.pushElementNamespaces(elem)
 	defer func() { c.nsBindings = saved }()

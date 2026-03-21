@@ -7,6 +7,11 @@ import (
 )
 
 func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesInst, error) {
+	if err := validateXSLTAttrs(elem, map[string]struct{}{
+		"select": {}, "mode": {},
+	}); err != nil {
+		return nil, err
+	}
 	mode := strings.TrimSpace(getAttr(elem, "mode"))
 	// Validate mode name is a valid QName.
 	if mode != "" && mode[0] != '#' {
@@ -603,6 +608,9 @@ func (c *compiler) compileNextMatch(elem *helium.Element) (*NextMatchInst, error
 }
 
 func (c *compiler) compileApplyImports(elem *helium.Element) (*ApplyImportsInst, error) {
+	if err := validateXSLTAttrs(elem, map[string]struct{}{}); err != nil {
+		return nil, err
+	}
 	inst := &ApplyImportsInst{}
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)

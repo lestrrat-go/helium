@@ -8,6 +8,11 @@ import (
 )
 
 func (c *compiler) compileGlobalContextItem(elem *helium.Element) error {
+	if err := validateXSLTAttrs(elem, map[string]struct{}{
+		"as": {}, "use": {}, "use-when": {},
+	}); err != nil {
+		return err
+	}
 	asAttr := getAttr(elem, "as")
 	if err := c.validateAsSequenceType(asAttr, "xsl:global-context-item"); err != nil {
 		return err
@@ -60,6 +65,14 @@ func isReservedFunctionNS(uri string) bool {
 }
 
 func (c *compiler) compileFunction(elem *helium.Element) error {
+	if err := validateXSLTAttrs(elem, map[string]struct{}{
+		"name": {}, "as": {}, "visibility": {}, "streamable": {},
+		"override-extension-function": {}, "override": {},
+		"identity-sensitive": {}, "cache": {}, "new-each-time": {},
+		"use-when": {},
+	}); err != nil {
+		return err
+	}
 	name := getAttr(elem, "name")
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:function requires name attribute")
@@ -209,6 +222,13 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 }
 
 func (c *compiler) compileMode(elem *helium.Element) error {
+	if err := validateXSLTAttrs(elem, map[string]struct{}{
+		"name": {}, "streamable": {}, "on-no-match": {}, "on-multiple-match": {},
+		"warning-on-no-match": {}, "warning-on-multiple-match": {},
+		"typed": {}, "visibility": {}, "use-when": {},
+	}); err != nil {
+		return err
+	}
 	// xsl:mode must be empty (no children)
 	if elem.FirstChild() != nil {
 		return staticError(errCodeXTSE0010, "xsl:mode must be empty")

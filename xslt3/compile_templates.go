@@ -7,7 +7,15 @@ import (
 	"github.com/lestrrat-go/helium"
 )
 
+var templateAllowedAttrs = map[string]struct{}{
+	"match": {}, "name": {}, "priority": {}, "mode": {}, "as": {},
+	"visibility": {}, "use-when": {},
+}
+
 func (c *compiler) compileTemplate(elem *helium.Element) error {
+	if err := validateXSLTAttrs(elem, templateAllowedAttrs); err != nil {
+		return err
+	}
 	// Collect namespace declarations and xpath-default-namespace before
 	// evaluating use-when so the expression has the correct namespace context.
 	c.collectNamespaces(elem)
