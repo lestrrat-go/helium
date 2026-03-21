@@ -681,8 +681,9 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 			hasContextItem = false
 		}
 	} else {
-		// Default: use the current context node
-		dynContextNode = ec.contextNode
+		// Per XSLT 3.0 §20.3.2: when no context-item attribute is present,
+		// the context item for the dynamic expression is absent.
+		hasContextItem = false
 	}
 
 	// 3. Build namespace bindings for the dynamic expression.
