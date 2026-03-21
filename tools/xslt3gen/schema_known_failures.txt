@@ -78,6 +78,7 @@ notation-0701
 notation-0702
 strip-type-annotations-012
 strip-type-annotations-013
+strip-type-annotations-014
 strip-type-annotations-020
 strip-type-annotations-021
 treat-as-0101
