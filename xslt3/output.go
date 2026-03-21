@@ -614,8 +614,8 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 		}
 	}
 
-	// SESU0007: unsupported encoding for html/xhtml/text
-	if method == "html" || method == "xhtml" || method == "text" {
+	// SESU0007: unsupported encoding for any output method
+	{
 		enc := strings.ToLower(outDef.Encoding)
 		if enc != "" && enc != "utf-8" && enc != "utf8" && enc != "utf-16" && enc != "utf16" {
 			_, encErr := htmlindex.Get(enc)
@@ -646,18 +646,6 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 		}
 	}
 
-	// SESU0013: unsupported encoding for xml output
-	if method == "xml" {
-		enc := strings.ToLower(outDef.Encoding)
-		if enc != "" && enc != "utf-8" && enc != "utf8" && enc != "utf-16" && enc != "utf16" {
-			_, encErr := htmlindex.Get(enc)
-			if encErr != nil {
-				return dynamicError(errCodeSESU0013,
-					"unsupported encoding %q", outDef.Encoding)
-			}
-		}
-	}
-
 	// SERE0012: fully-normalized and result begins with combining character
 	if outDef.NormalizationForm == "FULLY-NORMALIZED" {
 		if err := checkFullyNormalized(doc); err != nil {
@@ -665,8 +653,9 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 		}
 	}
 
-	// SERE0014: HTML method with characters in #x7F-#x9F range in text
-	if method == "html" {
+	// SERE0014: HTML method with characters in #x7F-#x9F range in text.
+	// HTML5 allows these characters as character references, so skip for version >= 5.
+	if method == "html" && !isHTMLVersion5(outDef.HTMLVersion) {
 		if err := checkHTMLInvalidChars(doc); err != nil {
 			return err
 		}
@@ -1166,6 +1155,11 @@ func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMa
 	// for omit-xml-declaration is "yes" (unless explicitly set otherwise).
 	if isHTML5 && !outDef.OmitDeclarationExplicit {
 		outDef.OmitDeclaration = true
+	}
+
+	// Per XSLT spec, doctype-public without doctype-system is ignored for xhtml.
+	if outDef.DoctypeSystem == "" && outDef.DoctypePublic != "" {
+		outDef.DoctypePublic = ""
 	}
 
 	// For HTML5: only use explicit doctype when doctype-system is specified.
