@@ -209,6 +209,12 @@ func axisAncestorOrSelf(node helium.Node) []helium.Node {
 }
 
 func axisFollowingSibling(node helium.Node) []helium.Node {
+	// Per XPath spec: if the context node is an attribute or namespace node,
+	// the following-sibling axis is empty.
+	switch node.(type) {
+	case *helium.Attribute, *helium.NamespaceNodeWrapper:
+		return nil
+	}
 	var result []helium.Node
 	for s := node.NextSibling(); s != nil; s = s.NextSibling() {
 		result = append(result, s)
@@ -217,6 +223,12 @@ func axisFollowingSibling(node helium.Node) []helium.Node {
 }
 
 func axisPrecedingSibling(node helium.Node) []helium.Node {
+	// Per XPath spec: if the context node is an attribute or namespace node,
+	// the preceding-sibling axis is empty.
+	switch node.(type) {
+	case *helium.Attribute, *helium.NamespaceNodeWrapper:
+		return nil
+	}
 	var result []helium.Node
 	for s := node.PrevSibling(); s != nil; s = s.PrevSibling() {
 		result = append(result, s)
@@ -225,6 +237,37 @@ func axisPrecedingSibling(node helium.Node) []helium.Node {
 }
 
 func axisFollowing(node helium.Node, maxNodes int) ([]helium.Node, error) {
+	// Per XPath data model: attribute and namespace nodes are ordered after
+	// their parent element and before the parent's children.  Therefore the
+	// following axis from an attribute/namespace node includes the parent's
+	// descendants, then the parent's following siblings (+ their descendants),
+	// and so on up the ancestor chain.
+	switch node.(type) {
+	case *helium.Attribute, *helium.NamespaceNodeWrapper:
+		parent := node.Parent()
+		if IsNilNode(parent) {
+			return nil, nil
+		}
+		var result []helium.Node
+		// Parent's descendants come first (they follow attrs in document order).
+		if err := collectDescendants(parent, &result, maxNodes); err != nil {
+			return nil, err
+		}
+		// Then the parent's following siblings + their descendants, and up
+		// through ancestors — same as the normal following axis from the parent.
+		for p := parent; p != nil; p = p.Parent() {
+			for s := p.NextSibling(); s != nil; s = s.NextSibling() {
+				if err := appendAxisNode(&result, s, maxNodes); err != nil {
+					return nil, err
+				}
+				if err := collectDescendants(s, &result, maxNodes); err != nil {
+					return nil, err
+				}
+			}
+		}
+		return result, nil
+	}
+
 	var result []helium.Node
 	for s := node.NextSibling(); s != nil; s = s.NextSibling() {
 		if err := appendAxisNode(&result, s, maxNodes); err != nil {
@@ -248,6 +291,40 @@ func axisFollowing(node helium.Node, maxNodes int) ([]helium.Node, error) {
 }
 
 func axisPreceding(node helium.Node, maxNodes int) ([]helium.Node, error) {
+	// Per XPath data model: attribute and namespace nodes are ordered after
+	// their parent element and before the parent's children.  Therefore the
+	// preceding axis from an attribute/namespace node contains the same nodes
+	// as the preceding axis from the parent element (the parent's preceding
+	// siblings + their descendants, and up the ancestor chain).  The parent
+	// element itself is excluded because it is an ancestor.
+	switch node.(type) {
+	case *helium.Attribute, *helium.NamespaceNodeWrapper:
+		parent := node.Parent()
+		if IsNilNode(parent) {
+			return nil, nil
+		}
+		var result []helium.Node
+		for s := parent.PrevSibling(); s != nil; s = s.PrevSibling() {
+			if err := collectDescendantsReverse(s, &result, maxNodes); err != nil {
+				return nil, err
+			}
+			if err := appendAxisNode(&result, s, maxNodes); err != nil {
+				return nil, err
+			}
+		}
+		for p := parent.Parent(); p != nil; p = p.Parent() {
+			for s := p.PrevSibling(); s != nil; s = s.PrevSibling() {
+				if err := collectDescendantsReverse(s, &result, maxNodes); err != nil {
+					return nil, err
+				}
+				if err := appendAxisNode(&result, s, maxNodes); err != nil {
+					return nil, err
+				}
+			}
+		}
+		return result, nil
+	}
+
 	var result []helium.Node
 	for s := node.PrevSibling(); s != nil; s = s.PrevSibling() {
 		if err := collectDescendantsReverse(s, &result, maxNodes); err != nil {
