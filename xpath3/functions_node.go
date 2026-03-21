@@ -724,17 +724,26 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	tokens, err := idLookupTokens(args[0])
+	// Unlike fn:id, fn:idref does NOT tokenize its argument strings.
+	// Each string in the input sequence is matched as-is against individual
+	// IDREF/IDREFS tokens in the document.
+	atoms, err := AtomizeSequence(args[0])
 	if err != nil {
 		return nil, err
 	}
-	if len(tokens) == 0 {
+	if len(atoms) == 0 {
 		return nil, nil
 	}
 
-	wanted := make(map[string]struct{}, len(tokens))
-	for _, token := range tokens {
-		wanted[token] = struct{}{}
+	wanted := make(map[string]struct{}, len(atoms))
+	for _, atom := range atoms {
+		s, sErr := atomicToString(atom)
+		if sErr != nil {
+			return nil, sErr
+		}
+		if s != "" {
+			wanted[s] = struct{}{}
+		}
 	}
 
 	var nodes []helium.Node
