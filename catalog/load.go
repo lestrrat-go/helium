@@ -270,21 +270,19 @@ func closeHandler(eh helium.ErrorHandler) {
 
 // getAttr returns the value of the attribute with the given local name.
 func getAttr(elem *helium.Element, name string) string {
-	for _, a := range elem.Attributes() {
-		if a.LocalName() == name {
-			return a.Value()
-		}
+	attr, ok := elem.FindAttribute(helium.LocalNamePredicate(name))
+	if !ok {
+		return ""
 	}
-	return ""
+	return attr.Value()
 }
 
 // getAttrNS returns the value of the attribute with the given local name
 // and namespace URI.
 func getAttrNS(elem *helium.Element, name, nsURI string) string {
-	for _, a := range elem.Attributes() {
-		if a.LocalName() == name && a.URI() == nsURI {
-			return a.Value()
-		}
+	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: nsURI})
+	if !ok {
+		return ""
 	}
-	return ""
+	return attr.Value()
 }

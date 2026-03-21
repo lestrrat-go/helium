@@ -34,12 +34,11 @@ func isXSDElement(elem *helium.Element, localName string) bool {
 }
 
 func getAttr(elem *helium.Element, name string) string {
-	for _, a := range elem.Attributes() {
-		if a.LocalName() == name {
-			return a.Value()
-		}
+	attr, ok := elem.FindAttribute(helium.LocalNamePredicate(name))
+	if !ok {
+		return ""
 	}
-	return ""
+	return attr.Value()
 }
 
 // parseBlockFlags parses a block attribute value into BlockFlags.

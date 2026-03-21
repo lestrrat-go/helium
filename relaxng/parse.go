@@ -996,22 +996,20 @@ func isNameClassElement(elem *helium.Element) bool {
 }
 
 func getAttr(elem *helium.Element, name string) string {
-	for _, attr := range elem.Attributes() {
-		if attr.LocalName() == name {
-			return strings.TrimSpace(attr.Value())
-		}
+	attr, ok := elem.FindAttribute(helium.LocalNamePredicate(name))
+	if !ok {
+		return ""
 	}
-	return ""
+	return strings.TrimSpace(attr.Value())
 }
 
 // getAttrOpt returns the value and presence of an attribute.
 func getAttrOpt(elem *helium.Element, name string) (string, bool) {
-	for _, attr := range elem.Attributes() {
-		if attr.LocalName() == name {
-			return strings.TrimSpace(attr.Value()), true
-		}
+	attr, ok := elem.FindAttribute(helium.LocalNamePredicate(name))
+	if !ok {
+		return "", false
 	}
-	return "", false
+	return strings.TrimSpace(attr.Value()), true
 }
 
 // getAncestorNS walks up the RNG element tree to find the ns attribute.

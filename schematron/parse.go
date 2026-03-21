@@ -353,12 +353,11 @@ func stripPrefix(name string) string {
 
 // getAttr returns the value of an attribute on the element by local name.
 func getAttr(elem *helium.Element, name string) string {
-	for _, a := range elem.Attributes() {
-		if a.LocalName() == name {
-			return a.Value()
-		}
+	attr, ok := elem.FindAttribute(helium.LocalNamePredicate(name))
+	if !ok {
+		return ""
 	}
-	return ""
+	return attr.Value()
 }
 
 // elemTextContent returns the concatenated text content of an element's children.

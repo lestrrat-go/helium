@@ -211,32 +211,77 @@ func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) error {
 	return nil
 }
 
-// GetAttribute returns the value of the attribute with the given name,
-// or empty string and false if not found.
-func (n *Element) GetAttribute(name string) (string, bool) {
+// AttributePredicate reports whether an attribute matches a lookup.
+// Implementations are used by FindAttribute to support alternate
+// matching semantics without exposing the property list layout.
+type AttributePredicate interface {
+	Match(*Attribute) bool
+}
+
+// QNamePredicate matches an attribute by QName as returned by Attribute.Name.
+type QNamePredicate string
+
+func (p QNamePredicate) Match(a *Attribute) bool {
+	return a.Name() == string(p)
+}
+
+// LocalNamePredicate matches an attribute by local name only.
+// If multiple attributes share the same local name, FindAttribute returns
+// the first match in property order.
+type LocalNamePredicate string
+
+func (p LocalNamePredicate) Match(a *Attribute) bool {
+	return a.LocalName() == string(p)
+}
+
+// NSPredicate matches an attribute by local name + namespace URI.
+type NSPredicate struct {
+	Local        string
+	NamespaceURI string
+}
+
+func (p NSPredicate) Match(a *Attribute) bool {
+	return a.LocalName() == p.Local && a.URI() == p.NamespaceURI
+}
+
+// FindAttribute returns the first attribute that matches ap in property order.
+// A nil predicate matches nothing and returns nil, false.
+func (n *Element) FindAttribute(ap AttributePredicate) (*Attribute, bool) {
+	if ap == nil {
+		return nil, false
+	}
 	for p := n.properties; p != nil; p = p.NextAttribute() {
-		if p.Name() == name {
-			return p.Value(), true
+		if ap.Match(p) {
+			return p, true
 		}
 	}
-	return "", false
+	return nil, false
+}
+
+// GetAttribute returns the value of the attribute with the given QName,
+// or empty string and false if not found.
+func (n *Element) GetAttribute(name string) (string, bool) {
+	attr, ok := n.FindAttribute(QNamePredicate(name))
+	if !ok {
+		return "", false
+	}
+	return attr.Value(), true
 }
 
 // HasAttribute reports whether the element has an attribute with the given name.
 func (n *Element) HasAttribute(name string) bool {
-	_, ok := n.GetAttribute(name)
+	_, ok := n.FindAttribute(QNamePredicate(name))
 	return ok
 }
 
 // GetAttributeNS returns the value of the attribute with the given
 // local name and namespace URI, or empty string and false if not found.
 func (n *Element) GetAttributeNS(localName, nsURI string) (string, bool) {
-	for p := n.properties; p != nil; p = p.NextAttribute() {
-		if p.LocalName() == localName && p.URI() == nsURI {
-			return p.Value(), true
-		}
+	attr, ok := n.FindAttribute(NSPredicate{Local: localName, NamespaceURI: nsURI})
+	if !ok {
+		return "", false
 	}
-	return "", false
+	return attr.Value(), true
 }
 
 // GetAttributeNodeNS returns the Attribute node with the given local name and
@@ -244,36 +289,33 @@ func (n *Element) GetAttributeNS(localName, nsURI string) (string, bool) {
 // xmlHasNsProp, returning the node itself for further inspection (e.g.,
 // checking atype or whether it is a default attribute).
 func (n *Element) GetAttributeNodeNS(localName, nsURI string) *Attribute {
-	for p := n.properties; p != nil; p = p.NextAttribute() {
-		if p.LocalName() == localName && p.URI() == nsURI {
-			return p
-		}
+	attr, ok := n.FindAttribute(NSPredicate{Local: localName, NamespaceURI: nsURI})
+	if !ok {
+		return nil
 	}
-	return nil
+	return attr
 }
 
-// RemoveAttribute removes the attribute with the given name from the element.
+// RemoveAttribute removes the attribute with the given QName from the element.
 // Returns true if an attribute was removed.
 func (n *Element) RemoveAttribute(name string) bool {
-	for p := n.properties; p != nil; p = p.NextAttribute() {
-		if p.Name() == name {
-			n.spliceOutAttribute(p)
-			return true
-		}
+	attr, ok := n.FindAttribute(QNamePredicate(name))
+	if !ok {
+		return false
 	}
-	return false
+	n.spliceOutAttribute(attr)
+	return true
 }
 
 // RemoveAttributeNS removes the attribute with the given local name and
 // namespace URI. Returns true if an attribute was removed.
 func (n *Element) RemoveAttributeNS(localName, nsURI string) bool {
-	for p := n.properties; p != nil; p = p.NextAttribute() {
-		if p.LocalName() == localName && p.URI() == nsURI {
-			n.spliceOutAttribute(p)
-			return true
-		}
+	attr, ok := n.FindAttribute(NSPredicate{Local: localName, NamespaceURI: nsURI})
+	if !ok {
+		return false
 	}
-	return false
+	n.spliceOutAttribute(attr)
+	return true
 }
 
 // spliceOutAttribute removes an attribute from the element's property linked list.
