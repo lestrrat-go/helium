@@ -137,6 +137,9 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	defer func() { c.nsBindings = saved }()
 
 	name := getAttr(elem, "name")
+	if name != "" {
+		name = resolveQName(name, c.nsBindings)
+	}
 	methodStr := strings.ToLower(getAttr(elem, "method"))
 	outDef := &OutputDef{
 		Name:           name,
