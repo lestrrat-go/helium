@@ -452,6 +452,9 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		if err != nil {
 			return err
 		}
+		// Per XSLT spec §5.7.2: adjacent text nodes in the result are merged
+		// before the separator is applied.
+		val = mergeAdjacentTextNodes(val)
 		value = stringifySequenceWithSep(val, sep)
 	}
 

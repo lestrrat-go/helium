@@ -36,6 +36,16 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	tmpl.XPathDefaultNS = c.xpathDefaultNS
 	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
 
+	// Inherit or override default-collation
+	savedDefaultCollation := c.defaultCollation
+	if dc := getAttr(elem, "default-collation"); dc != "" {
+		if uri := resolveDefaultCollation(dc); uri != "" {
+			c.defaultCollation = uri
+		}
+	}
+	tmpl.DefaultCollation = c.defaultCollation
+	defer func() { c.defaultCollation = savedDefaultCollation }()
+
 	matchAttr := getAttr(elem, "match")
 	if matchAttr != "" {
 		p, err := compilePattern(matchAttr, c.nsBindings, c.xpathDefaultNS)

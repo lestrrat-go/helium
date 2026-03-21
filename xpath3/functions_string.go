@@ -569,9 +569,7 @@ func fnSubstringAfter(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
-		return SingleBoolean(false), nil // input is xs:string? — empty yields false
-	}
+	// Per XPath spec, xs:string? argument: empty sequence is treated as "".
 	s, err := coerceArgToString(args[0])
 	if err != nil {
 		return nil, err
@@ -756,14 +754,14 @@ func translateXPathReplacement(repl string, numGroups int) (string, error) {
 					validEnd = i
 				}
 			}
+			// $0 always refers to the whole match.
+			if validEnd == start && i > start && repl[start] == '0' {
+				validEnd = start + 1
+			}
 			if validEnd == start {
-				// No valid group number found — $0 or group exceeds numGroups
-				// Per XPath spec, this is still valid syntax but refers to
-				// a non-existent group, which Go replaces with empty string.
-				// Write the full collected number.
-				b.WriteString("${")
-				b.WriteString(repl[start:i])
-				b.WriteByte('}')
+				// No valid group number found — group number exceeds numGroups.
+				// Per XPath spec, references to non-existent groups are replaced
+				// with empty string. Write nothing for the group reference.
 			} else {
 				// Write the valid group reference
 				b.WriteString("${")

@@ -391,6 +391,12 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execConte
 		}
 	}
 
+	// Built-in XSD subtype relationships: xs:integer derives from xs:decimal.
+	// An integer value satisfies xs:decimal without promotion/casting.
+	if isBuiltinSubtypeOf(av.TypeName, target) {
+		return av, nil
+	}
+
 	// xs:anyAtomicType matches any atomic value
 	if target == "xs:anyAtomicType" {
 		return av, nil
@@ -614,6 +620,7 @@ func isNumericType(t string) bool {
 	}
 	return false
 }
+
 
 // resolveSchemaQName resolves a QName string (e.g. "my:userNode" or "localName")
 // to (localName, namespace) using the stylesheet's namespace bindings.
