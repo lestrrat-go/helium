@@ -814,10 +814,10 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 			return buErr
 		}
 		if baseURI != "" {
-			dynCtx = xpath3.WithBaseURI(dynCtx, baseURI)
+			dynCtx = xpath3.WithBaseURI(dynCtx, ensureFileURI(baseURI))
 		}
 	} else if ec.stylesheet.baseURI != "" {
-		dynCtx = xpath3.WithBaseURI(dynCtx, ec.stylesheet.baseURI)
+		dynCtx = xpath3.WithBaseURI(dynCtx, ensureFileURI(ec.stylesheet.baseURI))
 	}
 
 	// Decimal formats
