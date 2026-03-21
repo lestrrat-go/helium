@@ -177,18 +177,14 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 		return nil, ErrNodeSetLimit
 	}
 
-	// If the document is already indexed in the cache, use the fast
-	// position-based sort. Otherwise, use ancestor-chain comparison
-	// which avoids the expensive full-document indexing.
-	if len(result) > 0 && cache.isIndexed(result[0]) {
-		sort.SliceStable(result, func(i, j int) bool {
-			return cache.Less(result[i], result[j])
-		})
-	} else {
-		sort.SliceStable(result, func(i, j int) bool {
-			return CompareNodeOrder(result[i], result[j]) < 0
-		})
+	// Build cache entries for all distinct tree roots so that cross-tree
+	// ordering is well-defined (registration order = creation order).
+	for _, n := range result {
+		cache.BuildFrom(n)
 	}
+	sort.SliceStable(result, func(i, j int) bool {
+		return cache.Less(result[i], result[j])
+	})
 	return result, nil
 }
 
@@ -359,15 +355,14 @@ func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]he
 	if len(result) > maxNodes {
 		return nil, ErrNodeSetLimit
 	}
-	if len(result) > 0 && cache.isIndexed(result[0]) {
-		sort.SliceStable(result, func(i, j int) bool {
-			return cache.Less(result[i], result[j])
-		})
-	} else {
-		sort.SliceStable(result, func(i, j int) bool {
-			return CompareNodeOrder(result[i], result[j]) < 0
-		})
+	// Build cache entries for all distinct tree roots so that cross-tree
+	// ordering is well-defined (registration order = creation order).
+	for _, n := range result {
+		cache.BuildFrom(n)
 	}
+	sort.SliceStable(result, func(i, j int) bool {
+		return cache.Less(result[i], result[j])
+	})
 	return result, nil
 }
 

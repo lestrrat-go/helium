@@ -104,7 +104,7 @@ func (c *compiler) compileCallTemplate(elem *helium.Element) (*CallTemplateInst,
 	}); err != nil {
 		return nil, err
 	}
-	name := getAttr(elem, "name")
+	name := strings.TrimSpace(getAttr(elem, "name"))
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:call-template requires name attribute")
 	}

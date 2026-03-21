@@ -66,7 +66,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		c.pendingPatternValidations = append(c.pendingPatternValidations, pendingPatternValidation{p, matchAttr})
 	}
 
-	nameAttr := getAttr(elem, "name")
+	nameAttr := strings.TrimSpace(getAttr(elem, "name"))
 	if nameAttr != "" && !isValidQName(nameAttr) && !isValidEQName(nameAttr) {
 		return staticError(errCodeXTSE0020, "invalid name %q on xsl:template", nameAttr)
 	}

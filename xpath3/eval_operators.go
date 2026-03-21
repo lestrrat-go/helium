@@ -350,15 +350,10 @@ func evalPathExpr(evalFn exprEvaluator, ec *evalContext, e PathExpr) (Sequence, 
 		subNodes, _ := NodesFrom(subResult)
 		result = append(result, subNodes...)
 	}
-	// PathExpr filter expression: deduplicate without re-sorting to
-	// preserve the order from the filter (e.g. reverse() stays reversed).
-	seen := make(map[helium.Node]struct{}, len(result))
-	deduped := make([]helium.Node, 0, len(result))
-	for _, n := range result {
-		if _, ok := seen[n]; !ok {
-			seen[n] = struct{}{}
-			deduped = append(deduped, n)
-		}
+	// Per XPath 3.1 §3.3.5: E1/E2 returns nodes in document order.
+	deduped, err := ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
+	if err != nil {
+		return nil, err
 	}
 	seq := make(Sequence, len(deduped))
 	for i, n := range deduped {
@@ -390,13 +385,9 @@ func evalVMPathExpr(evalFn exprEvaluator, ec *evalContext, e vmPathExpr) (Sequen
 		subNodes, _ := NodesFrom(subResult)
 		result = append(result, subNodes...)
 	}
-	seen := make(map[helium.Node]struct{}, len(result))
-	deduped := make([]helium.Node, 0, len(result))
-	for _, n := range result {
-		if _, ok := seen[n]; !ok {
-			seen[n] = struct{}{}
-			deduped = append(deduped, n)
-		}
+	deduped, err := ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
+	if err != nil {
+		return nil, err
 	}
 	seq := make(Sequence, len(deduped))
 	for i, n := range deduped {
