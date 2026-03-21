@@ -98,7 +98,18 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 	case "text":
 		err = serializeText(target, doc, charMap)
 	case "html":
-		err = serializeHTML(target, doc, outDef)
+		if len(charMap) > 0 {
+			// For HTML with character maps, serialize to buffer, then apply
+			// character map to text content only (not inside tags).
+			var htmlBuf bytes.Buffer
+			if herr := serializeHTML(&htmlBuf, doc, outDef); herr != nil {
+				err = herr
+			} else {
+				_, err = io.WriteString(target, applyCharMapToHTMLText(htmlBuf.String(), charMap))
+			}
+		} else {
+			err = serializeHTML(target, doc, outDef)
+		}
 	default:
 		err = serializeXML(target, doc, outDef, charMap)
 	}
@@ -481,6 +492,105 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 		htmlpkg.WithPreserveCase(),
 	}
 	return htmlpkg.WriteDoc(w, doc, opts...)
+}
+
+// htmlURIAttrs lists HTML attributes whose values are URIs and should not
+// have character maps applied (they use URI-escaping instead).
+var htmlURIAttrs = map[string]struct{}{
+	"href": {}, "src": {}, "action": {}, "cite": {}, "data": {},
+	"formaction": {}, "poster": {}, "codebase": {}, "longdesc": {},
+	"usemap": {}, "background": {}, "profile": {},
+}
+
+// applyCharMapToHTMLText applies a character map to serialized HTML output,
+// applying to text content and non-URI attribute values, but skipping
+// URI attributes (href, src, etc.) per the XSLT serialization spec.
+func applyCharMapToHTMLText(html string, charMap map[rune]string) string {
+	var out strings.Builder
+	out.Grow(len(html))
+	i := 0
+	for i < len(html) {
+		if html[i] == '<' {
+			// Inside a tag — process attribute by attribute
+			tagEnd := strings.IndexByte(html[i:], '>')
+			if tagEnd < 0 {
+				out.WriteString(html[i:])
+				break
+			}
+			tag := html[i : i+tagEnd+1]
+			out.WriteString(applyCharMapToHTMLTag(tag, charMap))
+			i += tagEnd + 1
+			continue
+		}
+		// Text content — apply character map
+		r, size := utf8.DecodeRuneInString(html[i:])
+		if repl, ok := charMap[r]; ok {
+			out.WriteString(repl)
+		} else {
+			out.WriteString(html[i : i+size])
+		}
+		i += size
+	}
+	return out.String()
+}
+
+// applyCharMapToHTMLTag applies character map to attribute values within an
+// HTML tag, skipping URI attributes.
+func applyCharMapToHTMLTag(tag string, charMap map[rune]string) string {
+	// For closing tags and self-closing without attributes, return as-is
+	if strings.HasPrefix(tag, "</") || !strings.Contains(tag, "=") {
+		return tag
+	}
+	var out strings.Builder
+	out.Grow(len(tag))
+	i := 0
+	for i < len(tag) {
+		// Find attribute name=value pairs
+		eqIdx := strings.IndexByte(tag[i:], '=')
+		if eqIdx < 0 {
+			out.WriteString(tag[i:])
+			break
+		}
+		// Find the attribute name (word before =)
+		nameEnd := i + eqIdx
+		nameStart := nameEnd - 1
+		for nameStart > i && tag[nameStart] != ' ' && tag[nameStart] != '\t' && tag[nameStart] != '\n' {
+			nameStart--
+		}
+		if tag[nameStart] == ' ' || tag[nameStart] == '\t' || tag[nameStart] == '\n' {
+			nameStart++
+		}
+		attrName := strings.ToLower(tag[nameStart:nameEnd])
+		_, isURI := htmlURIAttrs[attrName]
+
+		// Write everything up to and including the =
+		out.WriteString(tag[i : i+eqIdx+1])
+		i += eqIdx + 1
+
+		// Read the attribute value
+		if i >= len(tag) {
+			break
+		}
+		quote := tag[i]
+		if quote == '"' || quote == '\'' {
+			out.WriteByte(quote)
+			i++
+			endQuote := strings.IndexByte(tag[i:], quote)
+			if endQuote < 0 {
+				out.WriteString(tag[i:])
+				break
+			}
+			attrVal := tag[i : i+endQuote]
+			if isURI {
+				out.WriteString(attrVal)
+			} else {
+				out.WriteString(applyCharacterMap(attrVal, charMap))
+			}
+			out.WriteByte(quote)
+			i += endQuote + 1
+		}
+	}
+	return out.String()
 }
 
 // hasDOEMarkers checks if the document contains any disable-output-escaping markers.
