@@ -99,6 +99,26 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 // formatDateTimePicture formats a time.Time value using an XPath picture string.
 func formatDateTimePicture(t time.Time, picture, lang, calendar, typeName string) (string, error) {
 	var b strings.Builder
+
+	// Language fallback: if the requested language is not "en", fall back
+	// and prepend [Language: en] per XPath F&O §9.8.4.
+	effectiveLang := lang
+	if effectiveLang == "" {
+		effectiveLang = "en"
+	}
+	if !isSupportedLanguage(effectiveLang) {
+		b.WriteString("[Language: en]")
+		effectiveLang = "en"
+	}
+
+	// Calendar fallback: if a non-ISO calendar is requested, fall back
+	// to the Gregorian/AD calendar and prepend [Calendar: AD].
+	effectiveCalendar := calendar
+	if effectiveCalendar != "" && !isISOCalendar(effectiveCalendar) {
+		b.WriteString("[Calendar: AD]")
+		effectiveCalendar = "ISO"
+	}
+
 	i := 0
 	runes := []rune(picture)
 
@@ -122,7 +142,7 @@ func formatDateTimePicture(t time.Time, picture, lang, calendar, typeName string
 				return "", &XPathError{Code: errCodeFOFD1340, Message: "unclosed '[' in picture string"}
 			}
 			component := string(runes[i+1 : end])
-			formatted, err := formatComponent(t, component, lang, calendar, typeName)
+			formatted, err := formatComponent(t, component, effectiveLang, effectiveCalendar, typeName)
 			if err != nil {
 				return "", err
 			}
@@ -143,6 +163,16 @@ func formatDateTimePicture(t time.Time, picture, lang, calendar, typeName string
 	}
 
 	return b.String(), nil
+}
+
+// isSupportedLanguage returns true if the language is supported for formatting.
+func isSupportedLanguage(lang string) bool {
+	switch lang {
+	case "en":
+		return true
+	default:
+		return false
+	}
 }
 
 // formatComponent handles a single [component] specifier.
@@ -200,7 +230,7 @@ func formatComponent(t time.Time, spec, lang, calendar, typeName string) (string
 	case 'f':
 		return formatFractionalSeconds(t, presentation, width), nil
 	case 'Z', 'z':
-		return formatTimezone(t, compChar, presentation), nil
+		return formatTimezone(t, compChar, presentation, width), nil
 	case 'W':
 		_, w := t.ISOWeek()
 		value = int64(w)
@@ -756,7 +786,7 @@ func formatFractionalSeconds(t time.Time, p dtPresentation, w dtWidth) string {
 	return s
 }
 
-func formatTimezone(t time.Time, comp byte, p dtPresentation) string {
+func formatTimezone(t time.Time, comp byte, p dtPresentation, w dtWidth) string {
 	// Check if the time has no explicit timezone
 	if !HasTimezone(t) {
 		if p.format == "Z" && !p.implicit {
@@ -778,6 +808,11 @@ func formatTimezone(t time.Time, comp byte, p dtPresentation) string {
 	}
 
 	spec := parseTimezonePicture(comp, p)
+	// When a width modifier is present and limits the width to just the hour
+	// portion, show minutes only when non-zero (XSLT 2.0 Erratum E29 behavior).
+	if w.maxWidth > 0 && p.implicit && w.maxWidth <= spec.hourWidth {
+		spec.showMinutes = false
+	}
 	return renderTimezoneOffset(offset, spec)
 }
 
@@ -959,7 +994,7 @@ func militaryTimezoneCode(offset int) (string, bool) {
 
 func isISOCalendar(calendar string) bool {
 	switch calendar {
-	case "ISO", "Q{}ISO":
+	case "ISO", "Q{}ISO", "AD", "Q{}AD":
 		return true
 	default:
 		return false
@@ -1038,7 +1073,9 @@ func isoMonthWeekOneStart(t time.Time) time.Time {
 
 func isKnownCalendarName(calendar string) bool {
 	switch calendar {
-	case "ISO", "CB":
+	case "ISO", "AD", "AH", "AM", "AP", "AS", "BE", "CB", "CE", "CL",
+		"CS", "EE", "FE", "JE", "KE", "KY", "ME", "MS", "NS",
+		"OS", "RS", "SE", "SH", "SS", "TE", "US":
 		return true
 	default:
 		return false

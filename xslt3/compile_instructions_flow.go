@@ -7,10 +7,10 @@ import (
 )
 
 func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesInst, error) {
-	mode := getAttr(elem, "mode")
+	mode := strings.TrimSpace(getAttr(elem, "mode"))
 	// Validate mode name is a valid QName.
 	if mode != "" && mode[0] != '#' {
-		if !isValidQName(mode) {
+		if !isValidQName(mode) && !isValidEQName(mode) {
 			return nil, staticError(errCodeXTSE0550, "invalid mode name %q on xsl:apply-templates", mode)
 		}
 		// XTSE0280: check for undeclared prefix.

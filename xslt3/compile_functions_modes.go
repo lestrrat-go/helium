@@ -251,21 +251,23 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	// Check for conflicting declarations at the same import precedence
 	if existing, ok := c.stylesheet.modeDefs[name]; ok {
 		if existing.ImportPrec == c.importPrec {
-			// Same precedence: check for conflicting attribute values (XTSE0545)
+			// Same precedence: check for conflicting attribute values (XTSE0545).
+			// Instead of erroring immediately, defer the conflict — a higher-
+			// precedence declaration may resolve it later.
 			if existing.OnNoMatch != "" && md.OnNoMatch != "" && existing.OnNoMatch != md.OnNoMatch {
-				return staticError(errCodeXTSE0545, "conflicting on-no-match values for mode %q: %q vs %q", name, existing.OnNoMatch, md.OnNoMatch)
+				existing.conflictErr = "conflicting on-no-match values for mode " + name
 			}
 			if streamableStr != "" && existing.Streamable != md.Streamable {
-				return staticError(errCodeXTSE0545, "conflicting streamable values for mode %q", name)
+				existing.conflictErr = "conflicting streamable values for mode " + name
 			}
 			if existing.Visibility != "" && md.Visibility != "" && existing.Visibility != md.Visibility {
-				return staticError(errCodeXTSE0545, "conflicting visibility values for mode %q: %q vs %q", name, existing.Visibility, md.Visibility)
+				existing.conflictErr = "conflicting visibility values for mode " + name
 			}
 			if existing.OnMultipleMatch != "" && md.OnMultipleMatch != "" && existing.OnMultipleMatch != md.OnMultipleMatch {
-				return staticError(errCodeXTSE0545, "conflicting on-multiple-match values for mode %q", name)
+				existing.conflictErr = "conflicting on-multiple-match values for mode " + name
 			}
 			if existing.UseAccumulators != "" && md.UseAccumulators != "" && !sameAccumulatorSet(existing.UseAccumulators, md.UseAccumulators) {
-				return staticError(errCodeXTSE0545, "conflicting use-accumulators values for mode %q", name)
+				existing.conflictErr = "conflicting use-accumulators values for mode " + name
 			}
 			// Non-conflicting: merge attributes (use non-empty values from new decl)
 			if md.OnNoMatch != "" {
@@ -282,9 +284,12 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 			}
 			return nil
 		}
-		// Different precedence: higher precedence wins
+		// Different precedence: higher precedence wins and clears any conflict.
 		if c.importPrec > existing.ImportPrec {
 			c.stylesheet.modeDefs[name] = md
+		} else {
+			// Lower precedence than existing: existing already won, clear conflict.
+			existing.conflictErr = ""
 		}
 		return nil
 	}

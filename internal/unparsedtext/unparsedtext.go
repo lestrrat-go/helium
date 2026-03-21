@@ -179,9 +179,10 @@ func ReadURI(cfg *Config, uri string) ([]byte, error) {
 	}
 }
 
-// DecodeText decodes raw bytes to a string, handling BOM detection and
-// encoding conversion. If encoding is empty, UTF-8 is assumed unless a
-// BOM indicates otherwise.
+// DecodeText decodes raw bytes to a string, handling BOM detection,
+// XML declaration sniffing, and encoding conversion. If encoding is empty,
+// the encoding is determined from the BOM, then from an XML declaration
+// (if present), and defaults to UTF-8 otherwise.
 func DecodeText(data []byte, encoding string) (string, error) {
 	if encoding != "" {
 		enc := iencoding.Load(encoding)
@@ -191,6 +192,14 @@ func DecodeText(data []byte, encoding string) (string, error) {
 	}
 
 	detectedEncoding, cleanData := detectBOM(data)
+
+	// When no BOM is found and no explicit encoding is given, try to
+	// detect encoding from an XML declaration (<?xml ... encoding="..."?>).
+	if detectedEncoding == "" && encoding == "" {
+		if xmlEnc := detectXMLDeclEncoding(data); xmlEnc != "" {
+			detectedEncoding = xmlEnc
+		}
+	}
 
 	effectiveEncoding := resolveEncoding(encoding, detectedEncoding)
 	if effectiveEncoding == "" {
@@ -213,6 +222,47 @@ func detectBOM(data []byte) (string, []byte) {
 		return "utf-16be", data[2:]
 	}
 	return "", data
+}
+
+// detectXMLDeclEncoding looks for an XML declaration at the beginning of
+// data and extracts the encoding attribute value if present.
+// It works on raw bytes assuming the declaration is in ASCII-compatible encoding.
+func detectXMLDeclEncoding(data []byte) string {
+	// XML declaration must start at the very beginning.
+	if len(data) < 5 || string(data[:5]) != "<?xml" {
+		return ""
+	}
+	// Find the end of the declaration.
+	end := bytes.Index(data, []byte("?>"))
+	if end < 0 || end > 200 {
+		return ""
+	}
+	decl := string(data[:end])
+	// Look for encoding="..." or encoding='...'.
+	idx := strings.Index(decl, "encoding")
+	if idx < 0 {
+		return ""
+	}
+	rest := decl[idx+len("encoding"):]
+	rest = strings.TrimLeft(rest, " \t\r\n")
+	if len(rest) == 0 || rest[0] != '=' {
+		return ""
+	}
+	rest = rest[1:]
+	rest = strings.TrimLeft(rest, " \t\r\n")
+	if len(rest) == 0 {
+		return ""
+	}
+	quote := rest[0]
+	if quote != '"' && quote != '\'' {
+		return ""
+	}
+	rest = rest[1:]
+	endQ := strings.IndexByte(rest, quote)
+	if endQ < 0 {
+		return ""
+	}
+	return rest[:endQ]
 }
 
 // resolveEncoding determines the effective encoding from the user-specified

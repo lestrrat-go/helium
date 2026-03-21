@@ -101,7 +101,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		seenModes := make(map[string]struct{}, len(modeFields))
 		hasAll := false
 		for _, m := range modeFields {
-			if m[0] != '#' && !isValidQName(m) {
+			if m[0] != '#' && !isValidQName(m) && !isValidEQName(m) {
 				return staticError(errCodeXTSE0550, "invalid mode name %q on xsl:template", m)
 			}
 			// XTSE0280: check for undeclared prefix in mode name.
