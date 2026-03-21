@@ -251,6 +251,20 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 		tmpl.Priority = tmpl.Match.Alternatives[0].priority
 	}
 
+	// Validate: override match template can only use public/abstract modes
+	if tmpl.Mode != "" && pkg.modeDefs != nil {
+		if md, ok := pkg.modeDefs[tmpl.Mode]; ok {
+			if md.Visibility == visFinal {
+				return nil, staticError(errCodeXTSE3060,
+					"cannot override templates in final mode %q", tmpl.Mode)
+			}
+			if md.Visibility == visPrivate || md.Visibility == visHidden {
+				return nil, staticError(errCodeXTSE3060,
+					"cannot override templates in %s mode %q", md.Visibility, tmpl.Mode)
+			}
+		}
+	}
+
 	// Validate: named template must exist in package
 	if tmpl.Name != "" {
 		if _, exists := pkg.namedTemplates[tmpl.Name]; !exists {
@@ -304,10 +318,14 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 			"xsl:override variable %q not found in used package", name)
 	}
 
-	// Check visibility: cannot override final variable
-	if pkgVar.Visibility == visFinal {
+	// Check visibility: cannot override final/private/hidden variable
+	switch pkgVar.Visibility {
+	case visFinal:
 		return nil, staticError(errCodeXTSE3060,
 			"cannot override final variable %q", name)
+	case visPrivate, visHidden:
+		return nil, staticError(errCodeXTSE3060,
+			"cannot override %s variable %q", pkgVar.Visibility, name)
 	}
 
 	v := &Variable{Name: resolvedName, As: getAttr(elem, "as")}
@@ -372,10 +390,16 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 			"xsl:override attribute-set %q not found in used package", name)
 	}
 
-	// Check visibility: cannot override final attribute-set
-	if pkgAS != nil && pkgAS.Visibility == visFinal {
-		return nil, staticError(errCodeXTSE3060,
-			"cannot override final attribute-set %q", name)
+	// Check visibility: cannot override final/private/hidden attribute-set
+	if pkgAS != nil {
+		switch pkgAS.Visibility {
+		case visFinal:
+			return nil, staticError(errCodeXTSE3060,
+				"cannot override final attribute-set %q", name)
+		case visPrivate, visHidden:
+			return nil, staticError(errCodeXTSE3060,
+				"cannot override %s attribute-set %q", pkgAS.Visibility, name)
+		}
 	}
 
 	asd := &AttributeSetDef{Name: resolvedName}
