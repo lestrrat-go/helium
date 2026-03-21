@@ -82,7 +82,7 @@ func fnIRIToURI(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleString(b.String()), nil
 }
 
-func fnResolveURI(_ context.Context, args []Sequence) (Sequence, error) {
+func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args[0]) == 0 {
 		return nil, nil
 	}
@@ -98,6 +98,10 @@ func fnResolveURI(_ context.Context, args []Sequence) (Sequence, error) {
 			}
 			return SingleString(base), nil
 		}
+		// 1-arg with empty relative: return static base URI
+		if cfg := getEvalConfig(ctx); cfg != nil && cfg.baseURI != "" {
+			return SingleString(cfg.baseURI), nil
+		}
 		return SingleString(""), nil
 	}
 	base := ""
@@ -105,6 +109,12 @@ func fnResolveURI(_ context.Context, args []Sequence) (Sequence, error) {
 		base, err = coerceArgToString(args[1])
 		if err != nil {
 			return nil, err
+		}
+	}
+	// 1-arg form: use static base URI from context
+	if base == "" {
+		if cfg := getEvalConfig(ctx); cfg != nil {
+			base = cfg.baseURI
 		}
 	}
 	if base == "" {

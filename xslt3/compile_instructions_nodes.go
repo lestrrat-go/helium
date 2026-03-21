@@ -159,6 +159,12 @@ func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
 		}
 	}
 
+	// Capture xml:base for static base URI override during body execution.
+	effectiveBase := stylesheetBaseURI(elem, c.baseURI)
+	if effectiveBase != c.baseURI {
+		inst.StaticBaseURI = effectiveBase
+	}
+
 	body, err := c.compileChildren(elem)
 	if err != nil {
 		return nil, err

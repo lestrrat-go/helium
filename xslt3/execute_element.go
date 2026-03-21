@@ -94,6 +94,13 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		ec.annotateNode(elem, inst.TypeName)
 	}
 
+	// Override static base URI when xsl:element carries xml:base.
+	savedBaseOverride := ec.staticBaseURIOverride
+	if inst.StaticBaseURI != "" {
+		ec.staticBaseURIOverride = inst.StaticBaseURI
+	}
+	defer func() { ec.staticBaseURIOverride = savedBaseOverride }()
+
 	// Push new output context for children.
 	// Temporarily disable sequenceMode so that children are added to this
 	// element normally (not captured as separate items in the sequence).
