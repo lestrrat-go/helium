@@ -157,24 +157,6 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 	return ec
 }
 
-func (ec *evalContext) withNode(n helium.Node, pos, size int) *evalContext {
-	cp := *ec
-	cp.node = n
-	cp.contextItem = nil
-	cp.position = pos
-	cp.size = size
-	return &cp
-}
-
-// withContextItem sets a non-node context item (for simple map, etc.)
-func (ec *evalContext) withContextItem(item Item, pos, size int) *evalContext {
-	cp := *ec
-	cp.contextItem = item
-	cp.node = nil // clear node so functions don't accidentally use an outer node
-	cp.position = pos
-	cp.size = size
-	return &cp
-}
 
 type evalContextFrame struct {
 	node        helium.Node
