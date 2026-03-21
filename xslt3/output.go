@@ -7,6 +7,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
@@ -85,6 +86,11 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 				outDef.Method = "xhtml"
 			}
 		}
+	}
+
+	// Validate serialization parameters before proceeding.
+	if err := validateSerializationParams(outDef, doc); err != nil {
+		return err
 	}
 
 	var charMap map[rune]string
@@ -229,6 +235,225 @@ func defaultOutputDef() *OutputDef {
 		Encoding: "UTF-8",
 		Version:  "1.0",
 	}
+}
+
+// validateSerializationParams checks serialization parameters for errors
+// per the XSLT 3.0 serialization spec.
+func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error {
+	method := outDef.Method
+
+	// SEPM0004: standalone != "omit" with multiple element children of root
+	if outDef.Standalone == "yes" || outDef.Standalone == "no" {
+		if method == "xml" || method == "xhtml" {
+			elemCount := countRootElements(doc)
+			if elemCount > 1 {
+				return dynamicError(errCodeSEPM0004,
+					"standalone=%q specified but result has %d root elements", outDef.Standalone, elemCount)
+			}
+		}
+	}
+
+	// SEPM0004: doctype-system with multiple element children of root
+	if outDef.DoctypeSystem != "" {
+		if method == "xml" || method == "xhtml" {
+			elemCount := countRootElements(doc)
+			if elemCount > 1 {
+				return dynamicError(errCodeSEPM0004,
+					"doctype-system specified but result has %d root elements", elemCount)
+			}
+		}
+	}
+
+	// SEPM0009: omit-xml-declaration="yes" conflicts with standalone or doctype-system
+	if outDef.OmitDeclaration {
+		if outDef.Standalone == "yes" || outDef.Standalone == "no" {
+			return dynamicError(errCodeSEPM0009,
+				"omit-xml-declaration=\"yes\" conflicts with standalone=%q", outDef.Standalone)
+		}
+		if outDef.DoctypeSystem != "" && outDef.Version != "" && outDef.Version != "1.0" {
+			return dynamicError(errCodeSEPM0009,
+				"omit-xml-declaration=\"yes\" conflicts with doctype-system and version=%q", outDef.Version)
+		}
+	}
+
+	// SEPM0010: undeclare-prefixes="yes" with version="1.0"
+	if outDef.UndeclarePrefixes && outDef.Version == "1.0" {
+		return dynamicError(errCodeSEPM0010,
+			"undeclare-prefixes=\"yes\" is not allowed with version=\"1.0\"")
+	}
+
+	// SEPM0016: invalid doctype-public (contains non-pubid characters)
+	if outDef.DoctypePublic != "" {
+		if !isValidPublicID(outDef.DoctypePublic) {
+			return dynamicError(errCodeSEPM0016,
+				"doctype-public %q contains invalid characters", outDef.DoctypePublic)
+		}
+	}
+
+	// SESU0007: unsupported encoding for html/xhtml/text
+	if method == "html" || method == "xhtml" || method == "text" {
+		enc := strings.ToLower(outDef.Encoding)
+		if enc != "" && enc != "utf-8" && enc != "utf8" && enc != "utf-16" && enc != "utf16" {
+			_, encErr := htmlindex.Get(enc)
+			if encErr != nil {
+				return dynamicError(errCodeSESU0007,
+					"unsupported encoding %q for %s output method", outDef.Encoding, method)
+			}
+		}
+	}
+
+	// SESU0007: unsupported version for html output (only when method explicitly set)
+	if method == "html" && outDef.MethodExplicit && outDef.Version != "" {
+		v, err := strconv.ParseFloat(outDef.Version, 64)
+		if err == nil && v != 4.0 && v != 4.01 && v != 5.0 {
+			return dynamicError(errCodeSESU0007,
+				"unsupported version %q for html output method", outDef.Version)
+		}
+	}
+
+	// SESU0011: unsupported normalization-form
+	if outDef.NormalizationForm != "" && outDef.NormalizationForm != "NONE" {
+		switch outDef.NormalizationForm {
+		case "NFC", "NFD", "NFKC", "NFKD", "FULLY-NORMALIZED":
+			// supported
+		default:
+			return dynamicError(errCodeSESU0011,
+				"unsupported normalization-form %q", outDef.NormalizationForm)
+		}
+	}
+
+	// SESU0013: unsupported encoding for xml output
+	if method == "xml" {
+		enc := strings.ToLower(outDef.Encoding)
+		if enc != "" && enc != "utf-8" && enc != "utf8" && enc != "utf-16" && enc != "utf16" {
+			_, encErr := htmlindex.Get(enc)
+			if encErr != nil {
+				return dynamicError(errCodeSESU0013,
+					"unsupported encoding %q", outDef.Encoding)
+			}
+		}
+	}
+
+	// SERE0012: fully-normalized and result begins with combining character
+	if outDef.NormalizationForm == "FULLY-NORMALIZED" {
+		if err := checkFullyNormalized(doc); err != nil {
+			return err
+		}
+	}
+
+	// SERE0014: HTML method with characters in #x7F-#x9F range in text
+	if method == "html" {
+		if err := checkHTMLInvalidChars(doc); err != nil {
+			return err
+		}
+	}
+
+	// SERE0015: ">" in PI content for HTML output
+	if method == "html" {
+		if err := checkHTMLPIContent(doc); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// countRootElements counts the number of element children of the document root.
+func countRootElements(doc *helium.Document) int {
+	count := 0
+	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() == helium.ElementNode {
+			count++
+		}
+	}
+	return count
+}
+
+// isValidPublicID checks if a string is a valid public identifier.
+// Valid characters: [a-zA-Z0-9], space, newline, '-', '(', ')', '+', ',',
+// '.', '/', ':', '=', '?', ';', '!', '*', '#', '@', '$', '_', '%'
+func isValidPublicID(s string) bool {
+	for _, r := range s {
+		if !isPubidChar(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func isPubidChar(r rune) bool {
+	if r >= 'a' && r <= 'z' {
+		return true
+	}
+	if r >= 'A' && r <= 'Z' {
+		return true
+	}
+	if r >= '0' && r <= '9' {
+		return true
+	}
+	switch r {
+	case ' ', '\n', '\r', '-', '\'', '(', ')', '+', ',', '.', '/', ':', '=', '?', ';', '!', '*', '#', '@', '$', '_', '%':
+		return true
+	}
+	return false
+}
+
+// checkFullyNormalized checks if the result tree violates fully-normalized
+// constraints (e.g., starts with a combining character).
+func checkFullyNormalized(doc *helium.Document) error {
+	var firstErr error
+	_ = helium.Walk(doc, func(n helium.Node) error {
+		if n.Type() == helium.TextNode || n.Type() == helium.CDATASectionNode {
+			content := string(n.Content())
+			for _, r := range content {
+				if unicode.In(r, unicode.Mn, unicode.Mc, unicode.Me) {
+					firstErr = dynamicError(errCodeSERE0012,
+						"fully-normalized output begins with combining character U+%04X", r)
+					return firstErr
+				}
+				break // only check first character
+			}
+		}
+		return nil
+	})
+	return firstErr
+}
+
+// checkHTMLInvalidChars checks for characters in the #x7F-#x9F range in
+// HTML text content (SERE0014).
+func checkHTMLInvalidChars(doc *helium.Document) error {
+	var firstErr error
+	_ = helium.Walk(doc, func(n helium.Node) error {
+		if n.Type() == helium.TextNode || n.Type() == helium.CDATASectionNode {
+			content := string(n.Content())
+			for _, r := range content {
+				if r >= 0x7F && r <= 0x9F && r != 0x85 {
+					firstErr = dynamicError(errCodeSERE0014,
+						"HTML output contains character U+%04X in #x7F-#x9F range", r)
+					return firstErr
+				}
+			}
+		}
+		return nil
+	})
+	return firstErr
+}
+
+// checkHTMLPIContent checks that no PI in the result tree contains ">".
+func checkHTMLPIContent(doc *helium.Document) error {
+	var err error
+	_ = helium.Walk(doc, func(n helium.Node) error {
+		if n.Type() == helium.ProcessingInstructionNode {
+			content := string(n.Content())
+			if strings.Contains(content, ">") {
+				err = dynamicError(errCodeSERE0015,
+					"processing instruction content contains '>' in HTML output")
+				return err
+			}
+		}
+		return nil
+	})
+	return err
 }
 
 func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
