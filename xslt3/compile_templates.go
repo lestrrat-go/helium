@@ -38,6 +38,26 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 
 	tmpl.Name = resolveQName(getAttr(elem, "name"), c.nsBindings)
 
+	// XTSE0500: template must have match or name (or both).
+	if matchAttr == "" && tmpl.Name == "" {
+		return staticError(errCodeXTSE0500, "xsl:template must have a @match or @name attribute")
+	}
+	// XTSE0500: template without match must not have mode or priority.
+	if matchAttr == "" {
+		if _, hasMode := elem.GetAttribute("mode"); hasMode {
+			return staticError(errCodeXTSE0500, "xsl:template without @match must not have @mode")
+		}
+		if _, hasPrio := elem.GetAttribute("priority"); hasPrio {
+			return staticError(errCodeXTSE0500, "xsl:template without @match must not have @priority")
+		}
+	}
+	// XTSE0500: template without name must not have visibility.
+	if tmpl.Name == "" {
+		if _, hasVis := elem.GetAttribute("visibility"); hasVis {
+			return staticError(errCodeXTSE0500, "xsl:template without @name must not have @visibility")
+		}
+	}
+
 	// XSLT 3.0 §3.8.2: default-mode on xsl:template affects both the
 	// template's own mode (when mode is omitted) and xsl:apply-templates
 	// within the template body. Read it before resolving the mode so
