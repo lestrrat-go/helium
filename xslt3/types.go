@@ -147,6 +147,13 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 			}
 		}
 		return nil, fmt.Errorf("expected processing-instruction(), got %s", describeItem(item))
+	case "namespace-node()":
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			if ni.Node.Type() == helium.NamespaceNode {
+				return item, nil
+			}
+		}
+		return nil, fmt.Errorf("expected namespace-node(), got %s", describeItem(item))
 	case "document-node()":
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			if ni.Node.Type() == helium.DocumentNode {
