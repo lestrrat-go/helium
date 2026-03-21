@@ -51,13 +51,22 @@ func (c *compiler) compileCharacterMap(elem *helium.Element) error {
 	if c.stylesheet.characterMaps == nil {
 		c.stylesheet.characterMaps = make(map[string]*CharacterMapDef)
 	}
-	// XTSE1580: duplicate character-map declarations with same name at same
-	// import precedence. Imported character maps merge silently.
-	if _, ok := c.stylesheet.characterMaps[name]; ok && !c.insideImport {
+	if c.charMapModuleKeys == nil {
+		c.charMapModuleKeys = make(map[string]string)
+	}
+	// XTSE1580: duplicate character-map declarations with same name in the
+	// same stylesheet module. Different modules may define the same name;
+	// higher import precedence overrides, same precedence merges.
+	if prevModule, exists := c.charMapModuleKeys[name]; exists && prevModule == c.moduleKey {
 		return staticError(errCodeXTSE1580,
 			"duplicate character-map declaration %q", name)
 	}
+	c.charMapModuleKeys[name] = c.moduleKey
+
 	if existing, ok := c.stylesheet.characterMaps[name]; ok {
+		// Merge: later-compiled mappings override earlier ones for the
+		// same character. Since imports compile before the importing
+		// module, the importing module's mappings naturally take precedence.
 		for r, s := range cm.Mappings {
 			existing.Mappings[r] = s
 		}
@@ -171,6 +180,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@omit-xml-declaration", v)
 		}
 		outDef.OmitDeclaration = b
+		outDef.OmitDeclarationExplicit = true
 	}
 	if v := getAttr(elem, "undeclare-prefixes"); v != "" {
 		b, ok := parseXSDBool(v)
@@ -277,6 +287,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		}
 		if getAttr(elem, "omit-xml-declaration") == "" {
 			outDef.OmitDeclaration = existing.OmitDeclaration
+			outDef.OmitDeclarationExplicit = existing.OmitDeclarationExplicit
 		}
 		if getAttr(elem, "standalone") == "" {
 			outDef.Standalone = existing.Standalone

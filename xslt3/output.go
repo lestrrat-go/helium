@@ -73,13 +73,16 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 	}
 
 	// XSLT 3.0 §20: When no output method is explicitly specified, auto-detect
-	// based on the document element. If the root element is "html" (case-insensitive)
-	// in no namespace, default to HTML output method.
+	// based on the document element.
 	if !outDef.MethodExplicit && outDef.Method == "xml" {
 		if root := doc.DocumentElement(); root != nil {
 			if strings.EqualFold(root.Name(), "html") && root.URI() == "" {
+				// Root is "html" in no namespace → HTML output method.
 				outDef.Method = "html"
 				outDef.OmitDeclaration = true
+			} else if strings.EqualFold(string(root.LocalName()), "html") && string(root.URI()) == xhtmlNS {
+				// Root is "html" in XHTML namespace → XHTML output method.
+				outDef.Method = "xhtml"
 			}
 		}
 	}
@@ -610,20 +613,35 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
 	isHTML5 := isHTMLVersion5(outDef.HTMLVersion)
 
+	// XSLT 3.0 §20: for xhtml method with html-version >= 5, the default
+	// for omit-xml-declaration is "yes" (unless explicitly set otherwise).
+	if isHTML5 && !outDef.OmitDeclarationExplicit {
+		outDef.OmitDeclaration = true
+	}
+
 	// For HTML5: only use explicit doctype when doctype-system is specified.
 	// Without doctype-system (even if doctype-public is set), use <!DOCTYPE html>.
 	if isHTML5 && outDef.DoctypeSystem == "" {
-		// Remove existing DTD and replace with HTML5 DOCTYPE
+		// Remove existing DTD and replace with HTML5 DOCTYPE.
+		// Use the root element's local name to preserve case (e.g. "HTML" vs "html").
+		dtdName := "html"
+		if root := doc.DocumentElement(); root != nil {
+			dtdName = string(root.LocalName())
+		}
 		if dtd := doc.IntSubset(); dtd != nil {
 			helium.UnlinkNode(dtd)
 		}
-		_, _ = doc.CreateInternalSubset("html", "", "")
+		_, _ = doc.CreateInternalSubset(dtdName, "", "")
 	}
 
 	// Insert <meta http-equiv="Content-Type"> in <head>
 	if outDef.IncludeContentType == nil || *outDef.IncludeContentType {
 		insertHTMLMeta(doc, outDef)
 	}
+
+	// Normalize XHTML namespace: elements in http://www.w3.org/1999/xhtml
+	// that use a prefix should be converted to use the default namespace.
+	normalizeXHTMLNamespace(doc)
 
 	// Serialize as XML, then post-process for XHTML rules:
 	// - Void elements: add space before /> (e.g., <br /> not <br/>)
@@ -634,6 +652,39 @@ func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMa
 	}
 	_, err := io.WriteString(w, fixXHTMLSelfClosing(buf.String()))
 	return err
+}
+
+const xhtmlNS = "http://www.w3.org/1999/xhtml"
+
+// normalizeXHTMLNamespace walks the document and converts prefixed XHTML
+// namespace elements to use the default namespace (unprefixed), as required
+// by the XHTML output method.
+func normalizeXHTMLNamespace(doc *helium.Document) {
+	_ = helium.Walk(doc, func(n helium.Node) error {
+		elem, ok := n.(*helium.Element)
+		if !ok {
+			return nil
+		}
+		if string(elem.URI()) == xhtmlNS && string(elem.Prefix()) != "" {
+			oldPrefix := string(elem.Prefix())
+			// Remove the prefixed namespace declaration
+			elem.RemoveNamespaceByPrefix(oldPrefix)
+			// Set the element to use default namespace (no prefix)
+			_ = elem.SetActiveNamespace("", xhtmlNS)
+			// Ensure default namespace declaration is present
+			hasDefaultNS := false
+			for _, ns := range elem.Namespaces() {
+				if ns.Prefix() == "" && ns.URI() == xhtmlNS {
+					hasDefaultNS = true
+					break
+				}
+			}
+			if !hasDefaultNS {
+				_ = elem.DeclareNamespace("", xhtmlNS)
+			}
+		}
+		return nil
+	})
 }
 
 // xhtmlVoidElements lists HTML void elements that should be self-closed
@@ -906,10 +957,10 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 	if root == nil {
 		return
 	}
-	// Find the <head> element (case-insensitive).
+	// Find the <head> element (case-insensitive, using local name for namespace support).
 	var head *helium.Element
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
-		if e, ok := child.(*helium.Element); ok && strings.EqualFold(e.Name(), "head") {
+		if e, ok := child.(*helium.Element); ok && strings.EqualFold(string(e.LocalName()), "head") {
 			head = e
 			break
 		}
@@ -920,7 +971,7 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 	// Check if a <meta http-equiv="Content-Type"> already exists.
 	// Use case-insensitive attribute name matching for HTML compatibility.
 	for child := head.FirstChild(); child != nil; child = child.NextSibling() {
-		if e, ok := child.(*helium.Element); ok && strings.EqualFold(e.Name(), "meta") {
+		if e, ok := child.(*helium.Element); ok && strings.EqualFold(string(e.LocalName()), "meta") {
 			for _, attr := range e.Attributes() {
 				if strings.EqualFold(attr.Name(), "http-equiv") && strings.EqualFold(attr.Value(), "Content-Type") {
 					return // already present
@@ -937,15 +988,16 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 	if err != nil {
 		return
 	}
+	// If the head element is in a namespace, put the meta element in the same namespace.
+	if headURI := string(head.URI()); headURI != "" {
+		_ = meta.SetActiveNamespace(string(head.Prefix()), headURI)
+	}
 	meta.SetLiteralAttribute("http-equiv", "Content-Type")
-	// Use media-type if specified; otherwise default based on output method.
+	// Use media-type if specified; otherwise default to text/html
+	// (same for both html and xhtml methods per XSLT 3.0 spec).
 	mediaType := outDef.MediaType
 	if mediaType == "" {
-		if outDef.Method == "xhtml" {
-			mediaType = "application/xhtml+xml"
-		} else {
-			mediaType = "text/html"
-		}
+		mediaType = "text/html"
 	}
 	meta.SetLiteralAttribute("content", mediaType+"; charset="+enc)
 	// Insert meta as first child of <head>.

@@ -1,7 +1,6 @@
 package xslt3
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -9,7 +8,6 @@ import (
 )
 
 func (c *compiler) compileTemplate(elem *helium.Element) error {
-	fmt.Println("DEBUG compileTemplate match=", getAttr(elem, "match"), "name=", getAttr(elem, "name"))
 	// Collect namespace declarations and xpath-default-namespace before
 	// evaluating use-when so the expression has the correct namespace context.
 	c.collectNamespaces(elem)
