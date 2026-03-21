@@ -64,7 +64,14 @@ func (ec *execContext) execVariable(ctx context.Context, inst *VariableInst) err
 			return evalErr
 		}
 	} else {
-		val = xpath3.SingleString("")
+		// No select, no body (or empty body after whitespace stripping).
+		// XSLT 3.0 §9.3: if as specifies a sequence type whose occurrence
+		// indicator is ? or *, the effective value is an empty sequence.
+		if inst.As != "" && (strings.HasSuffix(inst.As, "?") || strings.HasSuffix(inst.As, "*")) {
+			val = nil
+		} else {
+			val = xpath3.SingleString("")
+		}
 	}
 
 	// Type check against the declared as type
