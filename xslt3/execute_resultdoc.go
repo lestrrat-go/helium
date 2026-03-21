@@ -186,6 +186,18 @@ func (ec *execContext) isItemOutputMethod() bool {
 	return isItemSerializationMethod(ec.currentResultDocMethod)
 }
 
+// resolveResultDocFormat returns the effective format name for a result-document
+// instruction, evaluating the format AVT if present.
+func (ec *execContext) resolveResultDocFormat(ctx context.Context, inst *ResultDocumentInst) string {
+	if inst.FormatAVT != nil {
+		v, err := inst.FormatAVT.evaluate(ctx, ec.contextNode)
+		if err == nil {
+			return resolveQName(strings.TrimSpace(v), inst.NSBindings)
+		}
+	}
+	return inst.Format
+}
+
 // resolveResultDocMethod returns the effective output method for a result-document
 // instruction, considering the method AVT, compile-time method, named format, and
 // default output definition.
@@ -202,8 +214,9 @@ func (ec *execContext) resolveResultDocMethod(ctx context.Context, inst *ResultD
 		return inst.Method
 	}
 	// Named format.
-	if inst.Format != "" {
-		if outDef, ok := ec.stylesheet.outputs[inst.Format]; ok {
+	format := ec.resolveResultDocFormat(ctx, inst)
+	if format != "" {
+		if outDef, ok := ec.stylesheet.outputs[format]; ok {
 			return outDef.Method
 		}
 	}
@@ -249,6 +262,9 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 
 	ec.usedResultURIs[href] = struct{}{}
 
+	// Resolve the effective format name (static or AVT).
+	effectiveFormat := ec.resolveResultDocFormat(ctx, inst)
+
 	// Resolve effective item-separator: xsl:result-document attribute takes
 	// priority (including #absent which blocks format inheritance),
 	// then the named xsl:output (format), then nil (default).
@@ -263,8 +279,8 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 			}
 			itemSep = &sepVal
 		}
-	} else if inst.Format != "" {
-		if outDef, ok := ec.stylesheet.outputs[inst.Format]; ok && outDef.ItemSeparator != nil {
+	} else if effectiveFormat != "" {
+		if outDef, ok := ec.stylesheet.outputs[effectiveFormat]; ok && outDef.ItemSeparator != nil {
 			itemSep = outDef.ItemSeparator
 		}
 	} else if outDef, ok := ec.stylesheet.outputs[""]; ok && outDef.ItemSeparator != nil {
@@ -405,8 +421,8 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		// Include maps from the named format (xsl:output) first, then
 		// maps from xsl:result-document itself (higher priority).
 		var allMaps []string
-		if inst.Format != "" {
-			if fmtDef, ok := ec.stylesheet.outputs[inst.Format]; ok {
+		if effectiveFormat != "" {
+			if fmtDef, ok := ec.stylesheet.outputs[effectiveFormat]; ok {
 				allMaps = append(allMaps, fmtDef.UseCharacterMaps...)
 			}
 		}
@@ -500,14 +516,15 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 		inst.OmitXMLDeclaration != nil || inst.DoctypeSystem != nil || inst.DoctypePublic != nil ||
 		inst.CDATASectionElements != nil || inst.Encoding != nil || inst.OutputVersion != nil ||
 		inst.ByteOrderMark != nil || inst.EscapeURIAttributes != nil
-	if !hasAny && inst.Format == "" {
+	effectiveFormat := ec.resolveResultDocFormat(ctx, inst)
+	if !hasAny && effectiveFormat == "" {
 		return nil, nil
 	}
 
 	// Start with the named format or default output def.
 	var base OutputDef
-	if inst.Format != "" {
-		if fmtDef, ok := ec.stylesheet.outputs[inst.Format]; ok {
+	if effectiveFormat != "" {
+		if fmtDef, ok := ec.stylesheet.outputs[effectiveFormat]; ok {
 			base = *fmtDef
 		}
 	} else if defDef, ok := ec.stylesheet.outputs[""]; ok {
