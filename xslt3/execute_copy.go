@@ -395,10 +395,10 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 				return err
 			}
 			if inst.TypeName != "" {
-				// XTTE1535: type annotation is only valid for element/attribute/document nodes.
+				// Per XSLT 3.0 spec, the type attribute on copy-of is silently
+				// ignored for nodes that are not elements, attributes, or documents.
 				if v.Node.Type() != helium.ElementNode && v.Node.Type() != helium.AttributeNode && v.Node.Type() != helium.DocumentNode {
-					return dynamicError(errCodeXTTE1535,
-						"copy-of: type attribute cannot be applied to %s node", v.Node.Type())
+					break
 				}
 				// Type validation: validate the copied element against the declared type.
 				if copied := out.current.LastChild(); copied != nil {
