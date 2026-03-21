@@ -23,6 +23,10 @@ func (c *compiler) compileSourceDocument(elem *helium.Element) (Instruction, err
 		Href:       hrefAVT,
 		Streamable: xsdBoolTrue(getAttr(elem, "streamable")),
 		BaseURI:    stylesheetBaseURI(elem, c.baseURI),
+		Validation: getAttr(elem, "validation"),
+	}
+	if typeName := getAttr(elem, "type"); typeName != "" {
+		inst.TypeName = resolveQName(typeName, c.nsBindings)
 	}
 	if useAccumulators := getAttr(elem, "use-accumulators"); useAccumulators != "" {
 		for _, name := range strings.Fields(useAccumulators) {

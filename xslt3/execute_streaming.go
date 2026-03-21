@@ -58,6 +58,17 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 		ec.docCache[resolvedURI] = doc
 	}
 
+	// Apply schema validation when validation="strict"|"lax" or type is specified.
+	if ec.schemaRegistry != nil && (inst.Validation == "strict" || inst.Validation == "lax" || inst.TypeName != "") {
+		ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, doc)
+		if valErr != nil && inst.Validation == "strict" {
+			return valErr
+		}
+		for node, typeName := range ann {
+			ec.annotateNode(node, typeName)
+		}
+	}
+
 	startNode := helium.Node(doc)
 	if fragment != "" {
 		elem := doc.GetElementByID(fragment)
