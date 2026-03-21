@@ -36,38 +36,52 @@ func (ec *execContext) execChoose(ctx context.Context, inst *ChooseInst) error {
 	defer func() { ec.defaultCollation = savedCollation }()
 
 	for _, when := range inst.When {
-		// Apply per-when xpath-default-namespace
+		// Apply per-when xpath-default-namespace and default-collation
 		savedNS := ec.xpathDefaultNS
 		savedHas := ec.hasXPathDefaultNS
+		savedWhenCollation := ec.defaultCollation
 		if when.HasXPathDefaultNS {
 			ec.xpathDefaultNS = when.XPathDefaultNS
 			ec.hasXPathDefaultNS = true
 		}
+		if when.DefaultCollation != "" {
+			ec.defaultCollation = when.DefaultCollation
+		}
 		xpathCtx := ec.newXPathContext(ec.contextNode)
+		// Override namespace bindings with per-clause bindings when present
+		if when.Namespaces != nil {
+			xpathCtx = xpath3.WithNamespaces(xpathCtx, when.Namespaces)
+			xpathCtx = xpath3.WithStrictPrefixes(xpathCtx)
+		}
 		result, err := when.Test.Evaluate(xpathCtx, ec.contextNode)
 		if err != nil {
 			ec.xpathDefaultNS = savedNS
 			ec.hasXPathDefaultNS = savedHas
+			ec.defaultCollation = savedWhenCollation
 			return err
 		}
 		b, err := xpath3.EBV(result.Sequence())
 		if err != nil {
 			ec.xpathDefaultNS = savedNS
 			ec.hasXPathDefaultNS = savedHas
+			ec.defaultCollation = savedWhenCollation
 			return err
 		}
 		if b {
 			if err := ec.executeSequenceConstructor(ctx, when.Body); err != nil {
 				ec.xpathDefaultNS = savedNS
 				ec.hasXPathDefaultNS = savedHas
+				ec.defaultCollation = savedWhenCollation
 				return err
 			}
 			ec.xpathDefaultNS = savedNS
 			ec.hasXPathDefaultNS = savedHas
+			ec.defaultCollation = savedWhenCollation
 			return nil
 		}
 		ec.xpathDefaultNS = savedNS
 		ec.hasXPathDefaultNS = savedHas
+		ec.defaultCollation = savedWhenCollation
 	}
 	// otherwise
 	savedNS := ec.xpathDefaultNS

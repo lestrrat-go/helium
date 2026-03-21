@@ -30,7 +30,7 @@ func evalGeneralComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) 
 		return nil, err
 	}
 	coll := ec.resolveDefaultCollation()
-	result, err := generalCompareWithCollation(e.Op, left, right, coll)
+	result, err := generalCompareWithCollation(e.Op, left, right, coll, ec)
 	if err != nil {
 		return nil, err
 	}
@@ -227,12 +227,12 @@ func evalNodeComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Se
 // Atomizes both sides and returns true if any pair of atomic values
 // satisfies the operator.
 func GeneralCompare(op TokenType, left, right Sequence) (bool, error) {
-	return generalCompareWithCollation(op, left, right, nil)
+	return generalCompareWithCollation(op, left, right, nil, nil)
 }
 
 // generalCompareWithCollation is the collation-aware implementation of
 // general comparison.  When coll is nil, codepoint collation is used.
-func generalCompareWithCollation(op TokenType, left, right Sequence, coll *collationImpl) (bool, error) {
+func generalCompareWithCollation(op TokenType, left, right Sequence, coll *collationImpl, ec *evalContext) (bool, error) {
 	leftIter := newAtomicSequenceIter(left)
 	rightAtoms := newCachedAtomicSequence(right)
 	for {
@@ -251,7 +251,7 @@ func generalCompareWithCollation(op TokenType, left, right Sequence, coll *colla
 			if !ok {
 				break
 			}
-			pa, pb, err := promoteForGeneralComparison(la, ra)
+			pa, pb, err := promoteForGeneralComparison(la, ra, ec)
 			if err != nil {
 				return false, err
 			}
@@ -469,7 +469,7 @@ func promoteForValueComparison(a, b AtomicValue) (AtomicValue, AtomicValue) {
 
 // promoteForGeneralComparison applies type promotion rules for general comparison (= != < > <= >=).
 // Per XPath 3.1 Section 3.7.1 — untypedAtomic is cast to the type of the other operand.
-func promoteForGeneralComparison(a, b AtomicValue) (AtomicValue, AtomicValue, error) {
+func promoteForGeneralComparison(a, b AtomicValue, ec *evalContext) (AtomicValue, AtomicValue, error) {
 	// untypedAtomic vs untypedAtomic → compare as string
 	if a.TypeName == TypeUntypedAtomic && b.TypeName == TypeUntypedAtomic {
 		return AtomicValue{TypeName: TypeString, Value: stringFromAtomic(a)},
@@ -477,14 +477,14 @@ func promoteForGeneralComparison(a, b AtomicValue) (AtomicValue, AtomicValue, er
 	}
 	// untypedAtomic vs typed → cast untypedAtomic to the other's type
 	if a.TypeName == TypeUntypedAtomic {
-		castA, err := castUntypedToType(a, b.TypeName)
+		castA, err := castUntypedToType(a, b.TypeName, ec)
 		if err != nil {
 			return AtomicValue{}, AtomicValue{}, err
 		}
 		return castA, b, nil
 	}
 	if b.TypeName == TypeUntypedAtomic {
-		castB, err := castUntypedToType(b, a.TypeName)
+		castB, err := castUntypedToType(b, a.TypeName, ec)
 		if err != nil {
 			return AtomicValue{}, AtomicValue{}, err
 		}
@@ -495,7 +495,11 @@ func promoteForGeneralComparison(a, b AtomicValue) (AtomicValue, AtomicValue, er
 
 // castUntypedToType casts an untypedAtomic value to the given target type.
 // For general comparison, cast failures are errors (not silently ignored).
-func castUntypedToType(untyped AtomicValue, targetType string) (AtomicValue, error) {
+func castUntypedToType(untyped AtomicValue, targetType string, ec *evalContext) (AtomicValue, error) {
+	// QName requires namespace context for prefix resolution
+	if targetType == TypeQName {
+		return castToQName(untyped, ec)
+	}
 	// For numeric types, cast to double per spec
 	if isIntegerDerived(targetType) || targetType == TypeDecimal || targetType == TypeFloat {
 		targetType = TypeDouble

@@ -136,6 +136,8 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 			if hasOtherwise {
 				return nil, staticError(errCodeXTSE0010, "xsl:when must not appear after xsl:otherwise in xsl:choose")
 			}
+			// Push element-local namespace declarations into scope
+			savedBindings := c.pushElementNamespaces(childElem)
 			savedNS := c.xpathDefaultNS
 			savedET := c.expandText
 			hasLocal := false
@@ -150,20 +152,32 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 			}
 			testAttr := getAttr(childElem, "test")
 			if testAttr == "" {
+				c.nsBindings = savedBindings
 				c.xpathDefaultNS = savedNS
 				c.expandText = savedET
 				return nil, staticError(errCodeXTSE0110, "xsl:when requires test attribute")
 			}
 			expr, err := compileXPath(testAttr, c.nsBindings)
 			if err != nil {
+				c.nsBindings = savedBindings
 				c.xpathDefaultNS = savedNS
 				c.expandText = savedET
 				return nil, err
 			}
+			// Capture per-clause namespace bindings for runtime resolution
+			var clauseNS map[string]string
+			if len(c.nsBindings) > 0 {
+				clauseNS = make(map[string]string, len(c.nsBindings))
+				for k, v := range c.nsBindings {
+					clauseNS[k] = v
+				}
+			}
+			whenCollation := getAttr(childElem, "default-collation")
 			body, err := c.compileChildren(childElem)
-			wc := &WhenClause{Test: expr, Body: body}
+			wc := &WhenClause{Test: expr, Body: body, Namespaces: clauseNS, DefaultCollation: whenCollation}
 			wc.XPathDefaultNS = c.xpathDefaultNS
 			wc.HasXPathDefaultNS = hasLocal
+			c.nsBindings = savedBindings
 			c.xpathDefaultNS = savedNS
 			c.expandText = savedET
 			if err != nil {
