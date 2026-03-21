@@ -632,6 +632,10 @@ func (c *compiler) compileDocument(elem *helium.Element) (*DocumentInst, error) 
 func (c *compiler) compileSequence(elem *helium.Element) (Instruction, error) {
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
+		// XTSE3185: when @select is present, only xsl:fallback children are allowed.
+		if hasSignificantChildren(elem) {
+			return nil, staticError(errCodeXTSE3185, "xsl:sequence with @select must not have content other than xsl:fallback")
+		}
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err

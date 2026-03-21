@@ -198,30 +198,47 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopula
 
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
-	// XSLT 3.0 section 8.4: filter the produced nodes. Element and document
-	// nodes are kept only when non-empty (have at least one significant child:
-	// a child element, non-zero-length text, comment, or PI). Text, comment,
-	// and PI nodes are always kept. If nothing survives the filter the whole
-	// result is discarded.
-	hasSignificant := false
+	// Collect surviving attributes (non-empty value) and surviving child nodes.
+	var survivingAttrs []*helium.Attribute
+	for _, attr := range tmpRoot.Attributes() {
+		if len(attr.Content()) > 0 {
+			survivingAttrs = append(survivingAttrs, attr)
+		}
+	}
+
+	hasSignificantChild := false
 	for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
 		if isPopulated(child) {
-			hasSignificant = true
+			hasSignificantChild = true
 			break
 		}
 	}
-	if !hasSignificant {
+
+	// If nothing survives (no populated attrs and no populated children),
+	// discard the whole result.
+	if len(survivingAttrs) == 0 && !hasSignificantChild {
 		return nil
 	}
 
-	// Copy significant nodes to real output. Empty elements/documents are
-	// stripped. Document nodes are unwrapped (their children are emitted).
+	// Emit surviving attributes to the real output.
+	for _, attr := range survivingAttrs {
+		if elem, ok := out.current.(*helium.Element); ok {
+			if elem.FirstChild() != nil {
+				return dynamicError(errCodeXTRE0540,
+					"cannot add attribute to element after children have been added")
+			}
+			if err := elem.SetAttribute(attr.Name(), string(attr.Content())); err != nil {
+				return err
+			}
+			out.noteOutput()
+		}
+	}
+
+	// Copy significant child nodes to real output.
 	for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
 		if !isPopulated(child) {
 			continue
 		}
-		// Document nodes are unwrapped: emit their children rather than the
-		// document node itself, since documents can't be children of elements.
 		if child.Type() == helium.DocumentNode {
 			doc := child.(*helium.Document)
 			for dc := doc.FirstChild(); dc != nil; dc = dc.NextSibling() {
@@ -299,6 +316,9 @@ func isPopulated(node helium.Node) bool {
 	case helium.TextNode:
 		return len(node.Content()) > 0
 	case helium.CommentNode, helium.ProcessingInstructionNode:
+		return len(node.Content()) > 0
+	case helium.AttributeNode:
+		// An attribute is populated if its value is non-empty.
 		return len(node.Content()) > 0
 	default:
 		return false

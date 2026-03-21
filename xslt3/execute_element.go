@@ -554,14 +554,22 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		return nil
 	}
 
+	// Inside xsl:where-populated, a zero-length attribute is treated as absent
+	// (XSLT 3.0 §11.1.8): skip it so it does not overwrite a non-empty value.
+	if out.wherePopulated && value == "" {
+		return nil
+	}
+
 	// The current output node must be an element
 	elem, ok := out.current.(*helium.Element)
 	if !ok {
 		return dynamicError(errCodeXTDE0820, "xsl:attribute must be added to an element")
 	}
 
-	// XTRE0540: cannot add attribute after child content has been added
-	if elem.FirstChild() != nil {
+	// XTRE0540: cannot add attribute after child content has been added.
+	// Inside xsl:where-populated the body is evaluated into a temporary tree
+	// and later filtered, so attribute-after-child is permitted during evaluation.
+	if elem.FirstChild() != nil && !out.wherePopulated {
 		return dynamicError(errCodeXTRE0540, "cannot add attribute to element after children have been added")
 	}
 
