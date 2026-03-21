@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<serialization-parameters xmlns="http://www.w3.org/2010/xslt-xquery-serialization">
+   <omit-xml-declaration value="yes"/>
+</serialization-parameters>

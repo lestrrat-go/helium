@@ -67,9 +67,17 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 	}
 	switch outDef.Method {
 	case "json":
+		if len(outDef.ResolvedCharMap) > 0 {
+			var buf strings.Builder
+			if err := serializeJSONItems(&buf, items, doc); err != nil {
+				return err
+			}
+			_, err := io.WriteString(w, applyCharMap(buf.String(), outDef.ResolvedCharMap))
+			return err
+		}
 		return serializeJSONItems(w, items, doc)
 	case "adaptive":
-		return serializeAdaptiveItems(w, items, doc)
+		return serializeAdaptiveItems(w, items, doc, outDef.ResolvedCharMap)
 	default:
 		return SerializeResult(w, doc, outDef)
 	}
@@ -159,9 +167,18 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 	case "xhtml":
 		err = serializeXHTML(target, doc, outDef, charMap)
 	case "json":
-		err = serializeJSONItems(target, nil, doc)
+		if len(charMap) > 0 {
+			var jsonBuf strings.Builder
+			if jerr := serializeJSONItems(&jsonBuf, nil, doc); jerr != nil {
+				err = jerr
+			} else {
+				_, err = io.WriteString(target, applyCharMap(jsonBuf.String(), charMap))
+			}
+		} else {
+			err = serializeJSONItems(target, nil, doc)
+		}
 	case "adaptive":
-		err = serializeAdaptiveItems(target, nil, doc)
+		err = serializeAdaptiveItems(target, nil, doc, charMap)
 	default:
 		err = serializeXML(target, doc, outDef, charMap)
 	}
@@ -216,10 +233,14 @@ func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document
 
 // serializeAdaptiveItems serializes a sequence of items using the adaptive
 // serialization method. Each item is serialized according to its type.
-func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Document) error {
+func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, charMaps ...map[rune]string) error {
 	if len(items) == 0 && doc != nil {
 		// Fallback: serialize DOM as XML
-		return serializeXML(w, doc, defaultOutputDef(), nil)
+		var cm map[rune]string
+		if len(charMaps) > 0 {
+			cm = charMaps[0]
+		}
+		return serializeXML(w, doc, defaultOutputDef(), cm)
 	}
 	for i, item := range items {
 		if i > 0 {
@@ -781,7 +802,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	// serializeResult's transcoding layer.
 	targetEnc := strings.ToLower(outDef.Encoding)
 	isNonUTF8 := targetEnc != "" && targetEnc != "utf-8" && targetEnc != "utf8" && targetEnc != "utf-16" && targetEnc != "utf16"
-	if len(charMap) > 0 || hasDOEMarkers(doc) || isNonUTF8 || len(outDef.CDATASections) > 0 {
+	if len(charMap) > 0 || hasDOEMarkers(doc) || isNonUTF8 || len(outDef.CDATASections) > 0 || (outDef.Indent && len(outDef.SuppressIndentation) > 0) {
 		return serializeXMLWithCharMap(w, doc, outDef, charMap)
 	}
 	// Set encoding on the document so the XML declaration includes it.
@@ -907,16 +928,107 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 	}
 
 	enc := strings.ToLower(outDef.Encoding)
-	err := serializeXMLNodeWithCharMap(sw, doc, charMap, cdataSet, enc)
+
+	// Build suppress-indentation set
+	var suppressSet map[string]struct{}
+	if len(outDef.SuppressIndentation) > 0 {
+		suppressSet = make(map[string]struct{}, len(outDef.SuppressIndentation))
+		for _, name := range outDef.SuppressIndentation {
+			suppressSet[name] = struct{}{}
+		}
+	}
+
+	ictx := &xmlIndentCtx{
+		indent:      outDef.Indent,
+		suppressSet: suppressSet,
+	}
+
+	err := serializeXMLNodeWithCharMap(sw, doc, charMap, cdataSet, enc, ictx)
 	if err != nil {
 		return err
 	}
 	return sw.Flush()
 }
 
-func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[rune]string, cdataElems map[string]struct{}, encoding string) error {
-	doeActive := false
+// xmlIndentCtx tracks indentation state for XML serialization with
+// suppress-indentation support.
+type xmlIndentCtx struct {
+	indent      bool
+	depth       int
+	suppressSet map[string]struct{}
+	suppressed  bool // true when inside a suppress-indentation element
+}
+
+func (ic *xmlIndentCtx) writeIndent(sw *stream.Writer) error {
+	if !ic.indent || ic.suppressed {
+		return nil
+	}
+	buf := make([]byte, 1+ic.depth*2)
+	buf[0] = '\n'
+	for i := 1; i < len(buf); i++ {
+		buf[i] = ' '
+	}
+	return sw.WriteRaw(string(buf))
+}
+
+// expandedElemName returns the expanded name for matching suppress-indentation.
+func expandedElemName(elem *helium.Element) string {
+	if uri := string(elem.URI()); uri != "" {
+		return "{" + uri + "}" + string(elem.LocalName())
+	}
+	return string(elem.LocalName())
+}
+
+// elemMatchesSuppressSet checks if the element name (with prefix or expanded)
+// matches the suppress-indentation set.
+func elemMatchesSuppressSet(elem *helium.Element, suppressSet map[string]struct{}) bool {
+	if len(suppressSet) == 0 {
+		return false
+	}
+	// Check expanded name
+	if _, ok := suppressSet[expandedElemName(elem)]; ok {
+		return true
+	}
+	// Check prefixed name
+	name := elem.Name()
+	if _, ok := suppressSet[name]; ok {
+		return true
+	}
+	// Check local name
+	if _, ok := suppressSet[string(elem.LocalName())]; ok {
+		return true
+	}
+	return false
+}
+
+func collectChildren(n helium.Node) []helium.Node {
+	var children []helium.Node
 	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+		children = append(children, child)
+	}
+	return children
+}
+
+func elemHasChildElements(elem *helium.Element) bool {
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() == helium.ElementNode {
+			return true
+		}
+	}
+	return false
+}
+
+func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[rune]string, cdataElems map[string]struct{}, encoding string, ictx *xmlIndentCtx) error {
+	doeActive := false
+	children := collectChildren(n)
+	hasChildElements := false
+	for _, child := range children {
+		if child.Type() == helium.ElementNode {
+			hasChildElements = true
+			break
+		}
+	}
+	for _, child := range children {
 		// Handle DOE marker PIs
 		if child.Type() == helium.ProcessingInstructionNode {
 			piName := string(child.Name())
@@ -932,6 +1044,10 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 		switch child.Type() {
 		case helium.ElementNode:
 			elem := child.(*helium.Element)
+			// Write indentation before start tag
+			if err := ictx.writeIndent(sw); err != nil {
+				return err
+			}
 			prefix := string(elem.Prefix())
 			local := string(elem.LocalName())
 			uri := string(elem.URI())
@@ -954,23 +1070,40 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 					}
 				}
 			}
-			// Write attributes with character map awareness.
-			// Mapped characters are written raw (unescaped) while
-			// unmapped characters go through normal XML attribute escaping.
+			// Write attributes
 			for _, attr := range elem.Attributes() {
 				if err := writeAttrWithCharMap(sw, attr.Name(), attr.Value(), charMap); err != nil {
 					return err
 				}
 			}
+			// Track suppress-indentation
+			wasSuppressed := ictx.suppressed
+			if elemMatchesSuppressSet(elem, ictx.suppressSet) {
+				ictx.suppressed = true
+			}
+			ictx.depth++
 			// Recurse into children
-			if err := serializeXMLNodeWithCharMap(sw, elem, charMap, cdataElems, encoding); err != nil {
+			if err := serializeXMLNodeWithCharMap(sw, elem, charMap, cdataElems, encoding, ictx); err != nil {
 				return err
 			}
+			ictx.depth--
+			// Write indentation before end tag (only if element has child elements)
+			if elemHasChildElements(elem) {
+				if err := ictx.writeIndent(sw); err != nil {
+					return err
+				}
+			}
+			ictx.suppressed = wasSuppressed
 			if err := sw.EndElement(); err != nil {
 				return err
 			}
 		case helium.TextNode, helium.CDATASectionNode:
 			text := string(child.Content())
+			// When indenting and not suppressed, trim whitespace-only text
+			// nodes that exist between elements (they are formatting whitespace).
+			if ictx.indent && !ictx.suppressed && hasChildElements && strings.TrimSpace(text) == "" {
+				continue
+			}
 			if doeActive {
 				if err := sw.WriteRaw(text); err != nil {
 					return err
@@ -1388,6 +1521,21 @@ var htmlURIAttrs = map[string]struct{}{
 	"href": {}, "src": {}, "action": {}, "cite": {}, "data": {},
 	"formaction": {}, "poster": {}, "codebase": {}, "longdesc": {},
 	"usemap": {}, "background": {}, "profile": {},
+}
+
+// applyCharMap applies a character map to a serialized string, replacing
+// each mapped character with its replacement string.
+func applyCharMap(s string, charMap map[rune]string) string {
+	var out strings.Builder
+	out.Grow(len(s))
+	for _, r := range s {
+		if repl, ok := charMap[r]; ok {
+			out.WriteString(repl)
+		} else {
+			out.WriteRune(r)
+		}
+	}
+	return out.String()
 }
 
 // applyCharMapToHTMLText applies a character map to serialized HTML output,

@@ -676,5 +676,8 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 			base.EscapeURIAttributes = &b
 		}
 	}
+	if len(inst.SuppressIndentation) > 0 {
+		base.SuppressIndentation = inst.SuppressIndentation
+	}
 	return &base, nil
 }

@@ -1,6 +1,9 @@
 package xslt3
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode"
@@ -174,6 +177,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		"suppress-indentation": {}, "html-version": {},
 		"item-separator": {}, "json-node-output-method": {},
 		"parameter-document": {}, "build-tree": {},
+		"allow-duplicate-names": {},
 		"use-when": {},
 	}); err != nil {
 		return err
@@ -319,6 +323,39 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		}
 	}
 
+	if v := getAttr(elem, "allow-duplicate-names"); v != "" {
+		b, ok := parseXSDBool(v)
+		if !ok {
+			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@allow-duplicate-names", v)
+		}
+		outDef.AllowDuplicateNames = b
+	}
+
+	if v := getAttr(elem, "suppress-indentation"); v != "" {
+		names := strings.Fields(v)
+		resolved := make([]string, len(names))
+		for i, n := range names {
+			resolved[i] = resolveQName(n, c.nsBindings)
+		}
+		outDef.SuppressIndentation = resolved
+	}
+
+	if v := getAttr(elem, "build-tree"); v != "" {
+		b, ok := parseXSDBool(v)
+		if !ok {
+			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@build-tree", v)
+		}
+		outDef.BuildTree = &b
+	}
+
+	if v := getAttr(elem, "parameter-document"); v != "" {
+		outDef.ParameterDocument = v
+		baseURI := stylesheetBaseURI(elem, c.baseURI)
+		if err := c.loadParameterDocument(outDef, baseURI, v); err != nil {
+			return err
+		}
+	}
+
 	// XTSE1560: check for conflicting output attributes at the same import
 	// precedence before merging.
 	if existing, ok := c.stylesheet.outputs[name]; ok && existing.ImportPrec == c.importPrec {
@@ -405,6 +442,171 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	}
 
 	c.stylesheet.outputs[name] = outDef
+	return nil
+}
+
+const nsSerializationParams = "http://www.w3.org/2010/xslt-xquery-serialization"
+
+// loadParameterDocument loads a serialization parameter document (XSLT 3.0 §9.2)
+// and applies its settings to the given OutputDef. Parameters explicitly set on
+// the xsl:output element take precedence; the parameter document provides defaults.
+func (c *compiler) loadParameterDocument(outDef *OutputDef, baseURI, href string) error {
+	uri := href
+	if baseURI != "" && !strings.Contains(href, "://") && !filepath.IsAbs(href) {
+		baseDir := filepath.Dir(baseURI)
+		uri = filepath.Join(baseDir, href)
+	}
+
+	data, err := os.ReadFile(uri)
+	if err != nil {
+		return staticError(errCodeXTSE0090, "cannot read parameter-document %q: %v", href, err)
+	}
+	doc, err := helium.Parse(context.Background(), data)
+	if err != nil {
+		return staticError(errCodeXTSE0090, "cannot parse parameter-document %q: %v", href, err)
+	}
+	root := doc.DocumentElement()
+	if root == nil || root.LocalName() != "serialization-parameters" || root.URI() != nsSerializationParams {
+		return staticError(errCodeXTSE0090, "parameter-document %q: root element must be {%s}serialization-parameters", href, nsSerializationParams)
+	}
+
+	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+		elem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if elem.URI() != nsSerializationParams {
+			continue
+		}
+		val := getAttr(elem, "value")
+		switch elem.LocalName() {
+		case "method":
+			if outDef.MethodRaw == "" && val != "" {
+				outDef.Method = strings.ToLower(strings.TrimSpace(val))
+				outDef.MethodExplicit = true
+			}
+		case "indent":
+			if outDef.IndentRaw == "" && val != "" {
+				if b, ok := parseXSDBool(val); ok {
+					outDef.Indent = b
+				}
+			}
+		case "omit-xml-declaration":
+			if !outDef.OmitDeclarationExplicit && val != "" {
+				if b, ok := parseXSDBool(val); ok {
+					outDef.OmitDeclaration = b
+					outDef.OmitDeclarationExplicit = true
+				}
+			}
+		case "encoding":
+			if outDef.EncodingRaw == "" && val != "" {
+				outDef.Encoding = strings.TrimSpace(val)
+			}
+		case "standalone":
+			if outDef.StandaloneRaw == "" && val != "" {
+				v := strings.TrimSpace(val)
+				switch v {
+				case "yes", "no", "omit":
+					outDef.Standalone = v
+				}
+			}
+		case "cdata-section-elements":
+			if len(outDef.CDATASections) == 0 && val != "" {
+				outDef.CDATASections = strings.Fields(val)
+			}
+		case "doctype-public":
+			if outDef.DoctypePublic == "" && val != "" {
+				outDef.DoctypePublic = val
+			}
+		case "doctype-system":
+			if outDef.DoctypeSystem == "" && val != "" {
+				outDef.DoctypeSystem = val
+			}
+		case "media-type":
+			if outDef.MediaType == "" && val != "" {
+				outDef.MediaType = val
+			}
+		case "version":
+			if outDef.VersionRaw == "" && val != "" {
+				outDef.Version = strings.TrimSpace(val)
+			}
+		case "undeclare-prefixes":
+			if val != "" {
+				if b, ok := parseXSDBool(val); ok {
+					outDef.UndeclarePrefixes = b
+				}
+			}
+		case "use-character-maps":
+			// Character maps defined in the parameter document.
+			// Each child <character-map> has @character and @map-string.
+			if outDef.ResolvedCharMap == nil {
+				outDef.ResolvedCharMap = make(map[rune]string)
+			}
+			for mapChild := elem.FirstChild(); mapChild != nil; mapChild = mapChild.NextSibling() {
+				mapElem, ok := mapChild.(*helium.Element)
+				if !ok {
+					continue
+				}
+				if mapElem.LocalName() != "character-map" {
+					continue
+				}
+				charStr := getAttr(mapElem, "character")
+				mapStr := getAttr(mapElem, "map-string")
+				if charStr != "" {
+					runes := []rune(charStr)
+					if len(runes) == 1 {
+						outDef.ResolvedCharMap[runes[0]] = mapStr
+					}
+				}
+			}
+		case "allow-duplicate-names":
+			if val != "" {
+				if b, ok := parseXSDBool(val); ok {
+					outDef.AllowDuplicateNames = b
+				}
+			}
+		case "item-separator":
+			if outDef.ItemSeparator == nil && val != "" {
+				outDef.ItemSeparator = &val
+			}
+		case "byte-order-mark":
+			if val != "" {
+				if b, ok := parseXSDBool(val); ok {
+					outDef.ByteOrderMark = b
+				}
+			}
+		case "escape-uri-attributes":
+			if outDef.EscapeURIAttributes == nil && val != "" {
+				if b, ok := parseXSDBool(val); ok {
+					outDef.EscapeURIAttributes = &b
+				}
+			}
+		case "include-content-type":
+			if outDef.IncludeContentType == nil && val != "" {
+				if b, ok := parseXSDBool(val); ok {
+					outDef.IncludeContentType = &b
+				}
+			}
+		case "normalization-form":
+			if outDef.NormalizationForm == "" && val != "" {
+				outDef.NormalizationForm = strings.ToUpper(strings.TrimSpace(val))
+			}
+		case "suppress-indentation":
+			if len(outDef.SuppressIndentation) == 0 && val != "" {
+				outDef.SuppressIndentation = strings.Fields(val)
+			}
+		case "html-version":
+			if outDef.HTMLVersion == "" && val != "" {
+				outDef.HTMLVersion = strings.TrimSpace(val)
+			}
+		case "build-tree":
+			if outDef.BuildTree == nil && val != "" {
+				if b, ok := parseXSDBool(val); ok {
+					outDef.BuildTree = &b
+				}
+			}
+		}
+	}
 	return nil
 }
 
