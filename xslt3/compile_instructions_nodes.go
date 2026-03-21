@@ -721,8 +721,17 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 				}
 			} else {
 				for _, prefix := range strings.Fields(erp) {
+					if prefix == "#default" {
+						if uri, ok := c.nsBindings[""]; ok && uri != "" {
+							newExcludes[uri] = struct{}{}
+						}
+						continue
+					}
 					if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 						newExcludes[uri] = struct{}{}
+					} else {
+						return nil, staticError("XTSE0808",
+							"undeclared namespace prefix %q in exclude-result-prefixes", prefix)
 					}
 				}
 			}

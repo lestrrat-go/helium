@@ -691,12 +691,16 @@ func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) error 
 	}); err != nil {
 		return err
 	}
+	// XTSE0260: strip-space/preserve-space must be empty
+	kind := "strip-space"
+	if !strip {
+		kind = "preserve-space"
+	}
+	if err := c.validateEmptyElement(elem, "xsl:"+kind); err != nil {
+		return err
+	}
 	elements := getAttr(elem, "elements")
 	if !elem.HasAttribute("elements") {
-		kind := "strip-space"
-		if !strip {
-			kind = "preserve-space"
-		}
 		return staticError(errCodeXTSE0010, "xsl:%s requires the elements attribute", kind)
 	}
 
