@@ -289,7 +289,10 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 	// document element wrapper). When nested inside a result element
 	// (e.g. an LRE or xsl:copy body), items must be written to the DOM
 	// as children of that element.
-	if out.captureItems && out.doc != nil && out.current == out.doc.DocumentElement() {
+	// For the principal output with json/adaptive method, the current node
+	// is the Document itself (not a wrapper element), so also match that case.
+	atRootLevel := out.doc != nil && (out.current == out.doc.DocumentElement() || out.current == out.doc)
+	if out.captureItems && atRootLevel {
 		out.pendingItems = append(out.pendingItems, result.Sequence()...)
 		if len(result.Sequence()) > 0 {
 			out.noteOutput()

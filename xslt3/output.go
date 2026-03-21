@@ -69,13 +69,13 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 	case "json":
 		if len(outDef.ResolvedCharMap) > 0 {
 			var buf strings.Builder
-			if err := serializeJSONItems(&buf, items, doc); err != nil {
+			if err := serializeJSONItems(&buf, items, doc, outDef); err != nil {
 				return err
 			}
 			_, err := io.WriteString(w, applyCharMap(buf.String(), outDef.ResolvedCharMap))
 			return err
 		}
-		return serializeJSONItems(w, items, doc)
+		return serializeJSONItems(w, items, doc, outDef)
 	case "adaptive":
 		return serializeAdaptiveItems(w, items, doc, outDef.ResolvedCharMap)
 	default:
@@ -176,13 +176,13 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 	case "json":
 		if len(charMap) > 0 {
 			var jsonBuf strings.Builder
-			if jerr := serializeJSONItems(&jsonBuf, nil, doc); jerr != nil {
+			if jerr := serializeJSONItems(&jsonBuf, nil, doc, outDef); jerr != nil {
 				err = jerr
 			} else {
 				_, err = io.WriteString(target, applyCharMap(jsonBuf.String(), charMap))
 			}
 		} else {
-			err = serializeJSONItems(target, nil, doc)
+			err = serializeJSONItems(target, nil, doc, outDef)
 		}
 	case "adaptive":
 		err = serializeAdaptiveItems(target, nil, doc, charMap)
@@ -212,13 +212,17 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 
 // serializeJSONItems serializes a sequence of items as JSON output.
 // Per XSLT 3.0 §26: the sequence is serialized as a single JSON value.
-func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document) error {
+func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, outDef *OutputDef) error {
 	if len(items) == 0 && doc != nil {
 		// No captured items: serialize DOM content as text for JSON
 		return serializeAdaptiveItems(w, items, doc)
 	}
+	nodeMethod := ""
+	if outDef != nil {
+		nodeMethod = outDef.JSONNodeOutputMethod
+	}
 	if len(items) == 1 {
-		s, err := serializeItemJSON(items[0])
+		s, err := serializeItemJSON(items[0], nodeMethod)
 		if err != nil {
 			return err
 		}
@@ -230,7 +234,7 @@ func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document
 	for i, item := range items {
 		members[i] = xpath3.Sequence{item}
 	}
-	s, err := serializeItemJSON(xpath3.NewArray(members))
+	s, err := serializeItemJSON(xpath3.NewArray(members), nodeMethod)
 	if err != nil {
 		return err
 	}
@@ -263,14 +267,128 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 	return nil
 }
 
+// serializeNodeWithMethod serializes a node using the specified output method.
+// This is used for json-node-output-method to serialize nodes within JSON output.
+func serializeNodeWithMethod(node helium.Node, method string) string {
+	var buf bytes.Buffer
+	switch method {
+	case "html":
+		doc := wrapNodeInHTMLDoc(node)
+		outDef := defaultOutputDef()
+		outDef.Method = "html"
+		outDef.OmitDeclaration = true
+		_ = serializeHTML(&buf, doc, outDef)
+		s := buf.String()
+		// If we wrapped the node in <html>, strip the wrapper tags
+		if elem, ok := node.(*helium.Element); ok && !strings.EqualFold(string(elem.LocalName()), "html") {
+			s = strings.TrimPrefix(s, "<html>")
+			s = strings.TrimSuffix(s, "</html>")
+		}
+		return s
+	case "xhtml":
+		doc := wrapNodeInDoc(node)
+		outDef := defaultOutputDef()
+		outDef.Method = "xhtml"
+		_ = serializeXHTML(&buf, doc, outDef, nil)
+		return buf.String()
+	case "text":
+		return nodeStringValue(node)
+	default: // "xml" or empty
+		if elem, ok := node.(*helium.Element); ok {
+			_ = elem.XML(&buf, helium.WithNoDecl())
+		} else if doc, ok := node.(*helium.Document); ok {
+			_ = doc.XML(&buf, helium.WithNoDecl())
+		} else {
+			buf.WriteString(string(node.Content()))
+		}
+		return buf.String()
+	}
+}
+
+// wrapNodeInHTMLDoc wraps a node in an HTML document structure.
+// If the node is already an <html> element, it becomes the document element.
+// Otherwise it is wrapped inside an <html> element so that insertHTMLMeta
+// can locate the <head> element as a child of the root.
+func wrapNodeInHTMLDoc(node helium.Node) *helium.Document {
+	if doc, ok := node.(*helium.Document); ok {
+		return doc
+	}
+	doc := helium.NewDocument("", "", helium.StandaloneNoXMLDecl)
+	if elem, ok := node.(*helium.Element); ok {
+		copied, err := helium.CopyNode(elem, doc)
+		if err != nil {
+			return doc
+		}
+		copiedElem := copied.(*helium.Element)
+		// Remove redundant namespace declarations from descendants
+		removeRedundantNamespaces(copiedElem)
+		if strings.EqualFold(string(copiedElem.LocalName()), "html") {
+			doc.AddChild(copiedElem)
+		} else {
+			// Wrap in an <html> element
+			htmlElem, _ := doc.CreateElement("html")
+			doc.AddChild(htmlElem)
+			htmlElem.AddChild(copiedElem)
+		}
+	}
+	return doc
+}
+
+// removeRedundantNamespaces removes namespace declarations from descendant
+// elements that are the same as their parent's. After CopyNode, each element
+// may carry its own copy of namespace declarations that were inherited in the
+// original tree.
+func removeRedundantNamespaces(root *helium.Element) {
+	rootNS := map[string]string{} // prefix -> uri
+	for _, ns := range root.Namespaces() {
+		rootNS[ns.Prefix()] = ns.URI()
+	}
+	helium.Walk(root, func(n helium.Node) error {
+		if n == root {
+			return nil
+		}
+		child, ok := n.(*helium.Element)
+		if !ok {
+			return nil
+		}
+		for _, ns := range child.Namespaces() {
+			prefix := ns.Prefix()
+			uri := ns.URI()
+			if parentURI, exists := rootNS[prefix]; exists && parentURI == uri {
+				child.RemoveNamespaceByPrefix(prefix)
+			}
+		}
+		return nil
+	})
+}
+
+// wrapNodeInDoc wraps a node in a Document for serialization purposes.
+func wrapNodeInDoc(node helium.Node) *helium.Document {
+	if doc, ok := node.(*helium.Document); ok {
+		return doc
+	}
+	doc := helium.NewDocument("", "", helium.StandaloneNoXMLDecl)
+	if elem, ok := node.(*helium.Element); ok {
+		copied, err := helium.CopyNode(elem, doc)
+		if err == nil {
+			doc.AddChild(copied)
+		}
+	}
+	return doc
+}
+
 // serializeItemJSON serializes a single XDM item as JSON.
-func serializeItemJSON(item xpath3.Item) (string, error) {
+// nodeMethod specifies the json-node-output-method for serializing nodes.
+func serializeItemJSON(item xpath3.Item, nodeMethod string) (string, error) {
 	switch v := item.(type) {
 	case xpath3.MapItem:
-		return serializeMapJSON(v)
+		return serializeMapJSON(v, nodeMethod)
 	case xpath3.ArrayItem:
-		return serializeArrayJSON(v)
+		return serializeArrayJSON(v, nodeMethod)
 	case xpath3.NodeItem:
+		if nodeMethod != "" && nodeMethod != "text" {
+			return jsonEscapeString(serializeNodeWithMethod(v.Node, nodeMethod)), nil
+		}
 		return jsonEscapeString(nodeStringValue(v.Node)), nil
 	case xpath3.AtomicValue:
 		return serializeAtomicJSON(v), nil
@@ -283,7 +401,7 @@ func serializeItemJSON(item xpath3.Item) (string, error) {
 }
 
 // serializeMapJSON serializes a map as a JSON object.
-func serializeMapJSON(m xpath3.MapItem) (string, error) {
+func serializeMapJSON(m xpath3.MapItem, nodeMethod string) (string, error) {
 	var buf bytes.Buffer
 	buf.WriteByte('{')
 	first := true
@@ -300,7 +418,7 @@ func serializeMapJSON(m xpath3.MapItem) (string, error) {
 		buf.WriteString(jsonEscapeString(ks))
 		buf.WriteByte(':')
 		if len(v) == 1 {
-			s, err := serializeItemJSON(v[0])
+			s, err := serializeItemJSON(v[0], nodeMethod)
 			if err != nil {
 				serErr = err
 				return err
@@ -313,7 +431,7 @@ func serializeMapJSON(m xpath3.MapItem) (string, error) {
 			for i, vi := range v {
 				members[i] = xpath3.Sequence{vi}
 			}
-			s, err := serializeItemJSON(xpath3.NewArray(members))
+			s, err := serializeItemJSON(xpath3.NewArray(members), nodeMethod)
 			if err != nil {
 				serErr = err
 				return err
@@ -330,7 +448,7 @@ func serializeMapJSON(m xpath3.MapItem) (string, error) {
 }
 
 // serializeArrayJSON serializes an array as a JSON array.
-func serializeArrayJSON(a xpath3.ArrayItem) (string, error) {
+func serializeArrayJSON(a xpath3.ArrayItem, nodeMethod string) (string, error) {
 	var buf bytes.Buffer
 	buf.WriteByte('[')
 	members := a.Members()
@@ -339,7 +457,7 @@ func serializeArrayJSON(a xpath3.ArrayItem) (string, error) {
 			buf.WriteByte(',')
 		}
 		if len(member) == 1 {
-			s, err := serializeItemJSON(member[0])
+			s, err := serializeItemJSON(member[0], nodeMethod)
 			if err != nil {
 				return "", err
 			}
@@ -352,7 +470,7 @@ func serializeArrayJSON(a xpath3.ArrayItem) (string, error) {
 			for j, mi := range member {
 				submembers[j] = xpath3.Sequence{mi}
 			}
-			s, err := serializeItemJSON(xpath3.NewArray(submembers))
+			s, err := serializeItemJSON(xpath3.NewArray(submembers), nodeMethod)
 			if err != nil {
 				return "", err
 			}

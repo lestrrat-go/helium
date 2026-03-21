@@ -323,6 +323,10 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		}
 	}
 
+	if v := getAttr(elem, "json-node-output-method"); v != "" {
+		outDef.JSONNodeOutputMethod = strings.TrimSpace(v)
+	}
+
 	if v := getAttr(elem, "allow-duplicate-names"); v != "" {
 		b, ok := parseXSDBool(v)
 		if !ok {
@@ -438,6 +442,9 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		}
 		if outDef.IncludeContentType == nil {
 			outDef.IncludeContentType = existing.IncludeContentType
+		}
+		if getAttr(elem, "json-node-output-method") == "" {
+			outDef.JSONNodeOutputMethod = existing.JSONNodeOutputMethod
 		}
 	}
 
@@ -604,6 +611,10 @@ func (c *compiler) loadParameterDocument(outDef *OutputDef, baseURI, href string
 				if b, ok := parseXSDBool(val); ok {
 					outDef.BuildTree = &b
 				}
+			}
+		case "json-node-output-method":
+			if outDef.JSONNodeOutputMethod == "" && val != "" {
+				outDef.JSONNodeOutputMethod = strings.TrimSpace(val)
 			}
 		}
 	}
