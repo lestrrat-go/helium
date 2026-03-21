@@ -885,8 +885,14 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 				}
 			}
 
-			// Evaluate select against this item.
-			items, err := ec.evaluateMergeSelectOnNode(ctx, src, contextNode)
+			// Evaluate select against this item. For atomic items (not nodes),
+			// set the context item so that "." resolves to the atomic value.
+			var items xpath3.Sequence
+			if contextNode == nil {
+				items, err = ec.evaluateMergeSelectOnItem(ctx, src, sourceItem)
+			} else {
+				items, err = ec.evaluateMergeSelectOnNode(ctx, src, contextNode)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -1229,6 +1235,28 @@ func (ec *execContext) evaluateMergeSelectOnNode(ctx context.Context, src *Merge
 
 	xpathCtx := ec.newXPathContext(node)
 	result, err := src.Select.Evaluate(xpathCtx, node)
+	if err != nil {
+		return nil, err
+	}
+	return result.Sequence(), nil
+}
+
+// evaluateMergeSelectOnItem evaluates the select expression for a merge source
+// with an atomic item as the context item (used with for-each-item when the
+// items are not nodes).
+func (ec *execContext) evaluateMergeSelectOnItem(_ context.Context, src *MergeSource, item xpath3.Item) (xpath3.Sequence, error) {
+	if src.Select == nil {
+		return xpath3.Sequence{item}, nil
+	}
+
+	savedItem := ec.contextItem
+	ec.contextItem = item
+	defer func() {
+		ec.contextItem = savedItem
+	}()
+
+	xpathCtx := ec.newXPathContext(nil)
+	result, err := src.Select.Evaluate(xpathCtx, nil)
 	if err != nil {
 		return nil, err
 	}
