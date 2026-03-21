@@ -136,11 +136,13 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	defer func() { c.nsBindings = saved }()
 
 	name := getAttr(elem, "name")
+	methodStr := strings.ToLower(getAttr(elem, "method"))
 	outDef := &OutputDef{
-		Name:     name,
-		Method:   strings.ToLower(getAttr(elem, "method")),
-		Encoding: getAttr(elem, "encoding"),
-		Version:  getAttr(elem, "version"),
+		Name:           name,
+		Method:         methodStr,
+		MethodExplicit: methodStr != "",
+		Encoding:       getAttr(elem, "encoding"),
+		Version:        getAttr(elem, "version"),
 	}
 
 	if outDef.Method == "" {
@@ -232,6 +234,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		// Preserve fields from earlier declaration when not explicitly set here.
 		if getAttr(elem, "method") == "" {
 			outDef.Method = existing.Method
+			outDef.MethodExplicit = existing.MethodExplicit
 		}
 		if getAttr(elem, "encoding") == "" {
 			outDef.Encoding = existing.Encoding

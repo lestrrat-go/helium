@@ -71,6 +71,18 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		outDef = defaultOutputDef()
 	}
 
+	// XSLT 3.0 §20: When no output method is explicitly specified, auto-detect
+	// based on the document element. If the root element is "html" (case-insensitive)
+	// in no namespace, default to HTML output method.
+	if !outDef.MethodExplicit && outDef.Method == "xml" {
+		if root := doc.DocumentElement(); root != nil {
+			if strings.EqualFold(root.Name(), "html") && root.URI() == "" {
+				outDef.Method = "html"
+				outDef.OmitDeclaration = true
+			}
+		}
+	}
+
 	var charMap map[rune]string
 	if len(charMaps) > 0 {
 		charMap = charMaps[0]

@@ -404,6 +404,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 			return nil, err
 		}
 		base.Method = strings.TrimSpace(v)
+		base.MethodExplicit = true
 	}
 	if inst.Standalone != nil {
 		v, err := evalAVT(inst.Standalone)
