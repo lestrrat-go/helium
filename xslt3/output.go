@@ -159,10 +159,17 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 			if herr := serializeHTML(&htmlBuf, doc, outDef); herr != nil {
 				err = herr
 			} else {
-				_, err = io.WriteString(target, applyCharMapToHTMLText(htmlBuf.String(), charMap))
+				result := applyCharMapToHTMLText(htmlBuf.String(), charMap)
+				result = escapeC1ControlsInString(result)
+				_, err = io.WriteString(target, result)
 			}
 		} else {
-			err = serializeHTML(target, doc, outDef)
+			var htmlBuf bytes.Buffer
+			if herr := serializeHTML(&htmlBuf, doc, outDef); herr != nil {
+				err = herr
+			} else {
+				_, err = io.WriteString(target, escapeC1ControlsInString(htmlBuf.String()))
+			}
 		}
 	case "xhtml":
 		err = serializeXHTML(target, doc, outDef, charMap)
@@ -802,16 +809,15 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 
 	// SERE0014: HTML method with characters in #x7F-#x9F range in text.
 	// HTML5 allows these characters as character references, so skip for version >= 5.
-	// Check both html-version and version attributes for HTML5 detection.
+	// Per the XSLT serialization spec, the processor may either report an error
+	// or output the character as a character reference. We choose to escape them
+	// as character references, which matches the W3C test expectations.
 	htmlVer := outDef.HTMLVersion
 	if htmlVer == "" {
 		htmlVer = outDef.Version
 	}
-	if method == "html" && !isHTMLVersion5(htmlVer) {
-		if err := checkHTMLInvalidChars(doc); err != nil {
-			return err
-		}
-	}
+	// C1 control chars in HTML are handled during serialization by
+	// escapeC1ControlsInString (post-processing), not here.
 
 	// SERE0015: ">" in PI content for HTML output
 	if method == "html" {

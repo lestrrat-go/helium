@@ -583,6 +583,23 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 	// The current output node must be an element
 	elem, ok := out.current.(*helium.Element)
 	if !ok {
+		// In adaptive/json output mode or build-tree=no, capture the
+		// attribute as a pending item rather than raising XTDE0820.
+		if ec.isItemOutputMethod() || out.captureItems {
+			// Create a standalone attribute node by attaching it to a
+			// temporary element, then capturing it as a node item.
+			tmpDoc := helium.NewDefaultDocument()
+			tmpElem, err := tmpDoc.CreateElement("_tmp")
+			if err == nil {
+				_ = tmpElem.SetAttribute(name, value)
+				for _, attr := range tmpElem.Attributes() {
+					out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: attr})
+					out.noteOutput()
+					break
+				}
+			}
+			return nil
+		}
 		return dynamicError(errCodeXTDE0820, "xsl:attribute must be added to an element")
 	}
 
