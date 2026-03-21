@@ -352,9 +352,7 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 			return dynamicError(errCodeXTDE0410,
 				"cannot add attribute %s after child nodes have been added", attr.Name())
 		}
-		if err := copyAttributeToElement(elem, attr); err != nil {
-			return err
-		}
+		copyAttributeToElement(elem, attr)
 		out.noteOutput()
 		return nil
 	}
@@ -508,9 +506,7 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 			return dynamicError(errCodeXTDE0410,
 				"cannot add attribute %s after child nodes have been added", attr.Name())
 		}
-		if err := copyAttributeToElement(elem, attr); err != nil {
-			return err
-		}
+		copyAttributeToElement(elem, attr)
 		out.noteOutput()
 		return nil
 	case helium.NamespaceNode:
@@ -594,13 +590,9 @@ func (ec *execContext) copyElementNoNamespaces(src *helium.Element) error {
 			if nsErr != nil {
 				return nsErr
 			}
-			if err := elem.SetAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
-				return err
-			}
+			elem.SetLiteralAttributeNS(a.LocalName(), a.Value(), ns)
 		} else {
-			if err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
-				return err
-			}
+			elem.SetLiteralAttribute(a.Name(), a.Value())
 		}
 	}
 

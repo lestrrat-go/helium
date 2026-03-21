@@ -688,8 +688,8 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 	if err != nil {
 		return
 	}
-	_ = meta.SetAttribute("http-equiv", "Content-Type")
-	_ = meta.SetAttribute("content", "text/html; charset="+enc)
+	meta.SetLiteralAttribute("http-equiv", "Content-Type")
+	meta.SetLiteralAttribute("content", "text/html; charset="+enc)
 	// Insert meta as first child of <head>.
 	// Unlink existing children, add meta, then re-add them.
 	var children []helium.Node

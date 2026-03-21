@@ -597,13 +597,9 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 				return err
 			}
 			keyText := key.StringVal()
-			if err := child.SetAttribute("key", keyText); err != nil {
-				return &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to set key attribute: %v", err)}
-			}
+			child.SetLiteralAttribute("key", keyText)
 			if opts.escape {
-				if err := child.SetAttribute("escaped-key", "true"); err != nil {
-					return &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to set escaped-key attribute: %v", err)}
-				}
+				child.SetLiteralAttribute("escaped-key", "true")
 			}
 			if err := elem.AddChild(child); err != nil {
 				return &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to attach child: %v", err)}
@@ -626,9 +622,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 		switch v.TypeName {
 		case TypeString:
 			if opts.escape {
-				if err := elem.SetAttribute("escaped", "true"); err != nil {
-					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to set escaped attribute: %v", err)}
-				}
+				elem.SetLiteralAttribute("escaped", "true")
 			}
 			if err := elem.AppendText([]byte(v.StringVal())); err != nil {
 				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append string value: %v", err)}

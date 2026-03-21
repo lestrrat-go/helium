@@ -375,7 +375,7 @@ func (ec *execContext) mapAnnotationsFromValidation(ann xsd.TypeAnnotations, src
 				// as a default/fixed value by schema validation. Copy it over.
 				if !dstFound {
 					// Copy the default/fixed attribute from the validated copy.
-					_ = dstElem.SetAttribute(srcAttr.Name(), srcAttr.Value())
+					dstElem.SetLiteralAttribute(srcAttr.Name(), srcAttr.Value())
 					// Annotate the newly added attribute.
 					if typeName, ok := ann[srcAttr]; ok {
 						for _, dstAttr := range dstElem.Attributes() {
@@ -603,9 +603,9 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 			if err != nil {
 				return err
 			}
-			if err := elem.SetAttributeNS(localName, value, ns); err != nil {
-				return err
-			}
+			// Use literal mode: XSLT evaluation values are plain text
+			// that may contain & from resolved entities.
+			elem.SetLiteralAttributeNS(localName, value, ns)
 			ec.annotateAttr(elem, inst.TypeName, localName, nsURI, value)
 			out.noteOutput()
 			return nil
@@ -621,9 +621,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 			}
 		}
 		elem.RemoveAttribute(name)
-		if err := elem.SetAttribute(name, value); err != nil {
-			return err
-		}
+		elem.SetLiteralAttribute(name, value)
 		ec.annotateAttr(elem, inst.TypeName, name, "", value)
 		out.noteOutput()
 		return nil
@@ -657,9 +655,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		if err != nil {
 			return err
 		}
-		if err := elem.SetAttributeNS(localName, value, ns); err != nil {
-			return err
-		}
+		elem.SetLiteralAttributeNS(localName, value, ns)
 		ec.annotateAttr(elem, inst.TypeName, localName, uri, value)
 		out.noteOutput()
 		return nil
@@ -674,9 +670,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 
 	// Remove existing attribute with same name to allow replacement
 	elem.RemoveAttribute(name)
-	if err := elem.SetAttribute(name, value); err != nil {
-		return err
-	}
+	elem.SetLiteralAttribute(name, value)
 	ec.annotateAttr(elem, inst.TypeName, name, "", value)
 	out.noteOutput()
 	return nil
@@ -684,8 +678,8 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 
 // copyAttributeToElement copies an attribute to an element, preserving its
 // namespace URI and prefix. For non-namespaced attributes, falls back to
-// SetAttribute.
-func copyAttributeToElement(elem *helium.Element, attr *helium.Attribute) error {
+// SetLiteralAttribute.
+func copyAttributeToElement(elem *helium.Element, attr *helium.Attribute) {
 	if uri := attr.URI(); uri != "" {
 		prefix := attr.Prefix()
 		// Extract local name by stripping prefix from Name()
@@ -695,9 +689,10 @@ func copyAttributeToElement(elem *helium.Element, attr *helium.Attribute) error 
 			localName = name[len(prefix)+1:]
 		}
 		ns := helium.NewNamespace(prefix, uri)
-		return elem.SetAttributeNS(localName, attr.Value(), ns)
+		elem.SetLiteralAttributeNS(localName, attr.Value(), ns)
+		return
 	}
-	return elem.SetAttribute(attr.Name(), attr.Value())
+	elem.SetLiteralAttribute(attr.Name(), attr.Value())
 }
 
 // hasNSDecl checks if an element already has a namespace declaration for

@@ -304,9 +304,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 				attr := v.Node.(*helium.Attribute)
 				elem, ok := out.current.(*helium.Element)
 				if ok {
-					if err := copyAttributeToElement(elem, attr); err != nil {
-						return err
-					}
+					copyAttributeToElement(elem, attr)
 					out.noteOutput()
 				}
 				continue
@@ -461,13 +459,9 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 							if nsErr != nil {
 								return nsErr
 							}
-							if err := elem.SetAttributeNS(attr.LocalName(), attr.Value(), ns); err != nil {
-								return err
-							}
+							elem.SetLiteralAttributeNS(attr.LocalName(), attr.Value(), ns)
 						} else {
-							if err := elem.SetAttribute(attr.Name(), attr.Value()); err != nil {
-								return err
-							}
+							elem.SetLiteralAttribute(attr.Name(), attr.Value())
 						}
 						continue
 					}

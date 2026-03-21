@@ -268,12 +268,24 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 			if ns == nil && ctx.elem != nil {
 				ns = lookupNSByPrefix(ctx.elem, p)
 			}
-			if err := e.SetAttributeNS(attr.LocalName(), attr.Value(), ns); err != nil {
-				return err
+			if ctx.replaceEntities {
+				// When replaceEntities is true (ParseNoEnt), entity
+				// references are already resolved in the attribute
+				// value. Use literal mode to avoid re-parsing & as
+				// new entity reference starts.
+				e.SetLiteralAttributeNS(attr.LocalName(), attr.Value(), ns)
+			} else {
+				if err := e.SetAttributeNS(attr.LocalName(), attr.Value(), ns); err != nil {
+					return err
+				}
 			}
 		} else {
-			if err := e.SetAttribute(attr.Name(), attr.Value()); err != nil {
-				return err
+			if ctx.replaceEntities {
+				e.SetLiteralAttribute(attr.Name(), attr.Value())
+			} else {
+				if err := e.SetAttribute(attr.Name(), attr.Value()); err != nil {
+					return err
+				}
 			}
 		}
 	}

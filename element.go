@@ -167,6 +167,21 @@ func (n *Element) addProperty(attr *Attribute) {
 	attr.SetParent(n)
 }
 
+// SetLiteralAttributeNS creates or replaces an attribute with a literal text
+// value and namespace. Unlike SetAttributeNS, the value is not parsed for
+// entity references. This is useful when the parser has already resolved
+// entities in attribute values.
+func (n *Element) SetLiteralAttributeNS(localname, value string, ns *Namespace) {
+	attr := newAttribute(localname, ns)
+	attr.doc = n.doc
+	t := newText([]byte(value))
+	t.doc = n.doc
+	setFirstChild(attr, t)
+	setLastChild(attr, t)
+	t.SetParent(attr)
+	n.addProperty(attr)
+}
+
 // SetAttributeNS creates an attribute with the given local name, value, and namespace.
 func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) error {
 	attr, err := n.doc.CreateAttribute(localname, value, ns)
