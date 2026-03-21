@@ -206,18 +206,24 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 
 	inst := &ForEachInst{Select: expr}
 
-	// First pass: collect sort keys
+	// First pass: collect sort keys. Validate sort comes before content.
+	pastSortContent := false
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
 		}
 		if childElem.URI() == NSXSLT && childElem.LocalName() == "sort" {
+			if pastSortContent {
+				return nil, staticError(errCodeXTSE0010, "xsl:sort must come before other content in xsl:for-each")
+			}
 			sk, err := c.compileSortKey(childElem)
 			if err != nil {
 				return nil, err
 			}
 			inst.Sort = append(inst.Sort, sk)
+		} else {
+			pastSortContent = true
 		}
 	}
 
@@ -406,19 +412,24 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*PerformSortInst, e
 		inst.Select = expr
 	}
 
-	// Collect sort keys and body
+	// Collect sort keys and body. xsl:sort must come before other content.
+	pastSort := false
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
 		}
 		if childElem.URI() == NSXSLT && childElem.LocalName() == "sort" {
+			if pastSort {
+				return nil, staticError(errCodeXTSE0010, "xsl:sort must come before other content in xsl:perform-sort")
+			}
 			sk, err := c.compileSortKey(childElem)
 			if err != nil {
 				return nil, err
 			}
 			inst.Sort = append(inst.Sort, sk)
 		} else {
+			pastSort = true
 			childInst, err := c.compileInstruction(childElem)
 			if err != nil {
 				return nil, err
