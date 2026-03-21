@@ -511,11 +511,16 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 		} else {
 			resultSeq := result.Sequence()
 			if len(resultSeq) == 0 {
-				keyVal = ""
-				keySeq = xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: ""}}
-			} else {
-				keyVal, keySeq = groupLookupKey(resultSeq[0], nil)
+				// XTTE1100: group-adjacent key must not be an empty sequence
+				return nil, dynamicError("XTTE1100",
+					"group-adjacent key is an empty sequence")
 			}
+			if len(resultSeq) > 1 {
+				// XTTE1100: group-adjacent key must be a single atomic value
+				return nil, dynamicError("XTTE1100",
+					"group-adjacent key has %d items (expected 1)", len(resultSeq))
+			}
+			keyVal, keySeq = groupLookupKey(resultSeq[0], nil)
 		}
 
 		lookupKey := keyVal
