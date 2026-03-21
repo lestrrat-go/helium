@@ -681,6 +681,11 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
+		// XTSE0620: select and non-empty content are mutually exclusive.
+		// Use-when-aware check: elements excluded by use-when don't count as content.
+		if c.hasEffectiveContent(elem) {
+			return staticError(errCodeXTSE0620, "xsl:variable %q has both @select and content", name)
+		}
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return err
