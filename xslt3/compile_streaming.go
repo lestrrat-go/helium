@@ -775,6 +775,12 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
 			return nil, err
 		}
 		mk.Select = expr
+	} else {
+		body, err := c.compileChildren(elem)
+		if err != nil {
+			return nil, err
+		}
+		mk.Body = body
 	}
 
 	if order := getAttr(elem, "order"); order != "" {

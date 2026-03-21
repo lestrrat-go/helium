@@ -1293,20 +1293,31 @@ func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceIt
 		}
 
 		for k, mk := range keyDefs {
-			if mk.Select == nil {
+			if mk.Select == nil && len(mk.Body) == 0 {
 				itemKeys[k] = mergeKeyValue{}
 				continue
 			}
 
-			ec.evaluatingMergeKey = true
-			xpathCtx := ec.newXPathContext(node)
-			result, err := mk.Select.Evaluate(xpathCtx, node)
-			ec.evaluatingMergeKey = false
-			if err != nil {
-				return nil, err
+			var seq xpath3.Sequence
+			if mk.Select != nil {
+				ec.evaluatingMergeKey = true
+				xpathCtx := ec.newXPathContext(node)
+				result, err := mk.Select.Evaluate(xpathCtx, node)
+				ec.evaluatingMergeKey = false
+				if err != nil {
+					return nil, err
+				}
+				seq = result.Sequence()
+			} else {
+				// Body evaluation: runs in temporary output state.
+				ec.temporaryOutputDepth++
+				bodySeq, err := ec.evaluateBodyAsSequence(ctx, mk.Body)
+				ec.temporaryOutputDepth--
+				if err != nil {
+					return nil, err
+				}
+				seq = bodySeq
 			}
-
-			seq := result.Sequence()
 			// XTTE1020: merge key must evaluate to a single atomic value.
 			if len(seq) > 1 {
 				return nil, dynamicError(errCodeXTTE1020, "xsl:merge-key select expression must return a single atomic value, got %d items", len(seq))
@@ -1325,7 +1336,15 @@ func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceIt
 				}
 			}
 			// Fall back to string value.
-			itemKeys[k] = mergeKeyValue{str: result.StringValue()}
+			var sv string
+			if len(seq) > 0 {
+				if av, ok := seq[0].(xpath3.AtomicValue); ok {
+					if s, err := xpath3.AtomicToString(av); err == nil {
+						sv = s
+					}
+				}
+			}
+			itemKeys[k] = mergeKeyValue{str: sv}
 		}
 		keys[i] = itemKeys
 	}
