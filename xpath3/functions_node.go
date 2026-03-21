@@ -119,6 +119,10 @@ func fnBaseURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	if n == nil {
 		return nil, nil
 	}
+	// Namespace nodes have no base URI per the XPath data model.
+	if n.Type() == helium.NamespaceNode {
+		return nil, nil
+	}
 	// Walk up the parent chain to find the actual document the node lives
 	// in. OwnerDocument() may return a different document when nodes are
 	// created in one document and then moved to another (e.g. in XSLT
