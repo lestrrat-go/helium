@@ -96,6 +96,9 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:key requires name attribute")
 	}
+	if !isValidQName(name) && !isValidEQName(name) {
+		return staticError(errCodeXTSE0020, "invalid name %q on xsl:key", name)
+	}
 
 	matchAttr := getAttr(elem, "match")
 	if matchAttr == "" {
@@ -361,6 +364,12 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:attribute-set requires name attribute")
 	}
+	if !isValidQName(name) && !isValidEQName(name) {
+		return staticError(errCodeXTSE0020, "invalid name %q on xsl:attribute-set", name)
+	}
+	if err := c.checkQNamePrefix(name, "xsl:attribute-set"); err != nil {
+		return err
+	}
 	name = resolveQName(name, c.nsBindings)
 
 	asd := &AttributeSetDef{
@@ -465,6 +474,9 @@ func (c *compiler) compileDecimalFormat(elem *helium.Element) error {
 	name := getAttr(elem, "name")
 	qn := xpath3.QualifiedName{}
 	if name != "" {
+		if !isValidQName(name) && !isValidEQName(name) {
+			return staticError(errCodeXTSE0020, "invalid name %q on xsl:decimal-format", name)
+		}
 		qn = xpath3.QualifiedName{Name: name}
 		if idx := strings.IndexByte(name, ':'); idx >= 0 {
 			prefix := name[:idx]

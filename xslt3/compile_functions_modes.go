@@ -183,6 +183,11 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 						"xsl:param %q in xsl:function must not have required=%q", pname, reqVal)
 				}
 			}
+			// XTSE0020: tunnel="yes" is not allowed on a function parameter
+			if getAttr(childElem, "tunnel") == "yes" {
+				return staticError(errCodeXTSE0020,
+					"tunnel=\"yes\" is not allowed on a function parameter")
+			}
 		}
 	}
 

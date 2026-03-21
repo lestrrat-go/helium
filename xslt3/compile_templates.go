@@ -66,7 +66,16 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		c.pendingPatternValidations = append(c.pendingPatternValidations, pendingPatternValidation{p, matchAttr})
 	}
 
-	tmpl.Name = resolveQName(getAttr(elem, "name"), c.nsBindings)
+	nameAttr := getAttr(elem, "name")
+	if nameAttr != "" && !isValidQName(nameAttr) && !isValidEQName(nameAttr) {
+		return staticError(errCodeXTSE0020, "invalid name %q on xsl:template", nameAttr)
+	}
+	if nameAttr != "" {
+		if err := c.checkQNamePrefix(nameAttr, "xsl:template"); err != nil {
+			return err
+		}
+	}
+	tmpl.Name = resolveQName(nameAttr, c.nsBindings)
 
 	// XTSE0080: template name must not be in the XSLT namespace
 	// Exception: xsl:initial-template is explicitly allowed (XSLT 3.0 §3.11).
@@ -536,6 +545,9 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
 	}
+	if !isValidQName(name) && !isValidEQName(name) {
+		return nil, staticError(errCodeXTSE0020, "invalid name %q on xsl:param", name)
+	}
 
 	// Validate boolean attribute values (including empty string)
 	if reqAttr, hasReq := elem.GetAttribute("required"); hasReq {
@@ -657,6 +669,9 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
 	}
+	if !isValidQName(name) && !isValidEQName(name) {
+		return staticError(errCodeXTSE0020, "invalid name %q on xsl:variable", name)
+	}
 
 	// XTSE0020: validate static attribute (boolean)
 	if staticVal, hasStatic := elem.GetAttribute("static"); hasStatic {
@@ -712,6 +727,10 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 }
 
 func (c *compiler) compileGlobalParam(elem *helium.Element) error {
+	// XTSE0020: tunnel="yes" is not allowed on a stylesheet parameter
+	if getAttr(elem, "tunnel") == "yes" {
+		return staticError(errCodeXTSE0020, "tunnel=\"yes\" is not allowed on a stylesheet parameter")
+	}
 	p, err := c.compileParamDef(elem)
 	if err != nil {
 		return err
