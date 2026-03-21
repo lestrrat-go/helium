@@ -340,8 +340,12 @@ func (c *compiler) processExpose(root *helium.Element) error {
 			c.stylesheet.globalParamVisibility[p.Name] = visPrivate
 		}
 	}
-	for name := range c.stylesheet.attributeSets {
-		c.stylesheet.attrSetVisibility[name] = visPrivate
+	for name, asd := range c.stylesheet.attributeSets {
+		if asd != nil && asd.Visibility != "" {
+			c.stylesheet.attrSetVisibility[name] = asd.Visibility
+		} else {
+			c.stylesheet.attrSetVisibility[name] = visPrivate
+		}
 	}
 	// Save explicitly declared mode visibility before defaults are applied.
 	c.declaredModeVis = make(map[string]string)
