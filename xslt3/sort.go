@@ -405,6 +405,33 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 				if *dtMode == dataTypeAuto && v.IsNumeric() {
 					*dtMode = dataTypeNumber
 				}
+				// Duration types: use numeric comparison based on total months or seconds
+				if v.TypeName == xpath3.TypeYearMonthDuration || v.TypeName == xpath3.TypeDayTimeDuration {
+					d := v.DurationVal()
+					var f float64
+					if v.TypeName == xpath3.TypeYearMonthDuration {
+						f = float64(d.Months)
+					} else {
+						f = d.Seconds
+					}
+					if d.Negative {
+						f = -f
+					}
+					sv = sortValue{kind: sortValueNumber, num: f, typeName: v.TypeName}
+					if *dtMode == dataTypeAuto {
+						*dtMode = dataTypeNumber
+					}
+				}
+				// Date/time types: use Unix nanoseconds for numeric comparison
+				switch v.TypeName {
+				case xpath3.TypeDateTime, xpath3.TypeDateTimeStamp, xpath3.TypeDate, xpath3.TypeTime:
+					t := v.TimeVal()
+					// Use seconds with sub-second precision for ordering
+					sv = sortValue{kind: sortValueNumber, num: float64(t.UnixNano()) / 1e9, typeName: v.TypeName}
+					if *dtMode == dataTypeAuto {
+						*dtMode = dataTypeNumber
+					}
+				}
 			case xpath3.NodeItem:
 				// Atomize to get the typed value for type consistency checks
 				if av, err := xpath3.AtomizeItem(v); err == nil {
@@ -443,8 +470,23 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 
 	sv := sortValue{kind: sortValueText, str: stringifySequence(val)}
 	if *dtMode == dataTypeAuto && len(val) == 1 {
-		if av, ok := val[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
-			*dtMode = dataTypeNumber
+		if av, ok := val[0].(xpath3.AtomicValue); ok {
+			if av.IsNumeric() {
+				*dtMode = dataTypeNumber
+			} else if av.TypeName == xpath3.TypeYearMonthDuration || av.TypeName == xpath3.TypeDayTimeDuration {
+				d := av.DurationVal()
+				var f float64
+				if av.TypeName == xpath3.TypeYearMonthDuration {
+					f = float64(d.Months)
+				} else {
+					f = d.Seconds
+				}
+				if d.Negative {
+					f = -f
+				}
+				sv = sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}
+				*dtMode = dataTypeNumber
+			}
 		}
 	}
 	return sv, nil
@@ -467,12 +509,10 @@ func extractSortValues(ctx context.Context, ec *execContext, sortKeys []*SortKey
 
 func extractNumericValueFromResult(seq xpath3.Sequence, result xpath3.Result) sortValue {
 	if len(seq) == 1 {
-		if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
-			f := av.ToFloat64()
-			if math.IsNaN(f) {
-				return sortValue{kind: sortValueNaN}
+		if av, ok := seq[0].(xpath3.AtomicValue); ok {
+			if sv, ok := atomicToNumericSortValue(av); ok {
+				return sv
 			}
-			return sortValue{kind: sortValueNumber, num: f}
 		}
 	}
 	return parseToNumericSortValue(result.StringValue())
@@ -480,12 +520,10 @@ func extractNumericValueFromResult(seq xpath3.Sequence, result xpath3.Result) so
 
 func extractNumericValueFromSeq(seq xpath3.Sequence) sortValue {
 	if len(seq) == 1 {
-		if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
-			f := av.ToFloat64()
-			if math.IsNaN(f) {
-				return sortValue{kind: sortValueNaN}
+		if av, ok := seq[0].(xpath3.AtomicValue); ok {
+			if sv, ok := atomicToNumericSortValue(av); ok {
+				return sv
 			}
-			return sortValue{kind: sortValueNumber, num: f}
 		}
 	}
 	return parseToNumericSortValue(stringifySequence(seq))
@@ -497,6 +535,40 @@ func parseToNumericSortValue(s string) sortValue {
 		return sortValue{kind: sortValueNaN}
 	}
 	return sortValue{kind: sortValueNumber, num: f}
+}
+
+// atomicToNumericSortValue converts an atomic value to a numeric sort value
+// for types that support ordering: numeric, duration, date/time.
+func atomicToNumericSortValue(av xpath3.AtomicValue) (sortValue, bool) {
+	if av.IsNumeric() {
+		f := av.ToFloat64()
+		if math.IsNaN(f) {
+			return sortValue{kind: sortValueNaN, typeName: av.TypeName}, true
+		}
+		return sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}, true
+	}
+	switch av.TypeName {
+	case xpath3.TypeYearMonthDuration:
+		d := av.DurationVal()
+		f := float64(d.Months)
+		if d.Negative {
+			f = -f
+		}
+		return sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}, true
+	case xpath3.TypeDayTimeDuration:
+		d := av.DurationVal()
+		f := d.Seconds
+		if d.Negative {
+			f = -f
+		}
+		return sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}, true
+	case xpath3.TypeDateTime, xpath3.TypeDateTimeStamp, xpath3.TypeDate, xpath3.TypeTime:
+		t := av.TimeVal()
+		// Use Unix seconds + fractional nanoseconds to avoid int64 overflow for large years
+		f := float64(t.Unix()) + float64(t.Nanosecond())/1e9
+		return sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}, true
+	}
+	return sortValue{}, false
 }
 
 // --- Data type mode resolution ---

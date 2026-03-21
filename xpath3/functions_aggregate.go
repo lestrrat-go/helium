@@ -191,15 +191,10 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
 	}
 	count := len(seq)
-	avgMonthsBig := new(big.Int).Quo(totalMonths, big.NewInt(int64(count)))
-	if !avgMonthsBig.IsInt64() {
-		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
-	}
-	avgMonths64 := avgMonthsBig.Int64()
-	if int64(int(avgMonths64)) != avgMonths64 {
-		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
-	}
-	avgMonths := int(avgMonths64)
+	// Per XPath F&O spec: months are rounded "half towards positive infinity"
+	// i.e. math.Floor(months + 0.5), matching op:divide-yearMonthDuration behavior.
+	monthsF := float64(totalMonths.Int64()) / float64(count)
+	avgMonths := int(math.Floor(monthsF + 0.5))
 	avgSeconds := totalSeconds / float64(count)
 	negative := avgMonths < 0 || avgSeconds < 0
 	if negative {
