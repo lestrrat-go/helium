@@ -166,12 +166,18 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 	// context.Context at invocation time for cancellation propagation.
 	capturedECValue := *ec
 	capturedEC := &capturedECValue
-	// Populate type signature from built-in registry
+	// Populate type signature from built-in registry or TypedFunction interface
 	var paramTypes []SequenceType
 	var returnType *SequenceType
 	if sig := lookupFunctionSignature(ns, e.Name, e.Arity); sig != nil {
 		paramTypes = sig.ParamTypes
 		returnType = sig.ReturnType
+	} else if tf, ok := fn.(TypedFunction); ok {
+		paramTypes = tf.FuncParamTypes()
+		returnType = tf.FuncReturnType()
+	} else if tfa, ok := fn.(TypedFunctionByArity); ok {
+		paramTypes = tfa.FuncParamTypesForArity(e.Arity)
+		returnType = tfa.FuncReturnTypeForArity(e.Arity)
 	}
 	fi := FunctionItem{
 		Arity:      e.Arity,

@@ -50,6 +50,21 @@ func Parse(expr string) (Expr, error) {
 	return parseWithLexer(l)
 }
 
+// ParseSequenceType parses a standalone sequence type expression such as
+// "xs:integer?", "element(e)*", or "function(xs:string) as xs:boolean".
+func ParseSequenceType(s string) (SequenceType, error) {
+	l, err := newLexer(s)
+	if err != nil {
+		return SequenceType{}, err
+	}
+	p := &parser{lexer: l}
+	st, err := p.parseSequenceType()
+	if err != nil {
+		return SequenceType{}, err
+	}
+	return st, nil
+}
+
 // parseExpression parses → ExprSingle (',' ExprSingle)* (sequence constructor).
 func (p *parser) parseExpression() (Expr, error) {
 	p.depth++

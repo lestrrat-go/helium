@@ -17,6 +17,23 @@ type Function interface {
 	Call(ctx context.Context, args []Sequence) (Sequence, error)
 }
 
+// TypedFunction extends Function with type signature information.
+// Implementations that expose parameter and return types enable
+// correct instance-of checks and function coercion for user-defined functions.
+type TypedFunction interface {
+	Function
+	FuncParamTypes() []SequenceType
+	FuncReturnType() *SequenceType
+}
+
+// TypedFunctionByArity is like TypedFunction but for multi-arity functions
+// that have different type signatures per arity.
+type TypedFunctionByArity interface {
+	Function
+	FuncParamTypesForArity(arity int) []SequenceType
+	FuncReturnTypeForArity(arity int) *SequenceType
+}
+
 // Namespace URIs for standard XPath 3.1 function namespaces.
 const (
 	NSFn    = lexicon.Fn
