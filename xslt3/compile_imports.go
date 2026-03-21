@@ -509,6 +509,18 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 	}
 	defer func() { c.effectiveVersion = savedVersion }()
 
+	// XTSE0265: conflicting input-type-annotations across modules.
+	// Error only when one module says "preserve" and another says "strip".
+	// "unspecified" is compatible with either.
+	if importedITA := getAttr(importedRoot, "input-type-annotations"); importedITA != "" && importedITA != "unspecified" {
+		mainITA := c.stylesheet.inputTypeAnnotations
+		if mainITA != "" && mainITA != "unspecified" && mainITA != importedITA {
+			return staticError(errCodeXTSE0265,
+				"conflicting input-type-annotations: main module has %q, imported module has %q",
+				mainITA, importedITA)
+		}
+	}
+
 	if isImport {
 		// For imports: the imported stylesheet gets current (lower) precedence.
 		// After compiling, increment so the importing module's remaining
