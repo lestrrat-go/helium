@@ -65,13 +65,7 @@ func LoadText(cfg *Config, href, encoding string) (string, error) {
 		return "", &Error{Code: ErrCodeRetrieval, Message: fmt.Sprintf("cannot retrieve resource: %v", err)}
 	}
 
-	// If no explicit encoding was given, use the HTTP Content-Type encoding hint.
-	effectiveEncoding := encoding
-	if effectiveEncoding == "" && httpEncoding != "" {
-		effectiveEncoding = httpEncoding
-	}
-
-	text, err := DecodeText(data, effectiveEncoding)
+	text, err := DecodeText(data, encoding, httpEncoding)
 	if err != nil {
 		return "", err
 	}
@@ -254,10 +248,12 @@ func ReadURI(cfg *Config, uri string) ([]byte, error) {
 }
 
 // DecodeText decodes raw bytes to a string, handling BOM detection,
-// XML declaration sniffing, and encoding conversion. If encoding is empty,
-// the encoding is determined from the BOM, then from an XML declaration
-// (if present), and defaults to UTF-8 otherwise.
-func DecodeText(data []byte, encoding string) (string, error) {
+// XML declaration sniffing, and encoding conversion. encoding is the
+// user-specified encoding (from the function argument); transportHints
+// are optional transport-level encoding hints (e.g. from HTTP Content-Type).
+// BOM overrides transport hints but conflicts with explicit encoding.
+// If all are empty, defaults to UTF-8.
+func DecodeText(data []byte, encoding string, transportHints ...string) (string, error) {
 	if encoding != "" {
 		enc := iencoding.Load(encoding)
 		if enc == nil {
@@ -272,6 +268,17 @@ func DecodeText(data []byte, encoding string) (string, error) {
 	if detectedEncoding == "" && encoding == "" {
 		if xmlEnc := detectXMLDeclEncoding(data); xmlEnc != "" {
 			detectedEncoding = xmlEnc
+		}
+	}
+
+	// If we still have no detected encoding and no explicit encoding,
+	// use the transport hint as a fallback.
+	if detectedEncoding == "" && encoding == "" {
+		for _, hint := range transportHints {
+			if hint != "" {
+				detectedEncoding = hint
+				break
+			}
 		}
 	}
 
