@@ -663,9 +663,14 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 		return dynamicError(errCodeXTDE3160, "xsl:evaluate: cannot compile XPath expression %q: %v", xpathStr, compileErr)
 	}
 
-	// 5a. XTDE3160: current() is not allowed in xsl:evaluate
+	// 5a. XTDE3160: certain XSLT functions are not allowed in xsl:evaluate
 	if xpath3.ExprUsesFunction(dynExpr, "current") {
 		return dynamicError(errCodeXTDE3160, "xsl:evaluate: current() is not allowed in dynamically evaluated expressions")
+	}
+	for _, blocked := range []string{"system-property", "current-output-uri", "available-system-properties"} {
+		if xpath3.ExprUsesFunction(dynExpr, blocked) {
+			return dynamicError(errCodeXTDE3160, "xsl:evaluate: %s() is not allowed in dynamically evaluated expressions", blocked)
+		}
 	}
 
 	// 6. Build evaluation context with variables from xsl:with-param.
