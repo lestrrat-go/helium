@@ -1004,6 +1004,11 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 		return dynamicError(errCodeXTDE0905,
 			"namespace URI %q is reserved and cannot be used", value)
 	}
+	// XTDE0930: non-empty prefix with zero-length namespace URI
+	if name != "" && value == "" {
+		return dynamicError(errCodeXTDE0930,
+			"namespace prefix %q requires a non-empty URI", name)
+	}
 
 	out := ec.currentOutput()
 	// In sequence mode, capture the namespace node as a standalone item.

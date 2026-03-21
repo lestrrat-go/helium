@@ -212,7 +212,12 @@ func (ec *execContext) execText(inst *TextInst) error {
 			}
 			return ec.addNode(text)
 		}
-		out.prevWasAtomic = false
+		// Inside xsl:where-populated, zero-length text nodes are removed
+		// before the constructing complex content rules apply (XSLT 3.0
+		// §8.4), so they must not break atomic adjacency chains.
+		if !out.wherePopulated {
+			out.prevWasAtomic = false
+		}
 		return nil
 	}
 	// XSLT 3.0 §20.1: disable-output-escaping is ignored when writing
