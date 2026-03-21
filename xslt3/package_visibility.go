@@ -528,11 +528,14 @@ func (c *compiler) applyExposeToTemplates(pattern, visibility string, isWildcard
 				}
 	
 			} else {
+				// For wildcard patterns, XTSE3025 (abstract) is still a
+				// hard error, but XTSE3010 (visibility increase) silently
+				// skips the component instead of erroring.
 				code, msg := checkExposeVisibility(name, visibility, declared)
-				if code != "" {
+				if code == errCodeXTSE3025 {
 					return staticError(code, "%s", msg)
 				}
-				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+				if declared != "" && isVisibilityIncrease(declared, visibility) {
 					continue
 				}
 			}
@@ -622,11 +625,14 @@ func (c *compiler) applyExposeToVariables(pattern, visibility string) error {
 				}
 	
 			} else {
+				// For wildcard patterns, XTSE3025 (abstract) is still a
+				// hard error, but XTSE3010 (visibility increase) silently
+				// skips the component instead of erroring.
 				code, msg := checkExposeVisibility(name, visibility, declared)
-				if code != "" {
+				if code == errCodeXTSE3025 {
 					return staticError(code, "%s", msg)
 				}
-				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+				if declared != "" && isVisibilityIncrease(declared, visibility) {
 					continue
 				}
 			}
@@ -644,11 +650,14 @@ func (c *compiler) applyExposeToVariables(pattern, visibility string) error {
 				}
 	
 			} else {
+				// For wildcard patterns, XTSE3025 (abstract) is still a
+				// hard error, but XTSE3010 (visibility increase) silently
+				// skips the component instead of erroring.
 				code, msg := checkExposeVisibility(name, visibility, declared)
-				if code != "" {
+				if code == errCodeXTSE3025 {
 					return staticError(code, "%s", msg)
 				}
-				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+				if declared != "" && isVisibilityIncrease(declared, visibility) {
 					continue
 				}
 			}
@@ -675,11 +684,14 @@ func (c *compiler) applyExposeToVariablesStrict(pattern, visibility string) erro
 				}
 	
 			} else {
+				// For wildcard patterns, XTSE3025 (abstract) is still a
+				// hard error, but XTSE3010 (visibility increase) silently
+				// skips the component instead of erroring.
 				code, msg := checkExposeVisibility(name, visibility, declared)
-				if code != "" {
+				if code == errCodeXTSE3025 {
 					return staticError(code, "%s", msg)
 				}
-				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+				if declared != "" && isVisibilityIncrease(declared, visibility) {
 					continue
 				}
 			}
@@ -697,11 +709,14 @@ func (c *compiler) applyExposeToVariablesStrict(pattern, visibility string) erro
 				}
 	
 			} else {
+				// For wildcard patterns, XTSE3025 (abstract) is still a
+				// hard error, but XTSE3010 (visibility increase) silently
+				// skips the component instead of erroring.
 				code, msg := checkExposeVisibility(name, visibility, declared)
-				if code != "" {
+				if code == errCodeXTSE3025 {
 					return staticError(code, "%s", msg)
 				}
-				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+				if declared != "" && isVisibilityIncrease(declared, visibility) {
 					continue
 				}
 			}
@@ -728,11 +743,14 @@ func (c *compiler) applyExposeToAttrSets(pattern, visibility string, strict bool
 				}
 	
 			} else {
+				// For wildcard patterns, XTSE3025 (abstract) is still a
+				// hard error, but XTSE3010 (visibility increase) silently
+				// skips the component instead of erroring.
 				code, msg := checkExposeVisibility(name, visibility, declared)
-				if code != "" {
+				if code == errCodeXTSE3025 {
 					return staticError(code, "%s", msg)
 				}
-				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+				if declared != "" && isVisibilityIncrease(declared, visibility) {
 					continue
 				}
 			}
