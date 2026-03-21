@@ -165,6 +165,15 @@ func checkStreamableInstruction(ss *Stylesheet, inst Instruction) error {
 	}
 
 	// Recurse into child instructions.
+	// For xsl:for-each whose select does NOT consume the stream (motionless/upward),
+	// skip body checks: the body operates in a new, non-streaming context where
+	// last(), position(), etc. are allowed.
+	if fe, ok := inst.(*ForEachInst); ok {
+		if fe.Select != nil && !xpath3.ExprHasDownwardStep(fe.Select) && !xpath3.ExprUsesDescendantOrSelf(fe.Select) {
+			// Body of for-each over motionless/attribute axis — skip streaming checks.
+			return nil
+		}
+	}
 	for _, children := range getChildInstructions(inst) {
 		for _, child := range children {
 			if err := checkStreamableInstruction(ss, child); err != nil {
@@ -344,7 +353,7 @@ func walkExprWithGrounding(expr xpath3.Expr, insideGrounding bool, fn func(xpath
 		}
 	case xpath3.FilterExpr:
 		walkExprWithGrounding(e.Expr, insideGrounding, fn)
-		g := insideGrounding || isGroundingExpr(e.Expr)
+		g := insideGrounding || isGroundingExpr(e.Expr) || isAtomicResultExpr(e.Expr)
 		for _, pred := range e.Predicates {
 			walkExprWithGrounding(pred, g, fn)
 		}
