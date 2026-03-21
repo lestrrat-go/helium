@@ -482,6 +482,30 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 	}
 	switch node.Type() {
 	case helium.DocumentNode:
+		out := ec.currentOutput()
+		if out.sequenceMode || out.captureItems {
+			// In capture/sequence mode, wrap the document copy as a
+			// single document-node item so that variables with
+			// as="node()" receive exactly 1 item (a document node).
+			srcDoc, _ := node.(*helium.Document)
+			newDoc := helium.NewDefaultDocument()
+			if srcDoc != nil {
+				helium.CopyDTDInfo(srcDoc, newDoc)
+				newDoc.SetURL(srcDoc.URL())
+			}
+			for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+				copied, err := helium.CopyNode(child, newDoc)
+				if err != nil {
+					return err
+				}
+				if err := newDoc.AddChild(copied); err != nil {
+					return err
+				}
+			}
+			out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: newDoc})
+			out.noteOutput()
+			return nil
+		}
 		// Per XSLT spec, xsl:copy-of on document node copies children.
 		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 			if err := ec.copyNodeToOutput(child, copyNS); err != nil {
