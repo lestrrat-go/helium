@@ -61,6 +61,10 @@ func (c *compiler) compileLocalParam(elem *helium.Element) (*ParamInst, error) {
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
+		// XTSE0620: select and non-empty content are mutually exclusive.
+		if err := c.validateEmptyElement(elem, "xsl:param"); err != nil {
+			return nil, staticError(errCodeXTSE0620, "xsl:param %q has both @select and content", name)
+		}
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
