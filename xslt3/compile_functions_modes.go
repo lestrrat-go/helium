@@ -281,7 +281,18 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 		}
 	}
 
-	useAccumulators := getAttr(elem, "use-accumulators")
+	// Resolve accumulator QNames to expanded names for proper comparison
+	// across modules with different namespace prefixes.
+	rawUA := getAttr(elem, "use-accumulators")
+	var resolvedParts []string
+	for _, tok := range strings.Fields(rawUA) {
+		if tok == "#all" {
+			resolvedParts = append(resolvedParts, tok)
+		} else {
+			resolvedParts = append(resolvedParts, resolveQName(tok, c.nsBindings))
+		}
+	}
+	useAccumulators := strings.Join(resolvedParts, " ")
 
 	typed := getAttr(elem, "typed")
 
