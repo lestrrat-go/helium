@@ -1717,6 +1717,13 @@ func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		// Per XPath 3.1 §12.2 (Adaptive): string and untypedAtomic values
+		// are serialized enclosed in double quotes, with internal quotes
+		// escaped as "".
+		if v.TypeName == TypeString || v.TypeName == TypeUntypedAtomic {
+			escaped := strings.ReplaceAll(s, `"`, `""`)
+			return `"` + escaped + `"`, nil
+		}
 		return s, nil
 	case NodeItem:
 		return serializeNodeItem(v, opts)
