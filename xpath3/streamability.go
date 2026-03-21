@@ -499,6 +499,32 @@ func ExprUsesUpwardAxis(expr *Expression) bool {
 	return false
 }
 
+// ExprUsesPrecedingAxis returns true if the expression uses preceding:: or
+// preceding-sibling:: axes, which require backward access to already-consumed
+// nodes and are therefore non-streamable.
+func ExprUsesPrecedingAxis(expr *Expression) bool {
+	if expr == nil {
+		return false
+	}
+	if expr.program != nil {
+		const precMask = 1<<uint(AxisPreceding) | 1<<uint(AxisPrecedingSibling)
+		return expr.program.stream.axisUsed&precMask != 0
+	}
+	return false
+}
+
+// ExprUsesFollowingSiblingAxis returns true if the expression uses
+// following-sibling:: axis.
+func ExprUsesFollowingSiblingAxis(expr *Expression) bool {
+	if expr == nil {
+		return false
+	}
+	if expr.program != nil {
+		return expr.program.stream.axisUsed&(1<<uint(AxisFollowingSibling)) != 0
+	}
+	return false
+}
+
 // ExprUsesDescendantOrSelf returns true if the expression uses descendant:: or
 // descendant-or-self:: axis (i.e. // shorthand or explicit descendant axis).
 func ExprUsesDescendantOrSelf(expr *Expression) bool {

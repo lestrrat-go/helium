@@ -225,6 +225,11 @@ func checkStreamableInstruction(ss *Stylesheet, inst Instruction) error {
 				return err
 			}
 		}
+		// Also check for streaming variable-in-loop violations within
+		// nested instruction bodies (e.g., inside LREs).
+		if err := checkStreamingVarInLoop(children); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -236,10 +241,13 @@ func checkStreamableExpr(expr *xpath3.Expression) error {
 		return nil
 	}
 
-	// Note: upward axes (parent, ancestor, preceding) are NOT flagged here
-	// because in XSLT 3.0 streaming, ancestor axis is "motionless" — the
-	// ancestors of the context node are available. Upward axis violations
-	// are only checked for declared-streamability function categories.
+	// Parent/ancestor axes are motionless — ancestors of the streaming context
+	// are always available. However, preceding/preceding-sibling axes require
+	// backward access to already-consumed nodes, which is non-streamable.
+	if xpath3.ExprUsesPrecedingAxis(expr) {
+		return staticError(errCodeXTSE3430,
+			"expression %q uses preceding/preceding-sibling axis, which is not streamable", expr.String())
+	}
 
 	// 1. last() outside grounding context (non-motionless in streaming)
 	if exprUsesLastOutsideGrounding(expr) {
@@ -962,8 +970,11 @@ func forEachBodyConsumesContext(body []Instruction) bool {
 			if expr == nil {
 				continue
 			}
-			// Check if the expression accesses "." (context item) — consuming it
-			if exprReferencesContextItem(expr.AST()) {
+			// Check if the expression accesses "." (context item) — consuming it.
+			// Also check for implicit context usage via downward steps (child/
+			// descendant axis) which navigate into children of the streaming
+			// context item.
+			if exprReferencesContextItem(expr.AST()) || xpath3.ExprHasDownwardStep(expr) {
 				return true
 			}
 		}
