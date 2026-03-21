@@ -211,7 +211,7 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 		return item, nil
 	}
 
-	// Handle function(...) — function type coercion
+	// Handle function(...) — function type matching and coercion
 	if strings.HasPrefix(itemType, "function(") {
 		// function(*) matches any function item
 		if itemType == "function(*)" {
@@ -221,20 +221,32 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 			}
 			return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
 		}
-		// Parse the function type and use xpath3 coercion
+		// Parse the function type
 		st, err := xpath3.ParseSequenceType(itemType)
 		if err != nil {
 			return item, nil // unparseable → pass through
 		}
 		seq := xpath3.Sequence{item}
-		coerced, ok := xpath3.CoerceToSequenceType(seq, st)
-		if !ok {
-			return nil, fmt.Errorf("cannot coerce %s to %s", describeItem(item), itemType)
+		// First try strict SequenceType matching (contravariant params, covariant return).
+		if xpath3.MatchesSequenceType(seq, st) {
+			return item, nil
 		}
-		if len(coerced) == 1 {
+		// Check parameter compatibility: the function's declared params must
+		// accept the target's param types (contravariance). This catches cases
+		// like function($x as xs:float) being used where function(xs:double)
+		// is expected — xs:float cannot accept xs:double args.
+		if fi, ok := item.(xpath3.FunctionItem); ok {
+			if ok := xpath3.CheckFunctionParamCompat(fi, st); !ok {
+				return nil, fmt.Errorf("function item does not match required type %s", itemType)
+			}
+		}
+		// Try function coercion for return type flexibility — creates a
+		// wrapper that coerces args/return at call time.
+		coerced, ok := xpath3.CoerceToSequenceType(seq, st)
+		if ok && len(coerced) == 1 {
 			return coerced[0], nil
 		}
-		return item, nil
+		return nil, fmt.Errorf("function item does not match required type %s", itemType)
 	}
 
 	// Handle element(name) / element(name, type) patterns.
