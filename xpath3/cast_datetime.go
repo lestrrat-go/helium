@@ -601,9 +601,7 @@ func formatDuration(d Duration, typeName string) string {
 				// Use exact fractional representation
 				fracStr := d.FracSec.FloatString(20)
 				// Remove "0." prefix
-				if strings.HasPrefix(fracStr, "0.") {
-					fracStr = fracStr[2:]
-				}
+				fracStr = strings.TrimPrefix(fracStr, "0.")
 				fracStr = strings.TrimRight(fracStr, "0")
 				if fracStr == "" {
 					fmt.Fprintf(&b, "%dS", wholeSecs)

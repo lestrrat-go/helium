@@ -216,11 +216,10 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 					return err
 				}
 			}
-		} else {
-			// copy-namespaces="no": do not copy source namespace declarations.
-			// Only the element's own namespace (required for well-formedness)
-			// is declared below.
 		}
+		// When copy-namespaces="no": we do not copy source namespace
+		// declarations.  Only the element's own namespace (required for
+		// well-formedness) is declared below.
 		if srcElem.URI() != "" {
 			// Always declare the element's own namespace
 			if !hasNSDecl(elem, srcElem.Prefix(), srcElem.URI()) {
