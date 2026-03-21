@@ -1412,6 +1412,9 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	// Topologically sort accumulators so dependencies are evaluated first.
 	sortAccumulatorOrder(c.stylesheet)
 
+	// Topologically sort accumulators so dependencies are evaluated first.
+	sortAccumulatorOrder(c.stylesheet)
+
 	return c.stylesheet, nil
 }
 

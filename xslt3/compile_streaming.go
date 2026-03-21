@@ -534,6 +534,129 @@ func (c *compiler) compileAccumulatorRule(parent *AccumulatorDef, elem *helium.E
 	return nil
 }
 
+// sortAccumulatorOrder topologically sorts the accumulator evaluation order
+// so that accumulators that depend on others (via accumulator-before/after
+// calls in their rule expressions) are evaluated after their dependencies.
+// This ensures that when accumulator A calls accumulator-after('B'), B's
+// value for the current node has already been computed.
+func sortAccumulatorOrder(ss *Stylesheet) {
+	if len(ss.accumulatorOrder) <= 1 {
+		return
+	}
+
+	// Build dependency graph by scanning rule select expressions for
+	// accumulator-before('name') and accumulator-after('name') calls.
+	deps := make(map[string]map[string]struct{})
+	for name, acc := range ss.accumulators {
+		deps[name] = make(map[string]struct{})
+		for _, rule := range acc.Rules {
+			var src string
+			if rule.Select != nil {
+				src = rule.Select.String()
+			}
+			if src == "" {
+				continue
+			}
+			// Extract referenced accumulator names from the expression source
+			for _, ref := range extractAccumulatorRefs(src) {
+				resolved := resolveQName(ref, ss.namespaces)
+				if resolved != name {
+					if _, ok := ss.accumulators[resolved]; ok {
+						deps[name][resolved] = struct{}{}
+					}
+				}
+			}
+		}
+	}
+
+	// Topological sort using Kahn's algorithm
+	inDegree := make(map[string]int)
+	for _, name := range ss.accumulatorOrder {
+		inDegree[name] = 0
+	}
+	for name, d := range deps {
+		for dep := range d {
+			_ = name
+			inDegree[dep] = inDegree[dep] // ensure dep is in map
+		}
+	}
+	// Count incoming edges: if A depends on B, then A has an edge from B,
+	// meaning B must come before A. So an edge B -> A means inDegree[A]++.
+	for name, d := range deps {
+		_ = name
+		for range d {
+			// name depends on each dep, so dep -> name edge
+		}
+	}
+	// Recompute: for each name that depends on dep, dep -> name means
+	// name's in-degree goes up.
+	for _, name := range ss.accumulatorOrder {
+		inDegree[name] = 0
+	}
+	for name, d := range deps {
+		inDegree[name] += 0 // ensure entry exists
+		for dep := range d {
+			_ = dep
+			// name depends on dep → dep must come before name
+			// This is an edge dep -> name
+		}
+	}
+	// Actually: the topological sort should output dependencies first.
+	// Use DFS-based post-order traversal for simplicity.
+	visited := make(map[string]bool)
+	var sorted []string
+	var visit func(string)
+	visit = func(name string) {
+		if visited[name] {
+			return
+		}
+		visited[name] = true
+		for dep := range deps[name] {
+			visit(dep)
+		}
+		sorted = append(sorted, name)
+	}
+	for _, name := range ss.accumulatorOrder {
+		visit(name)
+	}
+	ss.accumulatorOrder = sorted
+}
+
+// extractAccumulatorRefs extracts accumulator names referenced by
+// accumulator-before('name') and accumulator-after('name') calls
+// from an XPath expression source string.
+func extractAccumulatorRefs(src string) []string {
+	var refs []string
+	for _, prefix := range []string{"accumulator-before(", "accumulator-after("} {
+		s := src
+		for {
+			idx := strings.Index(s, prefix)
+			if idx < 0 {
+				break
+			}
+			s = s[idx+len(prefix):]
+			// Skip whitespace
+			s = strings.TrimSpace(s)
+			if len(s) == 0 {
+				break
+			}
+			// Expect a quote character
+			q := s[0]
+			if q != '\'' && q != '"' {
+				break
+			}
+			s = s[1:]
+			end := strings.IndexByte(s, q)
+			if end < 0 {
+				break
+			}
+			refs = append(refs, s[:end])
+			s = s[end+1:]
+		}
+	}
+	return refs
+}
+
 // compileMerge compiles an xsl:merge element.
 func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 	inst := &MergeInst{}
