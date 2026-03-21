@@ -3,6 +3,7 @@ package xslt3
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -247,6 +248,11 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 	tmpl, ok := ec.stylesheet.namedTemplates[inst.Name]
 	if !ok {
 		return dynamicError(errCodeXTDE0060, "named template %q not found", inst.Name)
+	}
+
+	// XTTE0590: check context-item type constraint
+	if err := ec.checkContextItemType(tmpl); err != nil {
+		return err
 	}
 
 	// Switch package function scope if the template belongs to a different package.
@@ -559,4 +565,186 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *ApplyImportsI
 
 	// No imported template found, use built-in rules
 	return ec.applyBuiltinRules(ctx, node, mode, pv)
+}
+
+// checkContextItemType validates the context item against the template's
+// xsl:context-item declaration. Returns XTTE0590 on type mismatch or
+// XPDY0002 when the context item is absent but required.
+func (ec *execContext) checkContextItemType(tmpl *Template) error {
+	if tmpl.ContextItemAs == "" && tmpl.ContextItemUse == "" {
+		return nil
+	}
+
+	// Determine the current context item
+	var contextSeq xpath3.Sequence
+	if ec.contextItem != nil {
+		contextSeq = xpath3.Sequence{ec.contextItem}
+	} else if normalizeNode(ec.contextNode) != nil {
+		contextSeq = xpath3.Sequence{xpath3.NodeItem{Node: ec.contextNode}}
+	}
+
+	use := tmpl.ContextItemUse
+	if use == "" {
+		// Default use depends on template type:
+		// - match templates default to "required" (context always present)
+		// - named templates default to "optional" (may be called without context)
+		if tmpl.Match != nil {
+			use = "required"
+		} else {
+			use = "optional"
+		}
+	}
+
+	// XPDY0002: context item absent when use="required"
+	if len(contextSeq) == 0 && use == "required" {
+		return dynamicError("XPDY0002", "context item is absent but xsl:context-item use=\"required\"")
+	}
+
+	// Type check: if as is specified and context item exists, check the type.
+	// Context-item type checking uses "instance of" semantics (no atomization/casting).
+	if tmpl.ContextItemAs != "" && len(contextSeq) > 0 {
+		asExpr := stripXPathComments(tmpl.ContextItemAs)
+		if !instanceOfItemType(contextSeq[0], asExpr, ec) {
+			return dynamicError(errCodeXTTE0590,
+				"context item does not match required type %s", asExpr)
+		}
+	}
+
+	return nil
+}
+
+// instanceOfItemType checks if an item is an instance of the given item type
+// WITHOUT coercion or atomization. This is used for xsl:context-item/@as which
+// requires "instance of" semantics per XSLT 3.0 §9.8.
+func instanceOfItemType(item xpath3.Item, itemType string, ec *execContext) bool {
+	switch itemType {
+	case "item()":
+		return true
+	case "node()":
+		_, ok := item.(xpath3.NodeItem)
+		return ok
+	case "element()":
+		ni, ok := item.(xpath3.NodeItem)
+		return ok && ni.Node.Type() == helium.ElementNode
+	case "attribute()":
+		ni, ok := item.(xpath3.NodeItem)
+		return ok && ni.Node.Type() == helium.AttributeNode
+	case "text()":
+		ni, ok := item.(xpath3.NodeItem)
+		return ok && (ni.Node.Type() == helium.TextNode || ni.Node.Type() == helium.CDATASectionNode)
+	case "comment()":
+		ni, ok := item.(xpath3.NodeItem)
+		return ok && ni.Node.Type() == helium.CommentNode
+	case "processing-instruction()":
+		ni, ok := item.(xpath3.NodeItem)
+		return ok && ni.Node.Type() == helium.ProcessingInstructionNode
+	case "document-node()":
+		ni, ok := item.(xpath3.NodeItem)
+		return ok && ni.Node.Type() == helium.DocumentNode
+	}
+
+	// Handle element(name) / element(name, type)
+	if strings.HasPrefix(itemType, "element(") {
+		ni, ok := item.(xpath3.NodeItem)
+		if !ok || ni.Node.Type() != helium.ElementNode {
+			return false
+		}
+		inner := strings.TrimSpace(itemType[len("element(") : len(itemType)-1])
+		if inner == "" || inner == "*" {
+			return true
+		}
+		parts := splitTopLevelTypeArgs(inner)
+		reqName := strings.TrimSpace(parts[0])
+		if reqName != "*" {
+			reqLocal, reqNS := resolveSchemaQName(reqName, ec)
+			elem, isElem := ni.Node.(*helium.Element)
+			if !isElem || elem.LocalName() != reqLocal || elem.URI() != reqNS {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Handle document-node(element(...))
+	if strings.HasPrefix(itemType, "document-node(") {
+		ni, ok := item.(xpath3.NodeItem)
+		if !ok || ni.Node.Type() != helium.DocumentNode {
+			return false
+		}
+		inner := strings.TrimSpace(itemType[len("document-node(") : len(itemType)-1])
+		if inner == "" {
+			return true
+		}
+		doc, isDoc := ni.Node.(*helium.Document)
+		if !isDoc {
+			return false
+		}
+		rootElem := findDocumentElement(doc)
+		if rootElem == nil {
+			return false
+		}
+		return instanceOfItemType(xpath3.NodeItem{Node: rootElem}, inner, ec)
+	}
+
+	// Atomic types: item must be an atomic value of the specified type
+	av, ok := item.(xpath3.AtomicValue)
+	if !ok {
+		// Node items are not instances of atomic types
+		return false
+	}
+	target := normalizeTypeName(itemType, ec)
+	if target == "xs:anyAtomicType" {
+		return true
+	}
+	if av.TypeName == target {
+		return true
+	}
+	// Check built-in subtype relationships (e.g., xs:integer is instance of xs:decimal)
+	if isBuiltinSubtypeOf(av.TypeName, target) {
+		return true
+	}
+	// Check schema-derived subtype relationships
+	if ec != nil && ec.schemaRegistry != nil {
+		if ec.schemaRegistry.IsSubtypeOf(av.TypeName, target) {
+			return true
+		}
+	}
+	return false
+}
+
+// stripXPathComments removes XPath 2.0+ comments (: ... :) from a string
+// and normalizes whitespace (collapses runs of whitespace into single spaces,
+// removes spaces adjacent to parentheses).
+func stripXPathComments(s string) string {
+	// First pass: remove comments
+	var buf strings.Builder
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		if i+1 < len(s) && s[i] == '(' && s[i+1] == ':' {
+			depth++
+			i++ // skip ':'
+			continue
+		}
+		if i+1 < len(s) && s[i] == ':' && s[i+1] == ')' {
+			if depth > 0 {
+				depth--
+			}
+			i++ // skip ')'
+			continue
+		}
+		if depth == 0 {
+			buf.WriteByte(s[i])
+		}
+	}
+	// Normalize whitespace: collapse runs into single space, trim
+	result := strings.Join(strings.Fields(buf.String()), " ")
+	// Remove spaces around parentheses and commas for canonical form:
+	// "element ( doc )" → "element(doc)"
+	result = strings.ReplaceAll(result, " (", "(")
+	result = strings.ReplaceAll(result, "( ", "(")
+	result = strings.ReplaceAll(result, " )", ")")
+	result = strings.ReplaceAll(result, ") ", ")")
+	result = strings.ReplaceAll(result, " ,", ",")
+	result = strings.ReplaceAll(result, ", ", ",")
+	return result
 }

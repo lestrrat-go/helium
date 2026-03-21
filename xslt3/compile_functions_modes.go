@@ -149,7 +149,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	}
 
 	// Compile function body (params + instructions)
-	body, params, err := c.compileTemplateBody(elem)
+	_, body, params, err := c.compileTemplateBodyEx(elem, true)
 	c.expandText = savedExpandText
 	if err != nil {
 		return err
