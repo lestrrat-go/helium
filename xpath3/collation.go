@@ -9,6 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 )
@@ -229,9 +230,9 @@ func parseUCAParams(query string) (ucaParams, error) {
 		switch key {
 		case "fallback":
 			switch val {
-			case "no":
+			case lexicon.ValueNo:
 				p.fallbackNo = true
-			case "yes", "unknown":
+			case lexicon.ValueYes, "unknown":
 				// Unknown fallback values are implementation-defined unless
 				// fallback=no explicitly requests strict rejection.
 			default:
@@ -279,37 +280,37 @@ func parseUCAParams(query string) (ucaParams, error) {
 			}
 		case "caseLevel":
 			switch val {
-			case "yes":
+			case lexicon.ValueYes:
 				p.caseLevel = true
 				unsupported = true
-			case "no":
+			case lexicon.ValueNo:
 				p.caseLevel = false
 			default:
 				invalid = true
 			}
 		case "backwards":
 			switch val {
-			case "yes":
+			case lexicon.ValueYes:
 				p.backwards = true
-			case "no":
+			case lexicon.ValueNo:
 				p.backwards = false
 			default:
 				invalid = true
 			}
 		case "numeric":
 			switch val {
-			case "yes":
+			case lexicon.ValueYes:
 				p.collateOpts = append(p.collateOpts, collate.Numeric)
 				p.numeric = true
-			case "no":
+			case lexicon.ValueNo:
 				p.numeric = false
 			default:
 				invalid = true
 			}
 		case "normalization":
 			switch val {
-			case "yes", "no":
-				if val == "yes" {
+			case lexicon.ValueYes, lexicon.ValueNo:
+				if val == lexicon.ValueYes {
 					unsupported = true
 				}
 			default:

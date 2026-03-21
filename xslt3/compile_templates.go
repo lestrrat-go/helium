@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -562,7 +563,7 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 		}
 	}
 
-	required := getAttr(elem, "required") == "yes"
+	required := getAttr(elem, "required") == lexicon.ValueYes
 
 	// XTSE0010: A required parameter must not have a select attribute or body content
 	if required {
@@ -758,7 +759,7 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 
 func (c *compiler) compileGlobalParam(elem *helium.Element) error {
 	// XTSE0020: tunnel="yes" is not allowed on a stylesheet parameter
-	if getAttr(elem, "tunnel") == "yes" {
+	if getAttr(elem, "tunnel") == lexicon.ValueYes {
 		return staticError(errCodeXTSE0020, "tunnel=\"yes\" is not allowed on a stylesheet parameter")
 	}
 	p, err := c.compileParamDef(elem)

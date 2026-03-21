@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -274,12 +275,12 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	if v := getAttr(elem, "standalone"); v != "" {
 		v = strings.TrimSpace(v)
 		switch v {
-		case "yes", "no", "omit":
+		case lexicon.ValueYes, lexicon.ValueNo, "omit":
 			// valid as-is
 		case "true", "1":
-			v = "yes"
+			v = lexicon.ValueYes
 		case "false", "0":
-			v = "no"
+			v = lexicon.ValueNo
 		default:
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
 		}
@@ -520,7 +521,7 @@ func loadParameterDocumentFromFile(outDef *OutputDef, baseURI, href string) erro
 			if outDef.StandaloneRaw == "" && val != "" {
 				v := strings.TrimSpace(val)
 				switch v {
-				case "yes", "no", "omit":
+				case lexicon.ValueYes, lexicon.ValueNo, "omit":
 					outDef.Standalone = v
 				}
 			}

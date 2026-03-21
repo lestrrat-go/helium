@@ -11,4 +11,7 @@ const (
 
 	SpaceDefault  = "default"
 	SpacePreserve = "preserve"
+
+	ValueYes = "yes"
+	ValueNo  = "no"
 )

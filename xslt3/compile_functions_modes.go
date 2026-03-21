@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -154,7 +155,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	// XTSE0020: validate new-each-time (yes|no|maybe)
 	if net := getAttr(elem, "new-each-time"); net != "" {
 		switch net {
-		case "yes", "no", "maybe":
+		case lexicon.ValueYes, lexicon.ValueNo, "maybe":
 			// valid
 		default:
 			return staticError(errCodeXTSE0020,
@@ -178,14 +179,14 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		}
 		if childElem.URI() == NSXSLT && childElem.LocalName() == "param" {
 			if reqVal, hasReq := childElem.GetAttribute("required"); hasReq {
-				if reqVal != "yes" && reqVal != "1" && reqVal != "true" {
+				if reqVal != lexicon.ValueYes && reqVal != "1" && reqVal != "true" {
 					pname := getAttr(childElem, "name")
 					return staticError(errCodeXTSE0020,
 						"xsl:param %q in xsl:function must not have required=%q", pname, reqVal)
 				}
 			}
 			// XTSE0020: tunnel="yes" is not allowed on a function parameter
-			if getAttr(childElem, "tunnel") == "yes" {
+			if getAttr(childElem, "tunnel") == lexicon.ValueYes {
 				return staticError(errCodeXTSE0020,
 					"tunnel=\"yes\" is not allowed on a function parameter")
 			}
@@ -220,9 +221,9 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	if streamability == "" {
 		streamability = getAttr(elem, "streamable")
 		switch streamability {
-		case "yes":
+		case lexicon.ValueYes:
 			streamability = "absorbing"
-		case "no", "":
+		case lexicon.ValueNo, "":
 			streamability = ""
 		}
 	}

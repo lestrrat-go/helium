@@ -274,7 +274,7 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 		if ln != "param" && ln != "variable" {
 			continue
 		}
-		if getAttr(elem, "static") == "yes" {
+		if getAttr(elem, "static") == lexicon.ValueYes {
 			name := getAttr(elem, "name")
 			sel := getAttr(elem, "select")
 			if name != "" && sel != "" {

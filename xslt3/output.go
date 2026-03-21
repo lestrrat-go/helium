@@ -12,6 +12,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	htmlpkg "github.com/lestrrat-go/helium/html"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/stream"
 	"github.com/lestrrat-go/helium/xpath3"
 	"golang.org/x/text/encoding/htmlindex"
@@ -910,7 +911,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 	method := outDef.Method
 
 	// SEPM0004: standalone != "omit" with multiple element children of root
-	if outDef.Standalone == "yes" || outDef.Standalone == "no" {
+	if outDef.Standalone == lexicon.ValueYes || outDef.Standalone == lexicon.ValueNo {
 		if method == "xml" || method == "xhtml" {
 			elemCount := countRootElements(doc)
 			if elemCount > 1 {
@@ -934,7 +935,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 	// SEPM0009: omit-xml-declaration="yes" conflicts with standalone or doctype-system
 	// Only applicable for xml/xhtml methods — text/html/json don't have XML declarations.
 	if outDef.OmitDeclaration && (method == "xml" || method == "xhtml") {
-		if outDef.Standalone == "yes" || outDef.Standalone == "no" {
+		if outDef.Standalone == lexicon.ValueYes || outDef.Standalone == lexicon.ValueNo {
 			return dynamicError(errCodeSEPM0009,
 				"omit-xml-declaration=\"yes\" conflicts with standalone=%q", outDef.Standalone)
 		}
@@ -1162,7 +1163,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	}
 	// When standalone is "yes" or "no", or when indent="no" and
 	// the declaration is not omitted, buffer and post-process.
-	needStandalone := !outDef.OmitDeclaration && (outDef.Standalone == "yes" || outDef.Standalone == "no")
+	needStandalone := !outDef.OmitDeclaration && (outDef.Standalone == lexicon.ValueYes || outDef.Standalone == lexicon.ValueNo)
 	needStripNewline := !outDef.Indent && !outDef.OmitDeclaration
 	if needStandalone || needStripNewline {
 		var buf strings.Builder
@@ -1199,7 +1200,7 @@ func injectStandalone(xml, value string) string {
 // substitutions. Replacement strings are written raw (not escaped).
 func serializeXMLWithCharMap(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
 	// Buffer and post-process when standalone or indent="no".
-	needStandalone := !outDef.OmitDeclaration && (outDef.Standalone == "yes" || outDef.Standalone == "no")
+	needStandalone := !outDef.OmitDeclaration && (outDef.Standalone == lexicon.ValueYes || outDef.Standalone == lexicon.ValueNo)
 	needStripNewline := !outDef.Indent && !outDef.OmitDeclaration
 	if needStandalone || needStripNewline {
 		var buf strings.Builder

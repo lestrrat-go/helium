@@ -1,6 +1,9 @@
 package xslt3
 
-import "github.com/lestrrat-go/helium"
+import (
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
+)
 
 func (c *compiler) compileLocalVariable(elem *helium.Element) (*VariableInst, error) {
 	name := getAttr(elem, "name")
@@ -66,7 +69,7 @@ func (c *compiler) compileMessage(elem *helium.Element) (*MessageInst, error) {
 		}
 		// If the AVT is a static value, validate it is "yes" or "no"
 		if sv, ok := avt.staticValue(); ok {
-			if sv != "yes" && sv != "no" {
+			if sv != lexicon.ValueYes && sv != lexicon.ValueNo {
 				return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:message/@terminate", sv)
 			}
 		}

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -546,7 +547,7 @@ func (c *compiler) compileAccumulatorRule(parent *AccumulatorDef, elem *helium.E
 	rule := &AccumulatorRule{
 		Match: matchPat,
 		Phase: getAttr(elem, "phase"),
-		New:   getAttr(elem, "new-value") == "yes",
+		New:   getAttr(elem, "new-value") == lexicon.ValueYes,
 	}
 
 	// Default phase is "start" per XSLT 3.0 spec §14

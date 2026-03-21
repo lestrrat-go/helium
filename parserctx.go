@@ -16,6 +16,7 @@ import (
 	"github.com/lestrrat-go/helium/enum"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/strcursor"
@@ -2118,9 +2119,9 @@ func (pctx *parserCtx) parseStandaloneDeclFromCursor(ctx context.Context) (Docum
 	}
 
 	switch buf.String() {
-	case "yes":
+	case lexicon.ValueYes:
 		return StandaloneExplicitYes, nil
-	case "no":
+	case lexicon.ValueNo:
 		return StandaloneExplicitNo, nil
 	default:
 		return StandaloneImplicitNo, pctx.error(ctx, errors.New("standalone accepts only 'yes' or 'no'"))
@@ -2374,7 +2375,7 @@ func (pctx *parserCtx) parseStandaloneDecl(ctx context.Context) (DocumentStandal
 	if err != nil {
 		return StandaloneInvalidValue, err
 	}
-	if v == "yes" {
+	if v == lexicon.ValueYes {
 		return StandaloneExplicitYes, nil
 	} else {
 		return StandaloneExplicitNo, nil
@@ -2382,20 +2383,16 @@ func (pctx *parserCtx) parseStandaloneDecl(ctx context.Context) (DocumentStandal
 }
 
 func (ctx *parserCtx) parseStandaloneDeclValue(_ rune) (string, error) {
-	const (
-		yes = "yes"
-		no  = "no"
-	)
 	cur := ctx.getByteCursor()
 	if cur == nil {
 		return "", ErrByteCursorRequired
 	}
-	if cur.ConsumeString(yes) {
-		return string(yes), nil
+	if cur.ConsumeString(lexicon.ValueYes) {
+		return lexicon.ValueYes, nil
 	}
 
-	if cur.ConsumeString(no) {
-		return string(no), nil
+	if cur.ConsumeString(lexicon.ValueNo) {
+		return lexicon.ValueNo, nil
 	}
 
 	return "", errors.New("invalid standalone declaration")

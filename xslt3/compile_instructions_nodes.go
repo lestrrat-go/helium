@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func (c *compiler) compileValueOf(elem *helium.Element) (*ValueOfInst, error) {
@@ -133,7 +134,7 @@ func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
 
 	inst := &ElementInst{Name: nameAVT, InheritNamespaces: true}
 
-	if inAttr := getAttr(elem, "inherit-namespaces"); inAttr == "no" {
+	if inAttr := getAttr(elem, "inherit-namespaces"); inAttr == lexicon.ValueNo {
 		inst.InheritNamespaces = false
 	}
 

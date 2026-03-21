@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesInst, error) {
@@ -661,7 +662,7 @@ func (c *compiler) compileApplyImports(elem *helium.Element) (*ApplyImportsInst,
 func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 	inst := &TryCatchInst{RollbackOutput: true}
 
-	if rb := getAttr(elem, "rollback-output"); rb == "no" {
+	if rb := getAttr(elem, "rollback-output"); rb == lexicon.ValueNo {
 		inst.RollbackOutput = false
 	}
 
@@ -810,7 +811,7 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 		if err := validateBooleanAttr("xsl:for-each-group", "composite", comp); err != nil {
 			return nil, err
 		}
-		if comp == "yes" || comp == "true" || comp == "1" {
+		if comp == lexicon.ValueYes || comp == "true" || comp == "1" {
 			inst.Composite = true
 		}
 	}

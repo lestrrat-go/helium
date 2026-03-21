@@ -10,6 +10,7 @@ import (
 
 	"github.com/lestrrat-go/helium/enum"
 	henc "github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -464,9 +465,9 @@ func (d *Writer) dumpDocContent(out io.Writer, n Node) error {
 
 	switch doc.Standalone() {
 	case StandaloneExplicitNo:
-		_, _ = io.WriteString(out, ` standalone="no"`)
+		_, _ = io.WriteString(out, ` standalone="`+lexicon.ValueNo+`"`)
 	case StandaloneExplicitYes:
-		_, _ = io.WriteString(out, ` standalone="yes"`)
+		_, _ = io.WriteString(out, ` standalone="`+lexicon.ValueYes+`"`)
 	}
 	_, _ = io.WriteString(out, "?>\n")
 	return nil

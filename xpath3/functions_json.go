@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/unparsedtext"
 )
 
@@ -1565,9 +1566,9 @@ func readSerializeParamYesNo(elem *helium.Element) (bool, error) {
 		return false, err
 	}
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "yes", "true", "1":
+	case lexicon.ValueYes, "true", "1":
 		return true, nil
-	case "no", "false", "0":
+	case lexicon.ValueNo, "false", "0":
 		return false, nil
 	default:
 		return false, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize parameter %q must be yes/no", elem.LocalName())}
@@ -1580,7 +1581,7 @@ func readSerializeParamStandalone(elem *helium.Element) (string, error) {
 		return "", err
 	}
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "yes", "no", "omit":
+	case lexicon.ValueYes, lexicon.ValueNo, "omit":
 		return value, nil
 	default:
 		return "", &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter \"standalone\" must be yes/no/omit"}

@@ -57,9 +57,9 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 		}
 		termStr = strings.TrimSpace(termStr)
 		switch termStr {
-		case "yes", "true", "1":
+		case lexicon.ValueYes, "true", "1":
 			terminate = true
-		case "no", "false", "0":
+		case lexicon.ValueNo, "false", "0":
 			terminate = false
 		default:
 			// XTDE0030: AVT value is not a valid xs:boolean

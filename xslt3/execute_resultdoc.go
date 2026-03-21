@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -432,7 +433,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 				adnVal, adnErr := inst.AllowDuplicateNames.evaluate(ctx, ec.contextNode)
 				if adnErr == nil {
 					adnVal = strings.TrimSpace(adnVal)
-					if adnVal == "yes" || adnVal == "true" || adnVal == "1" {
+					if adnVal == lexicon.ValueYes || adnVal == "true" || adnVal == "1" {
 						allowDupes = true
 					}
 				}
@@ -609,9 +610,9 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 		}
 		switch strings.TrimSpace(v) {
 		case "true", "1":
-			v = "yes"
+			v = lexicon.ValueYes
 		case "false", "0":
-			v = "no"
+			v = lexicon.ValueNo
 		default:
 			v = strings.TrimSpace(v)
 		}
