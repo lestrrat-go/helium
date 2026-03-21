@@ -732,8 +732,19 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 		}
 	}
 
-	// 4. Handle xpath-default-namespace from the instruction
-	if inst.HasXPathDefaultNS {
+	// 4. Handle xpath-default-namespace for the dynamic expression.
+	// Per XSLT 3.0 §3.18.2: when namespace-context is present, the
+	// in-scope namespaces of that node define the namespace context for
+	// the dynamic expression, including any default namespace. An explicit
+	// xpath-default-namespace on xsl:evaluate overrides this. But an
+	// *inherited* xpath-default-namespace from the stylesheet must NOT
+	// override the namespace-context's default namespace.
+	if inst.HasLocalXPathDefaultNS {
+		nsBindings[""] = inst.XPathDefaultNS
+	} else if inst.NamespaceContext != nil {
+		// Keep whatever default namespace came from the namespace-context
+		// node (which may be absent, i.e. no key "" in nsBindings).
+	} else if inst.HasXPathDefaultNS {
 		nsBindings[""] = inst.XPathDefaultNS
 	} else if ec.hasXPathDefaultNS {
 		nsBindings[""] = ec.xpathDefaultNS
