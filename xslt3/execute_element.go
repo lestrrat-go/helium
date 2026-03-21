@@ -67,7 +67,12 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		if inst.NSBindings != nil {
 			uri = inst.NSBindings[prefix]
 		}
-		if uri == "" {
+		if uri == "" && prefix != "" {
+			// For prefixed names, fall back to stylesheet-level namespace
+			// declarations. For unprefixed names (prefix == ""), the default
+			// namespace is determined solely by the static context at the
+			// xsl:element position — do not use resolvePrefix which may
+			// return a global default namespace from a different scope.
 			uri = ec.resolvePrefix(prefix)
 		}
 		if uri != "" {
@@ -1156,6 +1161,13 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 	if name != "" && value == "" {
 		return dynamicError(errCodeXTDE0930,
 			"namespace prefix %q requires a non-empty URI", name)
+	}
+
+	// The xml namespace is always implicitly declared — skip it to
+	// avoid creating a redundant namespace declaration that some
+	// serializers might output as an element.
+	if name == "xml" && value == "http://www.w3.org/XML/1998/namespace" {
+		return nil
 	}
 
 	out := ec.currentOutput()
