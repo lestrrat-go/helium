@@ -176,12 +176,19 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.UndeclarePrefixes = b
 	}
 	// Validate other boolean output attributes.
-	for _, boolAttr := range []string{"byte-order-mark", "escape-uri-attributes", "include-content-type"} {
+	for _, boolAttr := range []string{"byte-order-mark", "escape-uri-attributes"} {
 		if v := getAttr(elem, boolAttr); v != "" {
 			if _, ok := parseXSDBool(v); !ok {
 				return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@%s", v, boolAttr)
 			}
 		}
+	}
+	if v := getAttr(elem, "include-content-type"); v != "" {
+		b, ok := parseXSDBool(v)
+		if !ok {
+			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@include-content-type", v)
+		}
+		outDef.IncludeContentType = &b
 	}
 	// Validate standalone: must be "yes", "no", "omit", or boolean equivalents.
 	if v := getAttr(elem, "standalone"); v != "" {

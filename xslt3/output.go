@@ -577,8 +577,77 @@ func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMa
 		insertHTMLMeta(doc, outDef)
 	}
 
-	// Use XML serialization for the rest
-	return serializeXML(w, doc, outDef, charMap)
+	// Serialize as XML, then post-process for XHTML rules:
+	// - Void elements: add space before /> (e.g., <br /> not <br/>)
+	// - Non-void elements: expand self-closing to open+close (e.g., <Option></Option>)
+	var buf bytes.Buffer
+	if err := serializeXML(&buf, doc, outDef, charMap); err != nil {
+		return err
+	}
+	_, err := io.WriteString(w, fixXHTMLSelfClosing(buf.String()))
+	return err
+}
+
+// xhtmlVoidElements lists HTML void elements that should be self-closed
+// with a space before /> in XHTML output.
+var xhtmlVoidElements = map[string]struct{}{
+	"area": {}, "base": {}, "br": {}, "col": {}, "embed": {},
+	"hr": {}, "img": {}, "input": {}, "link": {}, "meta": {},
+	"param": {}, "source": {}, "track": {}, "wbr": {},
+	// XHTML 1.x additional void elements
+	"basefont": {}, "frame": {}, "isindex": {},
+}
+
+// fixXHTMLSelfClosing post-processes XML output for XHTML serialization rules:
+// - Void elements get space before />: <br/> -> <br />
+// - Non-void elements are expanded: <Option.../> -> <Option...></Option>
+func fixXHTMLSelfClosing(xml string) string {
+	var out strings.Builder
+	out.Grow(len(xml))
+	i := 0
+	for i < len(xml) {
+		if xml[i] != '<' {
+			out.WriteByte(xml[i])
+			i++
+			continue
+		}
+		// Find end of tag
+		tagEnd := strings.IndexByte(xml[i:], '>')
+		if tagEnd < 0 {
+			out.WriteString(xml[i:])
+			break
+		}
+		tag := xml[i : i+tagEnd+1]
+		if strings.HasSuffix(tag, "/>") && !strings.HasPrefix(tag, "<?") {
+			// Self-closing element. Extract element name.
+			nameStart := 1 // skip '<'
+			nameEnd := nameStart
+			for nameEnd < len(tag) && tag[nameEnd] != ' ' && tag[nameEnd] != '/' && tag[nameEnd] != '>' && tag[nameEnd] != '\t' && tag[nameEnd] != '\n' {
+				nameEnd++
+			}
+			elemName := tag[nameStart:nameEnd]
+			// Check for namespace prefix — use local name
+			localName := elemName
+			if idx := strings.IndexByte(elemName, ':'); idx >= 0 {
+				localName = elemName[idx+1:]
+			}
+			if _, isVoid := xhtmlVoidElements[strings.ToLower(localName)]; isVoid {
+				// Void element: add space before />
+				out.WriteString(tag[:len(tag)-2])
+				out.WriteString(" />")
+			} else {
+				// Non-void element: expand to open+close tags
+				out.WriteString(tag[:len(tag)-2])
+				out.WriteString("></")
+				out.WriteString(elemName)
+				out.WriteString(">")
+			}
+		} else {
+			out.WriteString(tag)
+		}
+		i += tagEnd + 1
+	}
+	return out.String()
 }
 
 // htmlURIAttrs lists HTML attributes whose values are URIs and should not
@@ -759,10 +828,13 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 		return
 	}
 	// Check if a <meta http-equiv="Content-Type"> already exists.
+	// Use case-insensitive attribute name matching for HTML compatibility.
 	for child := head.FirstChild(); child != nil; child = child.NextSibling() {
 		if e, ok := child.(*helium.Element); ok && strings.EqualFold(e.Name(), "meta") {
-			if he, _ := e.GetAttribute("http-equiv"); strings.EqualFold(he, "Content-Type") {
-				return // already present
+			for _, attr := range e.Attributes() {
+				if strings.EqualFold(attr.Name(), "http-equiv") && strings.EqualFold(attr.Value(), "Content-Type") {
+					return // already present
+				}
 			}
 		}
 	}
@@ -776,7 +848,16 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 		return
 	}
 	meta.SetLiteralAttribute("http-equiv", "Content-Type")
-	meta.SetLiteralAttribute("content", "text/html; charset="+enc)
+	// Use media-type if specified; otherwise default based on output method.
+	mediaType := outDef.MediaType
+	if mediaType == "" {
+		if outDef.Method == "xhtml" {
+			mediaType = "application/xhtml+xml"
+		} else {
+			mediaType = "text/html"
+		}
+	}
+	meta.SetLiteralAttribute("content", mediaType+"; charset="+enc)
 	// Insert meta as first child of <head>.
 	// Unlink existing children, add meta, then re-add them.
 	var children []helium.Node
