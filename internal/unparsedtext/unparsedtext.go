@@ -60,12 +60,18 @@ func LoadText(cfg *Config, href, encoding string) (string, error) {
 		return "", err
 	}
 
-	data, err := ReadURI(cfg, resolvedURI)
+	data, httpEncoding, err := readURIWithEncoding(cfg, resolvedURI)
 	if err != nil {
 		return "", &Error{Code: ErrCodeRetrieval, Message: fmt.Sprintf("cannot retrieve resource: %v", err)}
 	}
 
-	text, err := DecodeText(data, encoding)
+	// If no explicit encoding was given, use the HTTP Content-Type encoding hint.
+	effectiveEncoding := encoding
+	if effectiveEncoding == "" && httpEncoding != "" {
+		effectiveEncoding = httpEncoding
+	}
+
+	text, err := DecodeText(data, effectiveEncoding)
 	if err != nil {
 		return "", err
 	}
@@ -135,6 +141,74 @@ func ResolveURI(cfg *Config, href string) (string, error) {
 	}
 
 	return "", &Error{Code: ErrCodeRetrieval, Message: fmt.Sprintf("cannot resolve relative URI without base URI: %s", href)}
+}
+
+// readURIWithEncoding reads the content at the resolved URI and returns
+// an optional encoding hint from HTTP Content-Type headers.
+func readURIWithEncoding(cfg *Config, uri string) ([]byte, string, error) {
+	if cfg != nil && cfg.URIResolver != nil {
+		rc, err := cfg.URIResolver.ResolveURI(uri)
+		if err != nil {
+			return nil, "", err
+		}
+		defer func() { _ = rc.Close() }()
+		data, err := io.ReadAll(rc)
+		return data, "", err
+	}
+
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if parsed.Scheme == "http" || parsed.Scheme == "https" {
+		client := http.DefaultClient
+		if cfg != nil && cfg.HTTPClient != nil {
+			client = cfg.HTTPClient
+		}
+		resp, err := client.Get(uri)
+		if err != nil {
+			return nil, "", err
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != 200 {
+			return nil, "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, uri)
+		}
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, "", err
+		}
+		// Extract charset from Content-Type header.
+		enc := extractHTTPCharset(resp.Header.Get("Content-Type"))
+		return data, enc, nil
+	}
+
+	switch parsed.Scheme {
+	case "file":
+		data, err := os.ReadFile(parsed.Path)
+		return data, "", err
+	case "":
+		data, err := os.ReadFile(uri)
+		return data, "", err
+	default:
+		return nil, "", fmt.Errorf("unsupported URI scheme: %s", parsed.Scheme)
+	}
+}
+
+// extractHTTPCharset parses the charset parameter from a Content-Type header value.
+func extractHTTPCharset(contentType string) string {
+	if contentType == "" {
+		return ""
+	}
+	for _, part := range strings.Split(contentType, ";") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(strings.ToLower(part), "charset=") {
+			charset := part[len("charset="):]
+			charset = strings.Trim(charset, "\"' ")
+			return charset
+		}
+	}
+	return ""
 }
 
 // ReadURI reads the content at the resolved URI.
