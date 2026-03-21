@@ -106,7 +106,52 @@ func checkStreamableTemplateBody(ss *Stylesheet, body []Instruction) error {
 		return err
 	}
 
+	// Check for multiple consuming (downward) operations across the template
+	// body as a whole. Two sibling copy-of/value-of/apply-templates each
+	// selecting child nodes constitute two consuming reads of the stream.
+	if countDownwardInBody(body) > 1 {
+		return staticError(errCodeXTSE3430,
+			"template body has multiple consuming operations, which is not streamable")
+	}
+
 	return nil
+}
+
+// countDownwardInBody counts consuming downward selections across a sequence
+// of sibling instructions, respecting branching: only the max across
+// xsl:choose branches is counted since only one branch executes.
+func countDownwardInBody(body []Instruction) int {
+	total := 0
+	for _, inst := range body {
+		if choose, ok := inst.(*ChooseInst); ok {
+			maxBranch := 0
+			for _, when := range choose.When {
+				bc := countDownwardInBody(when.Body)
+				if bc > maxBranch {
+					maxBranch = bc
+				}
+			}
+			if choose.Otherwise != nil {
+				bc := countDownwardInBody(choose.Otherwise)
+				if bc > maxBranch {
+					maxBranch = bc
+				}
+			}
+			total += maxBranch
+			continue
+		}
+		if ifInst, ok := inst.(*IfInst); ok {
+			// xsl:if is like a single branch — its body may or may
+			// not execute, but from a streamability perspective the
+			// consuming operations inside still count.
+			total += countDownwardInBody(ifInst.Body)
+			continue
+		}
+		for _, expr := range getInstructionExprs(inst) {
+			total += countStreamingDownwardSelections(expr.AST())
+		}
+	}
+	return total
 }
 
 // checkStreamableInstruction checks a single instruction for streamability violations.
