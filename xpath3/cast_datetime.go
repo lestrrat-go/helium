@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -67,7 +68,6 @@ func splitXSDYear(s string) (int, string, error) {
 	if digits > 4 && s[start] == '0' {
 		return 0, "", fmt.Errorf("year with leading zeros is not valid")
 	}
-	// XSD 1.1: year 0000 is valid
 	yearStr := s[start:i]
 	year, err := strconv.Atoi(yearStr)
 	if err != nil {
@@ -75,6 +75,10 @@ func splitXSDYear(s string) (int, string, error) {
 	}
 	if neg {
 		year = -year
+	}
+	// Year 0000 is not supported; reject with FODT0001.
+	if year == 0 {
+		return 0, "", &XPathError{Code: errCodeFODT0001, Message: "year zero is not supported"}
 	}
 	// Reject years outside Go's time.Time representable range.
 	// time.Date wraps silently for extreme years; cap at ±999,999,999.
@@ -150,6 +154,10 @@ func extractDateMonthDay(rest string) (int, int, error) {
 func parseXSDDate(s string) (time.Time, error) {
 	year, rest, err := splitXSDYear(s)
 	if err != nil {
+		var xe *XPathError
+		if errors.As(err, &xe) {
+			return time.Time{}, xe
+		}
 		return time.Time{}, fmt.Errorf("invalid xs:date: %q", s)
 	}
 	if err := validateTimezoneInString(s); err != nil {
@@ -180,6 +188,10 @@ func parseXSDDateTime(s string) (time.Time, error) {
 	}
 	year, rest, err := splitXSDYear(target)
 	if err != nil {
+		var xe *XPathError
+		if errors.As(err, &xe) {
+			return time.Time{}, xe
+		}
 		return time.Time{}, fmt.Errorf("invalid xs:dateTime: %q", s)
 	}
 	layouts := []string{

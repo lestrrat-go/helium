@@ -589,7 +589,8 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 	}
 
 	// SEPM0009: omit-xml-declaration="yes" conflicts with standalone or doctype-system
-	if outDef.OmitDeclaration {
+	// Only applicable for xml/xhtml methods — text/html/json don't have XML declarations.
+	if outDef.OmitDeclaration && (method == "xml" || method == "xhtml") {
 		if outDef.Standalone == "yes" || outDef.Standalone == "no" {
 			return dynamicError(errCodeSEPM0009,
 				"omit-xml-declaration=\"yes\" conflicts with standalone=%q", outDef.Standalone)
@@ -782,9 +783,13 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	if outDef.Encoding != "" && doc.Encoding() == "utf8" {
 		doc.SetEncoding(outDef.Encoding)
 	}
-	// Add DOCTYPE if doctype-public or doctype-system is specified and
+	// Per XSLT spec, doctype-public without doctype-system is ignored for xml method.
+	if outDef.DoctypeSystem == "" && outDef.DoctypePublic != "" {
+		outDef.DoctypePublic = ""
+	}
+	// Add DOCTYPE if doctype-system is specified and
 	// the document doesn't already have a DTD.
-	if (outDef.DoctypePublic != "" || outDef.DoctypeSystem != "") && doc.IntSubset() == nil {
+	if outDef.DoctypeSystem != "" && doc.IntSubset() == nil {
 		rootName := "html" // default
 		if root := doc.DocumentElement(); root != nil {
 			rootName = root.Name()
@@ -876,8 +881,8 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 		}
 	}
 
-	// Add DOCTYPE if doctype-public or doctype-system is specified.
-	if outDef.DoctypePublic != "" || outDef.DoctypeSystem != "" {
+	// Add DOCTYPE if doctype-system is specified (doctype-public alone is ignored for xml).
+	if outDef.DoctypeSystem != "" {
 		rootName := "html"
 		if root := doc.DocumentElement(); root != nil {
 			rootName = root.Name()
