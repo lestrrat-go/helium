@@ -1141,6 +1141,9 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 			ec.pushVarScope()
 			ec.setVar("value", currentValue)
 
+			// Accumulator rules execute in a temporary output state (XTDE1480).
+			ec.temporaryOutputDepth++
+
 			var (
 				newValue xpath3.Sequence
 				err      error
@@ -1160,6 +1163,7 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 				newValue = xpath3.EmptySequence()
 			}
 
+			ec.temporaryOutputDepth--
 			ec.popVarScope()
 			if err != nil {
 				// Defer error: store it for later retrieval via accumulator-before/after
