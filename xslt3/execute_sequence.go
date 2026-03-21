@@ -90,7 +90,10 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 	if emptySequence {
 		return nil
 	}
-	if inst.DisableOutputEscaping {
+	// XSLT 3.0 §20.1: disable-output-escaping is ignored when writing
+	// to a temporary tree (variable/parameter body) or sequence mode.
+	doeEffective := inst.DisableOutputEscaping && ec.temporaryOutputDepth == 0
+	if doeEffective {
 		// Insert DOE marker PI so the serializer writes this text raw.
 		pi, err := ec.resultDoc.CreatePI("disable-output-escaping", "")
 		if err != nil {
@@ -212,7 +215,10 @@ func (ec *execContext) execText(inst *TextInst) error {
 		out.prevWasAtomic = false
 		return nil
 	}
-	if inst.DisableOutputEscaping {
+	// XSLT 3.0 §20.1: disable-output-escaping is ignored when writing
+	// to a temporary tree (variable/parameter body) or sequence mode.
+	textDOEEffective := inst.DisableOutputEscaping && ec.temporaryOutputDepth == 0
+	if textDOEEffective {
 		pi, err := ec.resultDoc.CreatePI("disable-output-escaping", "")
 		if err != nil {
 			return err
