@@ -525,6 +525,8 @@ func jsonEscapeString(s string) string {
 			buf.WriteString("\\b")
 		case '\f':
 			buf.WriteString("\\f")
+		case '/':
+			buf.WriteString("\\/")
 		default:
 			if r < 0x20 {
 				fmt.Fprintf(&buf, "\\u%04x", r)

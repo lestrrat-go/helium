@@ -561,6 +561,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 		inst.OmitXMLDeclaration != nil || inst.DoctypeSystem != nil || inst.DoctypePublic != nil ||
 		inst.CDATASectionElements != nil || inst.Encoding != nil || inst.OutputVersion != nil ||
 		inst.ByteOrderMark != nil || inst.EscapeURIAttributes != nil ||
+		inst.JSONNodeOutputMethodAVT != nil ||
 		inst.ParameterDocOutputDef != nil
 	effectiveFormat, fmtErr := ec.resolveResultDocFormat(ctx, inst)
 	if fmtErr != nil {
@@ -712,6 +713,13 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 			base.EscapeURIAttributes = &b
 		}
 	}
+	if inst.JSONNodeOutputMethodAVT != nil {
+		v, err := evalAVT(inst.JSONNodeOutputMethodAVT)
+		if err != nil {
+			return nil, err
+		}
+		base.JSONNodeOutputMethod = strings.TrimSpace(v)
+	}
 	if len(inst.SuppressIndentation) > 0 {
 		base.SuppressIndentation = inst.SuppressIndentation
 	}
@@ -748,6 +756,9 @@ func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *Result
 		}
 		if overrides.Encoding != "" {
 			base.Encoding = overrides.Encoding
+		}
+		if overrides.JSONNodeOutputMethod != "" {
+			base.JSONNodeOutputMethod = overrides.JSONNodeOutputMethod
 		}
 		if len(overrides.ResolvedCharMap) > 0 && base.ResolvedCharMap == nil {
 			base.ResolvedCharMap = overrides.ResolvedCharMap
