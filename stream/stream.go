@@ -889,7 +889,27 @@ func (w *Writer) EndCDATA() error {
 }
 
 // WriteCDATA is a convenience for StartCDATA + WriteString + EndCDATA.
+// If content contains "]]>", it is split into multiple CDATA sections
+// per the XML serialization spec (e.g., "]]>" becomes "]]]]><![CDATA[>").
 func (w *Writer) WriteCDATA(content string) error {
+	for {
+		idx := strings.Index(content, "]]>")
+		if idx < 0 {
+			break
+		}
+		// Write everything up to and including "]]" as one CDATA section
+		if err := w.StartCDATA(); err != nil {
+			return err
+		}
+		if err := w.WriteString(content[:idx+2]); err != nil {
+			return err
+		}
+		if err := w.EndCDATA(); err != nil {
+			return err
+		}
+		// Continue with ">" onwards in the next CDATA section
+		content = content[idx+2:]
+	}
 	if err := w.StartCDATA(); err != nil {
 		return err
 	}

@@ -656,7 +656,12 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 
 	// SERE0014: HTML method with characters in #x7F-#x9F range in text.
 	// HTML5 allows these characters as character references, so skip for version >= 5.
-	if method == "html" && !isHTMLVersion5(outDef.HTMLVersion) {
+	// Check both html-version and version attributes for HTML5 detection.
+	htmlVer := outDef.HTMLVersion
+	if htmlVer == "" {
+		htmlVer = outDef.Version
+	}
+	if method == "html" && !isHTMLVersion5(htmlVer) {
 		if err := checkHTMLInvalidChars(doc); err != nil {
 			return err
 		}
@@ -901,14 +906,15 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 		}
 	}
 
-	err := serializeXMLNodeWithCharMap(sw, doc, charMap, cdataSet)
+	enc := strings.ToLower(outDef.Encoding)
+	err := serializeXMLNodeWithCharMap(sw, doc, charMap, cdataSet, enc)
 	if err != nil {
 		return err
 	}
 	return sw.Flush()
 }
 
-func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[rune]string, cdataElems map[string]struct{}) error {
+func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[rune]string, cdataElems map[string]struct{}, encoding string) error {
 	doeActive := false
 	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
 		// Handle DOE marker PIs
@@ -957,7 +963,7 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 				}
 			}
 			// Recurse into children
-			if err := serializeXMLNodeWithCharMap(sw, elem, charMap, cdataElems); err != nil {
+			if err := serializeXMLNodeWithCharMap(sw, elem, charMap, cdataElems, encoding); err != nil {
 				return err
 			}
 			if err := sw.EndElement(); err != nil {
@@ -970,7 +976,7 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 					return err
 				}
 			} else if inCDATAElement(n, cdataElems) {
-				if err := sw.WriteCDATA(text); err != nil {
+				if err := writeCDATAWithEncoding(sw, text, encoding); err != nil {
 					return err
 				}
 			} else if err := writeTextWithCharMap(sw, text, charMap); err != nil {
@@ -1471,7 +1477,65 @@ func inCDATAElement(parent helium.Node, cdataElems map[string]struct{}) bool {
 	return false
 }
 
-// applyCharacterMap replaces characters in text according to the character map.
+// writeCDATAWithEncoding writes text inside a CDATA section, splitting it
+// when the text contains characters that cannot be represented in the target
+// encoding. Non-representable characters are emitted as character references
+// between CDATA sections. The stream.Writer.WriteCDATA method already handles
+// splitting ]]> sequences.
+func writeCDATAWithEncoding(sw *stream.Writer, text, encoding string) error {
+	if !needsCDATASplit(encoding) {
+		return sw.WriteCDATA(text)
+	}
+	// Split text into runs of representable and non-representable characters.
+	var buf strings.Builder
+	for _, r := range text {
+		if canRepresentInEncoding(r, encoding) {
+			buf.WriteRune(r)
+			continue
+		}
+		// Flush pending representable text as CDATA
+		if buf.Len() > 0 {
+			if err := sw.WriteCDATA(buf.String()); err != nil {
+				return err
+			}
+			buf.Reset()
+		}
+		// Write non-representable char as character reference (outside CDATA)
+		if err := sw.WriteRaw(fmt.Sprintf("&#x%X;", r)); err != nil {
+			return err
+		}
+	}
+	if buf.Len() > 0 {
+		return sw.WriteCDATA(buf.String())
+	}
+	return nil
+}
+
+// needsCDATASplit returns true if the encoding might require CDATA splitting
+// for non-representable characters.
+func needsCDATASplit(encoding string) bool {
+	switch encoding {
+	case "", "utf-8", "utf8", "utf-16", "utf16":
+		return false
+	default:
+		return true
+	}
+}
+
+// canRepresentInEncoding returns true if rune r can be represented in the
+// given encoding without a character reference.
+func canRepresentInEncoding(r rune, encoding string) bool {
+	switch encoding {
+	case "us-ascii", "ascii":
+		return r < 128
+	case "iso-8859-1", "latin1", "latin-1":
+		return r < 256
+	default:
+		// For unknown encodings, assume ASCII-safe
+		return r < 128
+	}
+}
+
 // isHTMLVersion5 returns true when the html-version string represents
 // version 5 or higher (e.g. "5", "5.0", "5.00", "5.1").
 func isHTMLVersion5(v string) bool {
