@@ -203,6 +203,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	outDef.DoctypePublic = getAttr(elem, "doctype-public")
 	outDef.DoctypeSystem = getAttr(elem, "doctype-system")
 	outDef.MediaType = getAttr(elem, "media-type")
+	outDef.HTMLVersion = getAttr(elem, "html-version")
 
 	cdataStr := getAttr(elem, "cdata-section-elements")
 	if cdataStr != "" {
@@ -271,6 +272,9 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		}
 		if getAttr(elem, "normalization-form") == "" {
 			outDef.NormalizationForm = existing.NormalizationForm
+		}
+		if getAttr(elem, "html-version") == "" {
+			outDef.HTMLVersion = existing.HTMLVersion
 		}
 		if outDef.IncludeContentType == nil {
 			outDef.IncludeContentType = existing.IncludeContentType

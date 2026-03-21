@@ -468,8 +468,11 @@ func serializeText(w io.Writer, doc *helium.Document, charMap map[rune]string) e
 }
 
 func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
-	// Output DOCTYPE if specified.
-	if outDef.DoctypePublic != "" || outDef.DoctypeSystem != "" {
+	// Determine DOCTYPE handling.
+	hasDoctypeAttrs := outDef.DoctypePublic != "" || outDef.DoctypeSystem != ""
+	isHTML5 := outDef.HTMLVersion == "5" || outDef.HTMLVersion == "5.0"
+
+	if hasDoctypeAttrs {
 		rootName := "html"
 		if root := doc.DocumentElement(); root != nil {
 			rootName = root.Name()
@@ -492,12 +495,35 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 		}
 		_, _ = io.WriteString(w, ">\n")
 	}
+
 	// Insert <meta http-equiv="Content-Type"> in <head> if not already present.
-	// Per XSLT HTML serialization spec, the serializer should add this
-	// meta element to identify the encoding.
 	if outDef.IncludeContentType == nil || *outDef.IncludeContentType {
 		insertHTMLMeta(doc, outDef)
 	}
+
+	// For HTML5 without explicit doctype attrs, we need to serialize
+	// children manually to insert <!DOCTYPE html> before the first element.
+	if isHTML5 && !hasDoctypeAttrs {
+		nodeOpts := []htmlpkg.WriteOption{
+			htmlpkg.WithNoFormat(),
+			htmlpkg.WithPreserveCase(),
+		}
+		doctypeEmitted := false
+		for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+			if child.Type() == helium.DTDNode {
+				continue
+			}
+			if child.Type() == helium.ElementNode && !doctypeEmitted {
+				_, _ = io.WriteString(w, "<!DOCTYPE html>")
+				doctypeEmitted = true
+			}
+			if err := htmlpkg.WriteNode(w, child, nodeOpts...); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	opts := []htmlpkg.WriteOption{
 		htmlpkg.WithNoDefaultDTD(),
 		htmlpkg.WithNoFormat(),

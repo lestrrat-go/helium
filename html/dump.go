@@ -83,8 +83,12 @@ type htmlDumper struct {
 
 // WriteNode serializes an HTML node to the writer
 // (libxml2: htmlNodeDumpOutput).
-func WriteNode(out io.Writer, n helium.Node) error {
-	d := htmlDumper{format: true}
+func WriteNode(out io.Writer, n helium.Node, options ...WriteOption) error {
+	var cfg dumpConfig
+	for _, o := range options {
+		o(&cfg)
+	}
+	d := htmlDumper{format: !cfg.noFormat, preserveCase: cfg.preserveCase}
 	return d.dumpNode(out, n)
 }
 
