@@ -187,9 +187,20 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		itemSep = outDef.ItemSeparator
 	}
 
-	// Track the current output URI for current-output-uri()
+	// Track the current output URI for current-output-uri().
+	// For secondary outputs, resolve relative href against the current output URI.
 	savedOutputURI := ec.currentOutputURI
-	ec.currentOutputURI = href
+	if href != "" && savedOutputURI != "" {
+		resolved := helium.BuildURI(href, savedOutputURI)
+		if resolved != "" {
+			ec.currentOutputURI = resolved
+		} else {
+			ec.currentOutputURI = href
+		}
+	} else if href != "" {
+		ec.currentOutputURI = href
+	}
+	// For primary output (href==""), currentOutputURI stays unchanged.
 	defer func() { ec.currentOutputURI = savedOutputURI }()
 
 	if isPrimary {
