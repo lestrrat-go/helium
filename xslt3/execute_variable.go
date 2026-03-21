@@ -35,17 +35,23 @@ func (ec *execContext) execVariable(ctx context.Context, inst *VariableInst) err
 			// produces a document node (temporary tree)
 			val, evalErr = ec.evaluateBodyAsDocument(ctx, inst.Body)
 		} else if strings.HasPrefix(inst.As, "document-node") {
-			// document-node() type: wrap body in document node
-			val, evalErr = ec.evaluateBodyAsDocument(ctx, inst.Body)
-			// When the as type allows zero occurrences (e.g. document-node()?)
-			// and the body produced an empty document (no children), return
-			// an empty sequence instead of the empty document. This handles
-			// xsl:where-populated discarding all content.
-			if evalErr == nil && len(val) == 1 {
-				if docItem, ok := val[0].(xpath3.NodeItem); ok {
-					if doc, ok := docItem.Node.(*helium.Document); ok && doc.FirstChild() == nil {
-						if strings.HasSuffix(inst.As, "?") || strings.HasSuffix(inst.As, "*") {
-							val = nil
+			// document-node()* or document-node()+: evaluate as sequence
+			// so that copy-of of multiple documents produces separate items.
+			if strings.HasSuffix(inst.As, "*") || strings.HasSuffix(inst.As, "+") {
+				val, evalErr = ec.evaluateBodyAsSequence(ctx, inst.Body)
+			} else {
+				// document-node() or document-node()?: wrap body in document node
+				val, evalErr = ec.evaluateBodyAsDocument(ctx, inst.Body)
+				// When the as type allows zero occurrences (e.g. document-node()?)
+				// and the body produced an empty document (no children), return
+				// an empty sequence instead of the empty document. This handles
+				// xsl:where-populated discarding all content.
+				if evalErr == nil && len(val) == 1 {
+					if docItem, ok := val[0].(xpath3.NodeItem); ok {
+						if doc, ok := docItem.Node.(*helium.Document); ok && doc.FirstChild() == nil {
+							if strings.HasSuffix(inst.As, "?") {
+								val = nil
+							}
 						}
 					}
 				}
