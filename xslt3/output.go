@@ -1271,7 +1271,7 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 		suppressSet: suppressSet,
 	}
 
-	err := serializeXMLNodeWithCharMap(sw, doc, charMap, cdataSet, enc, ictx)
+	err := serializeXMLNodeWithCharMap(sw, doc, charMap, cdataSet, enc, outDef.NormalizationForm, ictx)
 	if err != nil {
 		return err
 	}
@@ -1346,7 +1346,7 @@ func elemHasChildElements(elem *helium.Element) bool {
 	return false
 }
 
-func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[rune]string, cdataElems map[string]struct{}, encoding string, ictx *xmlIndentCtx) error {
+func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[rune]string, cdataElems map[string]struct{}, encoding string, normForm string, ictx *xmlIndentCtx) error {
 	doeActive := false
 	children := collectChildren(n)
 	hasChildElements := false
@@ -1411,7 +1411,7 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 			}
 			ictx.depth++
 			// Recurse into children
-			if err := serializeXMLNodeWithCharMap(sw, elem, charMap, cdataElems, encoding, ictx); err != nil {
+			if err := serializeXMLNodeWithCharMap(sw, elem, charMap, cdataElems, encoding, normForm, ictx); err != nil {
 				return err
 			}
 			ictx.depth--
@@ -1437,7 +1437,7 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 					return err
 				}
 			} else if inCDATAElement(n, cdataElems) {
-				if err := writeCDATAWithEncoding(sw, text, encoding); err != nil {
+				if err := writeCDATAWithEncoding(sw, text, encoding, normForm); err != nil {
 					return err
 				}
 			} else if err := writeTextWithCharMap(sw, text, charMap); err != nil {
@@ -2130,9 +2130,17 @@ func inCDATAElement(parent helium.Node, cdataElems map[string]struct{}) bool {
 // encoding. Non-representable characters are emitted as character references
 // between CDATA sections. The stream.Writer.WriteCDATA method already handles
 // splitting ]]> sequences.
-func writeCDATAWithEncoding(sw *stream.Writer, text, encoding string) error {
+func writeCDATAWithEncoding(sw *stream.Writer, text, encoding, normForm string) error {
 	if !needsCDATASplit(encoding) {
 		return sw.WriteCDATA(text)
+	}
+	// Apply Unicode normalization before CDATA splitting so that
+	// decomposed characters are split at the correct boundaries.
+	// For example, NFD of ç (U+00E7) is c (U+0063) + combining cedilla
+	// (U+0327); 'c' is representable in US-ASCII and stays in CDATA,
+	// while U+0327 must be emitted as a character reference.
+	if nf, ok := resolveNormForm(normForm); ok {
+		text = string(nf.Bytes([]byte(text)))
 	}
 	// Split text into runs of representable and non-representable characters.
 	var buf strings.Builder
