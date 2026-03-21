@@ -859,6 +859,11 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 		dynCtx = xpath3.WithBaseURI(dynCtx, ensureFileURI(ec.stylesheet.baseURI))
 	}
 
+	// Default collation
+	if ec.defaultCollation != "" {
+		dynCtx = xpath3.WithDefaultCollation(dynCtx, ec.defaultCollation)
+	}
+
 	// Decimal formats
 	if len(ec.stylesheet.decimalFormats) > 0 {
 		for qn, df := range ec.stylesheet.decimalFormats {
