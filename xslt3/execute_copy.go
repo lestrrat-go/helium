@@ -439,11 +439,20 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 				ec.transferAnnotationsForCopy(v.Node, out.current, lastBefore)
 			} else if effectiveVal == "strict" || effectiveVal == "lax" || effectiveVal == "strip" {
 				// Apply validation/strip to the most recently added node in output.
+				// In sequence mode the copied node lives in pendingItems, not
+				// as a child of out.current.
+				var copiedElem *helium.Element
 				if copied := out.current.LastChild(); copied != nil {
-					if copiedElem, ok := copied.(*helium.Element); ok {
-						if err := ec.validateConstructedElement(ctx, copiedElem, effectiveVal); err != nil {
-							return err
-						}
+					copiedElem, _ = copied.(*helium.Element)
+				}
+				if copiedElem == nil && out.sequenceMode && len(out.pendingItems) > pendingBefore {
+					if ni, ok := out.pendingItems[len(out.pendingItems)-1].(xpath3.NodeItem); ok {
+						copiedElem, _ = ni.Node.(*helium.Element)
+					}
+				}
+				if copiedElem != nil {
+					if err := ec.validateConstructedElement(ctx, copiedElem, effectiveVal); err != nil {
+						return err
 					}
 				}
 			}
