@@ -458,6 +458,15 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 		}
 		base.Encoding = strings.TrimSpace(v)
 	}
+	if inst.ByteOrderMark != nil {
+		v, err := evalAVT(inst.ByteOrderMark)
+		if err != nil {
+			return nil, err
+		}
+		if b, ok := parseXSDBool(strings.TrimSpace(v)); ok {
+			base.ByteOrderMark = b
+		}
+	}
 	if inst.CDATASectionElements != nil {
 		v, err := evalAVT(inst.CDATASectionElements)
 		if err != nil {

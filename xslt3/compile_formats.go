@@ -176,8 +176,15 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		}
 		outDef.UndeclarePrefixes = b
 	}
+	if v := getAttr(elem, "byte-order-mark"); v != "" {
+		b, ok := parseXSDBool(v)
+		if !ok {
+			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@byte-order-mark", v)
+		}
+		outDef.ByteOrderMark = b
+	}
 	// Validate other boolean output attributes.
-	for _, boolAttr := range []string{"byte-order-mark", "escape-uri-attributes"} {
+	for _, boolAttr := range []string{"escape-uri-attributes"} {
 		if v := getAttr(elem, boolAttr); v != "" {
 			if _, ok := parseXSDBool(v); !ok {
 				return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@%s", v, boolAttr)

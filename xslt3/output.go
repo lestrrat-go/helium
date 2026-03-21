@@ -105,6 +105,13 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		target = w
 	}
 
+	// Emit UTF-8 BOM if requested.
+	if outDef.ByteOrderMark {
+		if _, werr := w.Write([]byte{0xEF, 0xBB, 0xBF}); werr != nil {
+			return werr
+		}
+	}
+
 	var err error
 	switch outDef.Method {
 	case "text":
