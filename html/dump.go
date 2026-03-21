@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"golang.org/x/text/unicode/norm"
 )
 
 // HTML attribute value escaping sequences.
@@ -402,7 +403,12 @@ func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 // uriEscapeStr percent-encodes characters that are not URI-safe.
 // Mirrors libxml2's xmlURIEscapeStr with allowed set "@/:=?;#%&,+".
 // Unreserved chars (letters, digits, -_.~) and the allowed set are not encoded.
+// The input is normalized to NFC before encoding per IRI-to-URI conversion
+// (RFC 3987 §3.1).
 func uriEscapeStr(s string) string {
+	// Normalize to NFC before percent-encoding so that precomposed forms
+	// (e.g. U+00E5 å) are used instead of decomposed sequences (a + U+030A).
+	s = norm.NFC.String(s)
 	var b strings.Builder
 	for i := 0; i < len(s); {
 		c := s[i]
