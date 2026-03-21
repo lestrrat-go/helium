@@ -69,7 +69,7 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 	}
 
 	if ec.msgHandler != nil {
-		ec.msgHandler(value, terminate)
+		ec.msgHandler.HandleMessage(value, terminate)
 	}
 
 	if terminate {

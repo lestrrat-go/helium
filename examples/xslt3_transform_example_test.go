@@ -111,9 +111,9 @@ func Example_xslt3_compile_file() {
 	ctx := context.Background()
 	ctx = xslt3.WithInitialTemplate(ctx, "report")
 	ctx = xslt3.WithParameter(ctx, "title", "Helium")
-	ctx = xslt3.WithMessageHandler(ctx, func(msg string, terminate bool) {
+	ctx = xslt3.WithMessageHandler(ctx, xslt3.MessageHandlerFunc(func(msg string, terminate bool) {
 		fmt.Printf("message: %s (terminate=%t)\n", msg, terminate)
-	})
+	}))
 
 	resultDoc, err := xslt3.Transform(ctx, sourceDoc, stylesheet)
 	if err != nil {
