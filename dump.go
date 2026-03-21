@@ -261,6 +261,13 @@ func WithNoEscapeNonASCII() WriteOption {
 	return func(d *Writer) { d.noEscapeNonASCII = true }
 }
 
+// WithAllowPrefixUndecl enables output of xmlns:prefix="" namespace
+// undeclarations. This is valid in XML 1.1 and required by XSLT 3.0 when
+// undeclare-prefixes="yes" is set on xsl:output.
+func WithAllowPrefixUndecl() WriteOption {
+	return func(d *Writer) { d.allowPrefixUndecl = true }
+}
+
 // Writer serializes an XML document tree (libxml2: xmlSaveCtxt).
 //
 // All serialization behavior is configured via WriteOption functional options
@@ -284,9 +291,10 @@ type Writer struct {
 	noDecl            bool
 	noEscapeNonASCII  bool
 	escapeNonASCII    bool
-	isXHTML        bool
-	encoding       string // document encoding, used for XHTML meta injection
-	indent         int    // current indent depth (used when format is true)
+	isXHTML           bool
+	encoding          string // document encoding, used for XHTML meta injection
+	indent            int    // current indent depth (used when format is true)
+	allowPrefixUndecl bool   // emit xmlns:prefix="" undeclarations (XML 1.1)
 }
 
 // NewWriter creates a Writer configured with the given options.
@@ -846,14 +854,19 @@ func (d *Writer) dumpNsList(out io.Writer, nslist []*Namespace) error {
 }
 
 func (d *Writer) dumpNs(out io.Writer, ns *Namespace) error {
+	if ns.href == "" && ns.prefix != "" {
+		// Prefixed namespace with empty URI — skip unless serializer
+		// opts in to XML 1.1 undeclarations (xmlns:prefix="").
+		// The default XML 1.0 serialization does not support these.
+		if !d.allowPrefixUndecl {
+			return nil
+		}
+	}
 	if ns.href == "" && ns.prefix == "" {
 		// xmlns="" — namespace undeclaration; emit it
 		_, err := io.WriteString(out, ` xmlns=""`)
 		return err
 	}
-	// Prefixed namespace with empty URI (xmlns:prefix="") is a valid
-	// namespace undeclaration in XML 1.1 / XSLT 3.0. Fall through to
-	// the general case which writes xmlns:prefix="value".
 
 	// Skip the implicit xml: prefix namespace declaration.
 	// libxml2: xmlNsDumpOutput skips prefix "xml" unconditionally.
