@@ -129,14 +129,15 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 	}
 
 	useAttr := getAttr(elem, "use")
+	hasContent := c.hasEffectiveContent(elem)
+	// XTSE1205: must have either use attr or content, not both, and not neither
+	if useAttr != "" && hasContent {
+		return staticError("XTSE1205", "xsl:key must not have both a use attribute and content")
+	}
+	if useAttr == "" && !hasContent {
+		return staticError("XTSE1205", "xsl:key must have either a use attribute or content")
+	}
 	if useAttr != "" {
-		// XTSE0010: xsl:key with use attribute must not have child elements
-		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-			if child.Type() == helium.ElementNode {
-				return staticError(errCodeXTSE0010,
-					"xsl:key with use attribute must not have child elements")
-			}
-		}
 		useExpr, err := compileXPath(useAttr, c.nsBindings)
 		if err != nil {
 			return err
@@ -178,6 +179,20 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		name = resolveQName(name, c.nsBindings)
 	}
 	methodStr := strings.TrimSpace(strings.ToLower(getAttr(elem, "method")))
+	// XTSE1570: validate method value
+	if methodStr != "" {
+		if !strings.Contains(methodStr, ":") {
+			// No-prefix: must be a known method
+			switch methodStr {
+			case "xml", "html", "xhtml", "text", "json", "adaptive":
+				// valid
+			default:
+				return staticError("XTSE1570", "invalid output method %q", methodStr)
+			}
+		} else if !isValidQName(methodStr) && !isValidEQName(methodStr) {
+			return staticError("XTSE1570", "invalid output method %q", methodStr)
+		}
+	}
 	outDef := &OutputDef{
 		Name:           name,
 		Method:         methodStr,

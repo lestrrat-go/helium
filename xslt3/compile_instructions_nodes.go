@@ -748,6 +748,9 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 			for _, prefix := range strings.Fields(eep) {
 				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 					newExcludes[uri] = struct{}{}
+				} else {
+					return nil, staticError("XTSE1430",
+						"undeclared namespace prefix %q in extension-element-prefixes", prefix)
 				}
 			}
 		}
