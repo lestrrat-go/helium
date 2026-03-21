@@ -579,11 +579,11 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
 	}
 	if root {
-		if err := elem.DeclareNamespace("fn", NSFn); err != nil {
+		if err := elem.DeclareNamespace("", NSFn); err != nil {
 			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
 		}
 	}
-	if err := elem.SetActiveNamespace("fn", NSFn); err != nil {
+	if err := elem.SetActiveNamespace("", NSFn); err != nil {
 		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
 	}
 
