@@ -429,14 +429,16 @@ func (c *compiler) compileAccumulator(elem *helium.Element) error {
 		ImportPrec: c.importPrec,
 	}
 
-	// Read initial-value attribute
-	if iv := getAttr(elem, "initial-value"); iv != "" {
-		expr, err := compileXPath(iv, c.nsBindings)
-		if err != nil {
-			return err
-		}
-		acc.Initial = expr
+	// Read initial-value attribute (required per XSLT 3.0 §10.4)
+	iv := getAttr(elem, "initial-value")
+	if iv == "" {
+		return staticError(errCodeXTSE0010, "xsl:accumulator %q requires initial-value attribute", expandedName)
 	}
+	initialExpr, err := compileXPath(iv, c.nsBindings)
+	if err != nil {
+		return err
+	}
+	acc.Initial = initialExpr
 
 	// Scan children for accumulator-rule elements
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
@@ -460,11 +462,13 @@ func (c *compiler) compileAccumulator(elem *helium.Element) error {
 	}
 
 	if existing, exists := c.stylesheet.accumulators[expandedName]; exists {
-		// Higher or equal import precedence wins; lower is silently discarded.
-		// Per XSLT 3.0 §10.4: same-name accumulators at different import
-		// precedence are resolved by import precedence (highest wins).
-		// Duplicates at the same level are replaced (last definition wins).
-		if acc.ImportPrec >= existing.ImportPrec {
+		// XTSE3350: duplicate accumulator name at the same import precedence.
+		if acc.ImportPrec == existing.ImportPrec {
+			return staticError(errCodeXTSE3350,
+				"duplicate xsl:accumulator %q at the same import precedence", expandedName)
+		}
+		// Different import precedence: highest wins, lower is silently discarded.
+		if acc.ImportPrec > existing.ImportPrec {
 			c.stylesheet.accumulators[expandedName] = acc
 		}
 		return nil
