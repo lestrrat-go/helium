@@ -577,6 +577,30 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 		}
 	}
 
+	// XTDE2210: detect inconsistent collation between sources.
+	// If corresponding merge-key elements specify different collations,
+	// lang, or case-order, raise XTDE2210.
+	if len(inst.Sources) > 1 {
+		firstKeys := inst.Sources[0].Keys
+		for si := 1; si < len(inst.Sources); si++ {
+			srcKeys := inst.Sources[si].Keys
+			for k := range firstKeys {
+				if k >= len(srcKeys) {
+					break
+				}
+				if firstKeys[k].Collation != srcKeys[k].Collation {
+					return dynamicError(errCodeXTDE2210, "merge sources have inconsistent collation for merge key %d: %q vs %q", k+1, firstKeys[k].Collation, srcKeys[k].Collation)
+				}
+				if firstKeys[k].Lang != srcKeys[k].Lang {
+					return dynamicError(errCodeXTDE2210, "merge sources have inconsistent lang for merge key %d: %q vs %q", k+1, firstKeys[k].Lang, srcKeys[k].Lang)
+				}
+				if firstKeys[k].CaseOrder != srcKeys[k].CaseOrder {
+					return dynamicError(errCodeXTDE2210, "merge sources have inconsistent case-order for merge key %d: %q vs %q", k+1, firstKeys[k].CaseOrder, srcKeys[k].CaseOrder)
+				}
+			}
+		}
+	}
+
 	// Sort or verify sort order for each source's items.
 	// Each source uses its OWN data-type for sort verification.
 	for si := range allSources {

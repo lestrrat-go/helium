@@ -718,7 +718,10 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
 	// we can't reliably verify sort order so we skip the check.
 	collation := getAttr(elem, "collation")
 	codepointCollation := "http://www.w3.org/2005/xpath-functions/collation/codepoint"
-	if getAttr(elem, "lang") != "" || getAttr(elem, "case-order") != "" {
+	mk.Collation = collation
+	mk.Lang = getAttr(elem, "lang")
+	mk.CaseOrder = getAttr(elem, "case-order")
+	if mk.Lang != "" || mk.CaseOrder != "" {
 		mk.HasCollation = true
 	} else if collation != "" && collation != codepointCollation {
 		mk.HasCollation = true
