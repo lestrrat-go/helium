@@ -94,6 +94,12 @@ func resolveComponentName(name string, nsBindings map[string]string, elem *heliu
 		return name + arity
 	}
 
+	// Handle EQName notation: Q{uri}local
+	if strings.HasPrefix(name, "Q{") {
+		// Convert Q{uri}local to {uri}local (Clark notation)
+		return name[1:] + arity
+	}
+
 	// Handle prefix:* or prefix:local
 	if idx := strings.Index(name, ":"); idx >= 0 {
 		prefix := name[:idx]
@@ -348,36 +354,35 @@ func (c *compiler) compileExpose(elem *helium.Element) error {
 		resolvedName := resolveComponentName(name, nsBindings, elem)
 
 		switch component {
-		case xslElemTemplate, xslWildcard:
-			if component == xslElemTemplate || component == xslWildcard {
-				if err := c.applyExposeToTemplates(resolvedName, visibility, component == xslWildcard); err != nil {
-					return err
-				}
+		case xslElemTemplate:
+			if err := c.applyExposeToTemplates(resolvedName, visibility, false); err != nil {
+				return err
 			}
 		case xslElemFunction:
-			if err := c.applyExposeToFunctions(resolvedName, visibility); err != nil {
+			if err := c.applyExposeToFunctionsStrict(resolvedName, visibility); err != nil {
 				return err
 			}
 		case xslElemVariable:
-			if err := c.applyExposeToVariables(resolvedName, visibility); err != nil {
+			if err := c.applyExposeToVariablesStrict(resolvedName, visibility); err != nil {
 				return err
 			}
 		case xslElemAttributeSet:
-			if err := c.applyExposeToAttrSets(resolvedName, visibility); err != nil {
+			if err := c.applyExposeToAttrSets(resolvedName, visibility, true); err != nil {
 				return err
 			}
 		case xslElemMode:
-			if err := c.applyExposeToModes(resolvedName, visibility); err != nil {
+			if err := c.applyExposeToModes(resolvedName, visibility, true); err != nil {
 				return err
 			}
-		}
-
-		// When component="*", apply to all component types
-		if component == xslWildcard {
+		case xslWildcard:
+			// When component="*", apply to all component types.
+			// Use non-strict mode so we don't error when a name matches
+			// in one component type but not others.
+			_ = c.applyExposeToTemplates(resolvedName, visibility, true)
 			_ = c.applyExposeToFunctions(resolvedName, visibility)
 			_ = c.applyExposeToVariables(resolvedName, visibility)
-			_ = c.applyExposeToAttrSets(resolvedName, visibility)
-			_ = c.applyExposeToModes(resolvedName, visibility)
+			_ = c.applyExposeToAttrSets(resolvedName, visibility, false)
+			_ = c.applyExposeToModes(resolvedName, visibility, false)
 		}
 	}
 
@@ -424,46 +429,97 @@ func (c *compiler) applyExposeToFunctions(pattern, visibility string) error {
 			matched = true
 		}
 	}
-	// Don't error for wildcard component="*" if no functions match
 	_ = matched
 	return nil
 }
 
+// applyExposeToFunctionsStrict is like applyExposeToFunctions but reports
+// XTSE3010 when a non-wildcard pattern has no match. Used when the expose
+// element has component="function" (not component="*").
+func (c *compiler) applyExposeToFunctionsStrict(pattern, visibility string) error {
+	matched := false
+	for key := range c.stylesheet.functionVisibility {
+		if componentNameMatches(key, pattern) {
+			c.stylesheet.functionVisibility[key] = visibility
+			matched = true
+		}
+	}
+	if !matched && !isWildcard(pattern) {
+		return staticError(errCodeXTSE3010, "xsl:expose: no function %q found in package", pattern)
+	}
+	return nil
+}
+
 func (c *compiler) applyExposeToVariables(pattern, visibility string) error {
-	matchedVar := false
+	matched := false
 	for name := range c.stylesheet.variableVisibility {
 		if componentNameMatches(name, pattern) {
 			c.stylesheet.variableVisibility[name] = visibility
-			matchedVar = true
+			matched = true
 		}
 	}
 	for name := range c.stylesheet.globalParamVisibility {
 		if componentNameMatches(name, pattern) {
 			c.stylesheet.globalParamVisibility[name] = visibility
-			matchedVar = true
+			matched = true
 		}
 	}
-	_ = matchedVar
+	_ = matched
 	return nil
 }
 
-func (c *compiler) applyExposeToAttrSets(pattern, visibility string) error {
+// applyExposeToVariablesStrict is like applyExposeToVariables but reports
+// XTSE3010 when a non-wildcard pattern has no match.
+func (c *compiler) applyExposeToVariablesStrict(pattern, visibility string) error {
+	matched := false
+	for name := range c.stylesheet.variableVisibility {
+		if componentNameMatches(name, pattern) {
+			c.stylesheet.variableVisibility[name] = visibility
+			matched = true
+		}
+	}
+	for name := range c.stylesheet.globalParamVisibility {
+		if componentNameMatches(name, pattern) {
+			c.stylesheet.globalParamVisibility[name] = visibility
+			matched = true
+		}
+	}
+	if !matched && !isWildcard(pattern) {
+		return staticError(errCodeXTSE3010, "xsl:expose: no variable or parameter %q found in package", pattern)
+	}
+	return nil
+}
+
+func (c *compiler) applyExposeToAttrSets(pattern, visibility string, strict bool) error {
+	matched := false
 	for name := range c.stylesheet.attrSetVisibility {
 		if componentNameMatches(name, pattern) {
 			c.stylesheet.attrSetVisibility[name] = visibility
+			matched = true
 		}
+	}
+	if strict && !matched && !isWildcard(pattern) {
+		return staticError(errCodeXTSE3010, "xsl:expose: no attribute-set %q found in package", pattern)
 	}
 	return nil
 }
 
-func (c *compiler) applyExposeToModes(pattern, visibility string) error {
+func (c *compiler) applyExposeToModes(pattern, visibility string, strict bool) error {
 	if c.stylesheet.modeDefs == nil {
+		if strict && !isWildcard(pattern) {
+			return staticError(errCodeXTSE3010, "xsl:expose: no mode %q found in package", pattern)
+		}
 		return nil
 	}
+	matched := false
 	for _, md := range c.stylesheet.modeDefs {
 		if componentNameMatches(md.Name, pattern) {
 			md.Visibility = visibility
+			matched = true
 		}
+	}
+	if strict && !matched && !isWildcard(pattern) {
+		return staticError(errCodeXTSE3010, "xsl:expose: no mode %q found in package", pattern)
 	}
 	return nil
 }

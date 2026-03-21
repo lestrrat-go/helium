@@ -302,9 +302,52 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 					continue
 				}
 			}
+			if _, overridden := overrideNames[xslElemAttributeSet+":"+name]; overridden {
+				continue
+			}
 			if _, exists := c.stylesheet.attributeSets[name]; !exists {
 				c.stylesheet.attributeSets[name] = as
 			}
+		}
+	}
+
+	// Merge override components (these replace the originals)
+	if oset != nil {
+		for qn, fn := range oset.functions {
+			fn.OwnerPackage = pkg
+			c.stylesheet.functions[qn] = fn
+		}
+		for name, tmpl := range oset.namedTemplates {
+			tmpl.ImportPrec = c.importPrec - 1
+			tmpl.OwnerPackage = pkg
+			c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
+			c.stylesheet.namedTemplates[name] = tmpl
+		}
+		for _, tmpl := range oset.matchTemplates {
+			tmpl.ImportPrec = c.importPrec - 1
+			tmpl.OwnerPackage = pkg
+			c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
+			modes := []string{tmpl.Mode}
+			if tmpl.Mode == "#all" {
+				modes = []string{""}
+			}
+			for _, mode := range modes {
+				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
+			}
+		}
+		for name, v := range oset.variables {
+			c.stylesheet.globalVars = append(c.stylesheet.globalVars, v)
+			_ = name
+		}
+		for name, p := range oset.params {
+			c.stylesheet.globalParams = append(c.stylesheet.globalParams, p)
+			_ = name
+		}
+		for name, as := range oset.attributeSets {
+			if c.stylesheet.attributeSets == nil {
+				c.stylesheet.attributeSets = make(map[string]*AttributeSetDef)
+			}
+			c.stylesheet.attributeSets[name] = as
 		}
 	}
 

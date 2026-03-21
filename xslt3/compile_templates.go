@@ -131,6 +131,11 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		tmpl.Mode = c.resolveMode(c.defaultMode)
 	}
 
+	// Record mode usage for XTSE3085 checking (only match templates have modes)
+	if matchAttr != "" {
+		c.recordModeUsage(tmpl.Mode)
+	}
+
 	hasExplicitPriority := false
 	if prio := getAttr(elem, "priority"); prio != "" {
 		f, err := strconv.ParseFloat(prio, 64)
@@ -433,6 +438,24 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 			case helium.TextNode, helium.CDATASectionNode:
 				if strings.TrimSpace(string(child.Content())) != "" {
 					return nil, staticError(errCodeXTSE0010, "xsl:param with required='yes' must not have content")
+				}
+			}
+		}
+	}
+
+	// XTSE0010: A static parameter must not have a sequence constructor (body content).
+	// Static params default to empty sequence when no select is provided.
+	isStatic := xsdBoolTrue(getAttr(elem, "static"))
+	if isStatic {
+		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			switch child.Type() {
+			case helium.ElementNode:
+				return nil, staticError(errCodeXTSE0010,
+					"xsl:param %q with static='yes' must not have content (use select attribute instead)", name)
+			case helium.TextNode, helium.CDATASectionNode:
+				if strings.TrimSpace(string(child.Content())) != "" {
+					return nil, staticError(errCodeXTSE0010,
+						"xsl:param %q with static='yes' must not have content (use select attribute instead)", name)
 				}
 			}
 		}

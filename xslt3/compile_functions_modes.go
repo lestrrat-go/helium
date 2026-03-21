@@ -163,6 +163,11 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	name := strings.TrimSpace(getAttr(elem, "name"))
 	if name == "" {
 		name = "#default"
+	} else if name[0] != '#' {
+		// Resolve QName to Clark notation so mode declarations and mode
+		// references (on xsl:template/@mode, xsl:apply-templates/@mode)
+		// use the same key format.
+		name = c.resolveMode(name)
 	}
 
 	// Parse streamable with proper xs:boolean validation
