@@ -725,9 +725,11 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 		return ok
 	}
 
-	// Copy in-scope namespace declarations from stylesheet that are not excluded.
-	// These represent namespaces that should propagate to the result tree.
-	for prefix, uri := range c.stylesheet.namespaces {
+	// Copy in-scope namespace declarations that are not excluded.
+	// Use c.nsBindings (scoped to this element's position in the stylesheet)
+	// rather than c.stylesheet.namespaces (which accumulates globally and
+	// leaks namespaces from sibling variable trees).
+	for prefix, uri := range c.nsBindings {
 		if uri == NSXSLT || prefix == "" {
 			continue
 		}
@@ -817,9 +819,16 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 			if resultURI, resultPfx, ok := c.resolveNamespaceAlias(uri); ok {
 				if resultPfx != "" {
 					aliasedNS[resultPfx] = resultURI
-				} else {
+				} else if resultURI != "" {
+					// Only keep aliased prefix when the result URI is non-empty.
+					// Mapping a prefixed namespace to "" (no namespace) means
+					// the prefix is no longer needed — dropping it avoids
+					// emitting the illegal xmlns:p="" undeclaration.
 					aliasedNS[prefix] = resultURI
 				}
+				// else: prefixed namespace aliased to #default with no default
+				// namespace → drop entirely (the element/attr already got the
+				// correct no-namespace treatment above).
 			} else {
 				aliasedNS[prefix] = uri
 			}
