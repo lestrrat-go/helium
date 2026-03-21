@@ -159,7 +159,9 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		tmpl.Priority = tmpl.Match.Alternatives[0].priority
 	}
 
-	// Handle exclude-result-prefixes on xsl:template
+	// Handle exclude-result-prefixes on xsl:template.
+	// Resolve prefixes to URIs at the declaration point so that the
+	// exclusion applies to URIs, not prefixes (per XSLT spec).
 	savedExcludes := c.localExcludes
 	if erp := getAttr(elem, "exclude-result-prefixes"); erp != "" {
 		newExcludes := make(map[string]struct{})
@@ -168,11 +170,15 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		}
 		if erp == "#all" {
 			for prefix := range c.stylesheet.namespaces {
-				newExcludes[prefix] = struct{}{}
+				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
+					newExcludes[uri] = struct{}{}
+				}
 			}
 		} else {
 			for _, prefix := range strings.Fields(erp) {
-				newExcludes[prefix] = struct{}{}
+				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
+					newExcludes[uri] = struct{}{}
+				}
 			}
 		}
 		c.localExcludes = newExcludes

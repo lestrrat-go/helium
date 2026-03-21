@@ -704,20 +704,30 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 		for k, v := range c.localExcludes {
 			newExcludes[k] = v
 		}
+		// Resolve prefixes to URIs at the declaration point so that
+		// exclude-result-prefixes applies to URIs, not prefixes.
+		// When a child element rebinds a prefix to a different URI,
+		// the original URI (not the new one) remains excluded.
 		if erp, ok := elem.GetAttributeNS("exclude-result-prefixes", NSXSLT); ok {
 			if erp == "#all" {
 				for prefix := range c.stylesheet.namespaces {
-					newExcludes[prefix] = struct{}{}
+					if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
+						newExcludes[uri] = struct{}{}
+					}
 				}
 			} else {
 				for _, prefix := range strings.Fields(erp) {
-					newExcludes[prefix] = struct{}{}
+					if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
+						newExcludes[uri] = struct{}{}
+					}
 				}
 			}
 		}
 		if eep, ok := elem.GetAttributeNS("extension-element-prefixes", NSXSLT); ok {
 			for _, prefix := range strings.Fields(eep) {
-				newExcludes[prefix] = struct{}{}
+				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
+					newExcludes[uri] = struct{}{}
+				}
 			}
 		}
 		c.localExcludes = newExcludes
@@ -745,16 +755,14 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 
 	// Build set of excluded namespace URIs. Stylesheet-level URIs were
 	// resolved at compile init (before template processing mutates namespaces).
-	// Local (element-level) URIs are resolved from c.nsBindings which has the
-	// correct in-scope bindings at this point.
-	excludedURIs := make(map[string]struct{}, len(c.stylesheet.excludeURIs))
+	// Local (element-level) URIs are already resolved to URIs at declaration
+	// point, so we merge them directly.
+	excludedURIs := make(map[string]struct{}, len(c.stylesheet.excludeURIs)+len(c.localExcludes))
 	for uri := range c.stylesheet.excludeURIs {
 		excludedURIs[uri] = struct{}{}
 	}
-	for prefix := range c.localExcludes {
-		if uri, ok := c.nsBindings[prefix]; ok {
-			excludedURIs[uri] = struct{}{}
-		}
+	for uri := range c.localExcludes {
+		excludedURIs[uri] = struct{}{}
 	}
 
 	isExcluded := func(_, uri string) bool {
