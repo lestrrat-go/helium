@@ -559,20 +559,35 @@ func formatDuration(d Duration, typeName string) string {
 		fmt.Fprintf(&b, "%dM", months)
 	}
 
-	totalMicro := int64(math.Round(totalSeconds * 1e6))
-	days := totalMicro / (86400 * 1e6)
-	totalMicro -= days * 86400 * 1e6
-	hours := totalMicro / (3600 * 1e6)
-	totalMicro -= hours * 3600 * 1e6
-	mins := totalMicro / (60 * 1e6)
-	totalMicro -= mins * 60 * 1e6
-	wholeSecs := totalMicro / 1e6
-	fracMicro := totalMicro % 1e6
+	// Decompose seconds using integer arithmetic to avoid int64 overflow
+	// for very large values (totalSeconds * 1e6 can exceed MaxInt64).
+	totalWholeSeconds := int64(totalSeconds)
+	fracSeconds := totalSeconds - float64(totalWholeSeconds)
+	// Round fractional part to microseconds
+	fracMicro := int64(math.Round(fracSeconds * 1e6))
+	if fracMicro >= 1e6 {
+		totalWholeSeconds++
+		fracMicro -= 1e6
+	}
+	if fracMicro < 0 {
+		fracMicro = 0
+	}
+	// Use FracSec for exact fractional representation if available
+	if d.FracSec != nil && d.FracSec.Sign() != 0 {
+		fracMicro = 0 // will be formatted from FracSec below
+	}
+	days := totalWholeSeconds / 86400
+	totalWholeSeconds -= days * 86400
+	hours := totalWholeSeconds / 3600
+	totalWholeSeconds -= hours * 3600
+	mins := totalWholeSeconds / 60
+	wholeSecs := totalWholeSeconds - mins*60
 
+	hasFrac := fracMicro != 0 || (d.FracSec != nil && d.FracSec.Sign() != 0)
+	hasSecs := wholeSecs != 0 || hasFrac
 	if days != 0 {
 		fmt.Fprintf(&b, "%dD", days)
 	}
-	hasSecs := wholeSecs != 0 || fracMicro != 0
 	if hours != 0 || mins != 0 || hasSecs {
 		b.WriteByte('T')
 		if hours != 0 {
@@ -582,7 +597,20 @@ func formatDuration(d Duration, typeName string) string {
 			fmt.Fprintf(&b, "%dM", mins)
 		}
 		if hasSecs {
-			if fracMicro == 0 {
+			if d.FracSec != nil && d.FracSec.Sign() != 0 {
+				// Use exact fractional representation
+				fracStr := d.FracSec.FloatString(20)
+				// Remove "0." prefix
+				if strings.HasPrefix(fracStr, "0.") {
+					fracStr = fracStr[2:]
+				}
+				fracStr = strings.TrimRight(fracStr, "0")
+				if fracStr == "" {
+					fmt.Fprintf(&b, "%dS", wholeSecs)
+				} else {
+					fmt.Fprintf(&b, "%d.%sS", wholeSecs, fracStr)
+				}
+			} else if fracMicro == 0 {
 				fmt.Fprintf(&b, "%dS", wholeSecs)
 			} else {
 				frac := fmt.Sprintf("%06d", fracMicro)
