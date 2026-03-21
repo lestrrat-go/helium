@@ -1469,14 +1469,26 @@ func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMa
 		normalizeForeignNamespaces(doc)
 	}
 
-	// Serialize as XML, then post-process for XHTML rules:
-	// - Void elements: add space before /> (e.g., <br /> not <br/>)
-	// - Non-void elements: expand self-closing to open+close (e.g., <Option></Option>)
+	// Serialize as XML first.
 	var buf bytes.Buffer
 	if err := serializeXML(&buf, doc, outDef, charMap); err != nil {
 		return err
 	}
-	_, err := io.WriteString(w, fixXHTMLSelfClosing(buf.String()))
+	result := buf.String()
+
+	// Post-process for XHTML rules:
+	// 1. URI attribute escaping (percent-encode non-ASCII in href, src, etc.)
+	escapeURI := outDef.EscapeURIAttributes == nil || *outDef.EscapeURIAttributes
+	if escapeURI {
+		result = escapeXHTMLURIAttrsInString(result)
+	}
+	// 2. C1 control character escaping (U+0080-U+009F as &#NNN;)
+	result = escapeC1ControlsInString(result)
+	// 3. Void elements: add space before /> (e.g., <br /> not <br/>)
+	// 4. Non-void elements: expand self-closing to open+close
+	result = fixXHTMLSelfClosing(result)
+
+	_, err := io.WriteString(w, result)
 	return err
 }
 
@@ -1638,6 +1650,118 @@ func fixXHTMLSelfClosing(xml string) string {
 		i += tagEnd + 1
 	}
 	return out.String()
+}
+
+// escapeXHTMLURIAttrsInString post-processes serialized XML to percent-encode
+// non-ASCII characters in URI attribute values (href, src, action, etc.)
+func escapeXHTMLURIAttrsInString(xml string) string {
+	var out strings.Builder
+	out.Grow(len(xml))
+	i := 0
+	for i < len(xml) {
+		if xml[i] != '<' {
+			out.WriteByte(xml[i])
+			i++
+			continue
+		}
+		// Find end of tag
+		tagEnd := strings.IndexByte(xml[i:], '>')
+		if tagEnd < 0 {
+			out.WriteString(xml[i:])
+			break
+		}
+		tag := xml[i : i+tagEnd+1]
+		out.WriteString(escapeURIAttrsInTag(tag))
+		i += tagEnd + 1
+	}
+	return out.String()
+}
+
+// escapeURIAttrsInTag finds URI attributes in a tag and percent-encodes
+// non-ASCII characters in their values.
+func escapeURIAttrsInTag(tag string) string {
+	if len(tag) < 2 || tag[1] == '/' || tag[1] == '?' || tag[1] == '!' {
+		return tag
+	}
+	var out strings.Builder
+	out.Grow(len(tag))
+	i := 0
+	for i < len(tag) {
+		// Find attribute name
+		if tag[i] == '=' && i > 0 {
+			// Look back for attribute name
+			nameEnd := i
+			nameStart := nameEnd - 1
+			for nameStart > 0 && tag[nameStart] != ' ' && tag[nameStart] != '\t' && tag[nameStart] != '\n' {
+				nameStart--
+			}
+			if tag[nameStart] == ' ' || tag[nameStart] == '\t' || tag[nameStart] == '\n' {
+				nameStart++
+			}
+			attrName := strings.ToLower(tag[nameStart:nameEnd])
+			_, isURI := htmlURIAttrs[attrName]
+			out.WriteByte('=')
+			i++
+			if i < len(tag) && (tag[i] == '"' || tag[i] == '\'') {
+				quote := tag[i]
+				out.WriteByte(quote)
+				i++
+				valStart := i
+				for i < len(tag) && tag[i] != quote {
+					i++
+				}
+				val := tag[valStart:i]
+				if isURI {
+					out.WriteString(percentEncodeNonASCII(val))
+				} else {
+					out.WriteString(val)
+				}
+				if i < len(tag) {
+					out.WriteByte(quote)
+					i++
+				}
+			}
+		} else {
+			out.WriteByte(tag[i])
+			i++
+		}
+	}
+	return out.String()
+}
+
+// percentEncodeNonASCII percent-encodes non-ASCII bytes in a string.
+func percentEncodeNonASCII(s string) string {
+	var buf strings.Builder
+	b := []byte(s)
+	for i := 0; i < len(b); i++ {
+		c := b[i]
+		if c > 0x7E {
+			buf.WriteString(fmt.Sprintf("%%%02X", c))
+		} else {
+			buf.WriteByte(c)
+		}
+	}
+	return buf.String()
+}
+
+// escapeC1ControlsInString replaces C1 control characters (U+0080-U+009F)
+// in the serialized string with numeric character references.
+func escapeC1ControlsInString(s string) string {
+	var buf strings.Builder
+	buf.Grow(len(s))
+	changed := false
+	for _, r := range s {
+		if r >= 0x80 && r <= 0x9F {
+			buf.WriteString(fmt.Sprintf("&#%d;", r))
+			changed = true
+		} else {
+			buf.WriteRune(r)
+		}
+	}
+	if !changed {
+		return s
+	}
+	return buf.String()
 }
 
 // htmlURIAttrs lists HTML attributes whose values are URIs and should not
