@@ -417,11 +417,26 @@ func DocumentRoot(n helium.Node) helium.Node {
 			n = p
 		}
 	}
+	// Walk up the parent chain to find the root. If the topmost node is
+	// a document node, return it. Otherwise return the topmost element
+	// (parentless node — e.g. elements created in sequence mode).
+	// We avoid returning OwnerDocument() directly because parentless
+	// elements may be owned by a temporary document they are not rooted in.
+	top := n
+	for top.Parent() != nil {
+		top = top.Parent()
+	}
+	if top.Type() == helium.DocumentNode {
+		return top
+	}
+	// If the topmost ancestor is not a document and OwnerDocument exists,
+	// check if the topmost node is actually a child of that document.
 	if doc := n.OwnerDocument(); doc != nil {
-		return doc
+		for c := doc.FirstChild(); c != nil; c = c.NextSibling() {
+			if c == top {
+				return doc
+			}
+		}
 	}
-	for n.Parent() != nil {
-		n = n.Parent()
-	}
-	return n
+	return top
 }
