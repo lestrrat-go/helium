@@ -170,9 +170,15 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 	// then the named xsl:output (format), then nil (default).
 	var itemSep *string
 	if inst.ItemSeparatorSet {
-		// Attribute was present on xsl:result-document; use its value
-		// (nil for #absent, or the specified string).
-		itemSep = inst.ItemSeparator
+		// Attribute was present on xsl:result-document; evaluate AVT value
+		// (nil for #absent, or the evaluated string).
+		if inst.ItemSeparator != nil {
+			sepVal, err := inst.ItemSeparator.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+			itemSep = &sepVal
+		}
 	} else if inst.Format != "" {
 		if outDef, ok := ec.stylesheet.outputs[inst.Format]; ok && outDef.ItemSeparator != nil {
 			itemSep = outDef.ItemSeparator

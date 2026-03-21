@@ -144,9 +144,13 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 
 	hasExplicitPriority := false
 	if prio := getAttr(elem, "priority"); prio != "" {
+		// XTSE0530: priority must be a valid xs:decimal — no exponent notation.
+		if !isXSDecimal(prio) {
+			return staticError(errCodeXTSE0530, "priority %q is not a valid xs:decimal", prio)
+		}
 		f, err := strconv.ParseFloat(prio, 64)
 		if err != nil {
-			return staticError(errCodeXTSE0010, "invalid priority %q: %v", prio, err)
+			return staticError(errCodeXTSE0530, "invalid priority %q: %v", prio, err)
 		}
 		tmpl.Priority = f
 		hasExplicitPriority = true
