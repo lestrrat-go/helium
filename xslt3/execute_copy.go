@@ -217,16 +217,9 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 				}
 			}
 		} else {
-			// copy-namespaces="no": copy only the namespace declarations that
-			// are directly on the source element (not inherited from ancestors).
-			for _, ns := range srcElem.Namespaces() {
-				if ns.URI() == "" {
-					continue // skip undeclarations
-				}
-				if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
-					return err
-				}
-			}
+			// copy-namespaces="no": do not copy source namespace declarations.
+			// Only the element's own namespace (required for well-formedness)
+			// is declared below.
 		}
 		if srcElem.URI() != "" {
 			// Always declare the element's own namespace
@@ -546,32 +539,19 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 	}
 }
 
-// copyElementNoNamespaces deep-copies an element keeping only the namespace
-// declarations that are directly on the source element (copy-namespaces="no").
-// Inherited namespace declarations from ancestors are NOT copied.
+// copyElementNoNamespaces deep-copies an element without copying namespace
+// declarations (copy-namespaces="no").  Only the namespaces required for
+// well-formedness (element name and attribute names) are preserved.
 func (ec *execContext) copyElementNoNamespaces(src *helium.Element) error {
 	elem, err := ec.resultDoc.CreateElement(src.LocalName())
 	if err != nil {
 		return err
 	}
 
-	// Copy only the namespace declarations directly on the source element
-	// (not those inherited from ancestors).
-	for _, ns := range src.Namespaces() {
-		if ns.URI() == "" {
-			continue // skip undeclarations
-		}
-		if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
-			return err
-		}
-	}
-
-	// Ensure the element's own namespace is declared and set active.
+	// Declare only the element's own namespace (required for well-formedness).
 	if src.URI() != "" {
-		if !hasNSDecl(elem, src.Prefix(), src.URI()) {
-			if err := elem.DeclareNamespace(src.Prefix(), src.URI()); err != nil {
-				return err
-			}
+		if err := elem.DeclareNamespace(src.Prefix(), src.URI()); err != nil {
+			return err
 		}
 		if err := elem.SetActiveNamespace(src.Prefix(), src.URI()); err != nil {
 			return err

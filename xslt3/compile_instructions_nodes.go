@@ -435,8 +435,10 @@ func (c *compiler) compileCopyOf(elem *helium.Element) (*CopyOfInst, error) {
 		Select:         expr,
 		CopyNamespaces: true,
 	}
-	if cn := getAttr(elem, "copy-namespaces"); cn == "no" {
-		inst.CopyNamespaces = false
+	if cn := getAttr(elem, "copy-namespaces"); cn != "" {
+		if v, ok := parseXSDBool(cn); ok && !v {
+			inst.CopyNamespaces = false
+		}
 	}
 	// Shadow attribute _copy-namespaces overrides at runtime
 	if scn := getAttr(elem, "_copy-namespaces"); scn != "" {
