@@ -309,7 +309,11 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 			// document node as an item.
 			savedDoc := ec.resultDoc
 			savedOutput := out.current
+			savedSeqMode := out.sequenceMode
 			ec.resultDoc = newDoc
+			// Temporarily disable sequenceMode so that children are added
+			// to the new document node (not captured as separate items).
+			out.sequenceMode = false
 			docRoot := newDoc.DocumentElement()
 			if docRoot == nil {
 				// No doc element yet; use the document node itself as output target.
@@ -318,10 +322,12 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 			if err := ec.executeSequenceConstructor(ctx, opts.body); err != nil {
 				ec.resultDoc = savedDoc
 				out.current = savedOutput
+				out.sequenceMode = savedSeqMode
 				return err
 			}
 			ec.resultDoc = savedDoc
 			out.current = savedOutput
+			out.sequenceMode = savedSeqMode
 			out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: newDoc})
 			out.noteOutput()
 			return nil
