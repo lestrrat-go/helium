@@ -6,6 +6,23 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
+// lookupFuncStreamability returns the streamability annotation of a user-defined
+// function matching the given local name and arity, or "" if not found.
+// Since FunctionCall AST nodes store only prefix:localName (not namespace URI),
+// we match by local name and arity. This is safe because user-defined XSLT
+// functions always use a non-null namespace and duplicates by arity are rejected.
+func lookupFuncStreamability(ss *Stylesheet, localName string, arity int) string {
+	if ss == nil {
+		return ""
+	}
+	for key, fn := range ss.functions {
+		if key.Name.Name == localName && key.Arity == arity && fn.Streamability != "" {
+			return fn.Streamability
+		}
+	}
+	return ""
+}
+
 // analyzeStreamability performs a post-compilation pass over the stylesheet.
 // It checks templates in streamable modes and bodies of xsl:source-document
 // streamable="yes" for non-streamable constructs, raising XTSE3430 errors.
@@ -50,7 +67,7 @@ func analyzeStreamability(ss *Stylesheet) error {
 			continue
 		}
 		if acc.Initial != nil {
-			if err := checkStreamableExpr(acc.Initial); err != nil {
+			if err := checkStreamableExpr(ss, acc.Initial); err != nil {
 				return err
 			}
 			// A motionless expression must not navigate the document at all.
@@ -142,7 +159,7 @@ func checkStreamableTemplateBody(ss *Stylesheet, body []Instruction) error {
 	// Check for multiple consuming (downward) operations across the template
 	// body as a whole. Two sibling copy-of/value-of/apply-templates each
 	// selecting child nodes constitute two consuming reads of the stream.
-	if countDownwardInBody(body) > 1 {
+	if countDownwardInBody(ss, body) > 1 {
 		return staticError(errCodeXTSE3430,
 			"template body has multiple consuming operations, which is not streamable")
 	}
@@ -153,19 +170,19 @@ func checkStreamableTemplateBody(ss *Stylesheet, body []Instruction) error {
 // countDownwardInBody counts consuming downward selections across a sequence
 // of sibling instructions, respecting branching: only the max across
 // xsl:choose branches is counted since only one branch executes.
-func countDownwardInBody(body []Instruction) int {
+func countDownwardInBody(ss *Stylesheet, body []Instruction) int {
 	total := 0
 	for _, inst := range body {
 		if choose, ok := inst.(*ChooseInst); ok {
 			maxBranch := 0
 			for _, when := range choose.When {
-				bc := countDownwardInBody(when.Body)
+				bc := countDownwardInBody(ss, when.Body)
 				if bc > maxBranch {
 					maxBranch = bc
 				}
 			}
 			if choose.Otherwise != nil {
-				bc := countDownwardInBody(choose.Otherwise)
+				bc := countDownwardInBody(ss, choose.Otherwise)
 				if bc > maxBranch {
 					maxBranch = bc
 				}
@@ -177,11 +194,11 @@ func countDownwardInBody(body []Instruction) int {
 			// xsl:if is like a single branch — its body may or may
 			// not execute, but from a streamability perspective the
 			// consuming operations inside still count.
-			total += countDownwardInBody(ifInst.Body)
+			total += countDownwardInBody(ss, ifInst.Body)
 			continue
 		}
 		for _, expr := range getInstructionExprs(inst) {
-			total += countStreamingDownwardSelections(expr.AST())
+			total += countStreamingDownwardSelections(ss, expr.AST())
 		}
 	}
 	return total
@@ -206,14 +223,14 @@ func checkStreamableInstruction(ss *Stylesheet, inst Instruction) error {
 	}
 
 	for _, expr := range getInstructionExprs(inst) {
-		if err := checkStreamableExpr(expr); err != nil {
+		if err := checkStreamableExpr(ss, expr); err != nil {
 			return err
 		}
 	}
 
 	// Check for multiple downward selections across sibling expressions in
 	// fork branches and map entries (they each consume the stream).
-	if err := checkMultipleDownwardInst(inst); err != nil {
+	if err := checkMultipleDownwardInst(ss, inst); err != nil {
 		return err
 	}
 
@@ -269,7 +286,7 @@ func checkStreamableInstruction(ss *Stylesheet, inst Instruction) error {
 }
 
 // checkStreamableExpr checks a single XPath expression for non-streamable patterns.
-func checkStreamableExpr(expr *xpath3.Expression) error {
+func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 	if expr == nil {
 		return nil
 	}
@@ -295,14 +312,14 @@ func checkStreamableExpr(expr *xpath3.Expression) error {
 	}
 
 	// 4. Non-motionless predicates on streaming steps (not on grounded data)
-	if exprHasNonMotionlessStreamingPredicate(expr) {
+	if exprHasNonMotionlessStreamingPredicate(ss, expr) {
 		return staticError(errCodeXTSE3430,
 			"expression %q has a non-motionless predicate, which is not streamable", expr.String())
 	}
 
 	// 5. Multiple downward selections (consuming the stream twice)
 	// Only count selections outside grounding functions (snapshot/copy-of).
-	if countStreamingDownwardSelections(expr.AST()) > 1 {
+	if countStreamingDownwardSelections(ss, expr.AST()) > 1 {
 		return staticError(errCodeXTSE3430,
 			"expression %q has multiple downward selections, which is not streamable", expr.String())
 	}
@@ -501,10 +518,19 @@ func isGroundingFuncName(name string) bool {
 // meaning subsequent operations on its result work on non-streaming data.
 // This is different from functions that merely produce atomic output (like count/sum).
 func isGroundingExpr(expr xpath3.Expr) bool {
+	return isGroundingExprSS(nil, expr)
+}
+
+func isGroundingExprSS(ss *Stylesheet, expr xpath3.Expr) bool {
 	expr = derefXPathExpr(expr)
 	if fc, ok := expr.(xpath3.FunctionCall); ok {
 		if fc.Prefix == "" {
 			return isGroundingFuncName(fc.Name)
+		}
+		// Check user-defined absorbing/unclassified functions
+		cat := lookupFuncStreamability(ss, fc.Name, len(fc.Args))
+		if cat == "absorbing" || cat == "unclassified" {
+			return true
 		}
 	}
 	return false
@@ -586,18 +612,18 @@ func exprUsesFunctionOutsideGrounding(expr *xpath3.Expression, name string) bool
 
 // exprHasNonMotionlessStreamingPredicate checks for non-motionless predicates
 // on streaming steps, but NOT on grounded data (after snapshot/copy-of/tokenize etc.).
-func exprHasNonMotionlessStreamingPredicate(expr *xpath3.Expression) bool {
+func exprHasNonMotionlessStreamingPredicate(ss *Stylesheet, expr *xpath3.Expression) bool {
 	if expr == nil {
 		return false
 	}
 	found := false
-	walkExprCheckPredicates(expr.AST(), false, &found)
+	walkExprCheckPredicates(ss, expr.AST(), false, &found)
 	return found
 }
 
 // walkExprCheckPredicates walks the AST looking for non-motionless predicates
 // on streaming (non-grounded) steps.
-func walkExprCheckPredicates(expr xpath3.Expr, grounded bool, found *bool) {
+func walkExprCheckPredicates(ss *Stylesheet, expr xpath3.Expr, grounded bool, found *bool) {
 	if expr == nil || *found {
 		return
 	}
@@ -608,7 +634,7 @@ func walkExprCheckPredicates(expr xpath3.Expr, grounded bool, found *bool) {
 		if !grounded {
 			for _, step := range e.Steps {
 				for _, pred := range step.Predicates {
-					if predicateIsNonMotionless(pred) {
+					if predicateIsNonMotionlessSS(ss, pred) {
 						*found = true
 						return
 					}
@@ -619,75 +645,87 @@ func walkExprCheckPredicates(expr xpath3.Expr, grounded bool, found *bool) {
 		// Variable references are always grounded — they hold materialized
 		// sequences, not streaming nodes. Treat them like grounding exprs.
 		_, isVarRef := derefXPathExpr(e.Expr).(xpath3.VariableExpr)
-		g := grounded || isGroundingExpr(e.Expr) || isAtomicResultExpr(e.Expr) || isVarRef
-		walkExprCheckPredicates(e.Expr, grounded, found)
+		g := grounded || isGroundingExprSS(ss, e.Expr) || isAtomicResultExpr(e.Expr) || isVarRef
+		walkExprCheckPredicates(ss, e.Expr, grounded, found)
 		if !g {
 			for _, pred := range e.Predicates {
-				if predicateIsNonMotionless(pred) {
+				if predicateIsNonMotionlessSS(ss, pred) {
 					*found = true
 					return
 				}
 			}
 		}
 	case xpath3.SimpleMapExpr:
-		walkExprCheckPredicates(e.Left, grounded, found)
+		walkExprCheckPredicates(ss, e.Left, grounded, found)
 		// RHS of ! gets individual items — check if LHS produces grounded data
 		// Atomic result functions like tokenize() also ground the RHS
-		g := grounded || isGroundingExpr(e.Left) || isAtomicResultExpr(e.Left)
-		walkExprCheckPredicates(e.Right, g, found)
+		g := grounded || isGroundingExprSS(ss, e.Left) || isAtomicResultExpr(e.Left)
+		walkExprCheckPredicates(ss, e.Right, g, found)
 	case xpath3.PathStepExpr:
-		walkExprCheckPredicates(e.Left, grounded, found)
-		g := grounded || isGroundingExpr(e.Left) || isAtomicResultExpr(e.Left)
-		walkExprCheckPredicates(e.Right, g, found)
+		walkExprCheckPredicates(ss, e.Left, grounded, found)
+		g := grounded || isGroundingExprSS(ss, e.Left) || isAtomicResultExpr(e.Left)
+		walkExprCheckPredicates(ss, e.Right, g, found)
 	case xpath3.FunctionCall:
 		// Function arguments are still streaming — only grounding functions
 		// (snapshot, copy-of) ground their input.
-		g := grounded || isGroundingExpr(e)
+		g := grounded || isGroundingExprSS(ss, e)
 		for _, arg := range e.Args {
-			walkExprCheckPredicates(arg, g, found)
+			walkExprCheckPredicates(ss, arg, g, found)
+		}
+		// For user-defined inspection functions, predicates on the call
+		// are motionless since the result is atomic/upward.
+		if e.Prefix != "" {
+			cat := lookupFuncStreamability(ss, e.Name, len(e.Args))
+			if cat == "inspection" || cat == "ascent" {
+				return
+			}
 		}
 	case xpath3.PathExpr:
-		walkExprCheckPredicates(e.Filter, grounded, found)
+		walkExprCheckPredicates(ss, e.Filter, grounded, found)
 		if e.Path != nil {
-			g := grounded || isGroundingExpr(e.Filter)
+			g := grounded || isGroundingExprSS(ss, e.Filter)
 			lp := *e.Path
-			walkExprCheckPredicates(lp, g, found)
+			walkExprCheckPredicates(ss, lp, g, found)
 		}
 	case xpath3.BinaryExpr:
-		walkExprCheckPredicates(e.Left, grounded, found)
-		walkExprCheckPredicates(e.Right, grounded, found)
+		walkExprCheckPredicates(ss, e.Left, grounded, found)
+		walkExprCheckPredicates(ss, e.Right, grounded, found)
 	case xpath3.UnaryExpr:
-		walkExprCheckPredicates(e.Operand, grounded, found)
+		walkExprCheckPredicates(ss, e.Operand, grounded, found)
 	case xpath3.ConcatExpr:
-		walkExprCheckPredicates(e.Left, grounded, found)
-		walkExprCheckPredicates(e.Right, grounded, found)
+		walkExprCheckPredicates(ss, e.Left, grounded, found)
+		walkExprCheckPredicates(ss, e.Right, grounded, found)
 	case xpath3.UnionExpr:
-		walkExprCheckPredicates(e.Left, grounded, found)
-		walkExprCheckPredicates(e.Right, grounded, found)
+		walkExprCheckPredicates(ss, e.Left, grounded, found)
+		walkExprCheckPredicates(ss, e.Right, grounded, found)
 	case xpath3.IfExpr:
-		walkExprCheckPredicates(e.Cond, grounded, found)
-		walkExprCheckPredicates(e.Then, grounded, found)
-		walkExprCheckPredicates(e.Else, grounded, found)
+		walkExprCheckPredicates(ss, e.Cond, grounded, found)
+		walkExprCheckPredicates(ss, e.Then, grounded, found)
+		walkExprCheckPredicates(ss, e.Else, grounded, found)
 	case xpath3.SequenceExpr:
 		for _, item := range e.Items {
-			walkExprCheckPredicates(item, grounded, found)
+			walkExprCheckPredicates(ss, item, grounded, found)
 		}
 	case xpath3.FLWORExpr:
 		for _, clause := range e.Clauses {
 			switch c := clause.(type) {
 			case xpath3.ForClause:
-				walkExprCheckPredicates(c.Expr, grounded, found)
+				walkExprCheckPredicates(ss, c.Expr, grounded, found)
 			case xpath3.LetClause:
-				walkExprCheckPredicates(c.Expr, grounded, found)
+				walkExprCheckPredicates(ss, c.Expr, grounded, found)
 			}
 		}
-		walkExprCheckPredicates(e.Return, grounded, found)
+		walkExprCheckPredicates(ss, e.Return, grounded, found)
 	}
 }
 
 // predicateIsNonMotionless returns true if a predicate expression navigates
 // downward (uses child/descendant axes), uses last(), or accesses the context item.
 func predicateIsNonMotionless(pred xpath3.Expr) bool {
+	return predicateIsNonMotionlessSS(nil, pred)
+}
+
+func predicateIsNonMotionlessSS(ss *Stylesheet, pred xpath3.Expr) bool {
 	nonMotionless := false
 	xpath3.WalkExpr(pred, func(e xpath3.Expr) bool {
 		if nonMotionless {
@@ -722,6 +760,14 @@ func predicateIsNonMotionless(pred xpath3.Expr) bool {
 					return false // skip children — this whole call is motionless
 				}
 			}
+			// User-defined functions with motionless streamability annotations
+			// (inspection, ascent, filter) are motionless in predicates.
+			if v.Prefix != "" {
+				cat := lookupFuncStreamability(ss, v.Name, len(v.Args))
+				if cat == "inspection" || cat == "ascent" || cat == "filter" {
+					return false // skip children — the function is motionless
+				}
+			}
 		case xpath3.ContextItemExpr:
 			// "." in a predicate means the predicate accesses the context item.
 			// This is consuming (reads the string value / content).
@@ -735,7 +781,7 @@ func predicateIsNonMotionless(pred xpath3.Expr) bool {
 
 // checkMultipleDownwardInst checks if an instruction has multiple consuming
 // operations that would require reading the stream multiple times.
-func checkMultipleDownwardInst(inst Instruction) error {
+func checkMultipleDownwardInst(ss *Stylesheet, inst Instruction) error {
 	switch v := inst.(type) {
 	case *ForkInst:
 		// xsl:fork is specifically designed to allow multiple consuming branches.
@@ -743,7 +789,7 @@ func checkMultipleDownwardInst(inst Instruction) error {
 		// downward selections across branches are permitted.
 		// However, within a single branch, multiple downward selections are still an error.
 		for _, branch := range v.Branches {
-			branchDown := countDownwardInInstructions(branch)
+			branchDown := countDownwardInInstructions(ss, branch)
 			if branchDown > 1 {
 				return staticError(errCodeXTSE3430,
 					"xsl:fork branch has multiple consuming operations, which is not streamable")
@@ -752,7 +798,7 @@ func checkMultipleDownwardInst(inst Instruction) error {
 
 	case *IterateInst:
 		// Within xsl:iterate body, check for multiple downward selections.
-		bodyDown := countDownwardInInstructions(v.Body)
+		bodyDown := countDownwardInInstructions(ss, v.Body)
 		if bodyDown > 1 {
 			return staticError(errCodeXTSE3430,
 				"xsl:iterate body has multiple downward selections, which is not streamable")
@@ -868,7 +914,7 @@ func checkUseAttributeSetsStreamable(ss *Stylesheet, inst Instruction) error {
 	// Count downward selections in the instruction's own expressions
 	instDown := 0
 	for _, expr := range getInstructionExprs(inst) {
-		instDown += countStreamingDownwardSelections(expr.AST())
+		instDown += countStreamingDownwardSelections(ss, expr.AST())
 	}
 
 	for _, name := range attrSetNames {
@@ -880,7 +926,7 @@ func checkUseAttributeSetsStreamable(ss *Stylesheet, inst Instruction) error {
 		// Check individual expressions for streamability violations
 		for _, attrInst := range asDef.Attrs {
 			for _, expr := range getInstructionExprs(attrInst) {
-				if err := checkStreamableExpr(expr); err != nil {
+				if err := checkStreamableExpr(ss, expr); err != nil {
 					return staticError(errCodeXTSE3430,
 						"attribute set %q is not streamable: %s", asDef.Name, err.Error())
 				}
@@ -903,7 +949,7 @@ func checkUseAttributeSetsStreamable(ss *Stylesheet, inst Instruction) error {
 			}
 			for _, attrInst := range used.Attrs {
 				for _, expr := range getInstructionExprs(attrInst) {
-					if err := checkStreamableExpr(expr); err != nil {
+					if err := checkStreamableExpr(ss, expr); err != nil {
 						return staticError(errCodeXTSE3430,
 							"attribute set %q is not streamable: %s", usedName, err.Error())
 					}
@@ -920,7 +966,7 @@ func countAttributeSetDownward(ss *Stylesheet, asDef *AttributeSetDef) int {
 	total := 0
 	for _, attrInst := range asDef.Attrs {
 		for _, expr := range getInstructionExprs(attrInst) {
-			total += countStreamingDownwardSelections(expr.AST())
+			total += countStreamingDownwardSelections(ss, expr.AST())
 		}
 	}
 	// Include transitively used attribute sets
@@ -1231,7 +1277,7 @@ func exprUsesCurrentGroup(expr *xpath3.Expression) bool {
 // checkMapStreamable checks xsl:map instructions for streamability violations:
 // - Multiple map-entry children with consuming expressions
 // - Non-map-entry children (like xsl:if wrapping map-entry)
-func checkMapStreamable(_ *Stylesheet, inst Instruction) error {
+func checkMapStreamable(ss *Stylesheet, inst Instruction) error {
 	mapInst, ok := inst.(*MapInst)
 	if !ok {
 		return nil
@@ -1243,12 +1289,12 @@ func checkMapStreamable(_ *Stylesheet, inst Instruction) error {
 		if me, ok := child.(*MapEntryInst); ok {
 			consuming := false
 			if me.Select != nil {
-				if countStreamingDownwardSelections(me.Select.AST()) > 0 {
+				if countStreamingDownwardSelections(ss, me.Select.AST()) > 0 {
 					consuming = true
 				}
 			}
 			if me.Key != nil {
-				if countStreamingDownwardSelections(me.Key.AST()) > 0 {
+				if countStreamingDownwardSelections(ss, me.Key.AST()) > 0 {
 					consuming = true
 				}
 			}
@@ -1256,7 +1302,7 @@ func checkMapStreamable(_ *Stylesheet, inst Instruction) error {
 			if !consuming {
 				for _, meChild := range me.Body {
 					for _, expr := range getInstructionExprs(meChild) {
-						if countStreamingDownwardSelections(expr.AST()) > 0 {
+						if countStreamingDownwardSelections(ss, expr.AST()) > 0 {
 							consuming = true
 							break
 						}
@@ -1362,11 +1408,11 @@ func exprReferencesContextItem(expr xpath3.Expr) bool {
 }
 
 // countDownwardInInstructions counts total streaming downward selections across instructions.
-func countDownwardInInstructions(instructions []Instruction) int {
+func countDownwardInInstructions(ss *Stylesheet, instructions []Instruction) int {
 	total := 0
 	for _, inst := range instructions {
 		for _, expr := range getInstructionExprs(inst) {
-			total += countStreamingDownwardSelections(expr.AST())
+			total += countStreamingDownwardSelections(ss, expr.AST())
 		}
 	}
 	return total
@@ -1779,11 +1825,11 @@ func checkShallowDescentFunction(fn *XSLFunction) error {
 // countStreamingDownwardSelections counts downward selections in an expression
 // that are NOT inside a grounding function (snapshot, copy-of).
 // Selections inside grounding functions operate on grounded data and don't consume the stream.
-func countStreamingDownwardSelections(expr xpath3.Expr) int {
-	return countStreamingDownwardSelectionsInner(derefXPathExpr(expr), false)
+func countStreamingDownwardSelections(ss *Stylesheet, expr xpath3.Expr) int {
+	return countStreamingDownwardSelectionsInner(ss, derefXPathExpr(expr), false)
 }
 
-func countStreamingDownwardSelectionsInner(expr xpath3.Expr, grounded bool) int {
+func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, grounded bool) int {
 	expr = derefXPathExpr(expr)
 	if grounded {
 		return 0 // inside a grounding function — nothing counts
@@ -1799,20 +1845,20 @@ func countStreamingDownwardSelectionsInner(expr xpath3.Expr, grounded bool) int 
 				hasDown = true
 			}
 			for _, pred := range step.Predicates {
-				count += countStreamingDownwardSelectionsInner(pred, false)
+				count += countStreamingDownwardSelectionsInner(ss, pred, false)
 			}
 		}
 		if hasDown {
 			count++
 		}
 	case xpath3.PathStepExpr:
-		leftGrounding := isGroundingExpr(e.Left)
+		leftGrounding := isGroundingExprSS(ss, e.Left)
 		// A path step like A/B is a single selection path — the left side
 		// provides context for the right side. Count the right side's
 		// distinct downward selections; if the left side also has downward
 		// steps, they combine into one path, not two separate paths.
-		leftCount := countStreamingDownwardSelectionsInner(e.Left, false)
-		rightCount := countStreamingDownwardSelectionsInner(e.Right, leftGrounding)
+		leftCount := countStreamingDownwardSelectionsInner(ss, e.Left, false)
+		rightCount := countStreamingDownwardSelectionsInner(ss, e.Right, leftGrounding)
 		if leftCount > 0 && rightCount > 0 {
 			// Left and right form a single combined path.
 			// The right side may have multiple branches (e.g., sequence expressions).
@@ -1829,52 +1875,92 @@ func countStreamingDownwardSelectionsInner(expr xpath3.Expr, grounded bool) int 
 			count++
 		}
 	case xpath3.PathExpr:
-		filterGrounding := isGroundingExpr(e.Filter)
-		count += countStreamingDownwardSelectionsInner(e.Filter, false)
+		filterGrounding := isGroundingExprSS(ss, e.Filter)
+		filterCount := countStreamingDownwardSelectionsInner(ss, e.Filter, false)
+		pathCount := 0
 		if e.Path != nil {
 			lp := *e.Path
-			count += countStreamingDownwardSelectionsInner(lp, filterGrounding)
+			pathCount = countStreamingDownwardSelectionsInner(ss, lp, filterGrounding)
+		}
+		// When the filter and path both have downward selections,
+		// they form a single combined path (like PathStepExpr).
+		if filterCount > 0 && pathCount > 0 {
+			count += pathCount
+		} else {
+			count += filterCount + pathCount
 		}
 	case xpath3.FunctionCall:
+		// Check user-defined function streamability annotations.
+		// Functions with filter/inspection/ascent annotations act as
+		// motionless steps and do not add downward selections.
+		// Absorbing functions ground their arguments.
+		if e.Prefix != "" {
+			cat := lookupFuncStreamability(ss, e.Name, len(e.Args))
+			switch cat {
+			case "filter", "shallow-descent":
+				// Filter/shallow-descent: the function itself is a single
+				// streaming step. Its argument provides the streaming input.
+				// Count as 0 additional downward selections from the function.
+				for _, arg := range e.Args {
+					count += countStreamingDownwardSelectionsInner(ss, arg, false)
+				}
+				return count
+			case "inspection", "ascent":
+				// Inspection/ascent: motionless, no downward selection.
+				return 0
+			case "absorbing":
+				// Absorbing: grounds arguments.
+				for _, arg := range e.Args {
+					count += countStreamingDownwardSelectionsInner(ss, arg, true)
+				}
+				return count
+			case "unclassified":
+				// Unclassified with copy-of: grounds arguments.
+				for _, arg := range e.Args {
+					count += countStreamingDownwardSelectionsInner(ss, arg, true)
+				}
+				return count
+			}
+		}
 		g := isGroundingExpr(e)
 		for _, arg := range e.Args {
-			count += countStreamingDownwardSelectionsInner(arg, g)
+			count += countStreamingDownwardSelectionsInner(ss, arg, g)
 		}
 	case xpath3.BinaryExpr:
-		count += countStreamingDownwardSelectionsInner(e.Left, false)
-		count += countStreamingDownwardSelectionsInner(e.Right, false)
+		count += countStreamingDownwardSelectionsInner(ss, e.Left, false)
+		count += countStreamingDownwardSelectionsInner(ss, e.Right, false)
 	case xpath3.ConcatExpr:
-		count += countStreamingDownwardSelectionsInner(e.Left, false)
-		count += countStreamingDownwardSelectionsInner(e.Right, false)
+		count += countStreamingDownwardSelectionsInner(ss, e.Left, false)
+		count += countStreamingDownwardSelectionsInner(ss, e.Right, false)
 	case xpath3.SimpleMapExpr:
-		count += countStreamingDownwardSelectionsInner(e.Left, false)
+		count += countStreamingDownwardSelectionsInner(ss, e.Left, false)
 		// The RHS of ! receives individual items from the LHS.
 		// If the LHS is a grounding expression, the RHS operates on
 		// grounded data and doesn't consume the stream.
-		leftGrounding := isGroundingExpr(e.Left)
-		count += countStreamingDownwardSelectionsInner(e.Right, leftGrounding)
+		leftGrounding := isGroundingExprSS(ss, e.Left)
+		count += countStreamingDownwardSelectionsInner(ss, e.Right, leftGrounding)
 	case xpath3.UnionExpr:
 		// A union of two downward selections is a single combined streaming
 		// selection (the result is one merged node sequence), so count at
 		// most 1 regardless of how many operands have downward paths.
-		leftDown := countStreamingDownwardSelectionsInner(e.Left, false)
-		rightDown := countStreamingDownwardSelectionsInner(e.Right, false)
+		leftDown := countStreamingDownwardSelectionsInner(ss, e.Left, false)
+		rightDown := countStreamingDownwardSelectionsInner(ss, e.Right, false)
 		if leftDown > 0 || rightDown > 0 {
 			count++
 		}
 	case xpath3.FilterExpr:
-		count += countStreamingDownwardSelectionsInner(e.Expr, false)
+		count += countStreamingDownwardSelectionsInner(ss, e.Expr, false)
 		for _, pred := range e.Predicates {
-			count += countStreamingDownwardSelectionsInner(pred, false)
+			count += countStreamingDownwardSelectionsInner(ss, pred, false)
 		}
 	case xpath3.SequenceExpr:
 		for _, item := range e.Items {
-			count += countStreamingDownwardSelectionsInner(item, false)
+			count += countStreamingDownwardSelectionsInner(ss, item, false)
 		}
 	case xpath3.IfExpr:
-		count += countStreamingDownwardSelectionsInner(e.Cond, false)
-		thenCount := countStreamingDownwardSelectionsInner(e.Then, false)
-		elseCount := countStreamingDownwardSelectionsInner(e.Else, false)
+		count += countStreamingDownwardSelectionsInner(ss, e.Cond, false)
+		thenCount := countStreamingDownwardSelectionsInner(ss, e.Then, false)
+		elseCount := countStreamingDownwardSelectionsInner(ss, e.Else, false)
 		if thenCount > elseCount {
 			count += thenCount
 		} else {
@@ -1884,12 +1970,12 @@ func countStreamingDownwardSelectionsInner(expr xpath3.Expr, grounded bool) int 
 		for _, clause := range e.Clauses {
 			switch c := clause.(type) {
 			case xpath3.ForClause:
-				count += countStreamingDownwardSelectionsInner(c.Expr, false)
+				count += countStreamingDownwardSelectionsInner(ss, c.Expr, false)
 			case xpath3.LetClause:
-				count += countStreamingDownwardSelectionsInner(c.Expr, false)
+				count += countStreamingDownwardSelectionsInner(ss, c.Expr, false)
 			}
 		}
-		count += countStreamingDownwardSelectionsInner(e.Return, false)
+		count += countStreamingDownwardSelectionsInner(ss, e.Return, false)
 	}
 	return count
 }
