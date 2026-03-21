@@ -1127,6 +1127,12 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 				continue
 			}
 
+			// XTDE3400: cyclic dependency among accumulators.
+			if def.CyclicDeps {
+				return dynamicError(errCodeXTDE3400,
+					"accumulator %q has a cyclic dependency on itself or other accumulators", def.Name)
+			}
+
 			currentValue := ec.accumulatorState[name]
 			if rule.New {
 				currentValue = xpath3.EmptySequence()

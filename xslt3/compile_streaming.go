@@ -499,6 +499,12 @@ func (c *compiler) compileAccumulatorRule(parent *AccumulatorDef, elem *helium.E
 		return staticError(errCodeXTSE0110, "xsl:accumulator-rule requires match attribute")
 	}
 
+	// XPST0008: $value is only in scope in the select expression/body of
+	// an accumulator-rule, not in the match pattern. Reject it early.
+	if containsVarRef(matchAttr, "value") {
+		return staticError("XPST0008", "variable $value is not in scope in accumulator-rule match pattern")
+	}
+
 	matchPat, err := compilePattern(matchAttr, c.nsBindings, c.xpathDefaultNS)
 	if err != nil {
 		return err
@@ -534,11 +540,44 @@ func (c *compiler) compileAccumulatorRule(parent *AccumulatorDef, elem *helium.E
 	return nil
 }
 
+// containsVarRef checks whether a string contains a variable reference $name
+// that is NOT inside a string literal.
+func containsVarRef(s, name string) bool {
+	ref := "$" + name
+	inSingle := false
+	inDouble := false
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		case '$':
+			if !inSingle && !inDouble && i+len(ref)-1 < len(s) {
+				if s[i:i+len(ref)] == ref {
+					// Check that the next char is not a name char
+					end := i + len(ref)
+					if end >= len(s) || !isNameChar(rune(s[end])) {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
 // sortAccumulatorOrder topologically sorts the accumulator evaluation order
 // so that accumulators that depend on others (via accumulator-before/after
 // calls in their rule expressions) are evaluated after their dependencies.
 // This ensures that when accumulator A calls accumulator-after('B'), B's
 // value for the current node has already been computed.
+// Cyclic dependencies (including self-references) are detected and the
+// involved accumulators are marked with CyclicDeps=true for XTDE3400.
 func sortAccumulatorOrder(ss *Stylesheet) {
 	if len(ss.accumulatorOrder) <= 1 {
 		return
@@ -557,64 +596,52 @@ func sortAccumulatorOrder(ss *Stylesheet) {
 			if src == "" {
 				continue
 			}
-			// Extract referenced accumulator names from the expression source
 			for _, ref := range extractAccumulatorRefs(src) {
 				resolved := resolveQName(ref, ss.namespaces)
-				if resolved != name {
-					if _, ok := ss.accumulators[resolved]; ok {
-						deps[name][resolved] = struct{}{}
-					}
+				if _, ok := ss.accumulators[resolved]; ok {
+					deps[name][resolved] = struct{}{}
 				}
 			}
 		}
 	}
 
-	// Topological sort using Kahn's algorithm
-	inDegree := make(map[string]int)
-	for _, name := range ss.accumulatorOrder {
-		inDegree[name] = 0
-	}
-	for name, d := range deps {
-		for dep := range d {
-			_ = name
-			inDegree[dep] = inDegree[dep] // ensure dep is in map
+	// Detect self-cycles: an accumulator that references itself.
+	for name := range deps {
+		if _, selfRef := deps[name][name]; selfRef {
+			if acc, ok := ss.accumulators[name]; ok {
+				acc.CyclicDeps = true
+			}
+			delete(deps[name], name)
 		}
 	}
-	// Count incoming edges: if A depends on B, then A has an edge from B,
-	// meaning B must come before A. So an edge B -> A means inDegree[A]++.
-	for name, d := range deps {
-		_ = name
-		for range d {
-			// name depends on each dep, so dep -> name edge
-		}
-	}
-	// Recompute: for each name that depends on dep, dep -> name means
-	// name's in-degree goes up.
-	for _, name := range ss.accumulatorOrder {
-		inDegree[name] = 0
-	}
-	for name, d := range deps {
-		inDegree[name] += 0 // ensure entry exists
-		for dep := range d {
-			_ = dep
-			// name depends on dep → dep must come before name
-			// This is an edge dep -> name
-		}
-	}
-	// Actually: the topological sort should output dependencies first.
-	// Use DFS-based post-order traversal for simplicity.
-	visited := make(map[string]bool)
+
+	// DFS-based topological sort with cycle detection.
+	// States: 0=unvisited, 1=visiting (on stack), 2=done
+	state := make(map[string]int)
 	var sorted []string
-	var visit func(string)
-	visit = func(name string) {
-		if visited[name] {
-			return
+	var visit func(string) bool
+	visit = func(name string) bool {
+		switch state[name] {
+		case 2:
+			return false // already processed
+		case 1:
+			return true // cycle detected
 		}
-		visited[name] = true
+		state[name] = 1
 		for dep := range deps[name] {
-			visit(dep)
+			if visit(dep) {
+				// Mark all accumulators in the cycle
+				if acc, ok := ss.accumulators[name]; ok {
+					acc.CyclicDeps = true
+				}
+				if acc, ok := ss.accumulators[dep]; ok {
+					acc.CyclicDeps = true
+				}
+			}
 		}
+		state[name] = 2
 		sorted = append(sorted, name)
+		return false
 	}
 	for _, name := range ss.accumulatorOrder {
 		visit(name)
