@@ -115,6 +115,10 @@ func evalLocationPath(evalFn exprEvaluator, ec *evalContext, lp *LocationPath) (
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		root := ixpath.DocumentRoot(ec.node)
+		// XPDY0050: the root of the context node's tree must be a document node.
+		if root.Type() != helium.DocumentNode {
+			return nil, &XPathError{Code: errCodeXPDY0050, Message: "root of the tree containing the context node is not a document node"}
+		}
 		nodes = []helium.Node{root}
 	} else {
 		if ixpath.IsNilNode(ec.node) {
@@ -150,6 +154,10 @@ func evalVMLocationPath(evalFn exprEvaluator, ec *evalContext, lp vmLocationPath
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		root := ixpath.DocumentRoot(ec.node)
+		// XPDY0050: the root of the context node's tree must be a document node.
+		if root.Type() != helium.DocumentNode {
+			return nil, &XPathError{Code: errCodeXPDY0050, Message: "root of the tree containing the context node is not a document node"}
+		}
 		nodes = []helium.Node{root}
 	} else {
 		if ixpath.IsNilNode(ec.node) {

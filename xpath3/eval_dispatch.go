@@ -3,6 +3,7 @@ package xpath3
 import (
 	"fmt"
 
+	"github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -32,7 +33,12 @@ func evalRootExpr(ec *evalContext) (Sequence, error) {
 	if ixpath.IsNilNode(ec.node) {
 		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 	}
-	return Sequence{nodeItemFor(ec, ixpath.DocumentRoot(ec.node))}, nil
+	root := ixpath.DocumentRoot(ec.node)
+	// XPDY0050: the root of the context node's tree must be a document node.
+	if root.Type() != helium.DocumentNode {
+		return nil, &XPathError{Code: errCodeXPDY0050, Message: "root of the tree containing the context node is not a document node"}
+	}
+	return Sequence{nodeItemFor(ec, root)}, nil
 }
 
 func dispatchExpr(evalFn exprEvaluator, ec *evalContext, expr Expr) (Sequence, error) {
