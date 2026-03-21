@@ -8,42 +8,45 @@ import (
 	"github.com/lestrrat-go/helium/xslt3"
 )
 
-func Example_xslt3_transform() {
-	const stylesheetSrc = `<?xml version="1.0"?>
+func Example_xslt3_with_uri_resolver() {
+	const mainStylesheetSrc = `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:include href="common.xsl"/>
   <xsl:template match="/">
-    <products>
+    <items>
       <xsl:apply-templates select="catalog/item"/>
-    </products>
-  </xsl:template>
-  <xsl:template match="item">
-    <product>
-      <xsl:value-of select="name"/>
-    </product>
+    </items>
   </xsl:template>
 </xsl:stylesheet>`
 
-	const sourceSrc = `<?xml version="1.0"?>
-<catalog>
-  <item><name>Tea</name></item>
-  <item><name>Coffee</name></item>
-</catalog>`
+	const includedStylesheetSrc = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="item">
+    <item>
+      <xsl:value-of select="@code"/>
+    </item>
+  </xsl:template>
+</xsl:stylesheet>`
 
 	ctx := context.Background()
 
-	stylesheetDoc, err := helium.Parse(ctx, []byte(stylesheetSrc))
+	stylesheetDoc, err := helium.Parse(ctx, []byte(mainStylesheetSrc))
 	if err != nil {
 		fmt.Printf("failed to parse stylesheet: %s\n", err)
 		return
 	}
 
-	stylesheet, err := xslt3.CompileStylesheet(ctx, stylesheetDoc)
+	compileCtx := xslt3.WithCompileBaseURI(ctx, "/virtual/main.xsl")
+	compileCtx = xslt3.WithCompileURIResolver(compileCtx, exampleXSLTResolver{
+		"/virtual/common.xsl": includedStylesheetSrc,
+	})
+	stylesheet, err := xslt3.CompileStylesheet(compileCtx, stylesheetDoc)
 	if err != nil {
 		fmt.Printf("failed to compile stylesheet: %s\n", err)
 		return
 	}
 
-	sourceDoc, err := helium.Parse(ctx, []byte(sourceSrc))
+	sourceDoc, err := helium.Parse(ctx, []byte(`<catalog><item code="A1"/><item code="B2"/></catalog>`))
 	if err != nil {
 		fmt.Printf("failed to parse source: %s\n", err)
 		return
@@ -63,5 +66,5 @@ func Example_xslt3_transform() {
 
 	fmt.Println(out)
 	// Output:
-	// <products><product>Tea</product><product>Coffee</product></products>
+	// <items><item>A1</item><item>B2</item></items>
 }
