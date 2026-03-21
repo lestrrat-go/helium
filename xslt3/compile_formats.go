@@ -177,7 +177,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	if name != "" {
 		name = resolveQName(name, c.nsBindings)
 	}
-	methodStr := strings.ToLower(getAttr(elem, "method"))
+	methodStr := strings.TrimSpace(strings.ToLower(getAttr(elem, "method")))
 	outDef := &OutputDef{
 		Name:           name,
 		Method:         methodStr,

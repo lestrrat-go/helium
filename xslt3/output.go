@@ -883,31 +883,58 @@ const xhtmlNS = "http://www.w3.org/1999/xhtml"
 
 // normalizeXHTMLNamespace walks the document and converts prefixed XHTML
 // namespace elements to use the default namespace (unprefixed), as required
-// by the XHTML output method.
+// by the XHTML output method. The default namespace declaration is added
+// only to the root element; descendants inherit it.
 func normalizeXHTMLNamespace(doc *helium.Document) {
+	// First pass: find all XHTML-prefixed elements and track prefixes to remove.
+	// Also find/create a shared default namespace node for XHTML.
+	var sharedNS *helium.Namespace
+	rootDone := false
+
 	_ = helium.Walk(doc, func(n helium.Node) error {
 		elem, ok := n.(*helium.Element)
 		if !ok {
 			return nil
 		}
-		if string(elem.URI()) == xhtmlNS && string(elem.Prefix()) != "" {
-			oldPrefix := string(elem.Prefix())
-			// Remove the prefixed namespace declaration
-			elem.RemoveNamespaceByPrefix(oldPrefix)
-			// Set the element to use default namespace (no prefix)
-			_ = elem.SetActiveNamespace("", xhtmlNS)
-			// Ensure default namespace declaration is present
-			hasDefaultNS := false
+		if string(elem.URI()) != xhtmlNS {
+			return nil
+		}
+		if string(elem.Prefix()) == "" {
+			// Already using default namespace. Capture the NS node if we
+			// haven't seen one yet.
+			if sharedNS == nil {
+				for _, ns := range elem.Namespaces() {
+					if ns.Prefix() == "" && ns.URI() == xhtmlNS {
+						sharedNS = ns
+						break
+					}
+				}
+			}
+			return nil
+		}
+
+		oldPrefix := string(elem.Prefix())
+		// Remove the prefixed namespace declaration from this element
+		elem.RemoveNamespaceByPrefix(oldPrefix)
+
+		if !rootDone {
+			// First prefixed element: declare default XHTML namespace here
+			_ = elem.DeclareNamespace("", xhtmlNS)
+			// Find the namespace node we just created
 			for _, ns := range elem.Namespaces() {
 				if ns.Prefix() == "" && ns.URI() == xhtmlNS {
-					hasDefaultNS = true
+					sharedNS = ns
 					break
 				}
 			}
-			if !hasDefaultNS {
-				_ = elem.DeclareNamespace("", xhtmlNS)
-			}
+			rootDone = true
 		}
+
+		// Set the element's namespace to the shared default NS node
+		if sharedNS != nil {
+			elem.SetNs(sharedNS)
+		}
+
 		return nil
 	})
 }

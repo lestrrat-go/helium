@@ -395,6 +395,12 @@ func (n *node) SetActiveNamespace(prefix, uri string) error {
 	return nil
 }
 
+// SetNs sets the node's active namespace to an existing Namespace object
+// without creating a new declaration.
+func (n *node) SetNs(ns *Namespace) {
+	n.ns = ns
+}
+
 func (n node) Prefix() string {
 	if ns := n.ns; ns != nil {
 		return ns.Prefix()
