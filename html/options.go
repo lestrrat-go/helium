@@ -45,9 +45,10 @@ func WithNoWarning() ParseOption {
 
 // dumpConfig holds configuration for HTML serialization.
 type dumpConfig struct {
-	noDefaultDTD bool
-	noFormat     bool
-	preserveCase bool
+	noDefaultDTD        bool
+	noFormat            bool
+	preserveCase        bool
+	noEscapeURIAttributes bool
 }
 
 // WriteOption configures HTML serialization behavior.
@@ -73,5 +74,14 @@ func WithNoFormat() WriteOption {
 func WithPreserveCase() WriteOption {
 	return func(c *dumpConfig) {
 		c.preserveCase = true
+	}
+}
+
+// WithNoEscapeURIAttributes disables percent-encoding of non-ASCII characters
+// in URI attributes (href, src, action, etc.). Corresponds to
+// escape-uri-attributes="no" in the XSLT serialization spec.
+func WithNoEscapeURIAttributes() WriteOption {
+	return func(c *dumpConfig) {
+		c.noEscapeURIAttributes = true
 	}
 }

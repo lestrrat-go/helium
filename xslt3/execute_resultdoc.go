@@ -499,7 +499,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 	hasAny := inst.MethodAVT != nil || inst.Standalone != nil || inst.Indent != nil ||
 		inst.OmitXMLDeclaration != nil || inst.DoctypeSystem != nil || inst.DoctypePublic != nil ||
 		inst.CDATASectionElements != nil || inst.Encoding != nil || inst.OutputVersion != nil ||
-		inst.ByteOrderMark != nil
+		inst.ByteOrderMark != nil || inst.EscapeURIAttributes != nil
 	if !hasAny && inst.Format == "" {
 		return nil, nil
 	}
@@ -630,6 +630,15 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 		}
 		b, _ := parseXSDBool(strings.TrimSpace(v))
 		base.IncludeContentType = &b
+	}
+	if inst.EscapeURIAttributes != nil {
+		v, err := evalAVT(inst.EscapeURIAttributes)
+		if err != nil {
+			return nil, err
+		}
+		if b, ok := parseXSDBool(strings.TrimSpace(v)); ok {
+			base.EscapeURIAttributes = &b
+		}
 	}
 	return &base, nil
 }

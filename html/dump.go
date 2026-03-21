@@ -60,7 +60,7 @@ func WriteDoc(out io.Writer, doc *helium.Document, options ...WriteOption) error
 		_, _ = io.WriteString(out, defaultHTMLDTD)
 	}
 
-	d := htmlDumper{format: !cfg.noFormat, preserveCase: cfg.preserveCase}
+	d := htmlDumper{format: !cfg.noFormat, preserveCase: cfg.preserveCase, noEscapeURIAttributes: cfg.noEscapeURIAttributes}
 
 	// Serialize all children of the document
 	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
@@ -78,8 +78,9 @@ func WriteDoc(out io.Writer, doc *helium.Document, options ...WriteOption) error
 }
 
 type htmlDumper struct {
-	format       bool
-	preserveCase bool
+	format                bool
+	preserveCase          bool
+	noEscapeURIAttributes bool
 }
 
 // WriteNode serializes an HTML node to the writer
@@ -89,7 +90,7 @@ func WriteNode(out io.Writer, n helium.Node, options ...WriteOption) error {
 	for _, o := range options {
 		o(&cfg)
 	}
-	d := htmlDumper{format: !cfg.noFormat, preserveCase: cfg.preserveCase}
+	d := htmlDumper{format: !cfg.noFormat, preserveCase: cfg.preserveCase, noEscapeURIAttributes: cfg.noEscapeURIAttributes}
 	return d.dumpNode(out, n)
 }
 
@@ -387,7 +388,7 @@ func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 		val := attr.Value()
 		elemName := strings.ToLower(e.LocalName())
 		isURI := htmlURIAttrs[attrNameLower] || (attrNameLower == "name" && elemName == "a")
-		if isURI {
+		if isURI && !d.noEscapeURIAttributes {
 			val = uriEscapeStr(val)
 		}
 

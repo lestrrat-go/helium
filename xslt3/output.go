@@ -1119,10 +1119,14 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 
 	// For HTML5 without explicit doctype attrs, we need to serialize
 	// children manually to insert <!DOCTYPE html> before the first element.
+	noEscapeURI := outDef.EscapeURIAttributes != nil && !*outDef.EscapeURIAttributes
 	if isHTML5 && !hasDoctypeAttrs {
 		nodeOpts := []htmlpkg.WriteOption{
 			htmlpkg.WithNoFormat(),
 			htmlpkg.WithPreserveCase(),
+		}
+		if noEscapeURI {
+			nodeOpts = append(nodeOpts, htmlpkg.WithNoEscapeURIAttributes())
 		}
 		doctypeEmitted := false
 		for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
@@ -1144,6 +1148,9 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 		htmlpkg.WithNoDefaultDTD(),
 		htmlpkg.WithNoFormat(),
 		htmlpkg.WithPreserveCase(),
+	}
+	if noEscapeURI {
+		opts = append(opts, htmlpkg.WithNoEscapeURIAttributes())
 	}
 	return htmlpkg.WriteDoc(w, doc, opts...)
 }

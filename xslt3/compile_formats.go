@@ -251,13 +251,13 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		}
 		outDef.ByteOrderMark = b
 	}
-	// Validate other boolean output attributes.
-	for _, boolAttr := range []string{"escape-uri-attributes"} {
-		if v := getAttr(elem, boolAttr); v != "" {
-			if _, ok := parseXSDBool(v); !ok {
-				return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@%s", v, boolAttr)
-			}
+	// Parse escape-uri-attributes.
+	if v := getAttr(elem, "escape-uri-attributes"); v != "" {
+		b, ok := parseXSDBool(v)
+		if !ok {
+			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@escape-uri-attributes", v)
 		}
+		outDef.EscapeURIAttributes = &b
 	}
 	if v := getAttr(elem, "include-content-type"); v != "" {
 		b, ok := parseXSDBool(v)
