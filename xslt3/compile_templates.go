@@ -50,6 +50,12 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 
 	modeAttr := getAttr(elem, "mode")
 	if modeAttr != "" {
+		// Validate mode names are valid QName tokens.
+		for _, m := range strings.Fields(modeAttr) {
+			if m[0] != '#' && !isValidQName(m) {
+				return staticError("XTSE0550", "invalid mode name %q on xsl:template", m)
+			}
+		}
 		// Resolve mode QNames to Clark notation for namespace-aware matching
 		tmpl.Mode = c.resolveMode(modeAttr)
 	}
