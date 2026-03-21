@@ -644,6 +644,13 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 		return staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
 	}
 
+	// XTSE0020: validate static attribute (boolean)
+	if staticVal, hasStatic := elem.GetAttribute("static"); hasStatic {
+		if err := validateBooleanAttr("xsl:variable", "static", staticVal); err != nil {
+			return err
+		}
+	}
+
 	// XTSE0020: static variable must not have visibility attribute
 	if xsdBoolTrue(getAttr(elem, "static")) {
 		if vis := getAttr(elem, "visibility"); vis != "" {

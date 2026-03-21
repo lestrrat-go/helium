@@ -68,8 +68,10 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 			if err != nil {
 				return nil, err
 			}
-			inst.Sort = append(inst.Sort, sk)
-			sortCount++
+			if sk != nil {
+				inst.Sort = append(inst.Sort, sk)
+				sortCount++
+			}
 		case "with-param":
 			wp, err := c.compileWithParam(childElem)
 			if err != nil {
@@ -273,8 +275,10 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 			if err != nil {
 				return nil, err
 			}
-			inst.Sort = append(inst.Sort, sk)
-			sortCount++
+			if sk != nil {
+				inst.Sort = append(inst.Sort, sk)
+				sortCount++
+			}
 		} else {
 			pastSortContent = true
 		}
@@ -329,6 +333,17 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 }
 
 func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
+	// Evaluate use-when on xsl:sort before compiling the sort key.
+	if uw := getAttr(elem, "use-when"); uw != "" {
+		include, err := c.evaluateUseWhen(uw)
+		if err != nil {
+			return nil, err
+		}
+		if !include {
+			return nil, nil
+		}
+	}
+
 	// Validate boolean attribute: stable (including empty string).
 	// Skip validation for AVTs (contain '{' and '}') since the value
 	// is determined at runtime.
@@ -511,8 +526,10 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*PerformSortInst, e
 			if err != nil {
 				return nil, err
 			}
-			inst.Sort = append(inst.Sort, sk)
-			sortCount++
+			if sk != nil {
+				inst.Sort = append(inst.Sort, sk)
+				sortCount++
+			}
 		} else {
 			pastSort = true
 			childInst, err := c.compileInstruction(childElem)
@@ -741,8 +758,10 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 				if sortErr != nil {
 					return nil, sortErr
 				}
-				inst.Sort = append(inst.Sort, sk)
-				sortCount++
+				if sk != nil {
+					inst.Sort = append(inst.Sort, sk)
+					sortCount++
+				}
 				continue
 			}
 			childInst, childErr := c.compileInstruction(v)
