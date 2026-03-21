@@ -381,6 +381,9 @@ func appendAxisNodeMatches(dst []helium.Node, ec *evalContext, node helium.Node,
 		}
 		traversed := 0
 		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			if !ixpath.IsXDMChild(child) {
+				continue
+			}
 			traversed++
 			if matchNodeTest(nodeTest, child, axis, ec) {
 				dst = append(dst, child)
