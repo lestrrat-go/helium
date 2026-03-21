@@ -122,6 +122,8 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		} else {
 			err = serializeHTML(target, doc, outDef)
 		}
+	case "xhtml":
+		err = serializeXHTML(target, doc, outDef, charMap)
 	default:
 		err = serializeXML(target, doc, outDef, charMap)
 	}
@@ -530,6 +532,53 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 		htmlpkg.WithPreserveCase(),
 	}
 	return htmlpkg.WriteDoc(w, doc, opts...)
+}
+
+// serializeXHTML serializes using the XHTML output method.
+// XHTML is essentially XML with HTML-specific additions:
+// - meta charset tag in <head>
+// - For HTML5, simplified DOCTYPE
+// - Self-closing void elements with a space before />
+func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
+	isHTML5 := outDef.HTMLVersion == "5" || outDef.HTMLVersion == "5.0"
+
+	// For HTML5, replace the doctype with <!DOCTYPE html>
+	if isHTML5 {
+		// Override doctype: for XHTML5, the spec says to emit <!DOCTYPE html>
+		// regardless of doctype-public/doctype-system when html-version="5".
+		outDef = &OutputDef{
+			Name:               outDef.Name,
+			Method:             outDef.Method,
+			MethodExplicit:     outDef.MethodExplicit,
+			Encoding:           outDef.Encoding,
+			Indent:             outDef.Indent,
+			OmitDeclaration:    outDef.OmitDeclaration,
+			Standalone:         outDef.Standalone,
+			CDATASections:      outDef.CDATASections,
+			MediaType:          outDef.MediaType,
+			Version:            outDef.Version,
+			UndeclarePrefixes:  outDef.UndeclarePrefixes,
+			IncludeContentType: outDef.IncludeContentType,
+			ItemSeparator:      outDef.ItemSeparator,
+			HTMLVersion:        outDef.HTMLVersion,
+			NormalizationForm:  outDef.NormalizationForm,
+			UseCharacterMaps:   outDef.UseCharacterMaps,
+			ResolvedCharMap:    outDef.ResolvedCharMap,
+		}
+		// Remove existing DTD and replace with HTML5 DOCTYPE
+		if dtd := doc.IntSubset(); dtd != nil {
+			helium.UnlinkNode(dtd)
+		}
+		_, _ = doc.CreateInternalSubset("html", "", "")
+	}
+
+	// Insert <meta http-equiv="Content-Type"> in <head>
+	if outDef.IncludeContentType == nil || *outDef.IncludeContentType {
+		insertHTMLMeta(doc, outDef)
+	}
+
+	// Use XML serialization for the rest
+	return serializeXML(w, doc, outDef, charMap)
 }
 
 // htmlURIAttrs lists HTML attributes whose values are URIs and should not
