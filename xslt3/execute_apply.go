@@ -148,7 +148,11 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 	ec.size = len(atomicItems)
 	for i, item := range atomicItems {
 		ec.position = i + 1
-		if tmpl := ec.findAtomicTemplate(item, mode); tmpl != nil {
+		tmpl, err := ec.findAtomicTemplate(item, mode)
+		if err != nil {
+			return err
+		}
+		if tmpl != nil {
 			if err := ec.executeAtomicTemplate(ctx, tmpl, item, mode); err != nil {
 				return err
 			}
