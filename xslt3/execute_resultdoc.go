@@ -440,6 +440,10 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		if effectiveFormat != "" {
 			if fmtDef, ok := ec.stylesheet.outputs[effectiveFormat]; ok {
 				allMaps = append(allMaps, fmtDef.UseCharacterMaps...)
+				// Also propagate resolved character maps from parameter-document.
+				if len(fmtDef.ResolvedCharMap) > 0 {
+					ec.primaryResolvedCharMap = fmtDef.ResolvedCharMap
+				}
 			}
 		}
 		allMaps = append(allMaps, inst.UseCharacterMaps...)
@@ -482,9 +486,14 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 	ec.currentResultDocMethod = savedMethod
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
-	// For json/adaptive serialization, store captured items.
+	// For json/adaptive serialization, store captured items and output definition.
 	if isItemSerializationMethod(effectiveMethod) && len(frame.pendingItems) > 0 {
 		ec.resultDocItems[href] = frame.pendingItems
+		// Build and store the effective output definition for this result document.
+		effOutDef, err := ec.buildEffectiveOutputDef(ctx, inst, effectiveFormat, effectiveMethod)
+		if err == nil && effOutDef != nil {
+			ec.resultDocOutputDefs[href] = effOutDef
+		}
 	}
 
 	// Validate the result document if requested.
@@ -678,6 +687,50 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 	}
 	if len(inst.SuppressIndentation) > 0 {
 		base.SuppressIndentation = inst.SuppressIndentation
+	}
+	return &base, nil
+}
+
+// buildEffectiveOutputDef builds the effective output definition for a secondary
+// result document, combining the named format with result-document overrides.
+func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *ResultDocumentInst, formatName, method string) (*OutputDef, error) {
+	var base OutputDef
+	if formatName != "" {
+		if fmtDef, ok := ec.stylesheet.outputs[formatName]; ok {
+			base = *fmtDef
+		}
+	}
+	if base.Method == "" && method != "" {
+		base.Method = method
+		base.MethodExplicit = true
+	}
+	// Apply overrides from xsl:result-document
+	overrides, err := ec.evalResultDocOutputDef(ctx, inst)
+	if err != nil {
+		return nil, err
+	}
+	if overrides != nil {
+		if overrides.Method != "" {
+			base.Method = overrides.Method
+			base.MethodExplicit = true
+		}
+		if overrides.Encoding != "" {
+			base.Encoding = overrides.Encoding
+		}
+		if len(overrides.ResolvedCharMap) > 0 && base.ResolvedCharMap == nil {
+			base.ResolvedCharMap = overrides.ResolvedCharMap
+		}
+	}
+	// Resolve character maps from the format and instruction.
+	var allMaps []string
+	if formatName != "" {
+		if fmtDef, ok := ec.stylesheet.outputs[formatName]; ok {
+			allMaps = append(allMaps, fmtDef.UseCharacterMaps...)
+		}
+	}
+	allMaps = append(allMaps, inst.UseCharacterMaps...)
+	if len(allMaps) > 0 {
+		base.ResolvedCharMap = resolveCharacterMaps(ec.stylesheet, allMaps)
 	}
 	return &base, nil
 }
