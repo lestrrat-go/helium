@@ -469,11 +469,16 @@ func (c *compiler) compileAccumulator(elem *helium.Element) error {
 			return nil
 		}
 		// XTSE3350: duplicate accumulator name at the same import precedence.
+		// Defer the error — a higher-precedence accumulator may resolve the
+		// conflict later (e.g. imported file has duplicates but the importer
+		// provides its own override).
 		if acc.ImportPrec == existing.ImportPrec {
-			return staticError(errCodeXTSE3350,
-				"duplicate xsl:accumulator %q at the same import precedence", expandedName)
+			existing.conflictDuplicate = true
+			return nil
 		}
 		// Different import precedence: highest wins, lower is silently discarded.
+		// A higher-precedence declaration also clears any deferred duplicate
+		// conflict from a lower level.
 		if acc.ImportPrec > existing.ImportPrec {
 			c.stylesheet.accumulators[expandedName] = acc
 		}
