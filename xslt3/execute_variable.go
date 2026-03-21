@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -36,6 +37,19 @@ func (ec *execContext) execVariable(ctx context.Context, inst *VariableInst) err
 		} else if strings.HasPrefix(inst.As, "document-node") {
 			// document-node() type: wrap body in document node
 			val, evalErr = ec.evaluateBodyAsDocument(ctx, inst.Body)
+			// When the as type allows zero occurrences (e.g. document-node()?)
+			// and the body produced an empty document (no children), return
+			// an empty sequence instead of the empty document. This handles
+			// xsl:where-populated discarding all content.
+			if evalErr == nil && len(val) == 1 {
+				if docItem, ok := val[0].(xpath3.NodeItem); ok {
+					if doc, ok := docItem.Node.(*helium.Document); ok && doc.FirstChild() == nil {
+						if strings.HasSuffix(inst.As, "?") || strings.HasSuffix(inst.As, "*") {
+							val = nil
+						}
+					}
+				}
+			}
 		} else {
 			// With as attribute: evaluate as sequence constructor,
 			// keeping each node as a separate item
