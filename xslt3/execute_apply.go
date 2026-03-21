@@ -258,16 +258,15 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 	// Switch package function scope if the template belongs to a different package.
 	savedFnsNS := ec.cachedFnsNS
 	savedPackage := ec.currentPackage
-	savedTemplate := ec.currentTemplate
 	if tmpl.OwnerPackage != nil && tmpl.OwnerPackage != ec.currentPackage {
 		ec.cachedFnsNS = nil
 		ec.currentPackage = tmpl.OwnerPackage
 	}
-	ec.currentTemplate = tmpl
+	// Do NOT set ec.currentTemplate here: xsl:call-template preserves the
+	// current template rule for xsl:apply-imports/xsl:next-match.
 	defer func() {
 		ec.cachedFnsNS = savedFnsNS
 		ec.currentPackage = savedPackage
-		ec.currentTemplate = savedTemplate
 	}()
 
 	ec.pushVarScope()
@@ -371,6 +370,10 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 }
 
 func (ec *execContext) execNextMatch(ctx context.Context, inst *NextMatchInst) error {
+	// XTDE0560: xsl:next-match when the current template rule is absent.
+	if ec.currentTemplate == nil || ec.currentTemplate.Match == nil {
+		return dynamicError(errCodeXTDE0560, "xsl:next-match: no current template rule")
+	}
 	// xsl:next-match: find the next matching template after the current one
 	node := ec.currentNode
 	mode := ec.currentMode
@@ -478,8 +481,11 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *NextMatchInst) e
 func (ec *execContext) execApplyImports(ctx context.Context, inst *ApplyImportsInst) error {
 	// xsl:apply-imports: find a matching template with lower import precedence
 	// than the currently executing template.
-	if ec.currentTemplate == nil {
-		return nil
+	// XTDE0560: xsl:apply-imports when the current template rule is absent.
+	// A template rule is a template with a match pattern; named templates
+	// invoked via call-template or initial-template don't count.
+	if ec.currentTemplate == nil || ec.currentTemplate.Match == nil {
+		return dynamicError(errCodeXTDE0560, "xsl:apply-imports: no current template rule")
 	}
 
 	node := ec.currentNode
