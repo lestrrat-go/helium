@@ -201,6 +201,10 @@ func (c *compiler) loadAndCacheInclude(uri, importKey string) (*helium.Element, 
 		}
 		if !include {
 			c.includeRoots[importKey] = nil
+			if c.useWhenExcluded == nil {
+				c.useWhenExcluded = make(map[string]struct{})
+			}
+			c.useWhenExcluded[importKey] = struct{}{}
 			return nil, nil
 		}
 	}
@@ -220,6 +224,10 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 
 	root := c.includeRoots[importKey]
 	if root == nil {
+		// If this module was excluded by use-when on its root element, skip entirely.
+		if _, excluded := c.useWhenExcluded[importKey]; excluded {
+			return nil
+		}
 		// Simplified stylesheet — fall back to the original full include path.
 		// Simplified stylesheets have no imports, so document order is trivially correct.
 		return c.loadExternalStylesheet(stylesheetBaseURI(elem, c.baseURI), getAttr(elem, "href"), false)
