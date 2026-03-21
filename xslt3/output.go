@@ -1204,6 +1204,13 @@ func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMa
 	// that use a prefix should be converted to use the default namespace.
 	normalizeXHTMLNamespace(doc)
 
+	// For HTML5: normalize SVG and MathML namespaces so that elements in
+	// those namespaces use the default namespace (unprefixed) per the
+	// HTML5 serialization spec.
+	if isHTML5 {
+		normalizeForeignNamespaces(doc)
+	}
+
 	// Serialize as XML, then post-process for XHTML rules:
 	// - Void elements: add space before /> (e.g., <br /> not <br/>)
 	// - Non-void elements: expand self-closing to open+close (e.g., <Option></Option>)
@@ -1271,6 +1278,44 @@ func normalizeXHTMLNamespace(doc *helium.Document) {
 			elem.SetNs(sharedNS)
 		}
 
+		return nil
+	})
+}
+
+const (
+	svgNS     = "http://www.w3.org/2000/svg"
+	mathmlNS  = "http://www.w3.org/1998/Math/MathML"
+)
+
+// normalizeForeignNamespaces converts prefixed SVG and MathML elements to use
+// their default namespace (unprefixed) for HTML5 XHTML output. Each element
+// in the SVG or MathML namespace gets a default xmlns declaration for its own
+// namespace, so it serializes as e.g. <svg xmlns="..."> instead of <s:svg>.
+func normalizeForeignNamespaces(doc *helium.Document) {
+	_ = helium.Walk(doc, func(n helium.Node) error {
+		elem, ok := n.(*helium.Element)
+		if !ok {
+			return nil
+		}
+		uri := string(elem.URI())
+		if uri != svgNS && uri != mathmlNS {
+			return nil
+		}
+		if string(elem.Prefix()) == "" {
+			return nil // already unprefixed
+		}
+		oldPrefix := string(elem.Prefix())
+		// Remove the old prefixed namespace declaration
+		elem.RemoveNamespaceByPrefix(oldPrefix)
+		// Declare the element's namespace as the default on this element
+		_ = elem.DeclareNamespace("", uri)
+		// Find the ns node we just created and set it as the element's ns
+		for _, ns := range elem.Namespaces() {
+			if ns.Prefix() == "" && ns.URI() == uri {
+				elem.SetNs(ns)
+				break
+			}
+		}
 		return nil
 	})
 }
