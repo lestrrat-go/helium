@@ -102,6 +102,7 @@ func (c *compiler) compileIf(elem *helium.Element) (*IfInst, error) {
 
 func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 	inst := &ChooseInst{DefaultCollation: c.defaultCollation}
+	hasOtherwise := false
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
@@ -114,6 +115,10 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 
 		switch childElem.LocalName() {
 		case "when":
+			// XTSE0010: xsl:when must not appear after xsl:otherwise
+			if hasOtherwise {
+				return nil, staticError(errCodeXTSE0010, "xsl:when must not appear after xsl:otherwise in xsl:choose")
+			}
 			savedNS := c.xpathDefaultNS
 			savedET := c.expandText
 			hasLocal := false
@@ -149,6 +154,11 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 			}
 			inst.When = append(inst.When, wc)
 		case "otherwise":
+			// XTSE0010: at most one xsl:otherwise is allowed
+			if hasOtherwise {
+				return nil, staticError(errCodeXTSE0010, "xsl:choose must not contain more than one xsl:otherwise")
+			}
+			hasOtherwise = true
 			savedNS := c.xpathDefaultNS
 			savedET := c.expandText
 			hasLocal := false
