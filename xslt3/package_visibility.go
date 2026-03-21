@@ -237,6 +237,11 @@ func componentNameMatches(compName, pattern string) bool {
 	// {ns}* pattern — matches any local name in that namespace
 	if strings.HasSuffix(pattern, "}*") && strings.HasPrefix(pattern, "{") {
 		ns := pattern[1 : len(pattern)-2]
+		if ns == "" {
+			// {}* matches names with no namespace, which may be
+			// stored without Clark notation prefix.
+			return !strings.HasPrefix(compNameBase, "{") || strings.HasPrefix(compNameBase, "{}")
+		}
 		return strings.HasPrefix(compNameBase, "{"+ns+"}")
 	}
 
@@ -868,7 +873,14 @@ func (c *compiler) collectOverrideNames(usePackageElem *helium.Element, nsBindin
 				name := getAttr(oe, "name")
 				if name != "" {
 					resolved := resolveQName(name, nsBindings)
-					names[xslElemFunction+":"+resolved] = struct{}{}
+					// Count xsl:param children to determine arity
+					arity := 0
+					for pc := oe.FirstChild(); pc != nil; pc = pc.NextSibling() {
+						if pe, ok := pc.(*helium.Element); ok && pe.URI() == NSXSLT && pe.LocalName() == "param" {
+							arity++
+						}
+					}
+					names[xslElemFunction+":"+resolved+fmt.Sprintf("#%d", arity)] = struct{}{}
 				}
 			case xslElemVariable:
 				name := resolveQName(getAttr(oe, "name"), nsBindings)

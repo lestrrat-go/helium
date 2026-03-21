@@ -164,15 +164,25 @@ func (c *compiler) compileIterate(elem *helium.Element) (Instruction, error) {
 		bodyChildren = append(bodyChildren, bodyChild{elem: childElem})
 	}
 
-	// Compile body children. Only the LAST body child is in "tail position"
-	// where xsl:break and xsl:next-iteration are allowed (XTSE3120).
+	// Compile body children. Only the LAST significant body child is in
+	// "tail position" where xsl:break and xsl:next-iteration are allowed
+	// (XTSE3120). xsl:fallback compiles to nil so it does not count.
+	lastSignificant := -1
+	for i := len(bodyChildren) - 1; i >= 0; i-- {
+		bc := bodyChildren[i]
+		if bc.elem != nil && bc.elem.URI() == NSXSLT && bc.elem.LocalName() == "fallback" {
+			continue
+		}
+		lastSignificant = i
+		break
+	}
 	for i, bc := range bodyChildren {
 		if bc.elem == nil {
 			// Text node
 			inst.Body = append(inst.Body, &LiteralTextInst{Value: bc.text})
 			continue
 		}
-		c.breakAllowed = (i == len(bodyChildren)-1)
+		c.breakAllowed = (i == lastSignificant)
 		childInst, err := c.compileInstruction(bc.elem)
 		if err != nil {
 			return nil, err
