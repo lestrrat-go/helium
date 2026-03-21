@@ -564,7 +564,19 @@ func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 		}
 	}
 
+	if err := checkMergeStreamability(inst); err != nil {
+		return nil, err
+	}
+
 	return inst, nil
+}
+
+// checkMergeStreamability performs streamability checks on xsl:merge.
+// When any merge-source has streamable="yes", additional compile-time
+// constraints apply (XTSE3470, XTSE3500, etc.).
+func checkMergeStreamability(_ *MergeInst) error {
+	// TODO: implement streamability checks for merge
+	return nil
 }
 
 // compileMergeSource compiles an xsl:merge-source element.
