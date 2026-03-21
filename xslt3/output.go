@@ -32,6 +32,7 @@ type outputFrame struct {
 	emptyAtomicGen      uint64           // seqConstructorGen when prevWasAtomic was set by an empty-string atomic
 	wherePopulated      bool             // when true, xsl:document emits document node (not children) so xsl:where-populated can check emptiness
 	itemSeparator       *string          // item-separator serialization parameter; nil means default (" " between adjacent atomics)
+	prevHadOutput       bool             // true when any item (node or atomic) was previously output; used for item-separator between non-atomic items
 	outputSerial        int              // monotonically increases whenever visible output is produced
 	seqConstructorGen   uint64           // incremented each time executeSequenceConstructor is called
 	conditionalScopes   []conditionalScope
@@ -1130,7 +1131,11 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	// serializeResult's transcoding layer.
 	targetEnc := strings.ToLower(outDef.Encoding)
 	isNonUTF8 := targetEnc != "" && targetEnc != "utf-8" && targetEnc != "utf8" && targetEnc != "utf-16" && targetEnc != "utf16"
-	if len(charMap) > 0 || hasDOEMarkers(doc) || isNonUTF8 || len(outDef.CDATASections) > 0 || (outDef.Indent && len(outDef.SuppressIndentation) > 0) {
+	// When the document has no document element (e.g., result-document
+	// producing only comments and text), use the stream-based serializer
+	// which does not inject newlines between top-level children.
+	noDocElem := doc.DocumentElement() == nil
+	if len(charMap) > 0 || hasDOEMarkers(doc) || isNonUTF8 || len(outDef.CDATASections) > 0 || (outDef.Indent && len(outDef.SuppressIndentation) > 0) || noDocElem {
 		return serializeXMLWithCharMap(w, doc, outDef, charMap)
 	}
 	// Set encoding on the document so the XML declaration includes it.

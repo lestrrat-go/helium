@@ -307,6 +307,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 	}
 
 	prevWasAtomic := out.prevWasAtomic
+	prevHadOutput := out.prevHadOutput
 	hadAtomic := false // tracks whether any atomic (including empty) was seen
 	seq := flattenArraysInSequence(result.Sequence())
 	for _, item := range seq {
@@ -358,6 +359,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 						return err
 					}
 				}
+				prevHadOutput = true
 				continue
 			}
 			copied, copyErr := helium.CopyNode(v.Node, ec.resultDoc)
@@ -374,6 +376,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 				ec.fixNamespacesAfterCopy(elem)
 				fixDescendantDefaultNS(elem)
 			}
+			prevHadOutput = true
 		case xpath3.AtomicValue:
 			s, sErr := xpath3.AtomicToString(v)
 			if sErr != nil {
@@ -406,9 +409,11 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 				hadAtomic = true
 				continue
 			}
-			// Insert separator between consecutive atomic values.
-			// Use item-separator from the output frame if set, otherwise default space.
-			if prevWasAtomic {
+			// Insert separator between consecutive items.
+			// When item-separator is explicitly set, insert between any
+			// adjacent items (node→atomic or atomic→atomic). Otherwise,
+			// only insert the default space between adjacent atomics.
+			if prevWasAtomic || (prevHadOutput && out.itemSeparator != nil) {
 				sepStr := " "
 				if out.itemSeparator != nil {
 					sepStr = *out.itemSeparator
@@ -433,6 +438,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 			}
 			prevWasAtomic = true
 			hadAtomic = true
+			prevHadOutput = true
 		case xpath3.FunctionItem, xpath3.MapItem, *xpath3.ArrayItem:
 			// XTDE0450: function items (including maps and arrays) cannot
 			// appear in result tree content — unless the output method
@@ -457,6 +463,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 	} else {
 		out.prevWasAtomic = prevWasAtomic
 	}
+	out.prevHadOutput = prevHadOutput
 	return nil
 }
 
@@ -527,9 +534,11 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 				prevWasAtomic = true
 				continue
 			}
-			if prevWasAtomic {
-				// Use the item-separator from the output frame if set,
-				// otherwise default to a single space between adjacent atomics.
+			// Insert separator between consecutive items.
+			// When item-separator is explicitly set, insert between any
+			// adjacent items (node→atomic or atomic→atomic). Otherwise,
+			// only insert the default space between adjacent atomics.
+			if prevWasAtomic || (out.prevHadOutput && out.itemSeparator != nil) {
 				sepStr := " "
 				if out.itemSeparator != nil {
 					sepStr = *out.itemSeparator
