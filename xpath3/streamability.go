@@ -362,11 +362,16 @@ func predicateIsNonMotionless(pred Expr) bool {
 			}
 		case LiteralExpr:
 			// A numeric literal predicate like [1] is positional (equivalent
-			// to [position()=1]) and therefore non-motionless.
-			switch v.Value.(type) {
-			case float64, *big.Int, *big.Rat:
-				nonMotionless = true
-				return false
+			// to [position()=1]) and therefore non-motionless — but only when
+			// it is the top-level predicate expression. When the numeric
+			// literal appears inside a comparison (e.g., [f() eq 1]), it is
+			// just a value operand and does not make the predicate positional.
+			if e == pred {
+				switch v.Value.(type) {
+				case float64, *big.Int, *big.Rat:
+					nonMotionless = true
+					return false
+				}
 			}
 		case InstanceOfExpr, CastableExpr:
 			// Type-checking expressions (instance of, castable as) are
@@ -585,4 +590,38 @@ func ExprUsesDescendantOrSelf(expr *Expression) bool {
 			expr.program.stream.hasDescOrSelf
 	}
 	return false
+}
+
+// ExprUsesContextItem returns true if the expression references the context
+// item (.) at any level. This is used to detect consuming operations in
+// streaming accumulator rule select expressions.
+func ExprUsesContextItem(expr *Expression) bool {
+	if expr == nil {
+		return false
+	}
+	found := false
+	WalkExpr(expr.AST(), func(e Expr) bool {
+		if found {
+			return false
+		}
+		switch e.(type) {
+		case ContextItemExpr:
+			found = true
+			return false
+		}
+		// Also check for lowered "." → self::node() form.
+		if lp, ok := e.(vmLocationPathExpr); ok {
+			if !lp.Absolute && len(lp.Steps) == 1 {
+				s := lp.Steps[0]
+				if s.Axis == AxisSelf && len(s.Predicates) == 0 {
+					if tt, oktt := s.NodeTest.(TypeTest); oktt && tt.Kind == NodeKindNode {
+						found = true
+						return false
+					}
+				}
+			}
+		}
+		return true
+	})
+	return found
 }

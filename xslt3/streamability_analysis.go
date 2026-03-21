@@ -59,6 +59,13 @@ func analyzeStreamability(ss *Stylesheet) error {
 		if err := checkStreamableTemplateBody(ss, tmpl.Body); err != nil {
 			return err
 		}
+		// In streaming templates, accumulator-after() is only valid in
+		// post-descent position (after a consuming operation). If used
+		// before any consuming operation, the post-descent values are
+		// not yet available.
+		if err := checkAccumulatorAfterPreDescent(tmpl.Body); err != nil {
+			return err
+		}
 	}
 
 	// Check streamable accumulators: initial-value must be motionless.
@@ -92,6 +99,23 @@ func analyzeStreamability(ss *Stylesheet) error {
 					return staticError(errCodeXTSE3430,
 						"streamable accumulator %q rule match pattern %q uses current() on an element-matching step, which is not motionless",
 						acc.Name, rule.Match.source)
+				}
+			}
+			// Accumulator rule select expressions must not navigate
+			// downward (to children/descendants) in streaming mode.
+			// Also, using the context item (.) on an element match is
+			// consuming because the element may have unprocessed children.
+			// For text/attribute matches, "." is fine (the value is atomic).
+			if rule.Select != nil {
+				if xpath3.ExprHasDownwardStep(rule.Select) {
+					return staticError(errCodeXTSE3430,
+						"streamable accumulator %q has a non-streamable select expression %q",
+						acc.Name, rule.Select.String())
+				}
+				if xpath3.ExprUsesContextItem(rule.Select) && accRuleMatchesElement(rule) {
+					return staticError(errCodeXTSE3430,
+						"streamable accumulator %q rule select expression %q uses the context item on an element match, which is consuming in streaming mode",
+						acc.Name, rule.Select.String())
 				}
 			}
 		}
@@ -143,6 +167,99 @@ func checkInstructionsForStreamableSourceDoc(ss *Stylesheet, instructions []Inst
 
 // checkStreamableTemplateBody checks a template body (or source-document body)
 // for non-streamable constructs.
+// checkAccumulatorAfterPreDescent checks that accumulator-after() is not
+// used in AVTs of literal result elements before a consuming operation in
+// a streaming template body. AVTs are evaluated eagerly, so post-descent
+// values are not available. xsl:attribute instructions with accumulator-after
+// are fine because the processor can delay their evaluation.
+func checkAccumulatorAfterPreDescent(body []Instruction) error {
+	_, err := checkAccAfterPreDescentInner(body)
+	return err
+}
+
+// checkAccAfterPreDescentInner checks for accumulator-after in pre-descent
+// position. Returns (consumed, error) where consumed indicates whether a
+// consuming operation was found at this level or in children.
+func checkAccAfterPreDescentInner(body []Instruction) (bool, error) {
+	consumed := false
+	for _, inst := range body {
+		if consumed {
+			// After a consuming operation, accumulator-after is valid.
+			return true, nil
+		}
+		// Check if this instruction is directly consuming.
+		if instrIsConsuming(inst) {
+			consumed = true
+			continue
+		}
+		// Check AVTs in literal result elements.
+		if err := checkAccumulatorAfterInLRE(inst); err != nil {
+			return false, err
+		}
+		// Check xsl:value-of select expressions (pre-descent, so
+		// accumulator-after is not available). xsl:attribute select
+		// is NOT checked here because attributes can be delayed.
+		if vo, ok := inst.(*ValueOfInst); ok {
+			if vo.Select != nil && xpath3.ExprUsesFunction(vo.Select, "accumulator-after") {
+				return false, staticError(errCodeXTSE3430,
+					"accumulator-after() used in pre-descent position is not streamable")
+			}
+		}
+		// Recurse into child instructions (e.g., LRE body, copy body).
+		for _, children := range getChildInstructions(inst) {
+			childConsumed, err := checkAccAfterPreDescentInner(children)
+			if err != nil {
+				return false, err
+			}
+			if childConsumed {
+				consumed = true
+			}
+		}
+	}
+	return consumed, nil
+}
+
+// instrIsConsuming returns true if the instruction directly consumes the
+// streaming context (navigates downward or processes children).
+func instrIsConsuming(inst Instruction) bool {
+	switch v := inst.(type) {
+	case *ApplyTemplatesInst:
+		// apply-templates without select or with downward select is consuming.
+		// apply-templates select="@*" is motionless, NOT consuming.
+		if v.Select == nil {
+			return true
+		}
+		return xpath3.ExprHasDownwardStep(v.Select) || xpath3.ExprUsesContextItem(v.Select)
+	case *ForEachInst:
+		return v.Select != nil && xpath3.ExprHasDownwardStep(v.Select)
+	case *IterateInst:
+		return v.Select != nil && xpath3.ExprHasDownwardStep(v.Select)
+	case *ValueOfInst:
+		return v.Select != nil && xpath3.ExprHasDownwardStep(v.Select)
+	case *XSLSequenceInst:
+		return v.Select != nil && xpath3.ExprHasDownwardStep(v.Select)
+	case *CopyOfInst:
+		return v.Select != nil && (xpath3.ExprHasDownwardStep(v.Select) || xpath3.ExprUsesContextItem(v.Select))
+	}
+	return false
+}
+
+// checkAccumulatorAfterInLRE checks literal result elements for
+// accumulator-after() in their AVT attributes.
+func checkAccumulatorAfterInLRE(inst Instruction) error {
+	lre, ok := inst.(*LiteralResultElement)
+	if !ok {
+		return nil
+	}
+	for _, attr := range lre.Attrs {
+		if attr.Value != nil && attr.Value.hasFunction("accumulator-after") {
+			return staticError(errCodeXTSE3430,
+				"accumulator-after() used in pre-descent position is not streamable")
+		}
+	}
+	return nil
+}
+
 func checkStreamableTemplateBody(ss *Stylesheet, body []Instruction) error {
 	for _, inst := range body {
 		if err := checkStreamableInstruction(ss, inst); err != nil {
@@ -331,6 +448,13 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 			"expression %q uses a grounding function with a crawling operand, which is not streamable", expr.String())
 	}
 
+	// 7. accumulator-after() on a parent/ancestor axis is not streamable because
+	// the ancestor's post-descent value is not yet available during streaming.
+	if exprUsesAccumulatorAfterOnAncestor(expr) {
+		return staticError(errCodeXTSE3430,
+			"expression %q uses accumulator-after on an ancestor, which is not streamable", expr.String())
+	}
+
 	return nil
 }
 
@@ -354,6 +478,115 @@ func exprHasCrawlingGroundingArg(expr *xpath3.Expression) bool {
 						return false
 					}
 				}
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// accRuleMatchesElement returns true if the accumulator rule's match pattern
+// can match element nodes (as opposed to only text, attribute, or other node
+// types). This is used to determine whether the context item in the select
+// expression would be consuming in streaming mode.
+func accRuleMatchesElement(rule *AccumulatorRule) bool {
+	if rule.Match == nil {
+		return false
+	}
+	for _, alt := range rule.Match.Alternatives {
+		// Check if the pattern's last step matches elements.
+		// If the pattern is just a name test (e.g., "fig"), it matches elements.
+		// If it's "text()" or "attribute(...)", it doesn't match elements.
+		if !patternMatchesNonElement(alt.expr) {
+			return true
+		}
+	}
+	return false
+}
+
+// patternMatchesNonElement returns true if the pattern exclusively matches
+// non-element nodes (text, attribute, comment, PI, document).
+func patternMatchesNonElement(expr xpath3.Expr) bool {
+	// Walk to find the last/most-specific step and check its node test.
+	var lastTest xpath3.NodeTest
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		switch v := e.(type) {
+		case xpath3.LocationPath:
+			if len(v.Steps) > 0 {
+				lastTest = v.Steps[len(v.Steps)-1].NodeTest
+			}
+		}
+		return true
+	})
+	if lastTest == nil {
+		return false
+	}
+	if tt, ok := lastTest.(xpath3.TypeTest); ok {
+		switch tt.Kind {
+		case xpath3.NodeKindText, xpath3.NodeKindComment, xpath3.NodeKindProcessingInstruction:
+			return true
+		}
+	}
+	return false
+}
+
+// exprUsesAccumulatorAfterOnAncestor returns true if the expression contains
+// a path expression like ../accumulator-after(...) where accumulator-after
+// is applied to an ancestor node. In streaming, the ancestor's post-descent
+// accumulator value is not yet available.
+func exprUsesAccumulatorAfterOnAncestor(expr *xpath3.Expression) bool {
+	if expr == nil {
+		return false
+	}
+	found := false
+	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		// Check for PathStepExpr: Left / Right where Left uses upward axis
+		// and Right is accumulator-after function call.
+		if ps, ok := e.(xpath3.PathStepExpr); ok {
+			if hasUpwardAxis(ps.Left) && exprCallsFunction(ps.Right, "accumulator-after") {
+				found = true
+				return false
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// hasUpwardAxis checks if an expression contains a parent or ancestor axis step.
+func hasUpwardAxis(expr xpath3.Expr) bool {
+	found := false
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		if lp, ok := e.(xpath3.LocationPath); ok {
+			for _, step := range lp.Steps {
+				if step.Axis == xpath3.AxisParent || step.Axis == xpath3.AxisAncestor || step.Axis == xpath3.AxisAncestorOrSelf {
+					found = true
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// exprCallsFunction checks if an expression is or contains a specific function call.
+func exprCallsFunction(expr xpath3.Expr, name string) bool {
+	found := false
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		if fc, ok := e.(xpath3.FunctionCall); ok {
+			if fc.Prefix == "" && fc.Name == name {
+				found = true
+				return false
 			}
 		}
 		return true

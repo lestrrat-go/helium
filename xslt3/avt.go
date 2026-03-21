@@ -19,6 +19,20 @@ type avtPart struct {
 	expr    *xpath3.Expression
 }
 
+// hasFunction returns true if any expression part of the AVT uses the
+// named function (no namespace prefix).
+func (a *AVT) hasFunction(name string) bool {
+	if a == nil {
+		return false
+	}
+	for _, p := range a.parts {
+		if p.expr != nil && xpath3.ExprUsesFunction(p.expr, name) {
+			return true
+		}
+	}
+	return false
+}
+
 // compileAVT compiles an attribute value template string.
 // AVTs contain literal text interspersed with {expr} XPath expressions.
 // {{ and }} are escape sequences for literal { and }.
