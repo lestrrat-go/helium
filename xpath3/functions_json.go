@@ -727,7 +727,7 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'duplicates' must be xs:string"}
 		}
 		switch s {
-		case "reject", "use-first":
+		case "reject", "use-first", "retain":
 			opts.duplicates = s
 		case "use-last":
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must not be 'use-last' for json-to-xml"}
@@ -736,8 +736,14 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 		}
 	}
 
-	if validateSet && validate && opts.duplicates != "reject" {
-		return opts, &XPathError{Code: errCodeFOJS0005, Message: "validate=true() requires duplicates='reject'"}
+	// When validate=true() is set and no explicit duplicates option was
+	// provided, default duplicates to 'reject' per the spec.
+	// We silently accept validate=true() even without schema support.
+	if validateSet && validate {
+		dupKey2 := AtomicValue{TypeName: TypeString, Value: "duplicates"}
+		if _, found := m.Get(dupKey2); !found {
+			opts.duplicates = "reject"
+		}
 	}
 
 	fbKey := AtomicValue{TypeName: TypeString, Value: "fallback"}
