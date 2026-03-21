@@ -6,8 +6,8 @@ import helium "github.com/lestrrat-go/helium"
 type CompileOption func(*compileConfig)
 
 type compileConfig struct {
-	filename     string               // XSD filename for error messages
-	baseDir      string               // base directory for resolving relative includes
+	filename     string // XSD filename for error messages
+	baseDir      string // base directory for resolving relative includes
 	errorHandler helium.ErrorHandler
 }
 
