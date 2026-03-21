@@ -482,7 +482,7 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 	}
 	switch node.Type() {
 	case helium.DocumentNode:
-		// Copy children of the document node
+		// Per XSLT spec, xsl:copy-of on document node copies children.
 		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 			if err := ec.copyNodeToOutput(child, copyNS); err != nil {
 				return err
@@ -533,6 +533,17 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 			return nil
 		}
 		out := ec.currentOutput()
+		// In sequence mode, capture the namespace node as a standalone item.
+		if out.sequenceMode {
+			ns, err := out.doc.CreateNamespace(nsw.Name(), string(nsw.Content()))
+			if err != nil {
+				return err
+			}
+			copiedNSW := helium.NewNamespaceNodeWrapper(ns, nil)
+			out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: copiedNSW})
+			out.noteOutput()
+			return nil
+		}
 		elem, ok := out.current.(*helium.Element)
 		if !ok {
 			return nil
