@@ -122,6 +122,13 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 		}
 	}
 
+	// XTSE1210: collation must be a recognized URI
+	if collAttr := getAttr(elem, "collation"); collAttr != "" {
+		if !xpath3.IsCollationSupported(collAttr) {
+			return staticError("XTSE1210", "unrecognized collation URI %q on xsl:key", collAttr)
+		}
+	}
+
 	kd := &KeyDef{
 		Name:      expandedName,
 		Match:     matchPat,
