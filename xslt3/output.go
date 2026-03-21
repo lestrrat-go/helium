@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -492,7 +493,7 @@ func serializeText(w io.Writer, doc *helium.Document, charMap map[rune]string) e
 func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 	// Determine DOCTYPE handling.
 	hasDoctypeAttrs := outDef.DoctypePublic != "" || outDef.DoctypeSystem != ""
-	isHTML5 := outDef.HTMLVersion == "5" || outDef.HTMLVersion == "5.0"
+	isHTML5 := isHTMLVersion5(outDef.HTMLVersion)
 
 	if hasDoctypeAttrs {
 		rootName := "html"
@@ -560,7 +561,7 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 // - For HTML5, simplified DOCTYPE
 // - Self-closing void elements with a space before />
 func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
-	isHTML5 := outDef.HTMLVersion == "5" || outDef.HTMLVersion == "5.0"
+	isHTML5 := isHTMLVersion5(outDef.HTMLVersion)
 
 	// For HTML5: only use explicit doctype when doctype-system is specified.
 	// Without doctype-system (even if doctype-public is set), use <!DOCTYPE html>.
@@ -791,6 +792,19 @@ func inCDATAElement(parent helium.Node, cdataElems map[string]struct{}) bool {
 }
 
 // applyCharacterMap replaces characters in text according to the character map.
+// isHTMLVersion5 returns true when the html-version string represents
+// version 5 or higher (e.g. "5", "5.0", "5.00", "5.1").
+func isHTMLVersion5(v string) bool {
+	if v == "" {
+		return false
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return false
+	}
+	return f >= 5.0
+}
+
 func applyCharacterMap(text string, charMap map[rune]string) string {
 	var b strings.Builder
 	for _, r := range text {
