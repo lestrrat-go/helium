@@ -321,7 +321,9 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 	}
 	resolvedName := resolveQName(name, c.nsBindings)
 
-	// Check that the variable exists in the package
+	// Check that the variable or param exists in the package.
+	// In XSLT 3.0, variables and parameters share the same component
+	// namespace, so a variable can override a param (and vice versa).
 	var pkgVar *Variable
 	for _, v := range pkg.globalVars {
 		if v.Name == resolvedName {
@@ -330,18 +332,42 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 		}
 	}
 	if pkgVar == nil {
-		return nil, staticError(errCodeXTSE3058,
-			"xsl:override variable %q not found in used package", name)
+		// Also check params — they share the same namespace.
+		found := false
+		for _, p := range pkg.globalParams {
+			if p.Name == resolvedName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, staticError(errCodeXTSE3058,
+				"xsl:override variable %q not found in used package", name)
+		}
 	}
 
-	// Check visibility: cannot override final/private/hidden variable
-	switch pkgVar.Visibility {
+	// Check visibility: cannot override final/private/hidden variable.
+	// Effective visibility comes from xsl:expose (variableVisibility map)
+	// or the declared visibility attribute on the element.
+	effectiveVis := ""
+	if pkgVar != nil {
+		effectiveVis = pkgVar.Visibility
+	}
+	if v, ok := pkg.variableVisibility[resolvedName]; ok {
+		effectiveVis = v
+	}
+	if effectiveVis == "" {
+		if v, ok := pkg.globalParamVisibility[resolvedName]; ok {
+			effectiveVis = v
+		}
+	}
+	switch effectiveVis {
 	case visFinal:
 		return nil, staticError(errCodeXTSE3060,
 			"cannot override final variable %q", name)
 	case visPrivate, visHidden:
 		return nil, staticError(errCodeXTSE3060,
-			"cannot override %s variable %q", pkgVar.Visibility, name)
+			"cannot override %s variable %q", effectiveVis, name)
 	}
 
 	v := &Variable{Name: resolvedName, As: getAttr(elem, "as")}
@@ -371,12 +397,22 @@ func (c *compiler) compileOverrideParam(elem *helium.Element, pkg *Stylesheet) (
 		return nil, err
 	}
 
-	// Check that the param exists in the package
+	// Check that the param or variable exists in the package.
+	// In XSLT 3.0, variables and parameters share the same component
+	// namespace, so a param can override a variable (and vice versa).
 	found := false
 	for _, pp := range pkg.globalParams {
 		if pp.Name == p.Name {
 			found = true
 			break
+		}
+	}
+	if !found {
+		for _, v := range pkg.globalVars {
+			if v.Name == p.Name {
+				found = true
+				break
+			}
 		}
 	}
 	if !found {
