@@ -286,6 +286,15 @@ func (c *compiler) compileTemplateBody(elem *helium.Element) ([]Instruction, []*
 		}
 	}
 
+	// XTSE0580: check for duplicate parameter names.
+	seen := make(map[string]struct{}, len(params))
+	for _, p := range params {
+		if _, dup := seen[p.Name]; dup {
+			return nil, nil, staticError(errCodeXTSE0580_, "duplicate parameter name %q", p.Name)
+		}
+		seen[p.Name] = struct{}{}
+	}
+
 	return body, params, nil
 }
 
