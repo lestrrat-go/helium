@@ -262,10 +262,10 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		if getAttr(elem, "undeclare-prefixes") == "" {
 			outDef.UndeclarePrefixes = existing.UndeclarePrefixes
 		}
-		if getAttr(elem, "doctype-public") == "" {
+		if !elem.HasAttribute("doctype-public") {
 			outDef.DoctypePublic = existing.DoctypePublic
 		}
-		if getAttr(elem, "doctype-system") == "" {
+		if !elem.HasAttribute("doctype-system") {
 			outDef.DoctypeSystem = existing.DoctypeSystem
 		}
 		if getAttr(elem, "media-type") == "" {
