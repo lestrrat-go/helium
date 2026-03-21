@@ -67,11 +67,21 @@ func (c *compiler) compileIterate(elem *helium.Element) (Instruction, error) {
 	savedIterDepth := c.iterateDepth
 	savedBreakAllowed := c.breakAllowed
 	c.iterateDepth++
-	c.breakAllowed = true
+	// breakAllowed is set per-instruction below (only the tail instruction
+	// is allowed to contain xsl:break / xsl:next-iteration).
+	c.breakAllowed = false
 	defer func() {
 		c.iterateDepth = savedIterDepth
 		c.breakAllowed = savedBreakAllowed
 	}()
+
+	// Collect body children (non-param, non-on-completion) to determine which
+	// is the last one (tail position for XTSE3120 break/next-iteration check).
+	type bodyChild struct {
+		elem *helium.Element // nil for text nodes
+		text string          // non-empty for text nodes
+	}
+	var bodyChildren []bodyChild
 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
@@ -81,7 +91,7 @@ func (c *compiler) compileIterate(elem *helium.Element) (Instruction, error) {
 				t := string(text.Content())
 				if !c.shouldStripText(t) {
 					inParams = false
-					inst.Body = append(inst.Body, &LiteralTextInst{Value: t})
+					bodyChildren = append(bodyChildren, bodyChild{text: t})
 				}
 			}
 			continue
@@ -151,7 +161,19 @@ func (c *compiler) compileIterate(elem *helium.Element) (Instruction, error) {
 		}
 
 		inParams = false
-		childInst, err := c.compileInstruction(childElem)
+		bodyChildren = append(bodyChildren, bodyChild{elem: childElem})
+	}
+
+	// Compile body children. Only the LAST body child is in "tail position"
+	// where xsl:break and xsl:next-iteration are allowed (XTSE3120).
+	for i, bc := range bodyChildren {
+		if bc.elem == nil {
+			// Text node
+			inst.Body = append(inst.Body, &LiteralTextInst{Value: bc.text})
+			continue
+		}
+		c.breakAllowed = (i == len(bodyChildren)-1)
+		childInst, err := c.compileInstruction(bc.elem)
 		if err != nil {
 			return nil, err
 		}
@@ -159,6 +181,7 @@ func (c *compiler) compileIterate(elem *helium.Element) (Instruction, error) {
 			inst.Body = append(inst.Body, childInst)
 		}
 	}
+	c.breakAllowed = false
 
 	// XTSE3130: Validate that xsl:next-iteration with-params only reference
 	// declared xsl:iterate parameters.
@@ -579,10 +602,6 @@ func containsVarRef(s, name string) bool {
 // Cyclic dependencies (including self-references) are detected and the
 // involved accumulators are marked with CyclicDeps=true for XTDE3400.
 func sortAccumulatorOrder(ss *Stylesheet) {
-	if len(ss.accumulatorOrder) <= 1 {
-		return
-	}
-
 	// Build dependency graph by scanning rule select expressions for
 	// accumulator-before('name') and accumulator-after('name') calls.
 	deps := make(map[string]map[string]struct{})
@@ -613,6 +632,10 @@ func sortAccumulatorOrder(ss *Stylesheet) {
 			}
 			delete(deps[name], name)
 		}
+	}
+
+	if len(ss.accumulatorOrder) <= 1 {
+		return
 	}
 
 	// DFS-based topological sort with cycle detection.

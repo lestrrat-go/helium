@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -132,44 +133,113 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 	// Parse xsl:override children (collect overridden component names)
 	overrideNames := c.collectOverrideNames(usePackageElem, nsBindings)
 
-	// XTSE3051: it is a static error if xsl:accept makes a component private
-	// and the same component is overridden via xsl:override.
+	// XTSE3055: it is a static error if an override declaration is homonymous
+	// with any other declaration in the using package, regardless of import
+	// precedence.
+	if oset != nil {
+		for name := range oset.namedTemplates {
+			if _, exists := c.localTemplateNames[name]; exists {
+				return staticError(errCodeXTSE3055,
+					"override template %q conflicts with a local template of the same name", name)
+			}
+		}
+		for fk := range oset.functions {
+			if _, exists := c.stylesheet.functions[fk]; exists {
+				return staticError(errCodeXTSE3055,
+					"override function %s#%d conflicts with a local function of the same name",
+					fmt.Sprintf("{%s}%s", fk.Name.URI, fk.Name.Name), fk.Arity)
+			}
+		}
+		for name := range oset.variables {
+			for _, v := range c.stylesheet.globalVars {
+				if v.Name == name && v.OwnerPackage == nil {
+					return staticError(errCodeXTSE3055,
+						"override variable %q conflicts with a local variable of the same name", name)
+				}
+			}
+		}
+	}
+
+	// XTSE3040: it is a static error if the visibility assigned by xsl:accept
+	// is incompatible with the component's declared visibility, unless the
+	// matching token is a wildcard.
+	if len(acceptRules) > 0 {
+		for _, rule := range acceptRules {
+			if isWildcard(rule.names) {
+				continue // wildcards are exempt from XTSE3040
+			}
+			// Check templates
+			if rule.component == xslWildcard || rule.component == xslElemTemplate {
+				for _, tmpl := range pkg.templates {
+					if tmpl.Name == "" {
+						continue
+					}
+					if !componentNameMatches(tmpl.Name, rule.names) {
+						continue
+					}
+					pkgVis := getComponentVisibility(pkg, xslElemTemplate, tmpl.Name)
+					if !isAcceptVisibilityCompatible(pkgVis, rule.visibility) {
+						return staticError(errCodeXTSE3040,
+							"xsl:accept: visibility %q is incompatible with component %q (declared %s)",
+							rule.visibility, tmpl.Name, pkgVis)
+					}
+				}
+			}
+			// Check functions
+			if rule.component == xslWildcard || rule.component == xslElemFunction {
+				for fk, fn := range pkg.functions {
+					key := functionVisKey(fk.Name, len(fn.Params))
+					if !componentNameMatches(key, rule.names) {
+						continue
+					}
+					pkgVis := getComponentVisibility(pkg, xslElemFunction, key)
+					if !isAcceptVisibilityCompatible(pkgVis, rule.visibility) {
+						return staticError(errCodeXTSE3040,
+							"xsl:accept: visibility %q is incompatible with component %q (declared %s)",
+							rule.visibility, key, pkgVis)
+					}
+				}
+			}
+			// Check variables
+			if rule.component == xslWildcard || rule.component == xslElemVariable {
+				for _, v := range pkg.globalVars {
+					if !componentNameMatches(v.Name, rule.names) {
+						continue
+					}
+					pkgVis := getComponentVisibility(pkg, xslElemVariable, v.Name)
+					if !isAcceptVisibilityCompatible(pkgVis, rule.visibility) {
+						return staticError(errCodeXTSE3040,
+							"xsl:accept: visibility %q is incompatible with component %q (declared %s)",
+							rule.visibility, v.Name, pkgVis)
+					}
+				}
+			}
+		}
+	}
+
+	// XTSE3051: it is a static error if a non-wildcard token in the names
+	// attribute of xsl:accept matches the symbolic name of a component
+	// declared within an xsl:override child of the same xsl:use-package.
 	if len(acceptRules) > 0 && len(overrideNames) > 0 {
-		// Check functions (which need arity-aware keys)
-		for fk, fn := range pkg.functions {
-			key := functionVisKey(fk.Name, len(fn.Params))
-			if _, overridden := overrideNames[xslElemFunction+":"+fmt.Sprintf("{%s}%s", fk.Name.URI, fk.Name.Name)]; !overridden {
-				continue
+		for _, rule := range acceptRules {
+			if isWildcard(rule.names) {
+				continue // wildcards are exempt
 			}
-			pkgVis := getComponentVisibility(pkg, xslElemFunction, key)
-			acceptVis := applyAcceptRules(xslElemFunction, key, acceptRules, pkgVis)
-			if acceptVis == visPrivate {
-				return staticError(errCodeXTSE3051, "component %s set to private by xsl:accept cannot be overridden", key)
-			}
-		}
-		// Check templates
-		for _, tmpl := range pkg.templates {
-			if tmpl.Name == "" {
-				continue
-			}
-			if _, overridden := overrideNames[xslElemTemplate+":"+tmpl.Name]; !overridden {
-				continue
-			}
-			pkgVis := getComponentVisibility(pkg, xslElemTemplate, tmpl.Name)
-			acceptVis := applyAcceptRules(xslElemTemplate, tmpl.Name, acceptRules, pkgVis)
-			if acceptVis == visPrivate {
-				return staticError(errCodeXTSE3051, "component %s set to private by xsl:accept cannot be overridden", tmpl.Name)
-			}
-		}
-		// Check variables
-		for _, v := range pkg.globalVars {
-			if _, overridden := overrideNames[xslElemVariable+":"+v.Name]; !overridden {
-				continue
-			}
-			pkgVis := getComponentVisibility(pkg, xslElemVariable, v.Name)
-			acceptVis := applyAcceptRules(xslElemVariable, v.Name, acceptRules, pkgVis)
-			if acceptVis == visPrivate {
-				return staticError(errCodeXTSE3051, "component %s set to private by xsl:accept cannot be overridden", v.Name)
+			// Check if any override name matches this accept name
+			for overKey := range overrideNames {
+				// overKey is "type:name" (e.g., "template:t-public")
+				parts := splitOverrideKey(overKey)
+				if parts == nil {
+					continue
+				}
+				overType, overName := parts[0], parts[1]
+				if rule.component != xslWildcard && rule.component != overType {
+					continue
+				}
+				if componentNameMatches(overName, rule.names) {
+					return staticError(errCodeXTSE3051,
+						"xsl:accept name %q matches overridden component %q", rule.names, overName)
+				}
 			}
 		}
 	}
@@ -203,8 +273,14 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		tmpl.OwnerPackage = pkg
 		c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
 		if tmpl.Name != "" {
-			if _, exists := c.stylesheet.namedTemplates[tmpl.Name]; !exists {
+			if existing, exists := c.stylesheet.namedTemplates[tmpl.Name]; !exists {
 				c.stylesheet.namedTemplates[tmpl.Name] = tmpl
+			} else if existing.OwnerPackage != nil && existing.OwnerPackage != pkg {
+				// XTSE3050: two use-packages accept homonymous components
+				// with non-hidden visibility.
+				return staticError(errCodeXTSE3050,
+					"template %q accepted from multiple packages with non-hidden visibility",
+					tmpl.Name)
 			}
 		}
 		if tmpl.Match != nil {
@@ -400,4 +476,38 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 	}
 
 	return nil
+}
+
+// isAcceptVisibilityCompatible checks whether changing a component's visibility
+// from 'declared' to 'accepted' is allowed by the XSLT 3.0 spec §3.6.2.
+// The rule: xsl:accept cannot increase the visibility of a component.
+// private → public/final/abstract is not allowed.
+// final → public is not allowed.
+// hidden is always allowed (decreasing).
+func isAcceptVisibilityCompatible(declared, accepted string) bool {
+	if accepted == visHidden {
+		return true // hiding is always allowed
+	}
+	// Cannot make private component visible (public/final/abstract)
+	if declared == visPrivate && (accepted == visPublic || accepted == visFinal || accepted == visAbstract) {
+		return false
+	}
+	// Cannot make final component public or abstract
+	if declared == visFinal && (accepted == visPublic || accepted == visAbstract) {
+		return false
+	}
+	// Cannot make non-abstract component abstract
+	if declared != visAbstract && accepted == visAbstract {
+		return false
+	}
+	return true
+}
+
+// splitOverrideKey splits an override key "type:name" into its components.
+func splitOverrideKey(key string) []string {
+	idx := strings.Index(key, ":")
+	if idx < 0 {
+		return nil
+	}
+	return []string{key[:idx], key[idx+1:]}
 }

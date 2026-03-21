@@ -588,6 +588,12 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 	// The current output node must be an element
 	elem, ok := out.current.(*helium.Element)
 	if !ok {
+		// XTDE0420: it is a dynamic error if the result sequence used to
+		// construct the content of a document node contains an attribute node.
+		if _, isDoc := out.current.(*helium.Document); isDoc && !out.sequenceMode {
+			return dynamicError(errCodeXTDE0420,
+				"cannot add attribute %q to a document node", name)
+		}
 		// In adaptive/json output mode or build-tree=no, capture the
 		// attribute as a pending item rather than raising XTDE0820.
 		if ec.isItemOutputMethod() || out.captureItems {

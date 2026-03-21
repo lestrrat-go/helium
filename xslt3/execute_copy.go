@@ -45,6 +45,11 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		if len(seq) == 0 {
 			return nil // empty sequence: skip body
 		}
+		// XTTE3180: xsl:copy select must produce at most one item.
+		if len(seq) > 1 {
+			return dynamicError(errCodeXTTE3180,
+				"xsl:copy select produced %d items; at most one is allowed", len(seq))
+		}
 		for _, item := range seq {
 			switch v := item.(type) {
 			case xpath3.NodeItem:
@@ -333,8 +338,25 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 			return nil
 		}
 
-		// Not in capture mode — process body in current context.
-		return ec.executeSequenceConstructor(ctx, opts.body)
+		// Not in capture mode — process body in a document node context.
+		// XTDE0420: attributes/namespaces in the body are errors.
+		savedCurrent := out.current
+		out.current = newDoc
+		savedDoc := ec.resultDoc
+		ec.resultDoc = newDoc
+		err := ec.executeSequenceConstructor(ctx, opts.body)
+		ec.resultDoc = savedDoc
+		out.current = savedCurrent
+		if err != nil {
+			return err
+		}
+		// Copy children from the temporary document to the current output.
+		for child := newDoc.FirstChild(); child != nil; child = child.NextSibling() {
+			if addErr := ec.copyNodeToOutput(child); addErr != nil {
+				return addErr
+			}
+		}
+		return nil
 
 	case helium.AttributeNode:
 		attr := node.(*helium.Attribute)

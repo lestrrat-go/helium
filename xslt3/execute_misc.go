@@ -704,6 +704,11 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 			return ncErr
 		}
 		ncSeq := ncResult.Sequence()
+		// XTTE3170: namespace-context must produce a single node.
+		if len(ncSeq) > 1 {
+			return dynamicError(errCodeXTTE3170,
+				"xsl:evaluate namespace-context produced %d items; a single node is required", len(ncSeq))
+		}
 		if len(ncSeq) > 0 {
 			if ni, nodeOK := ncSeq[0].(xpath3.NodeItem); nodeOK {
 				nsNode := ni.Node

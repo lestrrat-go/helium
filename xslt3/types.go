@@ -41,6 +41,18 @@ func parseSequenceType(as string) SequenceType {
 	return SequenceType{ItemType: s, Occurrence: occ}
 }
 
+// allowsEmptySequence returns true if the given 'as' type string allows
+// an empty sequence (zero items). Types ending with ? or * allow empty;
+// types without an occurrence indicator or with + require at least one item.
+func allowsEmptySequence(as string) bool {
+	s := strings.TrimSpace(as)
+	if s == "" || s == "empty-sequence()" {
+		return true
+	}
+	last := s[len(s)-1]
+	return last == '?' || last == '*'
+}
+
 // checkSequenceType checks that a sequence matches the declared type.
 // Returns the (possibly coerced) sequence on success, or an error on type mismatch.
 func checkSequenceType(seq xpath3.Sequence, st SequenceType, errCode string, context string, ec ...*execContext) (xpath3.Sequence, error) {

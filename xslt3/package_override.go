@@ -512,6 +512,15 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 // with the base template it replaces. XTSE3070 is raised when parameter types
 // differ or new required parameters are added.
 func checkOverrideTemplateCompat(override, base *Template) error {
+	// XTSE3070: check return type compatibility.
+	// If both templates have 'as' attributes, they must be compatible
+	// (the override's return type must be a subtype of the base's).
+	if base.As != "" && override.As != "" && base.As != override.As {
+		return staticError(errCodeXTSE3070,
+			"override template %q return type %q does not match base type %q",
+			override.Name, override.As, base.As)
+	}
+
 	// Build map of base params by name
 	baseParams := make(map[string]*Param)
 	for _, p := range base.Params {
