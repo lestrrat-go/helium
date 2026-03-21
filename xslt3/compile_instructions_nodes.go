@@ -658,11 +658,19 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	defer func() { c.breakAllowed = savedBreak }()
 
 	lre := &LiteralResultElement{
-		Name:       elem.Name(),
-		Namespace:  elem.URI(),
-		Prefix:     elem.Prefix(),
-		LocalName:  elem.LocalName(),
-		Namespaces: make(map[string]string),
+		Name:              elem.Name(),
+		Namespace:         elem.URI(),
+		Prefix:            elem.Prefix(),
+		LocalName:         elem.LocalName(),
+		Namespaces:        make(map[string]string),
+		InheritNamespaces: true,
+	}
+
+	// xsl:inherit-namespaces on LRE
+	if inAttr, ok := elem.GetAttributeNS("inherit-namespaces", NSXSLT); ok {
+		if v, vok := parseXSDBool(inAttr); vok {
+			lre.InheritNamespaces = v
+		}
 	}
 
 	// Collect element-level xsl:exclude-result-prefixes and
