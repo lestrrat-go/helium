@@ -301,7 +301,7 @@ func (c *compiler) validateContextItem(elem *helium.Element) error {
 		}
 	}
 
-	useAttr := getAttr(elem, "use")
+	useAttr := strings.TrimSpace(getAttr(elem, "use"))
 	if useAttr != "" && useAttr != "required" && useAttr != "optional" && useAttr != "absent" {
 		return staticError(errCodeXTSE0020,
 			"xsl:context-item/@use must be 'required', 'optional', or 'absent': %q", useAttr)
