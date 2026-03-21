@@ -42,6 +42,11 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		if err != nil {
 			return err
 		}
+		// XTDE0835: namespace URI must not be the reserved xmlns namespace
+		if nsURI == "http://www.w3.org/2000/xmlns/" {
+			return dynamicError(errCodeXTDE0835,
+				"namespace URI %q is reserved and cannot be used", nsURI)
+		}
 		if nsURI != "" {
 			hasNS = true
 			if err := elem.DeclareNamespace(prefix, nsURI); err != nil {
@@ -588,6 +593,11 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		if err != nil {
 			return err
 		}
+		// XTDE0865: the xmlns namespace URI is reserved
+		if nsURI == "http://www.w3.org/2000/xmlns/" {
+			return dynamicError(errCodeXTDE0865,
+				"namespace URI %q is reserved and cannot be used for attributes", nsURI)
+		}
 		if nsURI != "" {
 			prefix := ""
 			localName := name
@@ -982,6 +992,17 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 			return bodyErr
 		}
 		value = stringifySequence(val)
+	}
+
+	// XTDE0920: the prefix "xmlns" is reserved and cannot be used
+	if name == "xmlns" {
+		return dynamicError(errCodeXTDE0920,
+			"cannot create namespace node with prefix %q", name)
+	}
+	// XTDE0905: the xmlns namespace URI is reserved
+	if value == "http://www.w3.org/2000/xmlns/" {
+		return dynamicError(errCodeXTDE0905,
+			"namespace URI %q is reserved and cannot be used", value)
 	}
 
 	out := ec.currentOutput()
