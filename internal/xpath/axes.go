@@ -349,16 +349,39 @@ func NamespacePrefixesInScope(ancestors []helium.Node) map[string]bool {
 
 // CollectNamespaceNodes builds the namespace node list for an element, adding
 // the xml prefix first and then ancestor-declared prefixes in document order.
+// For each prefix, the innermost (closest ancestor) declaration provides the
+// URI, but the output order follows document order (outermost first).
 func CollectNamespaceNodes(ancestors []helium.Node, inScope map[string]bool, elem *helium.Element) []helium.Node {
 	type nser interface{ Namespaces() []*helium.Namespace }
-	seen := map[string]bool{}
+
+	// First pass: find the correct namespace for each prefix (innermost wins).
+	// ancestors[0] is the element itself (innermost), ancestors[len-1] outermost.
+	winner := map[string]*helium.Namespace{}
+	for _, anc := range ancestors {
+		ns, ok := anc.(nser)
+		if !ok {
+			continue
+		}
+		for _, n := range ns.Namespaces() {
+			prefix := n.Prefix()
+			if _, found := winner[prefix]; found {
+				continue // innermost already recorded
+			}
+			if !inScope[prefix] || n.URI() == "" {
+				continue
+			}
+			winner[prefix] = n
+		}
+	}
+
 	var result []helium.Node
 
 	xmlNS := helium.NewNamespace("xml", "http://www.w3.org/XML/1998/namespace")
 	result = append(result, helium.NewNamespaceNodeWrapper(xmlNS, elem))
-	seen["xml"] = true
 
-	// Second pass: collect from outermost to innermost, matching libxml2 order.
+	// Second pass: output in document order (outermost to innermost), but
+	// use the innermost URI for each prefix.
+	emitted := map[string]struct{}{"xml": {}}
 	for i := len(ancestors) - 1; i >= 0; i-- {
 		ns, ok := ancestors[i].(nser)
 		if !ok {
@@ -366,11 +389,15 @@ func CollectNamespaceNodes(ancestors []helium.Node, inScope map[string]bool, ele
 		}
 		for _, n := range ns.Namespaces() {
 			prefix := n.Prefix()
-			if seen[prefix] || !inScope[prefix] || n.URI() == "" {
+			if _, done := emitted[prefix]; done {
 				continue
 			}
-			seen[prefix] = true
-			result = append(result, helium.NewNamespaceNodeWrapper(n, elem))
+			w := winner[prefix]
+			if w == nil {
+				continue
+			}
+			emitted[prefix] = struct{}{}
+			result = append(result, helium.NewNamespaceNodeWrapper(w, elem))
 		}
 	}
 
