@@ -738,9 +738,15 @@ func sortNodes1(ctx context.Context, ec *execContext, nodes []helium.Node, sk *S
 	evalState := ec.sortXPathEvalState()
 	evalState.SetSize(len(nodes))
 
+	// Save and restore currentNode so current() works correctly
+	// within sort key expressions (XSLT spec 13.1.4).
+	savedCurrent := ec.currentNode
+	defer func() { ec.currentNode = savedCurrent }()
+
 	entries := make([]keyedNode1, len(nodes))
 	for i, node := range nodes {
 		evalState.SetPosition(i + 1)
+		ec.currentNode = node
 		sv, err := evaluateSortKey(ctx, ec, sk, node, &dtMode, evalState)
 		if err != nil {
 			return nil, err
@@ -828,9 +834,13 @@ func sortNodesN(ctx context.Context, ec *execContext, nodes []helium.Node, sortK
 	evalState := ec.sortXPathEvalState()
 	evalState.SetSize(len(nodes))
 
+	savedCurrent := ec.currentNode
+	defer func() { ec.currentNode = savedCurrent }()
+
 	entries := make(keyedNodes, len(nodes))
 	for i, node := range nodes {
 		evalState.SetPosition(i + 1)
+		ec.currentNode = node
 		keys, err := extractSortValues(ctx, ec, sortKeys, node, dtModes, evalState)
 		if err != nil {
 			return nil, err
