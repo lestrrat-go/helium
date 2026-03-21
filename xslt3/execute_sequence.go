@@ -298,14 +298,12 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 	}
 
 	prevWasAtomic := out.prevWasAtomic
-	localAtomic := false // true when prevWasAtomic was set by an item in THIS call
-	hadAtomic := false   // tracks whether any atomic (including empty) was seen
+	hadAtomic := false // tracks whether any atomic (including empty) was seen
 	seq := flattenArraysInSequence(result.Sequence())
 	for _, item := range seq {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
 			prevWasAtomic = false
-			localAtomic = false
 			hadAtomic = false
 			if normalizeNode(v.Node) == nil {
 				continue
@@ -373,28 +371,11 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 				return sErr
 			}
 			// Zero-length atomic strings produce no text node (XSLT 3.0
-			// §11.4.1). Within a single select expression, skip separator
-			// for empty strings so that "23, '', date" produces "23 date"
-			// not "23  date". Between separate instructions, the original
-			// separator logic applies via prevWasAtomic inheritance.
+			// §11.4.1). Skip separator for empty strings: they produce
+			// no visible text, so inserting a space would create spurious
+			// whitespace. The prevWasAtomic flag is preserved so that a
+			// space will be inserted before the next non-empty atomic.
 			if s == "" {
-				if prevWasAtomic && !localAtomic {
-					// Inherited from a previous instruction: insert separator
-					sepStr := " "
-					if out.itemSeparator != nil {
-						sepStr = *out.itemSeparator
-					}
-					if sepStr != "" {
-						sep, tErr := ec.resultDoc.CreateText([]byte(sepStr))
-						if tErr != nil {
-							return tErr
-						}
-						if err := ec.addNodeUntracked(sep); err != nil {
-							return err
-						}
-					}
-				}
-				localAtomic = true
 				hadAtomic = true
 				continue
 			}
@@ -424,7 +405,6 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 				return err
 			}
 			prevWasAtomic = true
-			localAtomic = true
 			hadAtomic = true
 		case xpath3.FunctionItem, xpath3.MapItem, *xpath3.ArrayItem:
 			// XTDE0450: function items (including maps and arrays) cannot
