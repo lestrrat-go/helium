@@ -2,7 +2,6 @@ package xslt3
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -935,21 +934,32 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 			"cannot add namespace node to a non-element node")
 	}
 
+	// XTDE0430: it is a non-recoverable dynamic error if two namespace
+	// nodes for the same element have the same prefix but different URIs.
+	// However, when the conflict is with the element's own prefix, namespace
+	// fixup can rename the element instead (e.g. when exclude-result-prefixes
+	// causes the element's namespace to be re-declared differently).
+	for _, ns := range elem.Namespaces() {
+		if ns.Prefix() == name && ns.URI() != value {
+			// If this is the element's own namespace, allow rename (below).
+			if elem.Prefix() == name && elem.URI() == ns.URI() {
+				continue
+			}
+			return dynamicError(errCodeXTDE0430,
+				"namespace prefix %q is already bound to %q; cannot rebind to %q", name, ns.URI(), value)
+		}
+	}
+
 	// If the new namespace binding conflicts with the element's own prefix
 	// (same prefix, different URI), rename the element's prefix to avoid
-	// the collision. Per XSLT spec §11.1.4: if a namespace node clashes
-	// with the element's namespace, the processor must change the element
-	// prefix.
+	// the collision via namespace fixup.
 	if name != "" && elem.Prefix() == name && elem.URI() != value {
 		origURI := elem.URI()
-		// Generate a unique replacement prefix
 		newPrefix := name + "_0"
 		for i := 1; ec.prefixInUse(elem, newPrefix); i++ {
-			newPrefix = fmt.Sprintf("%s_%d", name, i)
+			newPrefix = name + "_" + strconv.Itoa(i)
 		}
-		// Remove the old namespace declaration for the conflicting prefix
 		elem.RemoveNamespaceByPrefix(name)
-		// Re-bind the element to the new prefix
 		if err := elem.DeclareNamespace(newPrefix, origURI); err != nil {
 			return err
 		}
