@@ -423,6 +423,12 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 
 		seq := result.Sequence()
 
+		// XTTE1020: sort key value must be a single atomic value after atomization
+		if len(seq) > 1 {
+			return sortValue{}, dynamicError(errCodeXTTE1020,
+				"sort key value is a sequence of %d items; a single value is required", len(seq))
+		}
+
 		implicitTZ := ec.currentTime.Location()
 		if *dtMode == dataTypeNumber {
 			// Explicit data-type="number": use number() semantics.
@@ -431,7 +437,14 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 		}
 		if *dtMode == dataTypeNumberAuto {
 			// Auto-detected numeric: preserve date/time ordering.
-			return extractNumericValueFromResult(seq, result, implicitTZ), nil
+			sv := extractNumericValueFromResult(seq, result, implicitTZ)
+			// Preserve original type name for XTDE1030 checking
+			if len(seq) == 1 {
+				if av, ok := seq[0].(xpath3.AtomicValue); ok {
+					sv.typeName = av.TypeName
+				}
+			}
+			return sv, nil
 		}
 
 		sv := sortValue{kind: sortValueText, str: result.StringValue()}

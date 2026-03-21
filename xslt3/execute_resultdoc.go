@@ -188,14 +188,27 @@ func (ec *execContext) isItemOutputMethod() bool {
 
 // resolveResultDocFormat returns the effective format name for a result-document
 // instruction, evaluating the format AVT if present.
-func (ec *execContext) resolveResultDocFormat(ctx context.Context, inst *ResultDocumentInst) string {
+// Returns an error for XTDE0290 (prefix not bound) or XTDE1460 (invalid QName).
+func (ec *execContext) resolveResultDocFormat(ctx context.Context, inst *ResultDocumentInst) (string, error) {
 	if inst.FormatAVT != nil {
 		v, err := inst.FormatAVT.evaluate(ctx, ec.contextNode)
-		if err == nil {
-			return resolveQName(strings.TrimSpace(v), inst.NSBindings)
+		if err != nil {
+			return inst.Format, nil
 		}
+		v = strings.TrimSpace(v)
+		if v != "" && !strings.HasPrefix(v, "Q{") {
+			// XTDE0290: prefix must have a namespace binding
+			if idx := strings.IndexByte(v, ':'); idx >= 0 {
+				prefix := v[:idx]
+				if _, ok := inst.NSBindings[prefix]; !ok {
+					return "", dynamicError("XTDE0290",
+						"prefix %q in result-document format has no namespace binding", prefix)
+				}
+			}
+		}
+		return resolveQName(v, inst.NSBindings), nil
 	}
-	return inst.Format
+	return inst.Format, nil
 }
 
 // resolveResultDocMethod returns the effective output method for a result-document
@@ -214,7 +227,7 @@ func (ec *execContext) resolveResultDocMethod(ctx context.Context, inst *ResultD
 		return inst.Method
 	}
 	// Named format.
-	format := ec.resolveResultDocFormat(ctx, inst)
+	format, _ := ec.resolveResultDocFormat(ctx, inst)
 	if format != "" {
 		if outDef, ok := ec.stylesheet.outputs[format]; ok {
 			return outDef.Method
@@ -263,7 +276,10 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 	ec.usedResultURIs[href] = struct{}{}
 
 	// Resolve the effective format name (static or AVT).
-	effectiveFormat := ec.resolveResultDocFormat(ctx, inst)
+	effectiveFormat, fmtErr := ec.resolveResultDocFormat(ctx, inst)
+	if fmtErr != nil {
+		return fmtErr
+	}
 
 	// Resolve effective item-separator: xsl:result-document attribute takes
 	// priority (including #absent which blocks format inheritance),
@@ -516,7 +532,10 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 		inst.OmitXMLDeclaration != nil || inst.DoctypeSystem != nil || inst.DoctypePublic != nil ||
 		inst.CDATASectionElements != nil || inst.Encoding != nil || inst.OutputVersion != nil ||
 		inst.ByteOrderMark != nil || inst.EscapeURIAttributes != nil
-	effectiveFormat := ec.resolveResultDocFormat(ctx, inst)
+	effectiveFormat, fmtErr := ec.resolveResultDocFormat(ctx, inst)
+	if fmtErr != nil {
+		return nil, fmtErr
+	}
 	if !hasAny && effectiveFormat == "" {
 		return nil, nil
 	}
