@@ -543,18 +543,20 @@ func findDocumentElement(doc *helium.Document) *helium.Element {
 }
 
 // xsdTypeNameFromDef converts a xsd.TypeDef to a type name string.
+// For anonymous types (no name), it walks the BaseType chain to find
+// the nearest named ancestor type, so schema-element() matching can
+// compare against the declared type hierarchy.
 func xsdTypeNameFromDef(td *xsd.TypeDef) string {
-	if td == nil {
-		return "xs:untyped"
-	}
-	if td.Name.NS == "http://www.w3.org/2001/XMLSchema" {
-		return "xs:" + td.Name.Local
-	}
-	if td.Name.NS != "" {
-		return xpath3.QAnnotation(td.Name.NS, td.Name.Local)
-	}
-	if td.Name.Local != "" {
-		return "Q{}" + td.Name.Local
+	for cur := td; cur != nil; cur = cur.BaseType {
+		if cur.Name.NS == "http://www.w3.org/2001/XMLSchema" && cur.Name.Local != "" {
+			return "xs:" + cur.Name.Local
+		}
+		if cur.Name.NS != "" && cur.Name.Local != "" {
+			return xpath3.QAnnotation(cur.Name.NS, cur.Name.Local)
+		}
+		if cur.Name.Local != "" {
+			return "Q{}" + cur.Name.Local
+		}
 	}
 	return "xs:untyped"
 }
