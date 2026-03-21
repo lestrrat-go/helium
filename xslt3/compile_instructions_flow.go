@@ -46,6 +46,7 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 	}
 
 	// Process children: xsl:sort and xsl:with-param
+	sortCount := 0
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
@@ -56,11 +57,19 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 		}
 		switch childElem.LocalName() {
 		case "sort":
+			// XTSE1017: @stable only on first xsl:sort
+			if sortCount > 0 {
+				if _, has := childElem.GetAttribute("stable"); has {
+					return nil, staticError(errCodeXTSE1017,
+						"the stable attribute is permitted only on the first xsl:sort element")
+				}
+			}
 			sk, err := c.compileSortKey(childElem)
 			if err != nil {
 				return nil, err
 			}
 			inst.Sort = append(inst.Sort, sk)
+			sortCount++
 		case "with-param":
 			wp, err := c.compileWithParam(childElem)
 			if err != nil {
@@ -239,6 +248,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 
 	// First pass: collect sort keys. Validate sort comes before content.
 	pastSortContent := false
+	sortCount := 0
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
@@ -248,11 +258,19 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 			if pastSortContent {
 				return nil, staticError(errCodeXTSE0010, "xsl:sort must come before other content in xsl:for-each")
 			}
+			// XTSE1017: @stable only on first xsl:sort
+			if sortCount > 0 {
+				if _, has := childElem.GetAttribute("stable"); has {
+					return nil, staticError(errCodeXTSE1017,
+						"the stable attribute is permitted only on the first xsl:sort element")
+				}
+			}
 			sk, err := c.compileSortKey(childElem)
 			if err != nil {
 				return nil, err
 			}
 			inst.Sort = append(inst.Sort, sk)
+			sortCount++
 		} else {
 			pastSortContent = true
 		}
@@ -457,6 +475,7 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*PerformSortInst, e
 
 	// Collect sort keys and body. xsl:sort must come before other content.
 	pastSort := false
+	sortCount := 0
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
@@ -466,11 +485,19 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*PerformSortInst, e
 			if pastSort {
 				return nil, staticError(errCodeXTSE0010, "xsl:sort must come before other content in xsl:perform-sort")
 			}
+			// XTSE1017: @stable only on first xsl:sort
+			if sortCount > 0 {
+				if _, has := childElem.GetAttribute("stable"); has {
+					return nil, staticError(errCodeXTSE1017,
+						"the stable attribute is permitted only on the first xsl:sort element")
+				}
+			}
 			sk, err := c.compileSortKey(childElem)
 			if err != nil {
 				return nil, err
 			}
 			inst.Sort = append(inst.Sort, sk)
+			sortCount++
 		} else {
 			pastSort = true
 			childInst, err := c.compileInstruction(childElem)
@@ -679,15 +706,24 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 	}
 
 	// Compile body (skip sort elements)
+	sortCount := 0
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		switch v := child.(type) {
 		case *helium.Element:
 			if v.URI() == NSXSLT && v.LocalName() == "sort" {
+				// XTSE1017: @stable only on first xsl:sort
+				if sortCount > 0 {
+					if _, has := v.GetAttribute("stable"); has {
+						return nil, staticError(errCodeXTSE1017,
+							"the stable attribute is permitted only on the first xsl:sort element")
+					}
+				}
 				sk, sortErr := c.compileSortKey(v)
 				if sortErr != nil {
 					return nil, sortErr
 				}
 				inst.Sort = append(inst.Sort, sk)
+				sortCount++
 				continue
 			}
 			childInst, childErr := c.compileInstruction(v)
