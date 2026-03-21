@@ -186,9 +186,6 @@ func (f NodeWalkerFunc) Visit(n Node) error {
 	return f(n)
 }
 
-// Deprecated: Use NodeWalkerFunc instead.
-type WalkFunc = NodeWalkerFunc
-
 // Walk performs a depth-first traversal of the node tree rooted at n,
 // calling w.Visit for each node. There is no direct libxml2 equivalent; callers
 // typically write manual tree traversal loops in C.
