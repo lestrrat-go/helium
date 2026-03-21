@@ -273,14 +273,14 @@ func validateDocument(doc *Document) *ValidationError {
 	}
 
 	// Walk the document tree and validate each element
-	_ = Walk(doc, func(n Node) error {
+	_ = Walk(doc, NodeWalkerFunc(func(n Node) error {
 		if n.Type() != ElementNode {
 			return nil
 		}
 		elem := n.(*Element)
 		validateOneElement(doc, elem, vctx)
 		return nil
-	})
+	}))
 
 	// Cross-reference check: every IDREF must match an existing ID
 	validateDocumentFinal(vctx)

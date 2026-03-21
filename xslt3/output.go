@@ -369,7 +369,7 @@ func removeRedundantNamespaces(root *helium.Element) {
 	for _, ns := range root.Namespaces() {
 		rootNS[ns.Prefix()] = ns.URI()
 	}
-	_ = helium.Walk(root, func(n helium.Node) error {
+	_ = helium.Walk(root, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n == root {
 			return nil
 		}
@@ -385,7 +385,7 @@ func removeRedundantNamespaces(root *helium.Element) {
 			}
 		}
 		return nil
-	})
+	}))
 }
 
 // wrapNodeInDoc wraps a node in a Document for serialization purposes.
@@ -1070,7 +1070,7 @@ func isPubidChar(r rune) bool {
 // constraints (e.g., starts with a combining character).
 func checkFullyNormalized(doc *helium.Document) error {
 	var firstErr error
-	_ = helium.Walk(doc, func(n helium.Node) error {
+	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() == helium.TextNode || n.Type() == helium.CDATASectionNode {
 			content := string(n.Content())
 			if len(content) > 0 {
@@ -1083,7 +1083,7 @@ func checkFullyNormalized(doc *helium.Document) error {
 			}
 		}
 		return nil
-	})
+	}))
 	return firstErr
 }
 
@@ -1091,7 +1091,7 @@ func checkFullyNormalized(doc *helium.Document) error {
 // HTML text content (SERE0014).
 func checkHTMLInvalidChars(doc *helium.Document) error {
 	var firstErr error
-	_ = helium.Walk(doc, func(n helium.Node) error {
+	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() == helium.TextNode || n.Type() == helium.CDATASectionNode {
 			content := string(n.Content())
 			for _, r := range content {
@@ -1103,14 +1103,14 @@ func checkHTMLInvalidChars(doc *helium.Document) error {
 			}
 		}
 		return nil
-	})
+	}))
 	return firstErr
 }
 
 // checkHTMLPIContent checks that no PI in the result tree contains ">".
 func checkHTMLPIContent(doc *helium.Document) error {
 	var err error
-	_ = helium.Walk(doc, func(n helium.Node) error {
+	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() == helium.ProcessingInstructionNode {
 			content := string(n.Content())
 			if strings.Contains(content, ">") {
@@ -1120,7 +1120,7 @@ func checkHTMLPIContent(doc *helium.Document) error {
 			}
 		}
 		return nil
-	})
+	}))
 	return err
 }
 
@@ -1533,7 +1533,7 @@ func writeAttrWithCharMap(sw *stream.Writer, name, value string, charMap map[run
 func serializeText(w io.Writer, doc *helium.Document, charMap map[rune]string) error {
 	// Text output: just write the text content of the document
 	sw := stream.NewWriter(w)
-	err := helium.Walk(doc, func(n helium.Node) error {
+	err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		switch n.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			text := string(n.Content())
@@ -1543,7 +1543,7 @@ func serializeText(w io.Writer, doc *helium.Document, charMap map[rune]string) e
 			return sw.WriteRaw(text)
 		}
 		return nil
-	})
+	}))
 	if err != nil {
 		return err
 	}
@@ -1707,7 +1707,7 @@ func normalizeXHTMLNamespace(doc *helium.Document) {
 	var sharedNS *helium.Namespace
 	rootDone := false
 
-	_ = helium.Walk(doc, func(n helium.Node) error {
+	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		elem, ok := n.(*helium.Element)
 		if !ok {
 			return nil
@@ -1752,7 +1752,7 @@ func normalizeXHTMLNamespace(doc *helium.Document) {
 		}
 
 		return nil
-	})
+	}))
 }
 
 const (
@@ -1765,7 +1765,7 @@ const (
 // in the SVG or MathML namespace gets a default xmlns declaration for its own
 // namespace, so it serializes as e.g. <svg xmlns="..."> instead of <s:svg>.
 func normalizeForeignNamespaces(doc *helium.Document) {
-	_ = helium.Walk(doc, func(n helium.Node) error {
+	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		elem, ok := n.(*helium.Element)
 		if !ok {
 			return nil
@@ -1790,7 +1790,7 @@ func normalizeForeignNamespaces(doc *helium.Document) {
 			}
 		}
 		return nil
-	})
+	}))
 }
 
 // xhtmlVoidElements lists HTML void elements that should be self-closed
@@ -2084,12 +2084,12 @@ func applyCharMapToHTMLTag(tag string, charMap map[rune]string) string {
 // hasDOEMarkers checks if the document contains any disable-output-escaping markers.
 func hasDOEMarkers(doc *helium.Document) bool {
 	found := false
-	_ = helium.Walk(doc, func(n helium.Node) error {
+	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() == helium.ProcessingInstructionNode && string(n.Name()) == "disable-output-escaping" {
 			found = true
 		}
 		return nil
-	})
+	}))
 	return found
 }
 

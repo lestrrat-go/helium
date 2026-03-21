@@ -696,7 +696,7 @@ func (d *Document) GetElementByID(id string) *Element {
 
 	// Fallback: O(n) tree walk for documents not built via parser.
 	var found *Element
-	_ = Walk(d, func(n Node) error {
+	_ = Walk(d, NodeWalkerFunc(func(n Node) error {
 		if n.Type() != ElementNode {
 			return nil
 		}
@@ -726,7 +726,7 @@ func (d *Document) GetElementByID(id string) *Element {
 			}
 		}
 		return nil
-	})
+	}))
 	return found
 }
 

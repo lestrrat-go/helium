@@ -753,7 +753,7 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	var nodes []helium.Node
-	_ = helium.Walk(doc, func(n helium.Node) error {
+	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		elem, ok := n.(*helium.Element)
 		if !ok {
 			return nil
@@ -770,7 +770,7 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 			}
 		}
 		return nil
-	})
+	}))
 	return sequenceFromDocOrderedNodes(ctx, nodes)
 }
 

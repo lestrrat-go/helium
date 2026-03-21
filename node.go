@@ -173,12 +173,26 @@ func appendText(n Node, b []byte) error {
 	return n.AddChild(t)
 }
 
-type WalkFunc func(Node) error
+// NodeWalker visits nodes during tree traversal.
+type NodeWalker interface {
+	Visit(Node) error
+}
+
+// NodeWalkerFunc is an adapter to allow use of ordinary functions as NodeWalker.
+// Similar to http.HandlerFunc.
+type NodeWalkerFunc func(Node) error
+
+func (f NodeWalkerFunc) Visit(n Node) error {
+	return f(n)
+}
+
+// Deprecated: Use NodeWalkerFunc instead.
+type WalkFunc = NodeWalkerFunc
 
 // Walk performs a depth-first traversal of the node tree rooted at n,
-// calling f for each node. There is no direct libxml2 equivalent; callers
+// calling w.Visit for each node. There is no direct libxml2 equivalent; callers
 // typically write manual tree traversal loops in C.
-func Walk(n Node, f WalkFunc) error {
+func Walk(n Node, w NodeWalker) error {
 	if n == nil {
 		return errors.New("nil node")
 	}
@@ -193,7 +207,7 @@ func Walk(n Node, f WalkFunc) error {
 	for len(stack) > 0 {
 		top := &stack[len(stack)-1]
 		if !top.entered {
-			if err := f(top.node); err != nil {
+			if err := w.Visit(top.node); err != nil {
 				return err
 			}
 			top.entered = true

@@ -27,7 +27,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	}
 
 	// Walk the document tree for content model validation.
-	_ = helium.Walk(doc, func(n helium.Node) error {
+	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
@@ -36,10 +36,10 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			valid = false
 		}
 		return nil
-	})
+	}))
 
 	// Second walk: evaluate identity constraints (xs:key, xs:keyref, xs:unique).
-	_ = helium.Walk(doc, func(n helium.Node) error {
+	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
@@ -51,7 +51,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			}
 		}
 		return nil
-	})
+	}))
 
 	if valid {
 		out.WriteString(filename + " validates\n")
