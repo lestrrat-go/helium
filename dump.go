@@ -85,7 +85,8 @@ var (
 	esc_tab  = []byte("&#9;")
 	esc_nl   = []byte("&#10;")
 	esc_cr   = []byte("&#13;")
-	esc_fffd = []byte("\uFFFD") // Unicode replacement character
+	esc_fffd     = []byte("\uFFFD")      // Unicode replacement character
+	esc_fffd_ref = []byte("&#xFFFD;") // U+FFFD as a numeric character reference
 )
 
 // Decide whether the given rune is in the XML Character Range, per
@@ -139,6 +140,10 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII bool) error {
 			}
 			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
 				esc = esc_fffd
+				break
+			}
+			if r == 0xFFFD {
+				esc = esc_fffd_ref
 				break
 			}
 			continue
@@ -199,6 +204,10 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 			}
 			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
 				esc = esc_fffd
+				break
+			}
+			if r == 0xFFFD {
+				esc = esc_fffd_ref
 				break
 			}
 			continue
