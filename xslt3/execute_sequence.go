@@ -428,8 +428,9 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 			hadAtomic = true
 		case xpath3.FunctionItem, xpath3.MapItem, *xpath3.ArrayItem:
 			// XTDE0450: function items (including maps and arrays) cannot
-			// appear in result tree content.
-			if !out.captureItems {
+			// appear in result tree content — unless the output method
+			// supports items (json/adaptive).
+			if !out.captureItems && !ec.isItemOutputMethod() {
 				return dynamicError(errCodeXTDE0450,
 					"cannot add a %T to the result tree", item)
 			}
@@ -546,7 +547,7 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 			}
 			prevWasAtomic = true
 		case xpath3.FunctionItem, xpath3.MapItem:
-			if out.captureItems {
+			if out.captureItems || ec.isItemOutputMethod() {
 				out.pendingItems = append(out.pendingItems, item)
 			} else {
 				return dynamicError(errCodeXTDE0450,

@@ -485,6 +485,12 @@ func (ec *execContext) execMap(ctx context.Context, inst *MapInst) error {
 		out.noteOutput()
 		return nil
 	}
+	// For json/adaptive output methods, capture items instead of XTDE0450.
+	if ec.isItemOutputMethod() {
+		out.pendingItems = append(out.pendingItems, m)
+		out.noteOutput()
+		return nil
+	}
 	return dynamicError(errCodeXTDE0450, "cannot add a map to the result tree")
 }
 

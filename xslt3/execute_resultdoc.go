@@ -136,6 +136,90 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 	return nil
 }
 
+// validateJSONItems checks for SERE0022 (duplicate keys) in JSON-serializable items.
+func validateJSONItems(items xpath3.Sequence) error {
+	for _, item := range items {
+		if m, ok := item.(xpath3.MapItem); ok {
+			if err := validateMapDuplicateKeys(m); err != nil {
+				return err
+			}
+		}
+		if a, ok := item.(xpath3.ArrayItem); ok {
+			for _, member := range a.Members() {
+				if err := validateJSONItems(member); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// validateMapDuplicateKeys checks a map for keys that produce the same
+// string representation, which is a SERE0022 error in JSON serialization.
+func validateMapDuplicateKeys(m xpath3.MapItem) error {
+	seenKeys := make(map[string]struct{})
+	var dupErr error
+	m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
+		if dupErr != nil {
+			return dupErr
+		}
+		ks, _ := xpath3.AtomicToString(k)
+		if _, dup := seenKeys[ks]; dup {
+			dupErr = dynamicError(errCodeSERE0022, "duplicate key %q in JSON output", ks)
+			return dupErr
+		}
+		seenKeys[ks] = struct{}{}
+		// Recursively check nested maps/arrays.
+		if err := validateJSONItems(v); err != nil {
+			dupErr = err
+			return err
+		}
+		return nil
+	})
+	return dupErr
+}
+
+// isItemOutputMethod returns true when the current effective output method
+// supports non-node items (maps, arrays, function items).
+func (ec *execContext) isItemOutputMethod() bool {
+	return isItemSerializationMethod(ec.currentResultDocMethod)
+}
+
+// resolveResultDocMethod returns the effective output method for a result-document
+// instruction, considering the method AVT, compile-time method, named format, and
+// default output definition.
+func (ec *execContext) resolveResultDocMethod(ctx context.Context, inst *ResultDocumentInst) string {
+	// Runtime AVT takes priority.
+	if inst.MethodAVT != nil {
+		v, err := inst.MethodAVT.evaluate(ctx, ec.contextNode)
+		if err == nil {
+			return strings.TrimSpace(v)
+		}
+	}
+	// Compile-time method attribute.
+	if inst.Method != "" {
+		return inst.Method
+	}
+	// Named format.
+	if inst.Format != "" {
+		if outDef, ok := ec.stylesheet.outputs[inst.Format]; ok {
+			return outDef.Method
+		}
+	}
+	// Default output definition.
+	if outDef, ok := ec.stylesheet.outputs[""]; ok {
+		return outDef.Method
+	}
+	return "xml"
+}
+
+// isItemSerializationMethod returns true when the output method supports
+// non-node items (maps, arrays, function items) without XTDE0450.
+func isItemSerializationMethod(method string) bool {
+	return method == "json" || method == "adaptive"
+}
+
 func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocumentInst) error {
 	// XTDE1480: xsl:result-document is not allowed in a temporary output state.
 	if ec.temporaryOutputDepth > 0 {
@@ -280,13 +364,41 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		ec.insideResultDocPrimary = true
 		savedSep := ec.outputStack[0].itemSeparator
 		ec.outputStack[0].itemSeparator = itemSep
+		effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
+		savedMethod := ec.currentResultDocMethod
+		ec.currentResultDocMethod = effectiveMethod
 		if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
 			ec.insideResultDocPrimary = false
+			ec.currentResultDocMethod = savedMethod
 			ec.outputStack[0].itemSeparator = savedSep
 			ec.outputStack = savedStack
 			return err
 		}
+		// Validate JSON duplicate keys (SERE0022) when allow-duplicate-names is not "yes".
+		if effectiveMethod == "json" {
+			allowDupes := false // default: allow-duplicate-names=no per XSLT 3.0 §20
+			if inst.AllowDuplicateNames != nil {
+				adnVal, adnErr := inst.AllowDuplicateNames.evaluate(ctx, ec.contextNode)
+				if adnErr == nil {
+					adnVal = strings.TrimSpace(adnVal)
+					if adnVal == "yes" || adnVal == "true" || adnVal == "1" {
+						allowDupes = true
+					}
+				}
+			}
+			if !allowDupes {
+				out := ec.outputStack[0]
+				if err := validateJSONItems(out.pendingItems); err != nil {
+					ec.insideResultDocPrimary = false
+					ec.currentResultDocMethod = savedMethod
+					ec.outputStack[0].itemSeparator = savedSep
+					ec.outputStack = savedStack
+					return err
+				}
+			}
+		}
 		ec.insideResultDocPrimary = false
+		ec.currentResultDocMethod = savedMethod
 		ec.outputStack[0].itemSeparator = savedSep
 		ec.outputStack = savedStack
 		// Propagate character map names to the primary output frame.
@@ -325,12 +437,23 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 	}
 	tmpDoc.SetURL(resolvedHref)
 
+	effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
+	savedMethod := ec.currentResultDocMethod
+	ec.currentResultDocMethod = effectiveMethod
 	ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpDoc, itemSeparator: itemSep})
 	if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
+		ec.currentResultDocMethod = savedMethod
 		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 		return err
 	}
+	frame := ec.outputStack[len(ec.outputStack)-1]
+	ec.currentResultDocMethod = savedMethod
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+
+	// For json/adaptive serialization, store captured items.
+	if isItemSerializationMethod(effectiveMethod) && len(frame.pendingItems) > 0 {
+		ec.resultDocItems[href] = frame.pendingItems
+	}
 
 	// Validate the result document if requested.
 	if v := inst.Validation; v == "strict" || v == "lax" {

@@ -58,6 +58,23 @@ func (out *outputFrame) noteOutput() {
 	out.outputSerial++
 }
 
+// SerializeItems writes a sequence of items (maps, arrays, atomics, nodes)
+// using the specified output definition's method (json or adaptive).
+// This is used for result-documents with method="json" or method="adaptive".
+func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, outDef *OutputDef) error {
+	if outDef == nil {
+		outDef = defaultOutputDef()
+	}
+	switch outDef.Method {
+	case "json":
+		return serializeJSONItems(w, items, doc)
+	case "adaptive":
+		return serializeAdaptiveItems(w, items, doc)
+	default:
+		return SerializeResult(w, doc, outDef)
+	}
+}
+
 // SerializeResult writes the result document to a writer according to the
 // output definition. If outDef is nil, defaults to XML output.
 func SerializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
@@ -141,6 +158,10 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		}
 	case "xhtml":
 		err = serializeXHTML(target, doc, outDef, charMap)
+	case "json":
+		err = serializeJSONItems(target, nil, doc)
+	case "adaptive":
+		err = serializeAdaptiveItems(target, nil, doc)
 	default:
 		err = serializeXML(target, doc, outDef, charMap)
 	}
@@ -163,6 +184,309 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		return err
 	}
 	return nil
+}
+
+// serializeJSONItems serializes a sequence of items as JSON output.
+// Per XSLT 3.0 §26: the sequence is serialized as a single JSON value.
+func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document) error {
+	if len(items) == 0 && doc != nil {
+		// No captured items: serialize DOM content as text for JSON
+		return serializeAdaptiveItems(w, items, doc)
+	}
+	if len(items) == 1 {
+		s, err := serializeItemJSON(items[0])
+		if err != nil {
+			return err
+		}
+		_, err = io.WriteString(w, s)
+		return err
+	}
+	// Multiple items: serialize as JSON array
+	members := make([]xpath3.Sequence, len(items))
+	for i, item := range items {
+		members[i] = xpath3.Sequence{item}
+	}
+	s, err := serializeItemJSON(xpath3.NewArray(members))
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, s)
+	return err
+}
+
+// serializeAdaptiveItems serializes a sequence of items using the adaptive
+// serialization method. Each item is serialized according to its type.
+func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Document) error {
+	if len(items) == 0 && doc != nil {
+		// Fallback: serialize DOM as XML
+		return serializeXML(w, doc, defaultOutputDef(), nil)
+	}
+	for i, item := range items {
+		if i > 0 {
+			if _, err := io.WriteString(w, "\n"); err != nil {
+				return err
+			}
+		}
+		s := serializeItemAdaptive(item)
+		if _, err := io.WriteString(w, s); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// serializeItemJSON serializes a single XDM item as JSON.
+func serializeItemJSON(item xpath3.Item) (string, error) {
+	switch v := item.(type) {
+	case xpath3.MapItem:
+		return serializeMapJSON(v)
+	case xpath3.ArrayItem:
+		return serializeArrayJSON(v)
+	case xpath3.NodeItem:
+		return jsonEscapeString(nodeStringValue(v.Node)), nil
+	case xpath3.AtomicValue:
+		return serializeAtomicJSON(v), nil
+	default:
+		if av, ok := item.(xpath3.AtomicValue); ok {
+			return serializeAtomicJSON(av), nil
+		}
+		return jsonEscapeString(fmt.Sprintf("%v", item)), nil
+	}
+}
+
+// serializeMapJSON serializes a map as a JSON object.
+func serializeMapJSON(m xpath3.MapItem) (string, error) {
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	first := true
+	var serErr error
+	m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
+		if serErr != nil {
+			return serErr
+		}
+		if !first {
+			buf.WriteByte(',')
+		}
+		first = false
+		ks, _ := xpath3.AtomicToString(k)
+		buf.WriteString(jsonEscapeString(ks))
+		buf.WriteByte(':')
+		if len(v) == 1 {
+			s, err := serializeItemJSON(v[0])
+			if err != nil {
+				serErr = err
+				return err
+			}
+			buf.WriteString(s)
+		} else if len(v) == 0 {
+			buf.WriteString("null")
+		} else {
+			members := make([]xpath3.Sequence, len(v))
+			for i, vi := range v {
+				members[i] = xpath3.Sequence{vi}
+			}
+			s, err := serializeItemJSON(xpath3.NewArray(members))
+			if err != nil {
+				serErr = err
+				return err
+			}
+			buf.WriteString(s)
+		}
+		return nil
+	})
+	if serErr != nil {
+		return "", serErr
+	}
+	buf.WriteByte('}')
+	return buf.String(), nil
+}
+
+// serializeArrayJSON serializes an array as a JSON array.
+func serializeArrayJSON(a xpath3.ArrayItem) (string, error) {
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	members := a.Members()
+	for i, member := range members {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		if len(member) == 1 {
+			s, err := serializeItemJSON(member[0])
+			if err != nil {
+				return "", err
+			}
+			buf.WriteString(s)
+		} else if len(member) == 0 {
+			buf.WriteString("null")
+		} else {
+			// Multi-item member: serialize as array
+			submembers := make([]xpath3.Sequence, len(member))
+			for j, mi := range member {
+				submembers[j] = xpath3.Sequence{mi}
+			}
+			s, err := serializeItemJSON(xpath3.NewArray(submembers))
+			if err != nil {
+				return "", err
+			}
+			buf.WriteString(s)
+		}
+	}
+	buf.WriteByte(']')
+	return buf.String(), nil
+}
+
+// serializeAtomicJSON serializes an atomic value as JSON.
+func serializeAtomicJSON(v xpath3.AtomicValue) string {
+	typeName := v.TypeName
+	switch typeName {
+	case "xs:boolean":
+		b, _ := xpath3.AtomicToString(v)
+		return b
+	case "xs:integer", "xs:int", "xs:long", "xs:short", "xs:byte",
+		"xs:unsignedInt", "xs:unsignedLong", "xs:unsignedShort", "xs:unsignedByte",
+		"xs:positiveInteger", "xs:nonNegativeInteger", "xs:negativeInteger", "xs:nonPositiveInteger":
+		s, _ := xpath3.AtomicToString(v)
+		return s
+	case "xs:double", "xs:float", "xs:decimal":
+		s, _ := xpath3.AtomicToString(v)
+		if s == "NaN" || s == "INF" || s == "-INF" || s == "+INF" {
+			return jsonEscapeString(s)
+		}
+		return s
+	default:
+		s, _ := xpath3.AtomicToString(v)
+		return jsonEscapeString(s)
+	}
+}
+
+// jsonEscapeString returns a JSON-escaped double-quoted string.
+func jsonEscapeString(s string) string {
+	var buf bytes.Buffer
+	buf.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"':
+			buf.WriteString("\\\"")
+		case '\\':
+			buf.WriteString("\\\\")
+		case '\n':
+			buf.WriteString("\\n")
+		case '\r':
+			buf.WriteString("\\r")
+		case '\t':
+			buf.WriteString("\\t")
+		case '\b':
+			buf.WriteString("\\b")
+		case '\f':
+			buf.WriteString("\\f")
+		default:
+			if r < 0x20 {
+				buf.WriteString(fmt.Sprintf("\\u%04x", r))
+			} else {
+				buf.WriteRune(r)
+			}
+		}
+	}
+	buf.WriteByte('"')
+	return buf.String()
+}
+
+// serializeItemAdaptive serializes a single item using the adaptive method.
+func serializeItemAdaptive(item xpath3.Item) string {
+	switch v := item.(type) {
+	case xpath3.MapItem:
+		return serializeMapAdaptive(v)
+	case xpath3.ArrayItem:
+		return serializeArrayAdaptive(v)
+	case xpath3.NodeItem:
+		var buf bytes.Buffer
+		if elem, ok := v.Node.(*helium.Element); ok {
+			elem.XML(&buf, helium.WithNoDecl())
+		} else if doc, ok := v.Node.(*helium.Document); ok {
+			doc.XML(&buf, helium.WithNoDecl())
+		} else {
+			buf.WriteString(string(v.Node.Content()))
+		}
+		return buf.String()
+	case xpath3.AtomicValue:
+		s, _ := xpath3.AtomicToString(v)
+		return s
+	default:
+		if av, ok := item.(xpath3.AtomicValue); ok {
+			s, _ := xpath3.AtomicToString(av)
+			return s
+		}
+		return fmt.Sprintf("%v", item)
+	}
+}
+
+// serializeMapAdaptive serializes a map using adaptive serialization.
+func serializeMapAdaptive(m xpath3.MapItem) string {
+	var buf bytes.Buffer
+	buf.WriteString("map{")
+	first := true
+	m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
+		if !first {
+			buf.WriteByte(',')
+		}
+		first = false
+		ks, _ := xpath3.AtomicToString(k)
+		buf.WriteString(jsonEscapeString(ks))
+		buf.WriteByte(':')
+		if len(v) == 1 {
+			buf.WriteString(serializeItemAdaptive(v[0]))
+		} else if len(v) == 0 {
+			buf.WriteString("()")
+		} else {
+			buf.WriteByte('(')
+			for i, vi := range v {
+				if i > 0 {
+					buf.WriteByte(',')
+				}
+				buf.WriteString(serializeItemAdaptive(vi))
+			}
+			buf.WriteByte(')')
+		}
+		return nil
+	})
+	buf.WriteByte('}')
+	return buf.String()
+}
+
+// serializeArrayAdaptive serializes an array using adaptive serialization.
+func serializeArrayAdaptive(a xpath3.ArrayItem) string {
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	members := a.Members()
+	for i, member := range members {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		if len(member) == 1 {
+			buf.WriteString(serializeItemAdaptive(member[0]))
+		} else if len(member) == 0 {
+			buf.WriteString("()")
+		} else {
+			buf.WriteByte('(')
+			for j, vi := range member {
+				if j > 0 {
+					buf.WriteByte(',')
+				}
+				buf.WriteString(serializeItemAdaptive(vi))
+			}
+			buf.WriteByte(')')
+		}
+	}
+	buf.WriteByte(']')
+	return buf.String()
+}
+
+// nodeStringValue returns the string value of a node.
+func nodeStringValue(n helium.Node) string {
+	if n == nil {
+		return ""
+	}
+	return string(n.Content())
 }
 
 // applyUnicodeNormalization applies the specified Unicode normalization form
