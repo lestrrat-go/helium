@@ -279,9 +279,12 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		}
 	}
 
-	// Merge accumulators
+	// Merge accumulators from the used package. Mark them as package-imported
+	// so that a local accumulator with the same name can shadow them without
+	// raising XTSE3350 (accumulators in different packages may share a name).
 	for name, acc := range pkg.accumulators {
 		if _, exists := c.stylesheet.accumulators[name]; !exists {
+			acc.FromPackage = true
 			c.stylesheet.accumulators[name] = acc
 			c.stylesheet.accumulatorOrder = append(c.stylesheet.accumulatorOrder, name)
 		}

@@ -462,6 +462,12 @@ func (c *compiler) compileAccumulator(elem *helium.Element) error {
 	}
 
 	if existing, exists := c.stylesheet.accumulators[expandedName]; exists {
+		// Accumulators in different packages may share the same name.
+		// A local accumulator shadows a package-imported one.
+		if existing.FromPackage {
+			c.stylesheet.accumulators[expandedName] = acc
+			return nil
+		}
 		// XTSE3350: duplicate accumulator name at the same import precedence.
 		if acc.ImportPrec == existing.ImportPrec {
 			return staticError(errCodeXTSE3350,
