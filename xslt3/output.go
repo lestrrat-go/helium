@@ -816,8 +816,14 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 	if htmlVer == "" {
 		htmlVer = outDef.Version
 	}
-	// C1 control chars in HTML are handled during serialization by
-	// escapeC1ControlsInString (post-processing), not here.
+	// SERE0014: HTML method with characters in #x7F-#x9F range in text.
+	// HTML5 allows these characters as character references, so skip for version >= 5.
+	// For HTML 4.x, raise the error as required by the spec.
+	if method == "html" && !isHTMLVersion5(htmlVer) {
+		if err := checkHTMLInvalidChars(doc); err != nil {
+			return err
+		}
+	}
 
 	// SERE0015: ">" in PI content for HTML output
 	if method == "html" {
