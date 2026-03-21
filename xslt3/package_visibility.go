@@ -96,6 +96,11 @@ func checkExposeVisibility(name, newVis, declaredVis string) (string, string) {
 		return errCodeXTSE3025, fmt.Sprintf(
 			"xsl:expose: cannot change visibility of %q from %s to abstract", name, effectiveVis)
 	}
+	// XTSE3010: cannot change an abstract component to non-abstract
+	if effectiveVis == visAbstract && newVis != visAbstract {
+		return errCodeXTSE3010, fmt.Sprintf(
+			"xsl:expose: cannot change visibility of abstract component %q to %s", name, newVis)
+	}
 	// XTSE3010: cannot increase visibility beyond declared level.
 	// public→final is allowed (restricting overridability is not an increase).
 	// final→public is NOT allowed (removing restriction is an increase).
@@ -338,8 +343,13 @@ func (c *compiler) processExpose(root *helium.Element) error {
 	for name := range c.stylesheet.attributeSets {
 		c.stylesheet.attrSetVisibility[name] = visPrivate
 	}
+	// Save explicitly declared mode visibility before defaults are applied.
+	c.declaredModeVis = make(map[string]string)
 	if c.stylesheet.modeDefs != nil {
 		for _, md := range c.stylesheet.modeDefs {
+			if md.Visibility != "" {
+				c.declaredModeVis[md.Name] = md.Visibility
+			}
 			if md.Visibility == "" {
 				md.Visibility = visPrivate
 			}
@@ -370,8 +380,11 @@ func (c *compiler) processExpose(root *helium.Element) error {
 		}
 	}
 	c.declaredAttrSetVis = make(map[string]string)
-	// Attribute sets have no explicit visibility attribute in XSLT;
-	// they always default to private, so no restriction needed.
+	for name, as := range c.stylesheet.attributeSets {
+		if as.Visibility != "" {
+			c.declaredAttrSetVis[name] = as.Visibility
+		}
+	}
 	c.declaredParamVis = make(map[string]string)
 	for _, p := range c.stylesheet.globalParams {
 		if p.Visibility != "" {
@@ -775,12 +788,23 @@ func (c *compiler) applyExposeToModes(pattern, visibility string, strict bool) e
 	isWild := isWildcard(pattern)
 	for _, md := range c.stylesheet.modeDefs {
 		if componentNameMatches(md.Name, pattern) {
+			declared := c.declaredModeVis[md.Name] // "" if not explicitly declared
 			if !isWild {
-				code, msg := checkExposeVisibility(md.Name, visibility, "")
+				code, msg := checkExposeVisibility(md.Name, visibility, declared)
 				if code != "" {
 					return staticError(code, "%s", msg)
 				}
-	
+			} else {
+				// For wildcard patterns, XTSE3025 (abstract) is still a
+				// hard error, but XTSE3010 (visibility increase) silently
+				// skips the component instead of erroring.
+				code, msg := checkExposeVisibility(md.Name, visibility, declared)
+				if code == errCodeXTSE3025 {
+					return staticError(code, "%s", msg)
+				}
+				if code == errCodeXTSE3010 {
+					continue
+				}
 			}
 			md.Visibility = visibility
 			matched = true
