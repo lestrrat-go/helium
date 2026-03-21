@@ -255,7 +255,11 @@ func generalCompareWithCollation(op TokenType, left, right Sequence, coll *colla
 			if err != nil {
 				return false, err
 			}
-			match, err := compareAtomicCollation(op, pa, pb, nil, coll)
+			var implTZ *time.Location
+			if ec != nil {
+				implTZ = ec.getImplicitTimezone()
+			}
+			match, err := compareAtomicCollation(op, pa, pb, implTZ, coll)
 			if err != nil {
 				return false, err
 			}
