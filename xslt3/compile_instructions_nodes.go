@@ -695,9 +695,11 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	// is not supported
 	if ver, ok := elem.GetAttributeNS("version", NSXSLT); ok {
 		ver = strings.TrimSpace(ver)
-		if ver != "" && ver < "2.0" {
-			return nil, dynamicError("XTDE0160",
-				"backwards-compatible behavior is not supported for XSLT version %s", ver)
+		if ver != "" {
+			if f, err := strconv.ParseFloat(ver, 64); err == nil && f < 2.0 {
+				return nil, dynamicError("XTDE0160",
+					"backwards-compatible behavior is not supported for XSLT version %s", ver)
+			}
 		}
 	}
 
