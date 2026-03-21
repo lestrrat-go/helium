@@ -61,23 +61,48 @@ func visibilityLevel(vis string) int {
 	}
 }
 
+// isVisibilityIncrease returns true if changing from 'from' to 'to' is
+// considered an increase in accessibility (which is not allowed by xsl:expose).
+// The ordering (from most restricted to most accessible) is:
+//   hidden < private < final < public
+// abstract is special and handled separately.
+func isVisibilityIncrease(from, to string) bool {
+	order := map[string]int{
+		visHidden:  0,
+		visPrivate: 1,
+		visFinal:   2,
+		visPublic:  3,
+	}
+	f, okF := order[from]
+	t, okT := order[to]
+	if !okF || !okT {
+		return false
+	}
+	return t > f
+}
+
 // checkExposeVisibility validates whether setting a component's visibility via
 // xsl:expose is allowed. Returns an error code and message, or "" if valid.
 // Rules:
 // - XTSE3010: declared visibility is explicitly set and expose tries to change
 //   it to a different "kind" (e.g., public→abstract) or to a higher level.
 func checkExposeVisibility(name, newVis, declaredVis string) (string, string) {
-	// Check against declared visibility (XTSE3010)
-	if declaredVis != "" {
-		if visibilityLevel(newVis) > visibilityLevel(declaredVis) {
+	effectiveVis := declaredVis
+	if effectiveVis == "" {
+		effectiveVis = visPrivate // default for package components
+	}
+	// XTSE3025: cannot make a non-abstract component abstract
+	if newVis == visAbstract && effectiveVis != visAbstract {
+		return errCodeXTSE3025, fmt.Sprintf(
+			"xsl:expose: cannot change visibility of %q from %s to abstract", name, effectiveVis)
+	}
+	// XTSE3010: cannot increase visibility beyond declared level.
+	// public→final is allowed (restricting overridability is not an increase).
+	// final→public is NOT allowed (removing restriction is an increase).
+	if declaredVis != "" && newVis != declaredVis {
+		if isVisibilityIncrease(declaredVis, newVis) {
 			return errCodeXTSE3010, fmt.Sprintf(
-				"xsl:expose: cannot increase visibility of %q from %s to %s", name, declaredVis, newVis)
-		}
-		// Cannot make a non-abstract component abstract (changes semantics).
-		// public→final and final→public are allowed (same accessibility level).
-		if newVis == visAbstract && declaredVis != visAbstract {
-			return errCodeXTSE3010, fmt.Sprintf(
-				"xsl:expose: cannot change visibility of %q from %s to abstract", name, declaredVis)
+				"xsl:expose: cannot change visibility of %q from %s to %s", name, declaredVis, newVis)
 		}
 	}
 
@@ -450,12 +475,21 @@ func (c *compiler) compileExpose(elem *helium.Element) error {
 		case xslWildcard:
 			// When component="*", apply to all component types.
 			// Use non-strict mode so we don't error when a name matches
-			// in one component type but not others.
-			_ = c.applyExposeToTemplates(resolvedName, visibility, true)
-			_ = c.applyExposeToFunctions(resolvedName, visibility)
-			_ = c.applyExposeToVariables(resolvedName, visibility)
-			_ = c.applyExposeToAttrSets(resolvedName, visibility, false)
-			_ = c.applyExposeToModes(resolvedName, visibility, false)
+			// in one component type but not others. But propagate XTSE3025
+			// (abstract on non-abstract) which applies regardless.
+			for _, fn := range []func() error{
+				func() error { return c.applyExposeToTemplates(resolvedName, visibility, true) },
+				func() error { return c.applyExposeToFunctions(resolvedName, visibility) },
+				func() error { return c.applyExposeToVariables(resolvedName, visibility) },
+				func() error { return c.applyExposeToAttrSets(resolvedName, visibility, false) },
+				func() error { return c.applyExposeToModes(resolvedName, visibility, false) },
+			} {
+				if err := fn(); err != nil {
+					if xErr, ok := err.(*XSLTError); ok && xErr.Code == errCodeXTSE3025 {
+						return err
+					}
+				}
+			}
 		}
 	}
 
@@ -493,9 +527,12 @@ func (c *compiler) applyExposeToTemplates(pattern, visibility string, isWildcard
 					return staticError(code, "%s", msg)
 				}
 	
-			} else if declared != "" {
-				// Wildcard: skip components with explicit visibility that would conflict
-				if visibilityLevel(visibility) > visibilityLevel(declared) {
+			} else {
+				code, msg := checkExposeVisibility(name, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
+				}
+				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
 					continue
 				}
 			}
@@ -521,8 +558,14 @@ func (c *compiler) applyExposeToFunctions(pattern, visibility string) error {
 					return staticError(code, "%s", msg)
 				}
 	
-			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
-				continue
+			} else {
+				code, msg := checkExposeVisibility(key, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
+				}
+				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+					continue
+				}
 			}
 			c.stylesheet.functionVisibility[key] = visibility
 			matched = true
@@ -546,9 +589,15 @@ func (c *compiler) applyExposeToFunctionsStrict(pattern, visibility string) erro
 				if code != "" {
 					return staticError(code, "%s", msg)
 				}
-	
-			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
-				continue
+
+			} else {
+				code, msg := checkExposeVisibility(key, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
+				}
+				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+					continue
+				}
 			}
 			c.stylesheet.functionVisibility[key] = visibility
 			matched = true
@@ -572,8 +621,14 @@ func (c *compiler) applyExposeToVariables(pattern, visibility string) error {
 					return staticError(code, "%s", msg)
 				}
 	
-			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
-				continue
+			} else {
+				code, msg := checkExposeVisibility(name, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
+				}
+				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+					continue
+				}
 			}
 			c.stylesheet.variableVisibility[name] = visibility
 			matched = true
@@ -588,8 +643,14 @@ func (c *compiler) applyExposeToVariables(pattern, visibility string) error {
 					return staticError(code, "%s", msg)
 				}
 	
-			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
-				continue
+			} else {
+				code, msg := checkExposeVisibility(name, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
+				}
+				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+					continue
+				}
 			}
 			c.stylesheet.globalParamVisibility[name] = visibility
 			matched = true
@@ -613,8 +674,14 @@ func (c *compiler) applyExposeToVariablesStrict(pattern, visibility string) erro
 					return staticError(code, "%s", msg)
 				}
 	
-			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
-				continue
+			} else {
+				code, msg := checkExposeVisibility(name, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
+				}
+				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+					continue
+				}
 			}
 			c.stylesheet.variableVisibility[name] = visibility
 			matched = true
@@ -629,8 +696,14 @@ func (c *compiler) applyExposeToVariablesStrict(pattern, visibility string) erro
 					return staticError(code, "%s", msg)
 				}
 	
-			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
-				continue
+			} else {
+				code, msg := checkExposeVisibility(name, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
+				}
+				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+					continue
+				}
 			}
 			c.stylesheet.globalParamVisibility[name] = visibility
 			matched = true
@@ -654,8 +727,14 @@ func (c *compiler) applyExposeToAttrSets(pattern, visibility string, strict bool
 					return staticError(code, "%s", msg)
 				}
 	
-			} else if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
-				continue
+			} else {
+				code, msg := checkExposeVisibility(name, visibility, declared)
+				if code != "" {
+					return staticError(code, "%s", msg)
+				}
+				if declared != "" && visibilityLevel(visibility) > visibilityLevel(declared) {
+					continue
+				}
 			}
 			c.stylesheet.attrSetVisibility[name] = visibility
 			matched = true
