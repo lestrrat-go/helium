@@ -546,6 +546,14 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 			return nil
 		}
 		// Per XSLT spec, xsl:copy-of on document node copies children.
+		// Also preserve DTD information (unparsed entities, notations)
+		// in the target document so that unparsed-entity-uri() etc.
+		// continue to work on the result tree.
+		if srcDoc, ok := node.(*helium.Document); ok && srcDoc.IntSubset() != nil {
+			if targetDoc := out.doc; targetDoc != nil && targetDoc.IntSubset() == nil {
+				helium.CopyDTDInfo(srcDoc, targetDoc)
+			}
+		}
 		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 			if err := ec.copyNodeToOutput(child, copyNS); err != nil {
 				return err
