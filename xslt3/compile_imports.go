@@ -53,6 +53,18 @@ func (c *compiler) resolveIncludeURI(elem *helium.Element) (string, string, erro
 // processes only xsl:import elements (and imports within nested includes).
 // This ensures importPrec is finalized before any templates are compiled.
 func (c *compiler) collectIncludeImports(elem *helium.Element) error {
+	// Check use-when before loading the included file (avoids loading
+	// non-existent files when use-when="false()").
+	if uw := getAttr(elem, "use-when"); uw != "" {
+		include, err := c.evaluateUseWhen(uw)
+		if err != nil {
+			return err
+		}
+		if !include {
+			return nil
+		}
+	}
+
 	uri, importKey, err := c.resolveIncludeURI(elem)
 	if err != nil {
 		return err
