@@ -249,6 +249,9 @@ func (ec *execContext) fnDoc(ctx context.Context, args []xpath3.Sequence) (xpath
 
 	doc, err := ec.loadDocument(ctx, uri, baseDir)
 	if err != nil {
+		if isXSLTError(err, errCodeFODC0002) {
+			return xpath3.EmptySequence(), nil
+		}
 		return nil, err
 	}
 	return xpath3.SingleNode(doc), nil
