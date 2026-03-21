@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // compareDecimal compares two decimal string values using math/big.Rat.
@@ -50,7 +51,7 @@ func (c *compiler) checkFacetConsistency() {
 		if td.Facets == nil {
 			continue
 		}
-		if qn.NS == xsdNS {
+		if qn.NS == lexicon.XSD {
 			continue
 		}
 		entries = append(entries, facetEntry{qn: qn, td: td})

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig) (string, bool) {
@@ -246,10 +247,10 @@ func isSpecialAttr(a *helium.Attribute) bool {
 		return true
 	}
 	uri := a.URI()
-	if uri == "http://www.w3.org/2001/XMLSchema-instance" {
+	if uri == lexicon.XSI {
 		return true
 	}
-	if uri == "http://www.w3.org/XML/1998/namespace" {
+	if uri == lexicon.XML {
 		return true
 	}
 	return false
@@ -492,12 +493,10 @@ func isBlank(b []byte) bool {
 	return true
 }
 
-const xsiNS = "http://www.w3.org/2001/XMLSchema-instance"
-
 // hasXsiNil returns true if the element has xsi:nil="true".
 func hasXsiNil(elem *helium.Element) bool {
 	for _, a := range elem.Attributes() {
-		if a.URI() == xsiNS && a.LocalName() == "nil" {
+		if a.URI() == lexicon.XSI && a.LocalName() == attrNil {
 			return a.Value() == "true" || a.Value() == "1"
 		}
 	}
@@ -551,7 +550,7 @@ func isDerivedFrom(derived, base *TypeDef) bool {
 	if derived == base {
 		return true
 	}
-	if base.Name.Local == "anyType" && base.Name.NS == xsdNS {
+	if base.Name.Local == "anyType" && base.Name.NS == lexicon.XSD {
 		return true
 	}
 	for cur := derived.BaseType; cur != nil; cur = cur.BaseType {
@@ -569,7 +568,7 @@ func isDerivedFrom(derived, base *TypeDef) bool {
 func (vc *validationContext) resolveXsiType(elem *helium.Element, declaredType *TypeDef) (*TypeDef, error) {
 	var xsiTypeVal string
 	for _, a := range elem.Attributes() {
-		if a.URI() == xsiNS && a.LocalName() == "type" {
+		if a.URI() == lexicon.XSI && a.LocalName() == attrType {
 			xsiTypeVal = a.Value()
 			break
 		}
@@ -619,7 +618,7 @@ func xsdTypeName(td *TypeDef) string {
 	if td == nil {
 		return "xs:untyped"
 	}
-	if td.Name.NS == xsdNS {
+	if td.Name.NS == lexicon.XSD {
 		return "xs:" + td.Name.Local
 	}
 	if td.Name.NS != "" {
@@ -630,7 +629,7 @@ func xsdTypeName(td *TypeDef) string {
 	}
 	// Anonymous type: walk up the base type chain to find a named type.
 	for cur := td.BaseType; cur != nil; cur = cur.BaseType {
-		if cur.Name.NS == xsdNS {
+		if cur.Name.NS == lexicon.XSD {
 			return "xs:" + cur.Name.Local
 		}
 		if cur.Name.NS != "" {

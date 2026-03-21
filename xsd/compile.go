@@ -8,8 +8,6 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
-const xsdNS = "http://www.w3.org/2001/XMLSchema"
-
 // attrValTrue and attrValQualified are common XML attribute value strings.
 const (
 	attrValTrue      = "true"
@@ -80,7 +78,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		return nil, fmt.Errorf("xsd: empty document")
 	}
 
-	if !isXSDElement(root, "schema") {
+	if !isXSDElement(root, elemSchema) {
 		return nil, fmt.Errorf("xsd: root element is not xs:schema")
 	}
 
@@ -114,15 +112,15 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		}
 	}
 
-	c.schema.targetNamespace = getAttr(root, "targetNamespace")
-	c.schema.elemFormQualified = getAttr(root, "elementFormDefault") == attrValQualified
-	c.schema.attrFormQualified = getAttr(root, "attributeFormDefault") == attrValQualified
+	c.schema.targetNamespace = getAttr(root, attrTargetNamespace)
+	c.schema.elemFormQualified = getAttr(root, attrElementFormDefault) == attrValQualified
+	c.schema.attrFormQualified = getAttr(root, attrAttributeFormDefault) == attrValQualified
 
 	// Parse blockDefault attribute.
-	if v := getAttr(root, "blockDefault"); v != "" {
+	if v := getAttr(root, attrBlockDefault); v != "" {
 		if !isValidBlock(v) && c.filename != "" {
 			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(),
-				root.LocalName(), "schema", "blockDefault",
+				root.LocalName(), elemSchema, attrBlockDefault,
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		} else {
@@ -131,10 +129,10 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	}
 
 	// Parse finalDefault attribute.
-	if v := getAttr(root, "finalDefault"); v != "" {
+	if v := getAttr(root, attrFinalDefault); v != "" {
 		if !isValidFinalDefault(v) && c.filename != "" {
 			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, root.Line(),
-				root.LocalName(), "schema", "finalDefault",
+				root.LocalName(), elemSchema, attrFinalDefault,
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | list | union))'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		} else {
@@ -201,27 +199,27 @@ func (c *compiler) parseSchemaChildren(root *helium.Element) error {
 		}
 		elem := child.(*helium.Element)
 		switch {
-		case isXSDElement(elem, "element"):
+		case isXSDElement(elem, elemElement):
 			if err := c.parseGlobalElement(elem); err != nil {
 				return err
 			}
-		case isXSDElement(elem, "complexType"):
+		case isXSDElement(elem, elemComplexType):
 			if err := c.parseNamedComplexType(elem); err != nil {
 				return err
 			}
-		case isXSDElement(elem, "simpleType"):
+		case isXSDElement(elem, elemSimpleType):
 			if err := c.parseNamedSimpleType(elem); err != nil {
 				return err
 			}
-		case isXSDElement(elem, "group"):
+		case isXSDElement(elem, elemGroup):
 			if err := c.parseNamedGroup(elem); err != nil {
 				return err
 			}
-		case isXSDElement(elem, "attributeGroup"):
+		case isXSDElement(elem, elemAttributeGroup):
 			if err := c.parseNamedAttributeGroup(elem); err != nil {
 				return err
 			}
-		case isXSDElement(elem, "attribute"):
+		case isXSDElement(elem, elemAttribute):
 			c.parseGlobalAttribute(elem)
 		}
 	}

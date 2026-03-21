@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // checkGlobalElement validates constraints on a global xs:element declaration.
@@ -11,7 +12,7 @@ func (c *compiler) checkGlobalElement(elem *helium.Element) {
 	if c.filename == "" {
 		return
 	}
-	name := getAttr(elem, "name")
+	name := getAttr(elem, attrName)
 	line := elem.Line()
 	local := elem.LocalName()
 
@@ -23,60 +24,60 @@ func (c *compiler) checkGlobalElement(elem *helium.Element) {
 	}
 
 	// ref is not allowed at global level.
-	if getAttr(elem, "ref") != "" {
+	if getAttr(elem, attrRef) != "" {
 		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 			"The attribute 'ref' is not allowed."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 
 	// minOccurs is not allowed at global level.
-	if getAttr(elem, "minOccurs") != "" {
+	if getAttr(elem, attrMinOccurs) != "" {
 		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 			"The attribute 'minOccurs' is not allowed."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 
 	// maxOccurs is not allowed at global level.
-	if getAttr(elem, "maxOccurs") != "" {
+	if getAttr(elem, attrMaxOccurs) != "" {
 		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 			"The attribute 'maxOccurs' is not allowed."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 
 	// form is not allowed at global level.
-	if getAttr(elem, "form") != "" {
+	if getAttr(elem, attrForm) != "" {
 		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 			"The attribute 'form' is not allowed."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 
 	// Validate 'final' attribute value.
-	if v := getAttr(elem, "final"); v != "" {
+	if v := getAttr(elem, attrFinal); v != "" {
 		if !isValidFinal(v) {
-			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "final",
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, elemElement, attrFinal,
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction))'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 
 	// Validate 'block' attribute value.
-	if v := getAttr(elem, "block"); v != "" {
+	if v := getAttr(elem, attrBlock); v != "" {
 		if !isValidBlock(v) {
-			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "block",
+			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, elemElement, attrBlock,
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 	}
 
 	// default and fixed are mutually exclusive.
-	if getAttr(elem, "default") != "" && getAttr(elem, "fixed") != "" {
+	if getAttr(elem, attrDefault) != "" && getAttr(elem, attrFixed) != "" {
 		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 			"The attributes 'default' and 'fixed' are mutually exclusive."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
 
 	// type and inline complexType/simpleType are mutually exclusive.
-	if getAttr(elem, "type") != "" {
+	if getAttr(elem, attrType) != "" {
 		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 			if child.Type() != helium.ElementNode {
 				continue
@@ -101,13 +102,13 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 	if c.filename == "" {
 		return
 	}
-	ref := getAttr(elem, "ref")
-	name := getAttr(elem, "name")
+	ref := getAttr(elem, attrRef)
+	name := getAttr(elem, attrName)
 	line := elem.Line()
 	local := elem.LocalName()
 
-	minOcc := getAttr(elem, "minOccurs")
-	maxOcc := getAttr(elem, "maxOccurs")
+	minOcc := getAttr(elem, attrMinOccurs)
+	maxOcc := getAttr(elem, attrMaxOccurs)
 
 	if ref != "" {
 		// Matches libxml2 ordering for ref elements (src-element 2.2):
@@ -117,7 +118,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 		// 4. First child content error
 
 		// maxOccurs must be >= 1.
-		if maxOcc != "" && maxOcc != "unbounded" {
+		if maxOcc != "" && maxOcc != attrValUnbounded {
 			maxVal := parseOccurs(maxOcc, 1)
 			if maxVal < 1 {
 				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
@@ -127,7 +128,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 		}
 
 		// minOccurs > maxOccurs check.
-		if minOcc != "" && maxOcc != "" && maxOcc != "unbounded" {
+		if minOcc != "" && maxOcc != "" && maxOcc != attrValUnbounded {
 			minVal := parseOccurs(minOcc, 1)
 			maxVal := parseOccurs(maxOcc, 1)
 			if minVal > maxVal {
@@ -145,7 +146,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 		}
 
 		// Report first ref-restricted attribute found (alphabetical order).
-		notAllowedWithRef := []string{"abstract", "block", "default", "final", "fixed", "form", "nillable", "substitutionGroup", "type"}
+		notAllowedWithRef := []string{attrAbstract, attrBlock, attrDefault, attrFinal, attrFixed, attrForm, attrNillable, attrSubstitutionGroup, attrType}
 		for _, attr := range notAllowedWithRef {
 			if getAttr(elem, attr) != "" {
 				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", attr,
@@ -161,7 +162,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 				continue
 			}
 			ce := child.(*helium.Element)
-			if isXSDElement(ce, "complexType") || isXSDElement(ce, "simpleType") {
+			if isXSDElement(ce, elemComplexType) || isXSDElement(ce, elemSimpleType) {
 				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
 					"The content is not valid. Expected is (annotation?)."), helium.ErrorLevelFatal))
 				c.errorCount++
@@ -174,7 +175,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 		// block/final value checks, default+fixed, type/content children.
 
 		// maxOccurs must be >= 1.
-		if maxOcc != "" && maxOcc != "unbounded" {
+		if maxOcc != "" && maxOcc != attrValUnbounded {
 			maxVal := parseOccurs(maxOcc, 1)
 			if maxVal < 1 {
 				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "maxOccurs",
@@ -184,7 +185,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 		}
 
 		// Some attributes not allowed for local named elements.
-		localNotAllowed := []string{"abstract", "substitutionGroup", "final"}
+		localNotAllowed := []string{attrAbstract, attrSubstitutionGroup, attrFinal}
 		for _, attr := range localNotAllowed {
 			if getAttr(elem, attr) != "" {
 				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
@@ -194,33 +195,33 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 		}
 
 		// Validate 'block' attribute value.
-		if v := getAttr(elem, "block"); v != "" && !isValidBlock(v) {
+		if v := getAttr(elem, attrBlock); v != "" && !isValidBlock(v) {
 			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "element", "block",
 				"The value '"+v+"' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 
 		// default and fixed mutually exclusive.
-		if getAttr(elem, "default") != "" && getAttr(elem, "fixed") != "" {
+		if getAttr(elem, attrDefault) != "" && getAttr(elem, attrFixed) != "" {
 			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "element",
 				"The attributes 'default' and 'fixed' are mutually exclusive."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 
 		// type and inline complexType/simpleType checks.
-		hasType := getAttr(elem, "type") != ""
+		hasType := getAttr(elem, attrType) != ""
 		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 			if child.Type() != helium.ElementNode {
 				continue
 			}
 			ce := child.(*helium.Element)
-			if isXSDElement(ce, "complexType") {
+			if isXSDElement(ce, elemComplexType) {
 				if hasType {
 					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
 						"The attribute 'type' and the <complexType> child are mutually exclusive."), helium.ErrorLevelFatal))
 					c.errorCount++
 				}
-			} else if isXSDElement(ce, "simpleType") {
+			} else if isXSDElement(ce, elemSimpleType) {
 				if hasType {
 					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "element",
 						"The content is not valid. Expected is (annotation?, ((simpleType | complexType)?, (unique | key | keyref)*))."), helium.ErrorLevelFatal))
@@ -236,27 +237,27 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 	if c.filename == "" {
 		return
 	}
-	ref := getAttr(elem, "ref")
+	ref := getAttr(elem, attrRef)
 	line := elem.Line()
 	local := elem.LocalName()
 
 	if ref != "" {
 		// ref and name are mutually exclusive.
-		if getAttr(elem, "name") != "" {
+		if getAttr(elem, attrName) != "" {
 			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
 				"The attribute 'name' is not allowed."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 
 		// type not allowed with ref.
-		if getAttr(elem, "type") != "" {
+		if getAttr(elem, attrType) != "" {
 			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
 				"The attribute 'type' is not allowed."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 
 		// form not allowed with ref.
-		if getAttr(elem, "form") != "" {
+		if getAttr(elem, attrForm) != "" {
 			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
 				"The attribute 'form' is not allowed."), helium.ErrorLevelFatal))
 			c.errorCount++
@@ -268,7 +269,7 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 				continue
 			}
 			ce := child.(*helium.Element)
-			if isXSDElement(ce, "simpleType") {
+			if isXSDElement(ce, elemSimpleType) {
 				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "attribute",
 					"The content is not valid. Expected is (annotation?)."), helium.ErrorLevelFatal))
 				c.errorCount++
@@ -276,33 +277,33 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 		}
 	} else {
 		// Attribute name must not be "xmlns".
-		if getAttr(elem, "name") == "xmlns" {
+		if getAttr(elem, attrName) == "xmlns" {
 			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "attribute", "name",
 				"The value of the attribute must not match 'xmlns'."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 
 		// Qualified attribute must not be in the XSI namespace.
-		form := getAttr(elem, "form")
+		form := getAttr(elem, attrForm)
 		if form == "qualified" || (form == "" && c.schema.attrFormQualified) {
-			if c.schema.targetNamespace == "http://www.w3.org/2001/XMLSchema-instance" {
+			if c.schema.targetNamespace == lexicon.XSI {
 				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
-					"The target namespace must not match 'http://www.w3.org/2001/XMLSchema-instance'."), helium.ErrorLevelFatal))
+					"The target namespace must not match '"+lexicon.XSI+"'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 		}
 
 		// default and fixed are mutually exclusive.
-		if getAttr(elem, "default") != "" && getAttr(elem, "fixed") != "" {
+		if getAttr(elem, attrDefault) != "" && getAttr(elem, attrFixed) != "" {
 			c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
 				"The attributes 'default' and 'fixed' are mutually exclusive."), helium.ErrorLevelFatal))
 			c.errorCount++
 		}
 
 		// If default is present, use must be optional (or absent, which defaults to optional).
-		if getAttr(elem, "default") != "" {
-			use := getAttr(elem, "use")
-			if use != "" && use != "optional" {
+		if getAttr(elem, attrDefault) != "" {
+			use := getAttr(elem, attrUse)
+			if use != "" && use != attrValOptional {
 				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
 					"The value of the attribute 'use' must be 'optional' if the attribute 'default' is present."), helium.ErrorLevelFatal))
 				c.errorCount++
@@ -310,13 +311,13 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 		}
 
 		// type and inline simpleType are mutually exclusive.
-		if getAttr(elem, "type") != "" {
+		if getAttr(elem, attrType) != "" {
 			for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 				if child.Type() != helium.ElementNode {
 					continue
 				}
 				ce := child.(*helium.Element)
-				if isXSDElement(ce, "simpleType") {
+				if isXSDElement(ce, elemSimpleType) {
 					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, ce.Line(), ce.LocalName(), "attribute",
 						"The attribute 'type' and the <simpleType> child are mutually exclusive."), helium.ErrorLevelFatal))
 					c.errorCount++
@@ -371,9 +372,9 @@ func (c *compiler) checkAnnotation(elem *helium.Element) {
 			continue
 		}
 		ce := child.(*helium.Element)
-		if isXSDElement(ce, "appinfo") {
+		if isXSDElement(ce, elemAppinfo) {
 			c.checkAppinfo(ce)
-		} else if isXSDElement(ce, "documentation") {
+		} else if isXSDElement(ce, elemDocumentation) {
 			c.checkDocumentation(ce)
 		}
 	}
@@ -390,7 +391,7 @@ func (c *compiler) checkAppinfo(elem *helium.Element) {
 		if attr.Prefix() != "" {
 			continue
 		}
-		if name == "source" {
+		if name == attrSource {
 			continue
 		}
 		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "appinfo",
@@ -410,14 +411,14 @@ func (c *compiler) checkDocumentation(elem *helium.Element) {
 	for _, attr := range elem.Attributes() {
 		name := attr.LocalName()
 		prefix := attr.Prefix()
-		if prefix != "" && prefix != "xml" {
+		if prefix != "" && prefix != lexicon.PrefixXML {
 			continue // other namespaced attributes are allowed
 		}
-		if prefix == "xml" && name == "lang" {
+		if prefix == lexicon.PrefixXML && name == lexicon.AttrLang {
 			langValue = string(attr.Content())
 			continue
 		}
-		if name == "source" {
+		if name == attrSource {
 			continue
 		}
 		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "documentation",
@@ -428,7 +429,7 @@ func (c *compiler) checkDocumentation(elem *helium.Element) {
 	// Validate xml:lang value after attribute checks.
 	if langValue != "" && !languageRegex.MatchString(langValue) {
 		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "documentation",
-			"{http://www.w3.org/XML/1998/namespace}lang",
+			"{"+lexicon.XML+"}"+lexicon.AttrLang,
 			"'"+langValue+"' is not a valid value of the atomic type 'xs:language'."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}

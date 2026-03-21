@@ -9,7 +9,7 @@ import (
 
 func (c *compiler) parseGlobalElement(elem *helium.Element) error {
 	c.checkGlobalElement(elem)
-	name := getAttr(elem, "name")
+	name := getAttr(elem, attrName)
 	if name == "" {
 		// Still register with a placeholder name to continue parsing.
 		return nil
@@ -53,7 +53,7 @@ func (c *compiler) parseLocalElement(elem *helium.Element) (*Particle, error) {
 	minOcc, maxOcc := parseParticleOccurs(elem)
 
 	// Handle element references (ref="...").
-	if ref := getAttr(elem, "ref"); ref != "" {
+	if ref := getAttr(elem, attrRef); ref != "" {
 		qn := c.resolveQName(elem, ref)
 		edecl := &ElementDecl{
 			Name:      qn,
@@ -70,14 +70,14 @@ func (c *compiler) parseLocalElement(elem *helium.Element) (*Particle, error) {
 		}, nil
 	}
 
-	name := getAttr(elem, "name")
+	name := getAttr(elem, attrName)
 	if name == "" {
 		return nil, fmt.Errorf("xsd: local element missing name")
 	}
 
 	// Determine element namespace based on form and elementFormDefault.
 	elemNS := ""
-	form := getAttr(elem, "form")
+	form := getAttr(elem, attrForm)
 	if form == attrValQualified || (form == "" && c.schema.elemFormQualified) {
 		elemNS = c.schema.targetNamespace
 	}
@@ -116,7 +116,7 @@ func (c *compiler) parseAnyAttribute(elem *helium.Element) *Wildcard {
 
 func (c *compiler) parseGlobalAttribute(elem *helium.Element) {
 	c.checkAttributeUse(elem)
-	name := getAttr(elem, "name")
+	name := getAttr(elem, attrName)
 	if name == "" {
 		return
 	}
@@ -130,26 +130,26 @@ func (c *compiler) parseGlobalAttribute(elem *helium.Element) {
 func (c *compiler) parseAttributeUse(elem *helium.Element) *AttrUse {
 	c.checkAttributeUse(elem)
 	// Handle attribute references (ref="...").
-	if ref := getAttr(elem, "ref"); ref != "" {
+	if ref := getAttr(elem, attrRef); ref != "" {
 		qn := c.resolveQName(elem, ref)
 		au := &AttrUse{Name: qn}
-		if getAttr(elem, "use") == "required" {
+		if getAttr(elem, attrUse) == attrValRequired {
 			au.Required = true
 		}
-		if v := getAttr(elem, "default"); v != "" {
+		if v := getAttr(elem, attrDefault); v != "" {
 			au.Default = &v
 		}
-		if v := getAttr(elem, "fixed"); v != "" {
+		if v := getAttr(elem, attrFixed); v != "" {
 			au.Fixed = &v
 		}
 		c.attrRefs[au] = qn
 		return au
 	}
 
-	name := getAttr(elem, "name")
+	name := getAttr(elem, attrName)
 	// Determine attribute namespace based on form and attributeFormDefault.
 	attrNS := ""
-	form := getAttr(elem, "form")
+	form := getAttr(elem, attrForm)
 	if form == attrValQualified || (form == "" && c.schema.attrFormQualified) {
 		attrNS = c.schema.targetNamespace
 	}
@@ -169,11 +169,11 @@ func (c *compiler) parseIDConstraints(elem *helium.Element) []*IDConstraint {
 		ce := child.(*helium.Element)
 		var kind IDCKind
 		switch {
-		case isXSDElement(ce, "unique"):
+		case isXSDElement(ce, elemUnique):
 			kind = IDCUnique
-		case isXSDElement(ce, "key"):
+		case isXSDElement(ce, elemKey):
 			kind = IDCKey
-		case isXSDElement(ce, "keyref"):
+		case isXSDElement(ce, elemKeyRef):
 			kind = IDCKeyRef
 		default:
 			continue
@@ -188,7 +188,7 @@ func (c *compiler) parseIDConstraints(elem *helium.Element) []*IDConstraint {
 
 // parseIDConstraint parses a single xs:key, xs:keyref, or xs:unique declaration.
 func (c *compiler) parseIDConstraint(elem *helium.Element, kind IDCKind) *IDConstraint {
-	name := getAttr(elem, "name")
+	name := getAttr(elem, attrName)
 	if name == "" {
 		return nil
 	}
@@ -198,7 +198,7 @@ func (c *compiler) parseIDConstraint(elem *helium.Element, kind IDCKind) *IDCons
 		Namespaces: collectNSContext(elem),
 	}
 	if kind == IDCKeyRef {
-		idc.Refer = getAttr(elem, "refer")
+		idc.Refer = getAttr(elem, attrRefer)
 	}
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		if child.Type() != helium.ElementNode {
@@ -206,10 +206,10 @@ func (c *compiler) parseIDConstraint(elem *helium.Element, kind IDCKind) *IDCons
 		}
 		ce := child.(*helium.Element)
 		switch {
-		case isXSDElement(ce, "selector"):
-			idc.Selector = getAttr(ce, "xpath")
-		case isXSDElement(ce, "field"):
-			idc.Fields = append(idc.Fields, getAttr(ce, "xpath"))
+		case isXSDElement(ce, elemSelector):
+			idc.Selector = getAttr(ce, attrXPath)
+		case isXSDElement(ce, elemField):
+			idc.Fields = append(idc.Fields, getAttr(ce, attrXPath))
 		}
 	}
 

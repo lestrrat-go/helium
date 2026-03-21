@@ -7,7 +7,7 @@ import (
 )
 
 func (c *compiler) parseNamedGroup(elem *helium.Element) error {
-	name := getAttr(elem, "name")
+	name := getAttr(elem, attrName)
 	if name == "" {
 		return fmt.Errorf("xsd: named group missing name")
 	}
@@ -20,11 +20,11 @@ func (c *compiler) parseNamedGroup(elem *helium.Element) error {
 		ce := child.(*helium.Element)
 		var compositor ModelGroupKind
 		switch {
-		case isXSDElement(ce, "sequence"):
+		case isXSDElement(ce, elemSequence):
 			compositor = CompositorSequence
-		case isXSDElement(ce, "choice"):
+		case isXSDElement(ce, elemChoice):
 			compositor = CompositorChoice
-		case isXSDElement(ce, "all"):
+		case isXSDElement(ce, elemAll):
 			compositor = CompositorAll
 		default:
 			continue
@@ -41,7 +41,7 @@ func (c *compiler) parseNamedGroup(elem *helium.Element) error {
 }
 
 func (c *compiler) parseNamedAttributeGroup(elem *helium.Element) error {
-	name := getAttr(elem, "name")
+	name := getAttr(elem, attrName)
 	if name == "" {
 		return fmt.Errorf("xsd: named attributeGroup missing name")
 	}
@@ -53,7 +53,7 @@ func (c *compiler) parseNamedAttributeGroup(elem *helium.Element) error {
 			continue
 		}
 		ce := child.(*helium.Element)
-		if isXSDElement(ce, "attribute") {
+		if isXSDElement(ce, elemAttribute) {
 			au := c.parseAttributeUse(ce)
 			attrs = append(attrs, au)
 		}
@@ -76,13 +76,13 @@ func (c *compiler) parseModelGroup(elem *helium.Element, compositor ModelGroupKi
 		}
 		ce := child.(*helium.Element)
 		switch {
-		case isXSDElement(ce, "element"):
+		case isXSDElement(ce, elemElement):
 			p, err := c.parseLocalElement(ce)
 			if err != nil {
 				return nil, err
 			}
 			mg.Particles = append(mg.Particles, p)
-		case isXSDElement(ce, "sequence"):
+		case isXSDElement(ce, elemSequence):
 			sub, err := c.parseModelGroup(ce, CompositorSequence)
 			if err != nil {
 				return nil, err
@@ -92,7 +92,7 @@ func (c *compiler) parseModelGroup(elem *helium.Element, compositor ModelGroupKi
 				MaxOccurs: sub.MaxOccurs,
 				Term:      sub,
 			})
-		case isXSDElement(ce, "choice"):
+		case isXSDElement(ce, elemChoice):
 			sub, err := c.parseModelGroup(ce, CompositorChoice)
 			if err != nil {
 				return nil, err
@@ -102,7 +102,7 @@ func (c *compiler) parseModelGroup(elem *helium.Element, compositor ModelGroupKi
 				MaxOccurs: sub.MaxOccurs,
 				Term:      sub,
 			})
-		case isXSDElement(ce, "all"):
+		case isXSDElement(ce, elemAll):
 			sub, err := c.parseModelGroup(ce, CompositorAll)
 			if err != nil {
 				return nil, err
@@ -112,11 +112,11 @@ func (c *compiler) parseModelGroup(elem *helium.Element, compositor ModelGroupKi
 				MaxOccurs: sub.MaxOccurs,
 				Term:      sub,
 			})
-		case isXSDElement(ce, "any"):
+		case isXSDElement(ce, elemAny):
 			p := c.parseWildcard(ce)
 			mg.Particles = append(mg.Particles, p)
-		case isXSDElement(ce, "group"):
-			ref := getAttr(ce, "ref")
+		case isXSDElement(ce, elemGroup):
+			ref := getAttr(ce, attrRef)
 			if ref != "" {
 				placeholderMin, placeholderMax := parseParticleOccurs(ce)
 				// Group reference — create a placeholder model group.

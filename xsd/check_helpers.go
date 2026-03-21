@@ -19,7 +19,7 @@ func isValidFinal(v string) bool {
 		return true
 	}
 	for _, part := range splitSpace(v) {
-		if part != "extension" && part != "restriction" {
+		if part != attrValExtension && part != attrValRestriction {
 			return false
 		}
 	}
@@ -32,7 +32,7 @@ func isValidBlock(v string) bool {
 		return true
 	}
 	for _, part := range splitSpace(v) {
-		if part != "extension" && part != "restriction" && part != "substitution" {
+		if part != attrValExtension && part != attrValRestriction && part != attrValSubstitution {
 			return false
 		}
 	}
@@ -46,7 +46,7 @@ func isValidFinalDefault(v string) bool {
 		return true
 	}
 	for _, part := range splitSpace(v) {
-		if part != "extension" && part != "restriction" && part != "list" && part != "union" {
+		if part != attrValExtension && part != attrValRestriction && part != attrValList && part != attrValUnion {
 			return false
 		}
 	}

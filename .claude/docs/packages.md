@@ -102,7 +102,7 @@ XML Schema (XSD) 1.0 compilation and validation.
 - Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include, IDC (xs:unique/key/keyref)
 - `ValidateError.Output` — libxml2-compatible error string
 - Files: `xsd.go` (API), `schema.go` (data model), `compile.go` + `compile_imports.go` + `compile_helpers.go` (compile orchestration/imports/helpers), `read_types.go` + `read_particles.go` + `read_elements.go` + `read_decl_helpers.go` (schema readers), `link_refs.go` + `check_*.go` (reference resolution + constraints), `validate_context.go` + `validate.go` + `validate_elem.go` + `validate_idc.go` (validation flow/content/IDC), `simplevalue_*.go` + `validate_value_api.go` (simple-value engine/API), `errors.go`
-- Imports: helium, xpath1/
+- Imports: helium, xpath1/, internal/lexicon
 - Status: 225/226 golden tests passing
 
 ## relaxng/
@@ -252,7 +252,7 @@ Internal OASIS XML Catalog model + resolution engine used by root parser + publi
 
 Shared spec vocabulary strings reused across packages.
 
-- Namespaces: XML Catalog, XSLT, XSD, XPath/XQuery function namespaces, XML, XMLNS
+- Namespaces: XML Catalog, XSLT, XSD, XSI, XPath/XQuery function namespaces, XML, XMLNS
 - XML vocabulary: common prefixes + attribute/value names such as `xml:base`
 - Catalog vocabulary: OASIS catalog element names, attribute names, `prefer` values
 - Files: `ns.go`, `xml.go`, `catalog.go`

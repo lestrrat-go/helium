@@ -595,24 +595,24 @@ func (vc *validationContext) tryMatchWildcardParticle(p *Particle, wc *Wildcard,
 func wildcardMatches(wc *Wildcard, elemNS string) bool {
 	ns := wc.Namespace
 	switch ns {
-	case "##any":
+	case WildcardNSAny:
 		return true
-	case "##other":
+	case WildcardNSOther:
 		// Matches any namespace other than the target namespace.
 		// Also does not match absent namespace (no namespace).
 		return elemNS != "" && elemNS != wc.TargetNS
-	case "##not-absent":
+	case WildcardNSNotAbsent:
 		// Matches any namespace except absent (empty namespace).
 		return elemNS != ""
 	default:
 		// Space-separated list that may include ##local, ##targetNamespace, and URIs.
 		for _, part := range strings.Split(ns, " ") {
 			switch part {
-			case "##local":
+			case WildcardNSLocal:
 				if elemNS == "" {
 					return true
 				}
-			case "##targetNamespace":
+			case WildcardNSTargetNamespace:
 				if elemNS == wc.TargetNS {
 					return true
 				}
@@ -629,13 +629,13 @@ func wildcardMatches(wc *Wildcard, elemNS string) bool {
 // wildcardExpected formats the expected string for wildcard error messages.
 func wildcardExpected(wc *Wildcard) string {
 	switch wc.Namespace {
-	case "##any":
-		return "##any"
-	case "##other":
+	case WildcardNSAny:
+		return WildcardNSAny
+	case WildcardNSOther:
 		if wc.TargetNS != "" {
-			return "##other{" + wc.TargetNS + "}*"
+			return WildcardNSOther + "{" + wc.TargetNS + "}*"
 		}
-		return "##other*"
+		return WildcardNSOther + "*"
 	default:
 		return wc.Namespace
 	}

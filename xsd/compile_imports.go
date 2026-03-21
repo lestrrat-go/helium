@@ -16,27 +16,27 @@ func (c *compiler) processIncludes(root *helium.Element) error {
 		}
 		elem := child.(*helium.Element)
 		switch {
-		case isXSDElement(elem, "include"):
-			loc := getAttr(elem, "schemaLocation")
+		case isXSDElement(elem, elemInclude):
+			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {
 				continue
 			}
 			if err := c.loadInclude(loc, elem); err != nil {
 				return err
 			}
-		case isXSDElement(elem, "import"):
-			loc := getAttr(elem, "schemaLocation")
+		case isXSDElement(elem, elemImport):
+			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {
 				continue
 			}
-			ns := getAttr(elem, "namespace")
+			ns := getAttr(elem, attrNamespace)
 
 			// Check if this namespace was already imported.
 			if prevLoc, ok := c.importedNS[ns]; ok && c.filename != "" {
 				displayLoc := filepath.Join(filepath.Dir(c.filename), loc)
 				displayPrevLoc := filepath.Join(filepath.Dir(c.filename), prevLoc)
 				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
-					elem.LocalName(), "import",
+					elem.LocalName(), elemImport,
 					"Skipping import of schema located at '"+displayLoc+"' for the namespace '"+ns+"', since this namespace was already imported with the schema located at '"+displayPrevLoc+"'."), helium.ErrorLevelWarning))
 				continue
 			}
@@ -47,7 +47,7 @@ func (c *compiler) processIncludes(root *helium.Element) error {
 					displayLoc := filepath.Join(filepath.Dir(c.filename), loc)
 					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(fmt.Sprintf("I/O warning : failed to load \"%s\": %s\n", displayLoc, "No such file or directory"), helium.ErrorLevelWarning))
 					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserWarning(c.filename, elem.Line(),
-						elem.LocalName(), "import",
+						elem.LocalName(), elemImport,
 						"Failed to locate a schema at location '"+displayLoc+"'. Skipping the import."), helium.ErrorLevelWarning))
 				}
 				continue
@@ -55,8 +55,8 @@ func (c *compiler) processIncludes(root *helium.Element) error {
 
 			// Track the imported namespace.
 			c.importedNS[ns] = loc
-		case isXSDElement(elem, "redefine"):
-			loc := getAttr(elem, "schemaLocation")
+		case isXSDElement(elem, elemRedefine):
+			loc := getAttr(elem, attrSchemaLocation)
 			if loc == "" {
 				continue
 			}
@@ -86,19 +86,19 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 	}
 
 	incRoot := findDocumentElement(doc)
-	if incRoot == nil || !isXSDElement(incRoot, "schema") {
+	if incRoot == nil || !isXSDElement(incRoot, elemSchema) {
 		return fmt.Errorf("xsd: included document %q is not an xs:schema", location)
 	}
 
 	// Check target namespace compatibility.
-	incTargetNS := getAttr(incRoot, "targetNamespace")
+	incTargetNS := getAttr(incRoot, attrTargetNamespace)
 	if incTargetNS != "" && incTargetNS != c.schema.targetNamespace {
 		displayLoc := location
 		if c.filename != "" {
 			displayLoc = filepath.Join(filepath.Dir(c.filename), location)
 		}
 		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, includeElem.Line(),
-			includeElem.LocalName(), "include",
+			includeElem.LocalName(), elemInclude,
 			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."), helium.ErrorLevelFatal))
 		c.errorCount++
 		return nil
@@ -115,16 +115,16 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
-	if v := getAttr(incRoot, "elementFormDefault"); v != "" {
+	if v := getAttr(incRoot, attrElementFormDefault); v != "" {
 		c.schema.elemFormQualified = v == attrValQualified
 	}
-	if v := getAttr(incRoot, "attributeFormDefault"); v != "" {
+	if v := getAttr(incRoot, attrAttributeFormDefault); v != "" {
 		c.schema.attrFormQualified = v == attrValQualified
 	}
-	if v := getAttr(incRoot, "blockDefault"); v != "" {
+	if v := getAttr(incRoot, attrBlockDefault); v != "" {
 		c.schema.blockDefault = parseBlockFlags(v)
 	}
-	if v := getAttr(incRoot, "finalDefault"); v != "" {
+	if v := getAttr(incRoot, attrFinalDefault); v != "" {
 		c.schema.finalDefault = parseFinalFlags(v)
 	}
 
@@ -167,19 +167,19 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 	}
 
 	incRoot := findDocumentElement(doc)
-	if incRoot == nil || !isXSDElement(incRoot, "schema") {
+	if incRoot == nil || !isXSDElement(incRoot, elemSchema) {
 		return fmt.Errorf("xsd: redefined document %q is not an xs:schema", location)
 	}
 
 	// Check target namespace compatibility (same rules as include).
-	incTargetNS := getAttr(incRoot, "targetNamespace")
+	incTargetNS := getAttr(incRoot, attrTargetNamespace)
 	if incTargetNS != "" && incTargetNS != c.schema.targetNamespace {
 		displayLoc := location
 		if c.filename != "" {
 			displayLoc = filepath.Join(filepath.Dir(c.filename), location)
 		}
 		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, redefineElem.Line(),
-			redefineElem.LocalName(), "redefine",
+			redefineElem.LocalName(), elemRedefine,
 			"The target namespace '"+incTargetNS+"' of the included/redefined schema '"+displayLoc+"' differs from '"+c.schema.targetNamespace+"' of the including/redefining schema."), helium.ErrorLevelFatal))
 		c.errorCount++
 		return nil
@@ -191,16 +191,16 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 	savedBlockDefault := c.schema.blockDefault
 	savedFinalDefault := c.schema.finalDefault
 	savedIncludeFile := c.includeFile
-	if v := getAttr(incRoot, "elementFormDefault"); v != "" {
+	if v := getAttr(incRoot, attrElementFormDefault); v != "" {
 		c.schema.elemFormQualified = v == attrValQualified
 	}
-	if v := getAttr(incRoot, "attributeFormDefault"); v != "" {
+	if v := getAttr(incRoot, attrAttributeFormDefault); v != "" {
 		c.schema.attrFormQualified = v == attrValQualified
 	}
-	if v := getAttr(incRoot, "blockDefault"); v != "" {
+	if v := getAttr(incRoot, attrBlockDefault); v != "" {
 		c.schema.blockDefault = parseBlockFlags(v)
 	}
-	if v := getAttr(incRoot, "finalDefault"); v != "" {
+	if v := getAttr(incRoot, attrFinalDefault); v != "" {
 		c.schema.finalDefault = parseFinalFlags(v)
 	}
 	if c.filename != "" {
@@ -224,10 +224,10 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 		}
 		elem := child.(*helium.Element)
 		switch {
-		case isXSDElement(elem, "annotation"):
+		case isXSDElement(elem, elemAnnotation):
 			// skip
-		case isXSDElement(elem, "complexType"):
-			name := getAttr(elem, "name")
+		case isXSDElement(elem, elemComplexType):
+			name := getAttr(elem, attrName)
 			if name == "" {
 				continue
 			}
@@ -252,8 +252,8 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 					c.typeRefs[newType] = origKey
 				}
 			}
-		case isXSDElement(elem, "simpleType"):
-			name := getAttr(elem, "name")
+		case isXSDElement(elem, elemSimpleType):
+			name := getAttr(elem, attrName)
 			if name == "" {
 				continue
 			}
@@ -275,8 +275,8 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 					c.typeRefs[newType] = origKey
 				}
 			}
-		case isXSDElement(elem, "group"):
-			name := getAttr(elem, "name")
+		case isXSDElement(elem, elemGroup):
+			name := getAttr(elem, attrName)
 			if name == "" {
 				continue
 			}
@@ -308,8 +308,8 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 					}
 				}
 			}
-		case isXSDElement(elem, "attributeGroup"):
-			name := getAttr(elem, "name")
+		case isXSDElement(elem, elemAttributeGroup):
+			name := getAttr(elem, attrName)
 			if name == "" {
 				continue
 			}
@@ -325,11 +325,11 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 				}
 				gce := gc.(*helium.Element)
 				switch {
-				case isXSDElement(gce, "attribute"):
+				case isXSDElement(gce, elemAttribute):
 					au := c.parseAttributeUse(gce)
 					attrs = append(attrs, au)
-				case isXSDElement(gce, "attributeGroup"):
-					if ref := getAttr(gce, "ref"); ref != "" {
+				case isXSDElement(gce, elemAttributeGroup):
+					if ref := getAttr(gce, attrRef); ref != "" {
 						refQN := c.resolveQName(gce, ref)
 						if refQN == qn && origAttrs != nil {
 							attrs = append(attrs, origAttrs...)
@@ -369,7 +369,7 @@ func (c *compiler) loadImport(location, _ string) error {
 	}
 
 	impRoot := findDocumentElement(doc)
-	if impRoot == nil || !isXSDElement(impRoot, "schema") {
+	if impRoot == nil || !isXSDElement(impRoot, elemSchema) {
 		return fmt.Errorf("xsd: imported document %q is not an xs:schema", location)
 	}
 
@@ -409,13 +409,13 @@ func (c *compiler) loadImport(location, _ string) error {
 	subCollector := helium.NewErrorCollector(c.compileContext(), helium.ErrorLevelNone)
 	impC.errorHandler = subCollector
 
-	impC.schema.targetNamespace = getAttr(impRoot, "targetNamespace")
-	impC.schema.elemFormQualified = getAttr(impRoot, "elementFormDefault") == attrValQualified
-	impC.schema.attrFormQualified = getAttr(impRoot, "attributeFormDefault") == attrValQualified
-	if v := getAttr(impRoot, "blockDefault"); v != "" {
+	impC.schema.targetNamespace = getAttr(impRoot, attrTargetNamespace)
+	impC.schema.elemFormQualified = getAttr(impRoot, attrElementFormDefault) == attrValQualified
+	impC.schema.attrFormQualified = getAttr(impRoot, attrAttributeFormDefault) == attrValQualified
+	if v := getAttr(impRoot, attrBlockDefault); v != "" {
 		impC.schema.blockDefault = parseBlockFlags(v)
 	}
-	if v := getAttr(impRoot, "finalDefault"); v != "" {
+	if v := getAttr(impRoot, attrFinalDefault); v != "" {
 		impC.schema.finalDefault = parseFinalFlags(v)
 	}
 

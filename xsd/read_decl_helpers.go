@@ -22,10 +22,10 @@ type attrUseReadOptions struct {
 func parseParticleOccurs(elem *helium.Element) (int, int) {
 	minOccurs := 1
 	maxOccurs := 1
-	if v := getAttr(elem, "minOccurs"); v != "" {
+	if v := getAttr(elem, attrMinOccurs); v != "" {
 		minOccurs = parseOccurs(v, 1)
 	}
-	if v := getAttr(elem, "maxOccurs"); v != "" {
+	if v := getAttr(elem, attrMaxOccurs); v != "" {
 		maxOccurs = parseOccurs(v, 1)
 	}
 	return minOccurs, maxOccurs
@@ -33,12 +33,12 @@ func parseParticleOccurs(elem *helium.Element) (int, int) {
 
 func readDefaultOrFixed(elem *helium.Element) (*string, *string) {
 	var defaultValue *string
-	if v := getAttr(elem, "default"); v != "" {
+	if v := getAttr(elem, attrDefault); v != "" {
 		defaultValue = &v
 	}
 
 	var fixedValue *string
-	if v := getAttr(elem, "fixed"); v != "" {
+	if v := getAttr(elem, attrFixed); v != "" {
 		fixedValue = &v
 	}
 
@@ -46,10 +46,10 @@ func readDefaultOrFixed(elem *helium.Element) (*string, *string) {
 }
 
 func readProcessContents(elem *helium.Element) ProcessContentsKind {
-	switch getAttr(elem, "processContents") {
-	case "lax":
+	switch getAttr(elem, attrProcessContents) {
+	case attrValLax:
 		return ProcessLax
-	case "skip":
+	case attrValSkip:
 		return ProcessSkip
 	default:
 		return ProcessStrict
@@ -57,7 +57,7 @@ func readProcessContents(elem *helium.Element) ProcessContentsKind {
 }
 
 func (c *compiler) readWildcard(elem *helium.Element) *Wildcard {
-	namespace := getAttr(elem, "namespace")
+	namespace := getAttr(elem, attrNamespace)
 	if namespace == "" {
 		namespace = WildcardNSAny
 	}
@@ -74,31 +74,31 @@ func (c *compiler) readElementDecl(elem *helium.Element, opts elementDeclReadOpt
 		Name:      QName{Local: opts.name, NS: opts.namespace},
 		MinOccurs: opts.minOccurs,
 		MaxOccurs: opts.maxOccurs,
-		Nillable:  getAttr(elem, "nillable") == attrValTrue,
+		Nillable:  getAttr(elem, attrNillable) == attrValTrue,
 	}
 
 	if opts.allowAbstract {
-		decl.Abstract = getAttr(elem, "abstract") == attrValTrue
+		decl.Abstract = getAttr(elem, attrAbstract) == attrValTrue
 	}
 
 	if opts.allowSubstitutionGroup {
-		if sg := getAttr(elem, "substitutionGroup"); sg != "" {
+		if sg := getAttr(elem, attrSubstitutionGroup); sg != "" {
 			decl.SubstitutionGroup = c.resolveQName(elem, sg)
 		}
 	}
 
 	decl.Default, decl.Fixed = readDefaultOrFixed(elem)
 
-	if hasAttr(elem, "block") {
-		decl.Block = parseBlockFlags(getAttr(elem, "block"))
+	if hasAttr(elem, attrBlock) {
+		decl.Block = parseBlockFlags(getAttr(elem, attrBlock))
 		decl.BlockSet = true
 	} else {
 		decl.Block = opts.defaultBlock
 	}
 
 	if opts.allowFinal {
-		if hasAttr(elem, "final") {
-			decl.Final = parseElemFinalFlags(getAttr(elem, "final"))
+		if hasAttr(elem, attrFinal) {
+			decl.Final = parseElemFinalFlags(getAttr(elem, attrFinal))
 			decl.FinalSet = true
 		} else {
 			decl.Final = opts.defaultFinal
@@ -113,7 +113,7 @@ func (c *compiler) readElementDecl(elem *helium.Element, opts elementDeclReadOpt
 }
 
 func (c *compiler) readElementType(elem *helium.Element, decl *ElementDecl, sourceName string) error {
-	typeRef := getAttr(elem, "type")
+	typeRef := getAttr(elem, attrType)
 	if typeRef != "" {
 		qn := c.resolveQName(elem, typeRef)
 		c.elemRefs[decl] = qn
@@ -127,15 +127,15 @@ func (c *compiler) readElementType(elem *helium.Element, decl *ElementDecl, sour
 		}
 		ce := child.(*helium.Element)
 		switch {
-		case isXSDElement(ce, "annotation"):
+		case isXSDElement(ce, elemAnnotation):
 			c.checkAnnotation(ce)
-		case isXSDElement(ce, "complexType"):
+		case isXSDElement(ce, elemComplexType):
 			td, err := c.parseComplexType(ce)
 			if err != nil {
 				return err
 			}
 			decl.Type = td
-		case isXSDElement(ce, "simpleType"):
+		case isXSDElement(ce, elemSimpleType):
 			td, err := c.parseSimpleType(ce)
 			if err != nil {
 				return err
@@ -149,14 +149,14 @@ func (c *compiler) readElementType(elem *helium.Element, decl *ElementDecl, sour
 
 func (c *compiler) readAttributeUseDecl(elem *helium.Element, opts attrUseReadOptions) *AttrUse {
 	au := &AttrUse{Name: opts.name}
-	if typeRef := getAttr(elem, "type"); typeRef != "" {
+	if typeRef := getAttr(elem, attrType); typeRef != "" {
 		au.TypeName = c.resolveQName(elem, typeRef)
 	}
 	if opts.includeUse {
-		switch getAttr(elem, "use") {
-		case "required":
+		switch getAttr(elem, attrUse) {
+		case attrValRequired:
 			au.Required = true
-		case "prohibited":
+		case attrValProhibited:
 			au.Prohibited = true
 		}
 	}

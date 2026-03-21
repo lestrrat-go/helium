@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func findDocumentElement(doc *helium.Document) *helium.Element {
@@ -29,7 +30,7 @@ func collectNSContext(elem *helium.Element) map[string]string {
 }
 
 func isXSDElement(elem *helium.Element, localName string) bool {
-	return elem.LocalName() == localName && elem.URI() == xsdNS
+	return elem.LocalName() == localName && elem.URI() == lexicon.XSD
 }
 
 func getAttr(elem *helium.Element, name string) string {
@@ -49,11 +50,11 @@ func parseBlockFlags(v string) BlockFlags {
 	var f BlockFlags
 	for _, part := range splitSpace(v) {
 		switch part {
-		case "extension":
+		case attrValExtension:
 			f |= BlockExtension
-		case "restriction":
+		case attrValRestriction:
 			f |= BlockRestriction
-		case "substitution":
+		case attrValSubstitution:
 			f |= BlockSubstitution
 		}
 	}
@@ -68,13 +69,13 @@ func parseFinalFlags(v string) FinalFlags {
 	var f FinalFlags
 	for _, part := range splitSpace(v) {
 		switch part {
-		case "extension":
+		case attrValExtension:
 			f |= FinalExtension
-		case "restriction":
+		case attrValRestriction:
 			f |= FinalRestriction
-		case "list":
+		case attrValList:
 			f |= FinalList
-		case "union":
+		case attrValUnion:
 			f |= FinalUnion
 		}
 	}
@@ -90,9 +91,9 @@ func parseElemFinalFlags(v string) FinalFlags {
 	var f FinalFlags
 	for _, part := range splitSpace(v) {
 		switch part {
-		case "extension":
+		case attrValExtension:
 			f |= FinalExtension
-		case "restriction":
+		case attrValRestriction:
 			f |= FinalRestriction
 		}
 	}
@@ -146,7 +147,7 @@ func registerBuiltinTypes(s *Schema) {
 		"anyType", "anySimpleType",
 	}
 	for _, name := range builtins {
-		qn := QName{Local: name, NS: xsdNS}
+		qn := QName{Local: name, NS: lexicon.XSD}
 		ct := ContentTypeSimple
 		td := &TypeDef{
 			Name:        qn,

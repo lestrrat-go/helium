@@ -249,25 +249,25 @@ func wildcardsOverlap(a, b firstSetEntry) bool {
 	bNS, bTarget := b.wildcard, b.targetNS
 
 	// ##any overlaps with everything.
-	if aNS == "##any" || bNS == "##any" {
+	if aNS == WildcardNSAny || bNS == WildcardNSAny {
 		return true
 	}
 
 	// ##other matches any NS except targetNS and empty.
 	// ##local matches only empty NS.
 	// So ##other and ##local are always disjoint.
-	if (aNS == "##other" && bNS == "##local") || (aNS == "##local" && bNS == "##other") {
+	if (aNS == WildcardNSOther && bNS == WildcardNSLocal) || (aNS == WildcardNSLocal && bNS == WildcardNSOther) {
 		return false
 	}
 
 	// ##other vs ##other: overlap if there's any NS outside both targets
 	// (practically always true unless both have the same target).
-	if aNS == "##other" && bNS == "##other" {
+	if aNS == WildcardNSOther && bNS == WildcardNSOther {
 		return true
 	}
 
 	// ##local vs ##local: obviously overlap.
-	if aNS == "##local" && bNS == "##local" {
+	if aNS == WildcardNSLocal && bNS == WildcardNSLocal {
 		return true
 	}
 
@@ -291,17 +291,17 @@ func wildcardsOverlap(a, b firstSetEntry) bool {
 // or nil if the wildcard matches an open-ended set (##other, ##any).
 func upaWildcardNSSet(wcNS, targetNS string) map[string]bool {
 	switch wcNS {
-	case "##any", "##other", "##not-absent":
+	case WildcardNSAny, WildcardNSOther, WildcardNSNotAbsent:
 		return nil
-	case "##local":
+	case WildcardNSLocal:
 		return map[string]bool{"": true}
 	default:
 		result := make(map[string]bool)
 		for _, part := range strings.Fields(wcNS) {
 			switch part {
-			case "##local":
+			case WildcardNSLocal:
 				result[""] = true
-			case "##targetNamespace":
+			case WildcardNSTargetNamespace:
 				result[targetNS] = true
 			default:
 				result[part] = true
@@ -314,20 +314,20 @@ func upaWildcardNSSet(wcNS, targetNS string) map[string]bool {
 // wildcardMatchesNS checks if a wildcard namespace constraint matches a given namespace.
 func wildcardMatchesNS(wcNS, wcTargetNS, elemNS string) bool {
 	switch wcNS {
-	case "##any":
+	case WildcardNSAny:
 		return true
-	case "##other":
+	case WildcardNSOther:
 		return elemNS != "" && elemNS != wcTargetNS
-	case "##not-absent":
+	case WildcardNSNotAbsent:
 		return elemNS != ""
 	default:
 		for _, part := range strings.Fields(wcNS) {
 			switch part {
-			case "##local":
+			case WildcardNSLocal:
 				if elemNS == "" {
 					return true
 				}
-			case "##targetNamespace":
+			case WildcardNSTargetNamespace:
 				if elemNS == wcTargetNS {
 					return true
 				}

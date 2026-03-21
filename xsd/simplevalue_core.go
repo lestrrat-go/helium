@@ -3,6 +3,8 @@ package xsd
 import (
 	"fmt"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // resolveWhiteSpace returns the effective whiteSpace facet value for a type,
@@ -221,7 +223,7 @@ func validateListValue(value string, td *TypeDef, elemName, filename string, lin
 func builtinBaseLocal(td *TypeDef) string {
 	cur := td
 	for cur != nil {
-		if cur.Name.NS == xsdNS && cur.Name.Local != "" {
+		if cur.Name.NS == lexicon.XSD && cur.Name.Local != "" {
 			return cur.Name.Local
 		}
 		cur = cur.BaseType
@@ -253,7 +255,7 @@ func typeDisplayName(td *TypeDef) string {
 		}
 		return ""
 	}
-	if td.Name.NS == xsdNS {
+	if td.Name.NS == lexicon.XSD {
 		return "xs:" + td.Name.Local
 	}
 	return td.Name.Local

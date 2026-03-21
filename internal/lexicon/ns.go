@@ -11,6 +11,9 @@ const (
 	// XSD is the W3C XML Schema namespace.
 	XSD = "http://www.w3.org/2001/XMLSchema"
 
+	// XSI is the XML Schema instance namespace.
+	XSI = "http://www.w3.org/2001/XMLSchema-instance"
+
 	// Fn is the XPath 3.1 standard function namespace.
 	Fn = "http://www.w3.org/2005/xpath-functions"
 

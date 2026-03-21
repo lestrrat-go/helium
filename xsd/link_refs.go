@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func (c *compiler) resolveRefs() {
@@ -43,7 +44,7 @@ func (c *compiler) resolveRefs() {
 			if edecl.IsRef {
 				if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
 					msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) element declaration.", qn.NS, qn.Local)
-					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, src.line, src.elemName, "element", "ref", msg), helium.ErrorLevelFatal))
+					c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, src.line, src.elemName, elemElement, attrRef, msg), helium.ErrorLevelFatal))
 					c.errorCount++
 				}
 				edecl.Type = &TypeDef{Name: qn, ContentType: ContentTypeSimple}
@@ -52,10 +53,10 @@ func (c *compiler) resolveRefs() {
 			td, ok := c.schema.types[qn]
 			if !ok {
 				// Report unresolved type error for XSD built-in types that should exist.
-				if qn.NS == xsdNS {
+				if qn.NS == lexicon.XSD {
 					if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
 						msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
-						c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaElemDeclErrorAttr(c.filename, src.line, src.elemName, "type", msg), helium.ErrorLevelFatal))
+						c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaElemDeclErrorAttr(c.filename, src.line, src.elemName, attrType, msg), helium.ErrorLevelFatal))
 						c.errorCount++
 					}
 				}
