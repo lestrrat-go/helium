@@ -198,6 +198,14 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	tryFrame := ec.outputStack[len(ec.outputStack)-1]
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
+	// XTDE0640: circular reference errors cannot be caught by xsl:try.
+	// Per spec: "the result of any attempt to catch the error using an
+	// xsl:try instruction is implementation-dependent."
+	if tryErr != nil && errors.Is(tryErr, ErrCircularRef) {
+		ec.localVars = savedVarScope
+		return dynamicError(errCodeXTDE0640, "%s", tryErr.Error())
+	}
+
 	// xsl:break and xsl:next-iteration are control flow signals, not errors.
 	// If one occurred inside the try body, copy the buffered output (produced
 	// before the signal) to the real output and propagate the signal.
