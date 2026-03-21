@@ -657,6 +657,11 @@ func (c *compiler) compileDocument(elem *helium.Element) (*DocumentInst, error) 
 }
 
 func (c *compiler) compileSequence(elem *helium.Element) (Instruction, error) {
+	if err := validateXSLTAttrs(elem, map[string]struct{}{
+		"select": {},
+	}); err != nil {
+		return nil, err
+	}
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		// XTSE3185: when @select is present, only xsl:fallback children are allowed.
