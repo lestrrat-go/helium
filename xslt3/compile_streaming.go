@@ -720,6 +720,14 @@ func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 		if childElem.URI() != NSXSLT {
 			continue
 		}
+		// Resolve shadow attributes on child XSLT elements (e.g.
+		// _select="..." on xsl:merge-source) before compilation.
+		if childElem.URI() == NSXSLT {
+			if err := c.resolveShadowAttributes(childElem); err != nil {
+				return nil, err
+			}
+		}
+
 		switch childElem.LocalName() {
 		case "merge-source":
 			src, err := c.compileMergeSource(childElem)
