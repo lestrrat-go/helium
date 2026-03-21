@@ -424,6 +424,25 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 					}
 				}
 			}
+			// Transfer accumulator state when copy-accumulators="yes"
+			if inst.CopyAccumulators && len(ec.stylesheet.accumulators) > 0 {
+				_ = ec.ensureAccumulatorStates(ctx, v.Node)
+				// Identify the copied node: it's the first new child after lastBefore
+				var copiedNode helium.Node
+				if lastBefore == nil {
+					copiedNode = out.current.FirstChild()
+				} else {
+					copiedNode = lastBefore.NextSibling()
+				}
+				if copiedNode != nil {
+					ec.transferAccumulatorStates(v.Node, copiedNode)
+					copyRoot := documentRoot(copiedNode)
+					if ec.accumulatorComputedDocs == nil {
+						ec.accumulatorComputedDocs = make(map[helium.Node]struct{})
+					}
+					ec.accumulatorComputedDocs[copyRoot] = struct{}{}
+				}
+			}
 		case xpath3.AtomicValue:
 			s, err := xpath3.AtomicToString(v)
 			if err != nil {

@@ -457,6 +457,11 @@ func (c *compiler) compileCopyOf(elem *helium.Element) (*CopyOfInst, error) {
 	if typeAttr := getAttr(elem, "type"); typeAttr != "" {
 		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
 	}
+	if ca := getAttr(elem, "copy-accumulators"); ca != "" {
+		if v, ok := parseXSDBool(ca); ok && v {
+			inst.CopyAccumulators = true
+		}
+	}
 	return inst, nil
 }
 
