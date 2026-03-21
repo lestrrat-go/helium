@@ -828,12 +828,13 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 	dynCtx = xpath3.WithVariablesBorrowed(dynCtx, vars)
 
 	// Per XSLT 3.0 section 20.3: the available functions include all
-	// functions defined in the static context of the xsl:evaluate instruction
-	// EXCEPT current(). User-defined stylesheet functions ARE available.
+	// functions from the static context of the xsl:evaluate instruction
+	// EXCEPT current(), user-defined stylesheet functions (xsl:function),
+	// and functions in the XSLT namespace.
 	evalFns := ec.xsltEvaluateFunctions()
 	dynCtx = xpath3.WithFunctionsBorrowed(dynCtx, evalFns)
 
-	if fnsNS := ec.xsltFunctionsNS(); len(fnsNS) > 0 {
+	if fnsNS := ec.xsltEvaluateFunctionsNS(); len(fnsNS) > 0 {
 		dynCtx = xpath3.WithFunctionsNSBorrowed(dynCtx, fnsNS)
 	}
 
