@@ -360,6 +360,13 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 			if err := ec.addNode(copied); err != nil {
 				return err
 			}
+			// Fix namespace declarations for copied elements relative to
+			// their new position in the result tree (e.g., add xmlns=""
+			// on no-namespace elements under a default-namespace parent).
+			if elem, ok := copied.(*helium.Element); ok {
+				ec.fixNamespacesAfterCopy(elem)
+				fixDescendantDefaultNS(elem)
+			}
 		case xpath3.AtomicValue:
 			s, sErr := xpath3.AtomicToString(v)
 			if sErr != nil {
