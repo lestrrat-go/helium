@@ -397,6 +397,9 @@ func (rs *resolvedSort) compareKeys(aKeys, bKeys []sortValue, aIdx, bIdx int) in
 // evaluateSortKey evaluates a single sort key for one item and returns its typed value.
 // Uses EvaluateReuse when evalState is non-nil to avoid per-item evalContext allocation.
 func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node helium.Node, dtMode *dataTypeMode, evalState *xpath3.EvalState) (sortValue, error) {
+	savedInSort := ec.inSortKeyEval
+	ec.inSortKeyEval = true
+	defer func() { ec.inSortKeyEval = savedInSort }()
 	if sk.Select != nil {
 		var result xpath3.Result
 		var err error

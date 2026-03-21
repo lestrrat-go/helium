@@ -142,6 +142,15 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 		}
 	}
 
+	// XSLT 3.0: sort atomic items if sort keys are present.
+	if len(inst.Sort) > 0 && len(atomicItems) > 0 {
+		sorted, err := sortItems(ctx, ec, xpath3.Sequence(atomicItems), inst.Sort)
+		if err != nil {
+			return err
+		}
+		atomicItems = []xpath3.Item(sorted)
+	}
+
 	// XSLT 3.0: process atomic values — try template matching first,
 	// then fall back to built-in text output.
 	// Set position/size so position()/last() work correctly inside templates.
