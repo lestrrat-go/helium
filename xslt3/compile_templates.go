@@ -625,6 +625,15 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 	savedNS := c.pushElementNamespaces(elem)
 	defer func() { c.nsBindings = savedNS }()
 
+	// Handle expand-text inheritance for this element.
+	savedExpandText := c.expandText
+	if et, hasET := elem.GetAttribute("expand-text"); hasET {
+		if v, ok := parseXSDBool(et); ok {
+			c.expandText = v
+		}
+	}
+	defer func() { c.expandText = savedExpandText }()
+
 	// Validate attributes on xsl:variable
 	if err := validateXSLTAttrs(elem, variableAllowedAttrs); err != nil {
 		return err
