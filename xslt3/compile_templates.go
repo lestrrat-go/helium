@@ -355,6 +355,12 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 				continue
 			}
 			if v.URI() == NSXSLT && v.LocalName() == "param" && inParams {
+				// XTSE0020: static is only valid on global params, not template/function params
+				if _, hasStatic := v.GetAttribute("static"); hasStatic {
+					pname := getAttr(v, "name")
+					return nil, nil, nil, staticError(errCodeXTSE0020,
+						"xsl:param %q: static attribute is not allowed on template/function parameters", pname)
+				}
 				p, err := c.compileParamDef(v)
 				if err != nil {
 					return nil, nil, nil, err
@@ -518,9 +524,23 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 		}
 	}
 
+	// XTSE0020: validate static attribute (boolean)
+	if staticVal, hasStatic := elem.GetAttribute("static"); hasStatic {
+		if err := validateBooleanAttr("xsl:param", "static", staticVal); err != nil {
+			return nil, err
+		}
+	}
+
 	// XTSE0010: A static parameter must not have a sequence constructor (body content).
 	// Static params default to empty sequence when no select is provided.
 	isStatic := xsdBoolTrue(getAttr(elem, "static"))
+
+	// XTSE0020: static parameter must not have tunnel="yes"
+	if isStatic && xsdBoolTrue(getAttr(elem, "tunnel")) {
+		return nil, staticError(errCodeXTSE0020,
+			"xsl:param %q with static='yes' must not have tunnel='yes'", name)
+	}
+
 	if isStatic {
 		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 			switch child.Type() {
@@ -581,6 +601,14 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 	name := getAttr(elem, "name")
 	if name == "" {
 		return staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
+	}
+
+	// XTSE0020: static variable must not have visibility attribute
+	if xsdBoolTrue(getAttr(elem, "static")) {
+		if vis := getAttr(elem, "visibility"); vis != "" {
+			return staticError(errCodeXTSE0020,
+				"xsl:variable %q with static='yes' must not have visibility attribute", name)
+		}
 	}
 
 	asAttr := getAttr(elem, "as")
