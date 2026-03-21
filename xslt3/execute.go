@@ -627,11 +627,6 @@ func (ec *execContext) addNode(node helium.Node) error {
 	if err := out.current.AddChild(node); err != nil {
 		return err
 	}
-	// Zero-length text nodes are not significant output for on-empty
-	// purposes (XSLT 3.0 §11.4: a zero-length text node is vacuous).
-	if node.Type() == helium.TextNode && len(node.Content()) == 0 {
-		return nil
-	}
 	out.noteOutput()
 	// Track that output was produced for item-separator insertion
 	// between non-atomic items (e.g., comment→atomic, element→atomic).
