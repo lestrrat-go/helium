@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // compileSourceDocument compiles an xsl:source-document element.
@@ -564,6 +565,11 @@ func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 		}
 	}
 
+	// Streamability checks when any merge-source has streamable="yes".
+	if err := mergeStreamCheck(inst); err != nil {
+		return nil, err
+	}
+
 	return inst, nil
 }
 
@@ -741,4 +747,48 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
 	}
 
 	return mk, nil
+}
+
+func mergeStreamCheck(inst *MergeInst) error {
+	hasStreamable := false
+	for _, src := range inst.Sources {
+		if src.StreamableAttr {
+			hasStreamable = true
+			break
+		}
+	}
+	if !hasStreamable {
+		return nil
+	}
+	// XTSE3470: merge-key order/data-type must not be AVTs within
+	// a streamable merge-source.
+	for _, src := range inst.Sources {
+		if !src.StreamableAttr {
+			continue
+		}
+		for _, mk := range src.Keys {
+			if mk.OrderAVT != nil {
+				return staticError("XTSE3470", "xsl:merge-key @order must not be an AVT when xsl:merge-source is streamable")
+			}
+			if mk.DataTypeAVT != nil {
+				return staticError("XTSE3470", "xsl:merge-key @data-type must not be an AVT when xsl:merge-source is streamable")
+			}
+		}
+	}
+	// XTSE3430: when a streamable merge-source select uses descendant-or-self
+	// axis (//), the merge-key must not navigate upward.
+	for _, src := range inst.Sources {
+		if !src.StreamableAttr || src.Select == nil {
+			continue
+		}
+		if !xpath3.ExprUsesDescendantOrSelf(src.Select) {
+			continue
+		}
+		for _, mk := range src.Keys {
+			if xpath3.ExprUsesUpwardAxis(mk.Select) {
+				return staticError(errCodeXTSE3430, "xsl:merge-key select is not streamable: upward axis with descendant-or-self selection")
+			}
+		}
+	}
+	return nil
 }

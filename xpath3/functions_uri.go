@@ -132,8 +132,10 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 		return SingleString(relative), nil
 	}
 
-	// Convert absolute file paths to file: URIs
-	if strings.HasPrefix(base, "/") && !strings.Contains(base, "://") {
+	// Convert absolute file paths to file: URIs, but only when the base
+	// is derived from context (1-arg form). When explicitly provided as
+	// the second argument, the base must already be an absolute URI.
+	if len(args) < 2 && strings.HasPrefix(base, "/") && !strings.Contains(base, "://") {
 		base = "file://" + base
 	}
 	parsedBase, err := parseURIReference(base)
@@ -162,6 +164,12 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 func validateIRI(s string) error {
 	if err := validatePercentEncoding(s); err != nil {
 		return err
+	}
+	// A URI reference may contain at most one '#' (fragment separator).
+	if idx := strings.IndexByte(s, '#'); idx >= 0 {
+		if strings.IndexByte(s[idx+1:], '#') >= 0 {
+			return fmt.Errorf("invalid IRI: multiple '#' characters")
+		}
 	}
 	for _, r := range s {
 		if r == ' ' || r < 0x20 || (r > 0x7E && r < 0xA0) {
