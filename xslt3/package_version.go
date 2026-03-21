@@ -98,17 +98,41 @@ type VersionConstraint struct {
 	// Range bounds (inclusive)
 	RangeFrom PackageVersion
 	RangeTo   PackageVersion
+	// MinVersion: "1.5+" means >= 1.5
+	IsMinVersion bool
+	MinVersion   PackageVersion
+	// MaxOnly: "to 1.5" means <= 1.5 (no lower bound)
+	IsMaxOnly  bool
+	MaxVersion PackageVersion
+	// Alternatives: "1.0.0, 2.0" means match any of these
+	Alternatives []VersionConstraint
 	// Wildcard: "*" matches any version
 	IsWildcard bool
 	Raw        string
 }
 
 // ParseVersionConstraint parses a package-version attribute value.
-// Forms: "*", "1.0", "1.*", "1.0 to 2.0", "" (= "*")
+// Forms: "*", "1.0", "1.*", "1.0 to 2.0", "to 2.0", "1.5+", "1.0, 2.0", "" (= "*")
 func ParseVersionConstraint(s string) VersionConstraint {
 	s = strings.TrimSpace(s)
 	if s == "" || s == "*" {
 		return VersionConstraint{IsWildcard: true, Raw: s}
+	}
+
+	// Check for alternatives: "X, Y, ..."
+	if strings.Contains(s, ",") {
+		parts := strings.Split(s, ",")
+		var alts []VersionConstraint
+		for _, p := range parts {
+			alts = append(alts, ParseVersionConstraint(strings.TrimSpace(p)))
+		}
+		return VersionConstraint{Alternatives: alts, Raw: s}
+	}
+
+	// Check for "to Y" (max-only, no lower bound)
+	if strings.HasPrefix(s, "to ") {
+		to := ParsePackageVersion(strings.TrimSpace(s[3:]))
+		return VersionConstraint{IsMaxOnly: true, MaxVersion: to, Raw: s}
 	}
 
 	// Check for range: "X to Y"
@@ -116,6 +140,12 @@ func ParseVersionConstraint(s string) VersionConstraint {
 		from := ParsePackageVersion(strings.TrimSpace(parts[0]))
 		to := ParsePackageVersion(strings.TrimSpace(parts[1]))
 		return VersionConstraint{IsRange: true, RangeFrom: from, RangeTo: to, Raw: s}
+	}
+
+	// Check for minimum version: "X+"
+	if strings.HasSuffix(s, "+") {
+		min := ParsePackageVersion(s[:len(s)-1])
+		return VersionConstraint{IsMinVersion: true, MinVersion: min, Raw: s}
 	}
 
 	// Check for prefix wildcard: "1.*"
@@ -145,8 +175,25 @@ func (c VersionConstraint) Matches(v PackageVersion) bool {
 		return true
 	}
 
+	if len(c.Alternatives) > 0 {
+		for _, alt := range c.Alternatives {
+			if alt.Matches(v) {
+				return true
+			}
+		}
+		return false
+	}
+
 	if c.IsRange {
 		return v.Compare(c.RangeFrom) >= 0 && v.Compare(c.RangeTo) <= 0
+	}
+
+	if c.IsMinVersion {
+		return v.Compare(c.MinVersion) >= 0
+	}
+
+	if c.IsMaxOnly {
+		return v.Compare(c.MaxVersion) <= 0
 	}
 
 	if c.Prefix != nil {
