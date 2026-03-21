@@ -927,29 +927,44 @@ func (w *Writer) StartDTD(name, pubid, sysid string) error {
 		} else {
 			w.writeStr(" PUBLIC ")
 		}
-		w.writeByte(w.quoteChar)
+		pubQ := dtdQuoteFor(pubid, w.quoteChar)
+		w.writeByte(pubQ)
 		w.writeStr(pubid)
-		w.writeByte(w.quoteChar)
+		w.writeByte(pubQ)
 		if w.indent != "" {
 			w.writeStr("\n       ")
 		} else {
 			w.writeByte(' ')
 		}
-		w.writeByte(w.quoteChar)
+		sysQ := dtdQuoteFor(sysid, w.quoteChar)
+		w.writeByte(sysQ)
 		w.writeStr(sysid)
-		w.writeByte(w.quoteChar)
+		w.writeByte(sysQ)
 	} else if sysid != "" {
 		if w.indent != "" {
 			w.writeStr("\nSYSTEM ")
 		} else {
 			w.writeStr(" SYSTEM ")
 		}
-		w.writeByte(w.quoteChar)
+		sysQ := dtdQuoteFor(sysid, w.quoteChar)
+		w.writeByte(sysQ)
 		w.writeStr(sysid)
-		w.writeByte(w.quoteChar)
+		w.writeByte(sysQ)
 	}
 	w.state = stateDTD
 	return w.err
+}
+
+// dtdQuoteFor returns the appropriate quote character for a DTD identifier.
+// If the value contains the preferred quote, use the other one.
+func dtdQuoteFor(value string, preferred byte) byte {
+	if strings.ContainsRune(value, rune(preferred)) {
+		if preferred == '"' {
+			return '\''
+		}
+		return '"'
+	}
+	return preferred
 }
 
 // ensureDTDInternalSubset writes the opening " [" for the DTD internal

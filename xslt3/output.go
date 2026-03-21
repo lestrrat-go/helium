@@ -1544,22 +1544,30 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 	if head == nil {
 		return
 	}
+	enc := outDef.Encoding
+	if enc == "" {
+		enc = "UTF-8"
+	}
+	mediaType := outDef.MediaType
+	if mediaType == "" {
+		mediaType = "text/html"
+	}
+	contentValue := mediaType + "; charset=" + enc
+
 	// Check if a <meta http-equiv="Content-Type"> already exists.
-	// Use case-insensitive attribute name matching for HTML compatibility.
+	// If so, update its content attribute to match the output encoding.
 	for child := head.FirstChild(); child != nil; child = child.NextSibling() {
 		if e, ok := child.(*helium.Element); ok && strings.EqualFold(string(e.LocalName()), "meta") {
 			for _, attr := range e.Attributes() {
 				if strings.EqualFold(attr.Name(), "http-equiv") && strings.EqualFold(attr.Value(), "Content-Type") {
-					return // already present
+					// Update the existing content attribute
+					e.SetLiteralAttribute("content", contentValue)
+					return
 				}
 			}
 		}
 	}
 	// Create and insert the meta element.
-	enc := outDef.Encoding
-	if enc == "" {
-		enc = "UTF-8"
-	}
 	meta, err := doc.CreateElement("meta")
 	if err != nil {
 		return
@@ -1569,13 +1577,7 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 		_ = meta.SetActiveNamespace(string(head.Prefix()), headURI)
 	}
 	meta.SetLiteralAttribute("http-equiv", "Content-Type")
-	// Use media-type if specified; otherwise default to text/html
-	// (same for both html and xhtml methods per XSLT 3.0 spec).
-	mediaType := outDef.MediaType
-	if mediaType == "" {
-		mediaType = "text/html"
-	}
-	meta.SetLiteralAttribute("content", mediaType+"; charset="+enc)
+	meta.SetLiteralAttribute("content", contentValue)
 	// Insert meta as first child of <head>.
 	// Unlink existing children, add meta, then re-add them.
 	var children []helium.Node

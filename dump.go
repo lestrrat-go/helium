@@ -463,21 +463,27 @@ func (d *Writer) dumpDocContent(out io.Writer, n Node) error {
 	return nil
 }
 
+// dtdQuoteChar returns the appropriate quote character for a DTD identifier.
+// Uses double quote by default, single quote if the value contains double quotes.
+func dtdQuoteChar(value string) byte {
+	if strings.ContainsRune(value, '"') {
+		return '\''
+	}
+	return '"'
+}
+
 func (d *Writer) dumpDTD(out io.Writer, n Node) error {
 	dtd := n.(*DTD)
 	_, _ = io.WriteString(out, "<!DOCTYPE ")
 	_, _ = io.WriteString(out, dtd.Name())
 
 	if dtd.externalID != "" {
-		_, _ = io.WriteString(out, " PUBLIC \"")
-		_, _ = io.WriteString(out, dtd.externalID)
-		_, _ = io.WriteString(out, "\" \"")
-		_, _ = io.WriteString(out, dtd.systemID)
-		_, _ = io.WriteString(out, "\"")
+		pubQ := dtdQuoteChar(dtd.externalID)
+		sysQ := dtdQuoteChar(dtd.systemID)
+		_, _ = fmt.Fprintf(out, " PUBLIC %c%s%c %c%s%c", pubQ, dtd.externalID, pubQ, sysQ, dtd.systemID, sysQ)
 	} else if dtd.systemID != "" {
-		_, _ = io.WriteString(out, " SYSTEM \"")
-		_, _ = io.WriteString(out, dtd.systemID)
-		_, _ = io.WriteString(out, "\"")
+		sysQ := dtdQuoteChar(dtd.systemID)
+		_, _ = fmt.Fprintf(out, " SYSTEM %c%s%c", sysQ, dtd.systemID, sysQ)
 	}
 
 	if len(dtd.entities) == 0 && len(dtd.elements) == 0 && len(dtd.pentities) == 0 && len(dtd.attributes) == 0 && len(dtd.notations) == 0 {
