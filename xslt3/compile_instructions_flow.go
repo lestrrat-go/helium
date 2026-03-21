@@ -677,6 +677,14 @@ func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
+			// XTSE3140: when select is present, non-whitespace text is not allowed.
+			if inst.Select != nil {
+				if tn, isText := child.(*helium.Text); isText {
+					if !isWhitespaceOnly(string(tn.Content())) {
+						return nil, staticError(errCodeXTSE3140, "xsl:try with select attribute must not have non-catch/fallback children")
+					}
+				}
+			}
 			continue
 		}
 		if childElem.URI() == NSXSLT && childElem.LocalName() == "catch" {
@@ -700,7 +708,11 @@ func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 			}
 
 			// xsl:catch select attribute
+			// XTSE3150: xsl:catch with select must have empty content.
 			if sel := getAttr(childElem, "select"); sel != "" {
+				if hasNonEmptyContent(childElem) {
+					return nil, staticError(errCodeXTSE3150, "xsl:catch with select attribute must have empty content")
+				}
 				expr, err := compileXPath(sel, c.nsBindings)
 				if err != nil {
 					return nil, err
@@ -718,6 +730,10 @@ func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 			// xsl:fallback inside xsl:try is silently ignored
 			continue
 		} else {
+			// XTSE3140: when select is present, only xsl:catch and xsl:fallback are allowed.
+			if inst.Select != nil {
+				return nil, staticError(errCodeXTSE3140, "xsl:try with select attribute must not have non-catch/fallback children")
+			}
 			childInst, err := c.compileInstruction(childElem)
 			if err != nil {
 				return nil, err

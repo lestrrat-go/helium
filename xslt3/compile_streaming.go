@@ -599,6 +599,20 @@ func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 		}
 	}
 
+	// XTSE3190: duplicate xsl:merge-source names.
+	seenNames := make(map[string]struct{})
+	for _, src := range inst.Sources {
+		name := src.Name
+		if name == "" {
+			// Implicit name is the position, so no duplicate check needed for unnamed
+			continue
+		}
+		if _, ok := seenNames[name]; ok {
+			return nil, staticError(errCodeXTSE3190, "duplicate xsl:merge-source name %q", name)
+		}
+		seenNames[name] = struct{}{}
+	}
+
 	// Streamability checks when any merge-source has streamable="yes".
 	if err := mergeStreamCheck(inst); err != nil {
 		return nil, err

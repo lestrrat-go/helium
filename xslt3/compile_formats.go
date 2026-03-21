@@ -206,6 +206,10 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		MethodExplicit: methodStr != "",
 		Encoding:       getAttr(elem, "encoding"),
 		Version:        getAttr(elem, "version"),
+		ImportPrec:     c.importPrec,
+		MethodRaw:      getAttr(elem, "method"),
+		EncodingRaw:    getAttr(elem, "encoding"),
+		VersionRaw:     getAttr(elem, "version"),
 	}
 
 	if outDef.Method == "" {
@@ -223,6 +227,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@indent", v)
 		}
 		outDef.Indent = b
+		outDef.IndentRaw = v
 	}
 	if v := getAttr(elem, "omit-xml-declaration"); v != "" {
 		b, ok := parseXSDBool(v)
@@ -275,6 +280,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
 		}
 		outDef.Standalone = v
+		outDef.StandaloneRaw = getAttr(elem, "standalone")
 	} else {
 		outDef.Standalone = ""
 	}
@@ -310,6 +316,33 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	if ucm := getAttr(elem, "use-character-maps"); ucm != "" {
 		for _, n := range strings.Fields(ucm) {
 			outDef.UseCharacterMaps = append(outDef.UseCharacterMaps, resolveQName(n, c.nsBindings))
+		}
+	}
+
+	// XTSE1560: check for conflicting output attributes at the same import
+	// precedence before merging.
+	if existing, ok := c.stylesheet.outputs[name]; ok && existing.ImportPrec == c.importPrec {
+		// Attributes that are not allowed to conflict (all except cdata-section-elements
+		// and use-character-maps). Check each explicitly set attribute.
+		type attrConflict struct {
+			attrName  string
+			oldVal    string
+			newVal    string
+			newIsSet  bool
+			oldIsSet  bool
+		}
+		checks := []attrConflict{
+			{"method", existing.MethodRaw, getAttr(elem, "method"), getAttr(elem, "method") != "", existing.MethodRaw != ""},
+			{"indent", existing.IndentRaw, getAttr(elem, "indent"), getAttr(elem, "indent") != "", existing.IndentRaw != ""},
+			{"encoding", existing.EncodingRaw, getAttr(elem, "encoding"), getAttr(elem, "encoding") != "", existing.EncodingRaw != ""},
+			{"version", existing.VersionRaw, getAttr(elem, "version"), getAttr(elem, "version") != "", existing.VersionRaw != ""},
+			{"standalone", existing.StandaloneRaw, getAttr(elem, "standalone"), getAttr(elem, "standalone") != "", existing.StandaloneRaw != ""},
+		}
+		for _, chk := range checks {
+			if chk.newIsSet && chk.oldIsSet && chk.oldVal != chk.newVal {
+				return staticError(errCodeXTSE1560,
+					"conflicting values for xsl:output/@%s: %q vs %q", chk.attrName, chk.oldVal, chk.newVal)
+			}
 		}
 	}
 

@@ -215,6 +215,21 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		return err
 	}
 
+	// XTSE3155: xsl:function with no params and streamability != unclassified
+	streamability := getAttr(elem, "streamability")
+	if streamability == "" {
+		streamability = getAttr(elem, "streamable")
+		if streamability == "yes" {
+			streamability = "absorbing"
+		} else if streamability == "no" || streamability == "" {
+			streamability = ""
+		}
+	}
+	if len(params) == 0 && streamability != "" && streamability != "unclassified" {
+		return staticError(errCodeXTSE3155,
+			"xsl:function %q with no parameters must not have streamability=%q (only unclassified allowed)", name, streamability)
+	}
+
 	fn := &XSLFunction{
 		Name:          qn,
 		Params:        params,

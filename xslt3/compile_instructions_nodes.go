@@ -247,6 +247,10 @@ func (c *compiler) compileAttribute(elem *helium.Element) (*AttributeInst, error
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
+		// XTSE0840: xsl:attribute with select must have empty content.
+		if hasNonEmptyContent(elem) {
+			return nil, staticError(errCodeXTSE0840, "xsl:attribute with select attribute must have empty content")
+		}
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
@@ -737,6 +741,10 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 					if prefix == "#default" {
 						if uri, ok := c.nsBindings[""]; ok && uri != "" {
 							newExcludes[uri] = struct{}{}
+						} else {
+							// XTSE0809: #default used but no default namespace in scope
+							return nil, staticError(errCodeXTSE0809,
+								"#default in exclude-result-prefixes but no default namespace is declared")
 						}
 						continue
 					}
