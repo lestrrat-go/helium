@@ -8,13 +8,23 @@ import (
 )
 
 func (c *compiler) compileTemplate(elem *helium.Element) error {
+	// Collect namespace declarations and xpath-default-namespace before
+	// evaluating use-when so the expression has the correct namespace context.
+	c.collectNamespaces(elem)
+	savedXPathDefaultNS := c.xpathDefaultNS
+	if xdn := getAttr(elem, "xpath-default-namespace"); xdn != "" {
+		c.xpathDefaultNS = xdn
+	}
+
 	// Evaluate use-when before compiling the template.
 	if uw := getAttr(elem, "use-when"); uw != "" {
 		include, err := c.evaluateUseWhen(uw)
 		if err != nil {
+			c.xpathDefaultNS = savedXPathDefaultNS
 			return err
 		}
 		if !include {
+			c.xpathDefaultNS = savedXPathDefaultNS
 			return nil
 		}
 	}
@@ -23,15 +33,6 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		ImportPrec:    c.importPrec,
 		MinImportPrec: c.minImportPrec,
 		BaseURI:       c.baseURI,
-	}
-
-	// Collect namespace declarations from this template
-	c.collectNamespaces(elem)
-
-	// Inherit or override xpath-default-namespace
-	savedXPathDefaultNS := c.xpathDefaultNS
-	if xdn := getAttr(elem, "xpath-default-namespace"); xdn != "" {
-		c.xpathDefaultNS = xdn
 	}
 	tmpl.XPathDefaultNS = c.xpathDefaultNS
 	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
