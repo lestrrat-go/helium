@@ -438,7 +438,8 @@ func checkAttributeSetCycles(ss *Stylesheet) error {
 		if asd := ss.attributeSets[name]; asd != nil {
 			for _, ref := range asd.UseAttrSets {
 				if _, ok := ss.attributeSets[ref]; !ok {
-					continue // unknown ref — not our concern here
+					return staticError("XTSE0710",
+						"attribute-set %q references undeclared attribute-set %q", name, ref)
 				}
 				if err := visit(ref); err != nil {
 					return err

@@ -174,7 +174,9 @@ func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
 
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
 		for _, name := range strings.Fields(uas) {
-			inst.UseAttributeSets = append(inst.UseAttributeSets, resolveQName(name, c.nsBindings))
+			resolved := resolveQName(name, c.nsBindings)
+			inst.UseAttributeSets = append(inst.UseAttributeSets, resolved)
+			c.usedAttrSetRefs = append(c.usedAttrSetRefs, resolved)
 		}
 	}
 
@@ -386,7 +388,9 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
 		for _, name := range strings.Fields(uas) {
-			inst.UseAttributeSets = append(inst.UseAttributeSets, resolveQName(name, c.nsBindings))
+			resolved := resolveQName(name, c.nsBindings)
+			inst.UseAttributeSets = append(inst.UseAttributeSets, resolved)
+			c.usedAttrSetRefs = append(c.usedAttrSetRefs, resolved)
 		}
 	}
 
@@ -892,7 +896,9 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	// Handle xsl:use-attribute-sets
 	if uas, ok := elem.GetAttributeNS("use-attribute-sets", NSXSLT); ok {
 		for _, name := range strings.Fields(uas) {
-			lre.UseAttributeSets = append(lre.UseAttributeSets, resolveQName(name, c.nsBindings))
+			resolved := resolveQName(name, c.nsBindings)
+			lre.UseAttributeSets = append(lre.UseAttributeSets, resolved)
+			c.usedAttrSetRefs = append(c.usedAttrSetRefs, resolved)
 		}
 		lre.UseAttrSets = strings.Fields(uas)
 	}

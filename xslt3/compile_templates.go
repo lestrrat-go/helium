@@ -722,6 +722,19 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 		v.Body = body
 	}
 
+	// XTSE0630: duplicate global variable with same name and same import precedence.
+	// Only flag duplicates within the same module (same importPrec).
+	for _, existing := range c.stylesheet.globalVars {
+		if existing.Name == v.Name && existing.ImportPrec == c.importPrec {
+			return staticError("XTSE0630", "duplicate global variable %q", v.Name)
+		}
+	}
+	for _, existing := range c.stylesheet.globalParams {
+		if existing.Name == v.Name && existing.ImportPrec == c.importPrec {
+			return staticError("XTSE0630", "duplicate global variable/param %q", v.Name)
+		}
+	}
+	v.ImportPrec = c.importPrec
 	c.stylesheet.globalVars = append(c.stylesheet.globalVars, v)
 	return nil
 }
@@ -735,6 +748,18 @@ func (c *compiler) compileGlobalParam(elem *helium.Element) error {
 	if err != nil {
 		return err
 	}
+	// XTSE0630: duplicate global param/variable with same name and same import precedence
+	for _, existing := range c.stylesheet.globalParams {
+		if existing.Name == p.Name && existing.ImportPrec == c.importPrec {
+			return staticError("XTSE0630", "duplicate global param %q", p.Name)
+		}
+	}
+	for _, existing := range c.stylesheet.globalVars {
+		if existing.Name == p.Name && existing.ImportPrec == c.importPrec {
+			return staticError("XTSE0630", "duplicate global param/variable %q", p.Name)
+		}
+	}
+	p.ImportPrec = c.importPrec
 	c.stylesheet.globalParams = append(c.stylesheet.globalParams, p)
 	return nil
 }
