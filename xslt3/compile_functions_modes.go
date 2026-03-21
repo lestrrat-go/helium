@@ -255,19 +255,19 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 			// Instead of erroring immediately, defer the conflict — a higher-
 			// precedence declaration may resolve it later.
 			if existing.OnNoMatch != "" && md.OnNoMatch != "" && existing.OnNoMatch != md.OnNoMatch {
-				existing.conflictErr = "conflicting on-no-match values for mode " + name
+				existing.conflictOnNoMatch = true
 			}
 			if streamableStr != "" && existing.Streamable != md.Streamable {
-				existing.conflictErr = "conflicting streamable values for mode " + name
+				existing.conflictStreamable = true
 			}
 			if existing.Visibility != "" && md.Visibility != "" && existing.Visibility != md.Visibility {
-				existing.conflictErr = "conflicting visibility values for mode " + name
+				existing.conflictVisibility = true
 			}
 			if existing.OnMultipleMatch != "" && md.OnMultipleMatch != "" && existing.OnMultipleMatch != md.OnMultipleMatch {
-				existing.conflictErr = "conflicting on-multiple-match values for mode " + name
+				existing.conflictOnMultiple = true
 			}
 			if existing.UseAccumulators != "" && md.UseAccumulators != "" && !sameAccumulatorSet(existing.UseAccumulators, md.UseAccumulators) {
-				existing.conflictErr = "conflicting use-accumulators values for mode " + name
+				existing.conflictAccumulator = true
 			}
 			// Non-conflicting: merge attributes (use non-empty values from new decl)
 			if md.OnNoMatch != "" {
@@ -284,13 +284,18 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 			}
 			return nil
 		}
-		// Different precedence: higher precedence wins and clears any conflict.
+		// Different precedence: higher precedence wins.
 		if c.importPrec > existing.ImportPrec {
+			// Preserve conflict flags from the lower-precedence entry,
+			// but clear them for attributes the higher-prec explicitly specifies.
+			md.conflictStreamable = existing.conflictStreamable && streamableStr == ""
+			md.conflictOnNoMatch = existing.conflictOnNoMatch && md.OnNoMatch == ""
+			md.conflictVisibility = existing.conflictVisibility && md.Visibility == ""
+			md.conflictOnMultiple = existing.conflictOnMultiple && md.OnMultipleMatch == ""
+			md.conflictAccumulator = existing.conflictAccumulator && md.UseAccumulators == ""
 			c.stylesheet.modeDefs[name] = md
-		} else {
-			// Lower precedence than existing: existing already won, clear conflict.
-			existing.conflictErr = ""
 		}
+		// Lower precedence than existing: existing already won, ignore this decl.
 		return nil
 	}
 
