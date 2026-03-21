@@ -67,6 +67,7 @@ func isReservedFunctionNS(uri string) bool {
 func (c *compiler) compileFunction(elem *helium.Element) error {
 	if err := validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {}, "as": {}, "visibility": {}, "streamable": {},
+		"streamability": {},
 		"override-extension-function": {}, "override": {},
 		"identity-sensitive": {}, "cache": {}, "new-each-time": {},
 		"use-when": {},
