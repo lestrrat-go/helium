@@ -126,10 +126,15 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		if err := validateBooleanAttr("xsl:function", "override", ov); err != nil {
 			return err
 		}
-		// Both override and override-extension-function is XTSE0020
-		if _, hasOEF := elem.GetAttribute("override-extension-function"); hasOEF {
-			return staticError(errCodeXTSE0020,
-				"xsl:function must not have both @override and @override-extension-function")
+		// Having both @override and @override-extension-function is only an error
+		// when they disagree (XTSE0020 per spec function-0117).
+		if oef, hasOEF := elem.GetAttribute("override-extension-function"); hasOEF {
+			ovBool, _ := parseXSDBool(ov)
+			oefBool, _ := parseXSDBool(oef)
+			if ovBool != oefBool {
+				return staticError(errCodeXTSE0020,
+					"xsl:function has conflicting @override=%q and @override-extension-function=%q", ov, oef)
+			}
 		}
 	}
 	// XTSE0020: validate new-each-time (yes|no|maybe)
@@ -150,18 +155,20 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		return err
 	}
 
-	// XTSE0020: xsl:param inside xsl:function must not have @required attribute
-	// (even required="no" is disallowed by the spec)
+	// XTSE0020: xsl:param inside xsl:function must not have required="no"
+	// (function params are implicitly required; required="yes" is allowed as redundant)
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
 		}
 		if childElem.URI() == NSXSLT && childElem.LocalName() == "param" {
-			if _, hasReq := childElem.GetAttribute("required"); hasReq {
-				pname := getAttr(childElem, "name")
-				return staticError(errCodeXTSE0020,
-					"xsl:param %q in xsl:function must not have @required", pname)
+			if reqVal, hasReq := childElem.GetAttribute("required"); hasReq {
+				if reqVal != "yes" && reqVal != "1" && reqVal != "true" {
+					pname := getAttr(childElem, "name")
+					return staticError(errCodeXTSE0020,
+						"xsl:param %q in xsl:function must not have required=%q", pname, reqVal)
+				}
 			}
 		}
 	}
