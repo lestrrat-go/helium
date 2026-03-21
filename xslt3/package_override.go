@@ -267,14 +267,21 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 
 	// Validate: named template must exist in package
 	if tmpl.Name != "" {
-		if _, exists := pkg.namedTemplates[tmpl.Name]; !exists {
+		existing, exists := pkg.namedTemplates[tmpl.Name]
+		if !exists {
 			return nil, staticError(errCodeXTSE3058,
 				"xsl:override template %q not found in used package", tmpl.Name)
 		}
 		// Check visibility: cannot override final template
-		if existing := pkg.namedTemplates[tmpl.Name]; existing != nil && existing.Visibility == visFinal {
+		if existing.Visibility == visFinal {
 			return nil, staticError(errCodeXTSE3070,
 				"cannot override final template %q", tmpl.Name)
+		}
+		// Check visibility: cannot override private/hidden template
+		pkgVis := getComponentVisibility(pkg, xslElemTemplate, tmpl.Name)
+		if pkgVis == visPrivate || pkgVis == visHidden {
+			return nil, staticError(errCodeXTSE3050,
+				"cannot override %s template %q", pkgVis, tmpl.Name)
 		}
 	}
 
@@ -293,6 +300,15 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 	tmpl.Params = params
 	tmpl.Body = body
 	tmpl.As = getAttr(elem, "as")
+
+	// XTSE3070: check type compatibility of override against base template.
+	if tmpl.Name != "" {
+		if existing, ok := pkg.namedTemplates[tmpl.Name]; ok {
+			if err := checkOverrideTemplateCompat(tmpl, existing); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	return tmpl, nil
 }
@@ -425,6 +441,36 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 	}
 
 	return asd, nil
+}
+
+// checkOverrideTemplateCompat validates that an override template is compatible
+// with the base template it replaces. XTSE3070 is raised when parameter types
+// differ or new required parameters are added.
+func checkOverrideTemplateCompat(override, base *Template) error {
+	// Build map of base params by name
+	baseParams := make(map[string]*Param)
+	for _, p := range base.Params {
+		baseParams[p.Name] = p
+	}
+
+	for _, op := range override.Params {
+		bp, exists := baseParams[op.Name]
+		if !exists {
+			// New parameter in override that doesn't exist in base
+			if op.Required {
+				return staticError(errCodeXTSE3070,
+					"override template %q adds required parameter $%s not in base", override.Name, op.Name)
+			}
+			continue
+		}
+		// Check type compatibility: if both have 'as', they must match
+		if bp.As != "" && op.As != "" && bp.As != op.As {
+			return staticError(errCodeXTSE3070,
+				"override template %q parameter $%s type %q does not match base type %q",
+				override.Name, op.Name, op.As, bp.As)
+		}
+	}
+	return nil
 }
 
 func parseFloat(s string) (float64, error) {
