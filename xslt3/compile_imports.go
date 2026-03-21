@@ -213,10 +213,14 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 	}
 	defer func() { c.defaultMode = savedDefaultMode }()
 
-	// Evaluate static params so they're available for shadow attributes.
+	// Evaluate static params and variables so they're available for shadow attributes.
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
-		if !ok || elem.URI() != NSXSLT || elem.LocalName() != "param" {
+		if !ok || elem.URI() != NSXSLT {
+			continue
+		}
+		ln := elem.LocalName()
+		if ln != "param" && ln != "variable" {
 			continue
 		}
 		if getAttr(elem, "static") == "yes" {
