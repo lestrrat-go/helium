@@ -574,6 +574,24 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 		}
 		prefix := nsw.Name()
 		uri := string(nsw.Content())
+		// Check for conflicts (same prefix, different URI) and apply
+		// namespace fixup when allowed (e.g. xsl:element auto-generated ns).
+		_, fixupOK := ec.nsFixupAllowed[elem]
+		for _, ns := range elem.Namespaces() {
+			if ns.Prefix() == prefix && ns.URI() != uri {
+				if fixupOK && elem.Prefix() == prefix && elem.URI() == ns.URI() {
+					// Rename the element's prefix to avoid conflict
+					origURI := elem.URI()
+					newPrefix := uniqueNSPrefix(elem, prefix+"_0", origURI)
+					elem.RemoveNamespaceByPrefix(prefix)
+					_ = elem.DeclareNamespace(newPrefix, origURI)
+					_ = elem.SetActiveNamespace(newPrefix, origURI)
+					break
+				}
+				return dynamicError(errCodeXTDE0430,
+					"namespace prefix %q is already bound to %q; cannot rebind to %q", prefix, ns.URI(), uri)
+			}
+		}
 		return elem.DeclareNamespace(prefix, uri)
 	case helium.DTDNode:
 		// DTDs are not copied to the result tree in XSLT
