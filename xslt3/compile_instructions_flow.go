@@ -400,6 +400,10 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 	sk := &SortKey{}
 
 	selectAttr := getAttr(elem, "select")
+	// XTSE1015: xsl:sort with select must not have content
+	if selectAttr != "" && c.hasEffectiveContent(elem) {
+		return nil, staticError("XTSE1015", "xsl:sort with a select attribute must not have content")
+	}
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -543,6 +547,23 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*PerformSortInst, e
 			return nil, err
 		}
 		inst.Select = expr
+		// XTSE1040: when select is present, only xsl:sort and xsl:fallback are allowed
+		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			childElem, ok := child.(*helium.Element)
+			if !ok {
+				continue
+			}
+			if childElem.URI() == NSXSLT {
+				ln := childElem.LocalName()
+				if ln != "sort" && ln != "fallback" {
+					return nil, staticError("XTSE1040",
+						"xsl:perform-sort with select attribute must not contain xsl:%s", ln)
+				}
+			} else {
+				return nil, staticError("XTSE1040",
+					"xsl:perform-sort with select attribute must not contain non-XSLT content")
+			}
+		}
 	}
 
 	// Collect sort keys and body. xsl:sort must come before other content.
@@ -736,6 +757,20 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 	}
 	if groupingCount > 1 {
 		return nil, staticError(errCodeXTSE1080, "xsl:for-each-group must have at most one of group-by, group-adjacent, group-starting-with, or group-ending-with")
+	}
+
+	// XTSE1090: collation/composite only with group-by or group-adjacent
+	hasGroupBy := getAttr(elem, "group-by") != ""
+	hasGroupAdjacent := getAttr(elem, "group-adjacent") != ""
+	if !hasGroupBy && !hasGroupAdjacent {
+		if getAttr(elem, "collation") != "" {
+			return nil, staticError("XTSE1090",
+				"collation attribute on xsl:for-each-group requires group-by or group-adjacent")
+		}
+		if getAttr(elem, "composite") != "" {
+			return nil, staticError("XTSE1090",
+				"composite attribute on xsl:for-each-group requires group-by or group-adjacent")
+		}
 	}
 
 	expr, err := compileXPath(selectAttr, c.nsBindings)

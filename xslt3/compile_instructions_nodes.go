@@ -612,6 +612,14 @@ func (c *compiler) compileNamespace(elem *helium.Element) (*NamespaceInst, error
 	inst := &NamespaceInst{Name: nameAVT}
 
 	selectAttr := getAttr(elem, "select")
+	hasContent := c.hasEffectiveContent(elem)
+	// XTSE0910: select and content are mutually exclusive on xsl:namespace
+	if selectAttr != "" && hasContent {
+		return nil, staticError("XTSE0910", "xsl:namespace must not have both a select attribute and content")
+	}
+	if selectAttr == "" && !hasContent {
+		return nil, staticError("XTSE0910", "xsl:namespace must have either a select attribute or content")
+	}
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {

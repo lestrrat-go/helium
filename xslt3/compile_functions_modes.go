@@ -189,6 +189,24 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 				return staticError(errCodeXTSE0020,
 					"tunnel=\"yes\" is not allowed on a function parameter")
 			}
+			// XTSE0760: function params must not have a default value
+			if getAttr(childElem, "select") != "" {
+				return staticError("XTSE0760",
+					"xsl:param %q in xsl:function must not have a select attribute", getAttr(childElem, "name"))
+			}
+			if childElem.FirstChild() != nil {
+				// Check for non-whitespace content (body content = default value)
+				for ch := childElem.FirstChild(); ch != nil; ch = ch.NextSibling() {
+					if ch.Type() == helium.ElementNode {
+						return staticError("XTSE0760",
+							"xsl:param %q in xsl:function must not have content", getAttr(childElem, "name"))
+					}
+					if ch.Type() == helium.TextNode && strings.TrimSpace(string(ch.Content())) != "" {
+						return staticError("XTSE0760",
+							"xsl:param %q in xsl:function must not have content", getAttr(childElem, "name"))
+					}
+				}
+			}
 		}
 	}
 
