@@ -426,7 +426,7 @@ func DocumentRoot(n helium.Node) helium.Node {
 	for top.Parent() != nil {
 		top = top.Parent()
 	}
-	if top.Type() == helium.DocumentNode {
+	if top.Type() == helium.DocumentNode || top.Type() == helium.HTMLDocumentNode {
 		return top
 	}
 	// If the topmost ancestor is not a document and OwnerDocument exists,

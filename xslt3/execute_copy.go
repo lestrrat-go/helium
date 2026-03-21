@@ -483,10 +483,10 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 	switch node.Type() {
 	case helium.DocumentNode:
 		out := ec.currentOutput()
-		if out.sequenceMode || out.captureItems {
-			// In capture/sequence mode, wrap the document copy as a
-			// single document-node item so that variables with
-			// as="node()" receive exactly 1 item (a document node).
+		if out.sequenceMode {
+			// In sequence mode, wrap the document copy as a single
+			// document-node item so that variables with as="node()"
+			// receive exactly 1 item (a document node).
 			srcDoc, _ := node.(*helium.Document)
 			newDoc := helium.NewDefaultDocument()
 			if srcDoc != nil {
