@@ -175,8 +175,8 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 	}
 
 	// Merge functions
-	for qn, fn := range pkg.functions {
-		key := functionVisKey(qn, len(fn.Params))
+	for fk, fn := range pkg.functions {
+		key := functionVisKey(fk.Name, len(fn.Params))
 		pkgVis := getComponentVisibility(pkg, xslElemFunction, key)
 		if !isVisibleFromOutside(pkgVis) {
 			continue
@@ -191,8 +191,8 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		if _, overridden := overrideNames[xslElemFunction+":"+key]; overridden {
 			continue
 		}
-		if _, exists := c.stylesheet.functions[qn]; !exists {
-			c.stylesheet.functions[qn] = fn
+		if _, exists := c.stylesheet.functions[fk]; !exists {
+			c.stylesheet.functions[fk] = fn
 		}
 	}
 

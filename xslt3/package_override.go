@@ -10,7 +10,7 @@ import (
 
 // overrideSet collects compiled override components from xsl:override.
 type overrideSet struct {
-	functions      map[xpath3.QualifiedName]*XSLFunction
+	functions      map[funcKey]*XSLFunction
 	namedTemplates map[string]*Template
 	matchTemplates []*Template
 	variables      map[string]*Variable
@@ -23,7 +23,7 @@ type overrideSet struct {
 // validates they match existing package components, and returns the override set.
 func (c *compiler) processOverrides(usePackageElem *helium.Element, pkg *Stylesheet) (*overrideSet, error) {
 	oset := &overrideSet{
-		functions:      make(map[xpath3.QualifiedName]*XSLFunction),
+		functions:      make(map[funcKey]*XSLFunction),
 		namedTemplates: make(map[string]*Template),
 		variables:      make(map[string]*Variable),
 		params:         make(map[string]*Param),
@@ -71,7 +71,7 @@ func (c *compiler) compileOverrideChildren(overrideElem *helium.Element, pkg *St
 			if err != nil {
 				return err
 			}
-			oset.functions[qn] = fn
+			oset.functions[funcKey{Name: qn, Arity: len(fn.Params)}] = fn
 
 		case xslElemTemplate:
 			tmpl, err := c.compileOverrideTemplate(elem, pkg)
@@ -149,21 +149,17 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 		return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE0010, "xsl:function name %q must have a namespace prefix", name)
 	}
 
-	// Check that the function exists in the package
-	pkgFn, exists := pkg.functions[qn]
-	if !exists {
-		// Try matching by name regardless of arity
-		found := false
-		for pkgQN := range pkg.functions {
-			if pkgQN.URI == qn.URI && pkgQN.Name == qn.Name {
-				found = true
-				break
-			}
+	// Check that the function exists in the package (check by name, any arity)
+	var pkgFn *XSLFunction
+	for fk, fn := range pkg.functions {
+		if fk.Name == qn {
+			pkgFn = fn
+			break
 		}
-		if !found {
-			return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE3058,
-				"xsl:override function %q not found in used package", name)
-		}
+	}
+	if pkgFn == nil {
+		return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE3058,
+			"xsl:override function %q not found in used package", name)
 	}
 
 	// Check visibility: cannot override final

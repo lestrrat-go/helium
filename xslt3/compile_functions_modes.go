@@ -143,13 +143,14 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	// functions with the same expanded QName, the same arity, and the same
 	// import precedence. Functions from different import levels are allowed;
 	// the one with the highest precedence wins.
-	if existing, ok := c.stylesheet.functions[qn]; ok {
-		if len(existing.Params) == len(fn.Params) && existing.ImportPrec == fn.ImportPrec {
+	fk := funcKey{Name: qn, Arity: len(fn.Params)}
+	if existing, ok := c.stylesheet.functions[fk]; ok {
+		if existing.ImportPrec == fn.ImportPrec {
 			return staticError(errCodeXTSE0770,
 				"duplicate xsl:function %s with arity %d", name, len(fn.Params))
 		}
 	}
-	c.stylesheet.functions[qn] = fn
+	c.stylesheet.functions[fk] = fn
 	return nil
 }
 

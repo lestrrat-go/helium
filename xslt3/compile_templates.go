@@ -8,6 +8,17 @@ import (
 )
 
 func (c *compiler) compileTemplate(elem *helium.Element) error {
+	// Evaluate use-when before compiling the template.
+	if uw := getAttr(elem, "use-when"); uw != "" {
+		include, err := c.evaluateUseWhen(uw)
+		if err != nil {
+			return err
+		}
+		if !include {
+			return nil
+		}
+	}
+
 	tmpl := &Template{
 		ImportPrec:    c.importPrec,
 		MinImportPrec: c.minImportPrec,

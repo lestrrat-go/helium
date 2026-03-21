@@ -955,7 +955,11 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 		}
 	}
 
-	return elem.DeclareNamespace(name, value)
+	if err := elem.DeclareNamespace(name, value); err != nil {
+		return err
+	}
+	out.noteOutput()
+	return nil
 }
 
 // prefixInUse checks if a namespace prefix is already declared on an element.

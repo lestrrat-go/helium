@@ -180,6 +180,19 @@ func (c *compiler) loadAndCacheInclude(uri, importKey string) (*helium.Element, 
 		return nil, staticError(errCodeXTSE0010, "included document %q is not a stylesheet", uri)
 	}
 
+	// Check use-when on the included/imported stylesheet's root element.
+	// If use-when evaluates to false, skip the entire module.
+	if uw := getAttr(root, "use-when"); uw != "" {
+		include, err := c.evaluateUseWhen(uw)
+		if err != nil {
+			return nil, err
+		}
+		if !include {
+			c.includeRoots[importKey] = nil
+			return nil, nil
+		}
+	}
+
 	c.includeRoots[importKey] = root
 	return root, nil
 }
@@ -527,7 +540,7 @@ func compileSimplified(doc *helium.Document, root *helium.Element, cfg *compileC
 			modeTemplates:    make(map[string][]*Template),
 			keys:             make(map[string][]*KeyDef),
 			outputs:          make(map[string]*OutputDef),
-			functions:        make(map[xpath3.QualifiedName]*XSLFunction),
+			functions:        make(map[funcKey]*XSLFunction),
 			namespaces:       make(map[string]string),
 			accumulators:     make(map[string]*AccumulatorDef),
 			accumulatorOrder: make([]string, 0),

@@ -242,8 +242,8 @@ func (c *compiler) processExpose(root *helium.Element) error {
 			}
 		}
 	}
-	for qn, fn := range c.stylesheet.functions {
-		key := functionVisKey(qn, len(fn.Params))
+	for fk, fn := range c.stylesheet.functions {
+		key := functionVisKey(fk.Name, len(fn.Params))
 		if fn.Visibility != "" {
 			c.stylesheet.functionVisibility[key] = fn.Visibility
 		} else {
@@ -294,8 +294,8 @@ func (c *compiler) processExpose(root *helium.Element) error {
 			}
 		}
 	}
-	for qn, fn := range c.stylesheet.functions {
-		key := functionVisKey(qn, len(fn.Params))
+	for fk, fn := range c.stylesheet.functions {
+		key := functionVisKey(fk.Name, len(fn.Params))
 		if vis, ok := c.stylesheet.functionVisibility[key]; ok {
 			fn.Visibility = vis
 		}

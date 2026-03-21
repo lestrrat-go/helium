@@ -176,14 +176,23 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 			}
 		}
 	}
-	// Validate standalone: must be "yes", "no", or "omit".
+	// Validate standalone: must be "yes", "no", "omit", or boolean equivalents.
 	if v := getAttr(elem, "standalone"); v != "" {
 		v = strings.TrimSpace(v)
-		if v != "yes" && v != "no" && v != "omit" {
+		switch v {
+		case "yes", "no", "omit":
+			// valid as-is
+		case "true", "1":
+			v = "yes"
+		case "false", "0":
+			v = "no"
+		default:
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
 		}
+		outDef.Standalone = v
+	} else {
+		outDef.Standalone = ""
 	}
-	outDef.Standalone = getAttr(elem, "standalone")
 	outDef.DoctypePublic = getAttr(elem, "doctype-public")
 	outDef.DoctypeSystem = getAttr(elem, "doctype-system")
 	outDef.MediaType = getAttr(elem, "media-type")
