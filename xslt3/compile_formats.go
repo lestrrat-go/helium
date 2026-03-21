@@ -219,6 +219,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	outDef.DoctypeSystem = getAttr(elem, "doctype-system")
 	outDef.MediaType = getAttr(elem, "media-type")
 	if hv := getAttr(elem, "html-version"); hv != "" {
+		hv = strings.TrimSpace(hv)
 		if _, err := strconv.ParseFloat(hv, 64); err != nil {
 			return staticError(errCodeXTSE0020, "%q is not a valid value for xsl:output/@html-version", hv)
 		}
