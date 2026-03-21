@@ -414,8 +414,15 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execConte
 		return xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: av.StringVal()}, nil
 	}
 
-	// xs:untypedAtomic and xs:string can be cast to any type
-	if av.TypeName == xpath3.TypeUntypedAtomic || av.TypeName == xpath3.TypeString {
+	// xs:string -> xs:anyURI promotion (per XPath spec)
+	if av.TypeName == xpath3.TypeString && target == xpath3.TypeAnyURI {
+		return xpath3.AtomicValue{TypeName: xpath3.TypeAnyURI, Value: av.StringVal()}, nil
+	}
+
+	// xs:untypedAtomic can be cast to any atomic type (function conversion rules).
+	// xs:string is NOT implicitly castable to other types — only xs:untypedAtomic
+	// has this privilege. xs:string -> xs:integer (etc.) is a type error (XTTE0590).
+	if av.TypeName == xpath3.TypeUntypedAtomic {
 		s := av.StringVal()
 		cast, err := xpath3.CastFromString(s, target)
 		if err != nil {
@@ -468,20 +475,8 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execConte
 		}
 	}
 
-	// General fallback: try string-based casting
-	s, err := xpath3.AtomicToString(av)
-	if err != nil {
-		return nil, fmt.Errorf("cannot convert %s to %s", av.TypeName, targetType)
-	}
-	cast, err := xpath3.CastFromString(s, target)
-	if err != nil {
-		// Try schema-aware cast for user-defined types.
-		if schemaCast, ok := trySchemaCast(s, target, ec...); ok {
-			return schemaCast, nil
-		}
-		return nil, fmt.Errorf("cannot convert %s to %s", av.TypeName, targetType)
-	}
-	return cast, nil
+	// No implicit cast path found — type mismatch.
+	return nil, fmt.Errorf("cannot convert %s to %s", av.TypeName, targetType)
 }
 
 // trySchemaCast attempts to cast a string to a user-defined schema type by
