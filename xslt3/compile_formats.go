@@ -168,6 +168,21 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		}
 		outDef.UndeclarePrefixes = b
 	}
+	// Validate other boolean output attributes.
+	for _, boolAttr := range []string{"byte-order-mark", "escape-uri-attributes", "include-content-type"} {
+		if v := getAttr(elem, boolAttr); v != "" {
+			if _, ok := parseXSDBool(v); !ok {
+				return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@%s", v, boolAttr)
+			}
+		}
+	}
+	// Validate standalone: must be "yes", "no", or "omit".
+	if v := getAttr(elem, "standalone"); v != "" {
+		v = strings.TrimSpace(v)
+		if v != "yes" && v != "no" && v != "omit" {
+			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
+		}
+	}
 	outDef.Standalone = getAttr(elem, "standalone")
 	outDef.DoctypePublic = getAttr(elem, "doctype-public")
 	outDef.DoctypeSystem = getAttr(elem, "doctype-system")
