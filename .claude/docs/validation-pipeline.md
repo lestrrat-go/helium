@@ -4,7 +4,7 @@ Three validation engines: XSD (grammar-based), RELAX NG (pattern-based), Schemat
 
 ## XSD
 
-Files: `xsd/xsd.go` (API), `parse.go` (compiler), `parse_check.go` (constraints), `validate.go` + `validate_elem.go` (content), `validate_idc.go` (IDC), `schema.go` (model)
+Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check_*.go` (compile/read/resolve/constraint pipeline), `validate_context.go` + `validate.go` + `validate_elem.go` (content validation), `validate_idc.go` (IDC), `simplevalue_*.go` + `validate_value_api.go` (simple-value validation), `schema.go` (model)
 
 ### Compile: Document → Schema
 

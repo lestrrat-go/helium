@@ -101,7 +101,7 @@ XML Schema (XSD) 1.0 compilation and validation.
 - `Schema.LookupElement(local, ns)`, `Schema.LookupType(local, ns)`, `Schema.NamedTypes()`, `Schema.TargetNamespace()`
 - Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include, IDC (xs:unique/key/keyref)
 - `ValidateError.Output` — libxml2-compatible error string
-- Files: `xsd.go` (API), `schema.go` (data model), `parse.go` (compiler), `parse_check.go` (UPA/constraints), `validate.go`, `validate_elem.go`, `validate_value.go`, `validate_idc.go`, `errors.go`
+- Files: `xsd.go` (API), `schema.go` (data model), `compile.go` + `compile_imports.go` + `compile_helpers.go` (compile orchestration/imports/helpers), `read_types.go` + `read_particles.go` + `read_elements.go` + `read_decl_helpers.go` (schema readers), `link_refs.go` + `check_*.go` (reference resolution + constraints), `validate_context.go` + `validate.go` + `validate_elem.go` + `validate_idc.go` (validation flow/content/IDC), `simplevalue_*.go` + `validate_value_api.go` (simple-value engine/API), `errors.go`
 - Imports: helium, xpath1/
 - Status: 225/226 golden tests passing
 
