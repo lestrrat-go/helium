@@ -217,6 +217,56 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		}
 	}
 
+	// Per XSLT 3.0 §9.6.1: multiple xsl:output declarations with the same
+	// name are merged. use-character-maps values accumulate; other attributes
+	// are taken from the later declaration when explicitly specified.
+	if existing, ok := c.stylesheet.outputs[name]; ok {
+		// Accumulate use-character-maps from both declarations.
+		if len(existing.UseCharacterMaps) > 0 {
+			outDef.UseCharacterMaps = append(existing.UseCharacterMaps, outDef.UseCharacterMaps...)
+		}
+		// Preserve fields from earlier declaration when not explicitly set here.
+		if getAttr(elem, "method") == "" {
+			outDef.Method = existing.Method
+		}
+		if getAttr(elem, "encoding") == "" {
+			outDef.Encoding = existing.Encoding
+		}
+		if getAttr(elem, "version") == "" {
+			outDef.Version = existing.Version
+		}
+		if getAttr(elem, "indent") == "" {
+			outDef.Indent = existing.Indent
+		}
+		if getAttr(elem, "omit-xml-declaration") == "" {
+			outDef.OmitDeclaration = existing.OmitDeclaration
+		}
+		if getAttr(elem, "standalone") == "" {
+			outDef.Standalone = existing.Standalone
+		}
+		if getAttr(elem, "undeclare-prefixes") == "" {
+			outDef.UndeclarePrefixes = existing.UndeclarePrefixes
+		}
+		if getAttr(elem, "doctype-public") == "" {
+			outDef.DoctypePublic = existing.DoctypePublic
+		}
+		if getAttr(elem, "doctype-system") == "" {
+			outDef.DoctypeSystem = existing.DoctypeSystem
+		}
+		if getAttr(elem, "media-type") == "" {
+			outDef.MediaType = existing.MediaType
+		}
+		if getAttr(elem, "cdata-section-elements") == "" {
+			outDef.CDATASections = existing.CDATASections
+		}
+		if getAttr(elem, "item-separator") == "" {
+			outDef.ItemSeparator = existing.ItemSeparator
+		}
+		if outDef.IncludeContentType == nil {
+			outDef.IncludeContentType = existing.IncludeContentType
+		}
+	}
+
 	c.stylesheet.outputs[name] = outDef
 	return nil
 }
