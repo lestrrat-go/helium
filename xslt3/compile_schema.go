@@ -100,6 +100,138 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 	return nil
 }
 
+// isTypedStrict returns true if the typed attribute value indicates strict
+// type checking. Per the XSLT 3.0 spec, "strict", "yes", "true", and "1"
+// all enable strict typing.
+func isTypedStrict(typed string) bool {
+	if typed == "strict" {
+		return true
+	}
+	v, ok := parseXSDBool(typed)
+	return ok && v
+}
+
+// checkTypedModePatterns validates XTSE3105: for modes declared with
+// typed="strict", every template match pattern whose first step uses an axis
+// with principal node kind Element and whose NodeTest is an EQName must
+// correspond to a global element declaration in the imported schemas.
+func checkTypedModePatterns(ss *Stylesheet) error {
+	if len(ss.schemas) == 0 {
+		return nil
+	}
+	reg := &schemaRegistry{schemas: ss.schemas}
+	for modeName, md := range ss.modeDefs {
+		if !isTypedStrict(md.Typed) {
+			continue
+		}
+		// Map modeDefs key to modeTemplates key: "#default" → ""
+		templateKey := modeName
+		if templateKey == "#default" {
+			templateKey = ""
+		}
+		templates := ss.modeTemplates[templateKey]
+		// Also include #all templates
+		if templateKey != "#all" {
+			templates = append(templates, ss.modeTemplates["#all"]...)
+		}
+		for _, tmpl := range templates {
+			if tmpl.Match == nil {
+				continue
+			}
+			if err := checkPatternAgainstSchema(tmpl.Match, reg); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkPatternAgainstSchema checks all alternatives in a pattern for
+// element name tests that don't exist in the imported schemas.
+func checkPatternAgainstSchema(p *Pattern, reg *schemaRegistry) error {
+	for _, alt := range p.Alternatives {
+		if err := checkExprAgainstSchema(alt.expr, reg, p.xpathDefaultNS); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkExprAgainstSchema walks an expression AST and checks element name
+// tests in axis steps against imported schemas.
+func checkExprAgainstSchema(expr xpath3.Expr, reg *schemaRegistry, xpathDefaultNS string) error {
+	switch e := expr.(type) {
+	case xpath3.LocationPath:
+		for _, step := range e.Steps {
+			if err := checkStepAgainstSchema(step, reg, xpathDefaultNS); err != nil {
+				return err
+			}
+		}
+	case *xpath3.LocationPath:
+		for _, step := range e.Steps {
+			if err := checkStepAgainstSchema(step, reg, xpathDefaultNS); err != nil {
+				return err
+			}
+		}
+	case xpath3.PathStepExpr:
+		if err := checkExprAgainstSchema(e.Left, reg, xpathDefaultNS); err != nil {
+			return err
+		}
+		return checkExprAgainstSchema(e.Right, reg, xpathDefaultNS)
+	case *xpath3.PathStepExpr:
+		if err := checkExprAgainstSchema(e.Left, reg, xpathDefaultNS); err != nil {
+			return err
+		}
+		return checkExprAgainstSchema(e.Right, reg, xpathDefaultNS)
+	case xpath3.FilterExpr:
+		return checkExprAgainstSchema(e.Expr, reg, xpathDefaultNS)
+	case *xpath3.FilterExpr:
+		return checkExprAgainstSchema(e.Expr, reg, xpathDefaultNS)
+	case xpath3.UnionExpr:
+		if err := checkExprAgainstSchema(e.Left, reg, xpathDefaultNS); err != nil {
+			return err
+		}
+		return checkExprAgainstSchema(e.Right, reg, xpathDefaultNS)
+	case *xpath3.UnionExpr:
+		if err := checkExprAgainstSchema(e.Left, reg, xpathDefaultNS); err != nil {
+			return err
+		}
+		return checkExprAgainstSchema(e.Right, reg, xpathDefaultNS)
+	}
+	return nil
+}
+
+// checkStepAgainstSchema checks if a step's NameTest is a declared element.
+func checkStepAgainstSchema(step xpath3.Step, reg *schemaRegistry, xpathDefaultNS string) error {
+	// Only check axes whose principal node kind is Element
+	if step.Axis == xpath3.AxisAttribute || step.Axis == xpath3.AxisNamespace {
+		return nil
+	}
+	nt, ok := step.NodeTest.(xpath3.NameTest)
+	if !ok {
+		return nil
+	}
+	// Wildcard tests match anything
+	if nt.Local == "*" {
+		return nil
+	}
+	if nt.Prefix == "*" {
+		return nil
+	}
+	// Determine element namespace
+	ns := nt.URI
+	if ns == "" && nt.Prefix == "" {
+		ns = xpathDefaultNS
+	}
+	// Check if element is declared in imported schemas
+	if _, found := reg.LookupElement(nt.Local, ns); !found {
+		return staticError(errCodeXTSE3105,
+			"match pattern uses element name %q which is not declared in any imported schema (mode has typed=\"strict\")",
+			nt.Local)
+	}
+	return nil
+}
+
 // hasNSDeclForPrefix checks if an element already declares a namespace for the given prefix.
 func hasNSDeclForPrefix(elem *helium.Element, prefix string) bool {
 	for _, ns := range elem.Namespaces() {
