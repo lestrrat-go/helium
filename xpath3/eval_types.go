@@ -374,6 +374,24 @@ func coerceFunctionItem(item Item, target FunctionTest, ec *evalContext) (Item, 
 		return nil, false
 	}
 
+	// Verify parameter compatibility: for each parameter position, the target's
+	// param type must be coercible to the actual function's param type.
+	// If the function has known param types and they are incompatible with
+	// the target, coercion cannot succeed.
+	if len(actual.ParamTypes) > 0 {
+		for i, targetPT := range target.ParamTypes {
+			if i < len(actual.ParamTypes) {
+				// Check if the target param type is a subtype of (or coercible to)
+				// the function's actual param type. If not, the wrapper would always fail.
+				if !isSequenceSubtype(targetPT, actual.ParamTypes[i], ec) {
+					// Also try the reverse — coercion might still work via promotion
+					// But for function types, xs:double → xs:float is not valid
+					return nil, false
+				}
+			}
+		}
+	}
+
 	paramTypes := append([]SequenceType(nil), target.ParamTypes...)
 	returnType := target.ReturnType
 
