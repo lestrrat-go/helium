@@ -8,6 +8,10 @@ import (
 
 func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesInst, error) {
 	mode := getAttr(elem, "mode")
+	// Validate mode name is a valid QName.
+	if mode != "" && mode[0] != '#' && !isValidQName(mode) {
+		return nil, staticError(errCodeXTSE0550, "invalid mode name %q on xsl:apply-templates", mode)
+	}
 	// When mode is absent, use the current default-mode (set by
 	// compileInstruction from ancestor or self default-mode attributes).
 	if mode == "" && c.defaultMode != "" {

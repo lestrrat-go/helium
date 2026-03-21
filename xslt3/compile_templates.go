@@ -49,12 +49,30 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	defer func() { c.defaultMode = savedDefaultMode }()
 
 	modeAttr := getAttr(elem, "mode")
+	if modeAttrVal, hasMode := elem.GetAttribute("mode"); hasMode {
+		// XTSE0550: empty mode list is invalid.
+		if strings.TrimSpace(modeAttrVal) == "" {
+			return staticError(errCodeXTSE0550, "mode attribute on xsl:template must not be empty")
+		}
+	}
 	if modeAttr != "" {
-		// Validate mode names are valid QName tokens.
-		for _, m := range strings.Fields(modeAttr) {
+		modeFields := strings.Fields(modeAttr)
+		seenModes := make(map[string]struct{}, len(modeFields))
+		hasAll := false
+		for _, m := range modeFields {
 			if m[0] != '#' && !isValidQName(m) {
-				return staticError("XTSE0550", "invalid mode name %q on xsl:template", m)
+				return staticError(errCodeXTSE0550, "invalid mode name %q on xsl:template", m)
 			}
+			if m == "#all" {
+				hasAll = true
+			}
+			if _, dup := seenModes[m]; dup {
+				return staticError(errCodeXTSE0550, "duplicate mode %q in xsl:template/@mode", m)
+			}
+			seenModes[m] = struct{}{}
+		}
+		if hasAll && len(modeFields) > 1 {
+			return staticError(errCodeXTSE0550, "#all must not appear with other modes in xsl:template/@mode")
 		}
 		// Resolve mode QNames to Clark notation for namespace-aware matching
 		tmpl.Mode = c.resolveMode(modeAttr)
