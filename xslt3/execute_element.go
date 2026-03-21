@@ -77,6 +77,16 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		}
 	}
 
+	// Mark element as eligible for namespace fixup. The namespace
+	// declaration from xsl:element is auto-generated from the name
+	// resolution, so xsl:namespace can override the prefix.
+	if hasNS && prefix != "" {
+		if ec.nsFixupAllowed == nil {
+			ec.nsFixupAllowed = make(map[*helium.Element]struct{})
+		}
+		ec.nsFixupAllowed[elem] = struct{}{}
+	}
+
 	// If this element has no namespace but there's a default namespace in scope,
 	// we need to undeclare it with xmlns=""
 	if !hasNS && prefix == "" && ec.hasDefaultNSInScope() {
@@ -991,14 +1001,14 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 
 	// XTDE0430: it is a non-recoverable dynamic error if two namespace
 	// nodes for the same element have the same prefix but different URIs.
-	// However, when the conflict is with the element's own prefix, namespace
-	// fixup can rename the element instead (e.g. when exclude-result-prefixes
-	// causes the element's namespace to be re-declared differently).
+	// Exception: when the element's prefix namespace was auto-generated
+	// (from xsl:element name resolution), namespace fixup can rename the
+	// element's prefix instead of raising an error.
+	_, fixupOK := ec.nsFixupAllowed[elem]
 	for _, ns := range elem.Namespaces() {
 		if ns.Prefix() == name && ns.URI() != value {
-			// If this is the element's own namespace, allow rename (below).
-			if elem.Prefix() == name && elem.URI() == ns.URI() {
-				continue
+			if fixupOK && elem.Prefix() == name && elem.URI() == ns.URI() {
+				continue // allow fixup below
 			}
 			return dynamicError(errCodeXTDE0430,
 				"namespace prefix %q is already bound to %q; cannot rebind to %q", name, ns.URI(), value)
@@ -1008,12 +1018,9 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 	// If the new namespace binding conflicts with the element's own prefix
 	// (same prefix, different URI), rename the element's prefix to avoid
 	// the collision via namespace fixup.
-	if name != "" && elem.Prefix() == name && elem.URI() != value {
+	if fixupOK && name != "" && elem.Prefix() == name && elem.URI() != value {
 		origURI := elem.URI()
-		newPrefix := name + "_0"
-		for i := 1; ec.prefixInUse(elem, newPrefix); i++ {
-			newPrefix = name + "_" + strconv.Itoa(i)
-		}
+		newPrefix := uniqueNSPrefix(elem, name+"_0", origURI)
 		elem.RemoveNamespaceByPrefix(name)
 		if err := elem.DeclareNamespace(newPrefix, origURI); err != nil {
 			return err
@@ -1030,12 +1037,3 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 	return nil
 }
 
-// prefixInUse checks if a namespace prefix is already declared on an element.
-func (ec *execContext) prefixInUse(elem *helium.Element, prefix string) bool {
-	for _, ns := range elem.Namespaces() {
-		if ns.Prefix() == prefix {
-			return true
-		}
-	}
-	return false
-}
