@@ -599,6 +599,12 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 			"xsl:attribute name must not be %q when no namespace attribute is specified", name)
 	}
 
+	// XTDE0850: name must be a valid QName
+	if !isValidQName(name) && !isValidEQName(name) {
+		return dynamicError(errCodeXTDE0850,
+			"xsl:attribute name %q is not a valid QName", name)
+	}
+
 	if inst.Namespace != nil {
 		nsURI, err := inst.Namespace.evaluate(ctx, ec.contextNode)
 		if err != nil {
