@@ -28,9 +28,11 @@ type outputFrame struct {
 	mapConstructor      bool             // when true, xsl:map-entry emits single-entry maps into pendingItems
 	pendingItems        xpath3.Sequence  // captured items from xsl:sequence
 	prevWasAtomic       bool             // true when last xsl:sequence output was an atomic value (for inter-call space separation)
+	emptyAtomicGen      uint64           // seqConstructorGen when prevWasAtomic was set by an empty-string atomic
 	wherePopulated      bool             // when true, xsl:document emits document node (not children) so xsl:where-populated can check emptiness
 	itemSeparator       *string          // item-separator serialization parameter; nil means default (" " between adjacent atomics)
 	outputSerial        int              // monotonically increases whenever visible output is produced
+	seqConstructorGen   uint64           // incremented each time executeSequenceConstructor is called
 	conditionalScopes   []conditionalScope
 }
 

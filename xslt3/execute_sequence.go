@@ -192,8 +192,14 @@ func (ec *execContext) execText(inst *TextInst) error {
 		if err != nil {
 			return err
 		}
-		// For TVTs that evaluate to empty, skip the text node
+		// For TVTs that evaluate to empty, skip the text node but
+		// break atomic adjacency chains, consistent with static
+		// empty xsl:text behaviour.
 		if value == "" {
+			out := ec.currentOutput()
+			if !out.wherePopulated {
+				out.prevWasAtomic = false
+			}
 			return nil
 		}
 	}
@@ -374,11 +380,29 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 				return sErr
 			}
 			// Zero-length atomic strings produce no text node (XSLT 3.0
-			// §11.4.1). Skip separator for empty strings: they produce
-			// no visible text, so inserting a space would create spurious
-			// whitespace. The prevWasAtomic flag is preserved so that a
-			// space will be inserted before the next non-empty atomic.
+			// §11.4.1). Within the same sequence constructor scope, skip
+			// separator for empty strings. Across scope boundaries (e.g.,
+			// different for-each iterations), insert separator so that
+			// consecutive atomic values get proper inter-item spacing.
+			// addNodeUntracked is used so the separator does NOT count as
+			// output for on-empty detection.
 			if s == "" {
+				if prevWasAtomic && out.emptyAtomicGen != out.seqConstructorGen {
+					sepStr := " "
+					if out.itemSeparator != nil {
+						sepStr = *out.itemSeparator
+					}
+					if sepStr != "" {
+						sep, tErr := ec.resultDoc.CreateText([]byte(sepStr))
+						if tErr != nil {
+							return tErr
+						}
+						if err := ec.addNodeUntracked(sep); err != nil {
+							return err
+						}
+					}
+				}
+				out.emptyAtomicGen = out.seqConstructorGen
 				hadAtomic = true
 				continue
 			}
