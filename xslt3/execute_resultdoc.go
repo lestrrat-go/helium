@@ -302,6 +302,12 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		if len(allMaps) > 0 {
 			ec.primaryCharacterMaps = allMaps
 		}
+		// Capture serialization parameter overrides from xsl:result-document.
+		if overrides, err := ec.evalResultDocOutputDef(ctx, inst); err != nil {
+			return err
+		} else if overrides != nil {
+			ec.primaryOutputOverrides = overrides
+		}
 		return nil
 	}
 
@@ -361,4 +367,95 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 	// Store the secondary result document.
 	ec.resultDocuments[href] = tmpDoc
 	return nil
+}
+
+// evalResultDocOutputDef evaluates serialization parameter AVTs on
+// xsl:result-document and returns an OutputDef with the overrides.
+// Returns nil if no serialization parameters are specified.
+func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultDocumentInst) (*OutputDef, error) {
+	hasAny := inst.MethodAVT != nil || inst.Standalone != nil || inst.Indent != nil ||
+		inst.OmitXMLDeclaration != nil || inst.DoctypeSystem != nil || inst.DoctypePublic != nil ||
+		inst.CDATASectionElements != nil || inst.Encoding != nil || inst.OutputVersion != nil ||
+		inst.ByteOrderMark != nil
+	if !hasAny && inst.Format == "" {
+		return nil, nil
+	}
+
+	// Start with the named format or default output def.
+	var base OutputDef
+	if inst.Format != "" {
+		if fmtDef, ok := ec.stylesheet.outputs[inst.Format]; ok {
+			base = *fmtDef
+		}
+	} else if defDef, ok := ec.stylesheet.outputs[""]; ok {
+		base = *defDef
+	}
+
+	evalAVT := func(avt *AVT) (string, error) {
+		if avt == nil {
+			return "", nil
+		}
+		return avt.evaluate(ctx, ec.contextNode)
+	}
+
+	if inst.MethodAVT != nil {
+		v, err := evalAVT(inst.MethodAVT)
+		if err != nil {
+			return nil, err
+		}
+		base.Method = strings.TrimSpace(v)
+	}
+	if inst.Standalone != nil {
+		v, err := evalAVT(inst.Standalone)
+		if err != nil {
+			return nil, err
+		}
+		switch strings.TrimSpace(v) {
+		case "true", "1":
+			v = "yes"
+		case "false", "0":
+			v = "no"
+		default:
+			v = strings.TrimSpace(v)
+		}
+		base.Standalone = v
+	}
+	if inst.Indent != nil {
+		v, err := evalAVT(inst.Indent)
+		if err != nil {
+			return nil, err
+		}
+		b, _ := parseXSDBool(strings.TrimSpace(v))
+		base.Indent = b
+	}
+	if inst.OmitXMLDeclaration != nil {
+		v, err := evalAVT(inst.OmitXMLDeclaration)
+		if err != nil {
+			return nil, err
+		}
+		b, _ := parseXSDBool(strings.TrimSpace(v))
+		base.OmitDeclaration = b
+	}
+	if inst.DoctypeSystem != nil {
+		v, err := evalAVT(inst.DoctypeSystem)
+		if err != nil {
+			return nil, err
+		}
+		base.DoctypeSystem = v
+	}
+	if inst.DoctypePublic != nil {
+		v, err := evalAVT(inst.DoctypePublic)
+		if err != nil {
+			return nil, err
+		}
+		base.DoctypePublic = v
+	}
+	if inst.Encoding != nil {
+		v, err := evalAVT(inst.Encoding)
+		if err != nil {
+			return nil, err
+		}
+		base.Encoding = strings.TrimSpace(v)
+	}
+	return &base, nil
 }
