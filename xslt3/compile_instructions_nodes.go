@@ -681,7 +681,26 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 		}
 		c.localExcludes = newExcludes
 	}
-	defer func() { c.localExcludes = savedExcludes }()
+	// Also register extension-element-prefixes URIs so that child elements
+	// in those namespaces are recognised as extension elements (and their
+	// xsl:fallback children are compiled).
+	savedExtURIs := c.extensionURIs
+	if eep, ok := elem.GetAttributeNS("extension-element-prefixes", NSXSLT); ok {
+		newExtURIs := make(map[string]struct{})
+		for k, v := range c.extensionURIs {
+			newExtURIs[k] = v
+		}
+		for _, prefix := range strings.Fields(eep) {
+			if uri, uriOK := c.nsBindings[prefix]; uriOK && uri != "" {
+				newExtURIs[uri] = struct{}{}
+			}
+		}
+		c.extensionURIs = newExtURIs
+	}
+	defer func() {
+		c.localExcludes = savedExcludes
+		c.extensionURIs = savedExtURIs
+	}()
 
 	// Build set of excluded namespace URIs. Stylesheet-level URIs were
 	// resolved at compile init (before template processing mutates namespaces).
