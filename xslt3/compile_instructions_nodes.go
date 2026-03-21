@@ -247,6 +247,10 @@ func (c *compiler) compileComment(elem *helium.Element) (*CommentInst, error) {
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
+		// XTSE0940: select and non-empty content are mutually exclusive.
+		if err := c.validateEmptyElement(elem, "xsl:comment"); err != nil {
+			return nil, staticError(errCodeXTSE0940, "xsl:comment has both @select and content")
+		}
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
@@ -278,6 +282,10 @@ func (c *compiler) compilePI(elem *helium.Element) (*PIInst, error) {
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
+		// XTSE0940: select and non-empty content are mutually exclusive.
+		if err := c.validateEmptyElement(elem, "xsl:processing-instruction"); err != nil {
+			return nil, staticError(errCodeXTSE0940, "xsl:processing-instruction has both @select and content")
+		}
 		expr, err := compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
