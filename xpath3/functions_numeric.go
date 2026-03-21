@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strconv"
 
 	"github.com/lestrrat-go/helium/internal/icu"
 )
@@ -136,10 +137,9 @@ func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
 	if precision > 308 {
 		return SingleAtomic(a), nil
 	}
-	scale := math.Pow(10, float64(precision))
-	// XPath round: round half towards positive infinity
-	r := math.Floor(n*scale+0.5) / scale
-	if r == 0 && n < 0 {
+	// Use big.Float to preserve the exact IEEE 754 value during scaling
+	r := roundHalfUpFloat(n, precision)
+	if r == 0 && math.Signbit(n) {
 		r = math.Copysign(0, -1)
 	}
 	return SingleAtomic(makeFloatResult(a.TypeName, r)), nil
@@ -183,8 +183,171 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 	if precision > 308 {
 		return SingleAtomic(a), nil
 	}
-	scale := math.Pow(10, float64(precision))
-	return SingleAtomic(makeFloatResult(a.TypeName, math.RoundToEven(n*scale)/scale)), nil
+	// Use big.Float to preserve the exact double value during scaling,
+	// avoiding precision loss that can flip the rounding direction.
+	result := roundHalfToEvenFloat(n, precision)
+	return SingleAtomic(makeFloatResult(a.TypeName, result)), nil
+}
+
+// roundHalfToEvenFloat rounds a float64 to the given precision using
+// half-to-even (banker's rounding). It uses big.Float to scale the value
+// floatToBigFloat converts a float64 to a big.Float using its shortest
+// decimal representation (matching Java's BigDecimal.valueOf behaviour).
+// This avoids rounding artifacts from the exact IEEE 754 binary value.
+func floatToBigFloat(n float64) *big.Float {
+	s := strconv.FormatFloat(n, 'G', -1, 64)
+	bf, _, err := new(big.Float).SetPrec(256).Parse(s, 10)
+	if err != nil {
+		return new(big.Float).SetPrec(256).SetFloat64(n)
+	}
+	return bf
+}
+
+// roundHalfUpFloat rounds a float64 using "half towards positive infinity"
+// semantics (XPath fn:round). Uses big.Float to preserve precision.
+func roundHalfUpFloat(n float64, precision int) float64 {
+	if precision >= 0 {
+		bf := new(big.Float).SetPrec(256).SetFloat64(n)
+		scale := bigPow10(precision)
+		scaled := new(big.Float).SetPrec(256).Mul(bf, scale)
+
+		// XPath round: floor(x + 0.5) — rounds half towards +∞
+		half := new(big.Float).SetPrec(256).SetFloat64(0.5)
+		shifted := new(big.Float).SetPrec(256).Add(scaled, half)
+
+		intPart := bigFloatFloor(shifted)
+		result := new(big.Float).SetPrec(256).SetInt(intPart)
+		result.Quo(result, scale)
+		f, _ := result.Float64()
+		return f
+	}
+
+	// Negative precision: use the shortest decimal representation to avoid
+	// artifacts from the exact IEEE 754 binary value at extreme magnitudes.
+	bf := floatToBigFloat(n)
+	divisor := bigPow10(-precision)
+	scaled := new(big.Float).SetPrec(256).Quo(bf, divisor)
+
+	half := new(big.Float).SetPrec(256).SetFloat64(0.5)
+	shifted := new(big.Float).SetPrec(256).Add(scaled, half)
+
+	intPart := bigFloatFloor(shifted)
+	result := new(big.Float).SetPrec(256).SetInt(intPart)
+	result.Mul(result, divisor)
+	f, _ := result.Float64()
+	return f
+}
+
+// bigPow10 returns 10^n as a big.Float with 256-bit precision.
+func bigPow10(n int) *big.Float {
+	p := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(n)), nil)
+	return new(big.Float).SetPrec(256).SetInt(p)
+}
+
+// bigFloatFloor returns the floor of a big.Float as a big.Int.
+func bigFloatFloor(bf *big.Float) *big.Int {
+	intPart, _ := bf.Int(nil)
+	if bf.Sign() < 0 {
+		frac := new(big.Float).SetPrec(256).Sub(bf, new(big.Float).SetPrec(256).SetInt(intPart))
+		if frac.Sign() != 0 {
+			intPart.Sub(intPart, big.NewInt(1))
+		}
+	}
+	return intPart
+}
+
+// roundHalfToEvenFloat rounds a float64 to the given precision using
+// half-to-even (banker's rounding). It uses big.Float to scale the value
+// so that the exact IEEE 754 value is preserved — naive float64 arithmetic
+// can lose the "above/below midpoint" information when multiplying by the
+// scale factor.
+func roundHalfToEvenFloat(n float64, precision int) float64 {
+	if precision >= 0 {
+		bf := new(big.Float).SetPrec(256).SetFloat64(n)
+		scale := bigPow10(precision)
+		scaled := new(big.Float).SetPrec(256).Mul(bf, scale)
+
+		// Determine floor and the fractional part
+		intPart, _ := scaled.Int(nil) // truncates towards zero
+		if scaled.Sign() < 0 {
+			// For negative numbers, Int truncates towards zero (ceiling);
+			// we want the floor.
+			frac := new(big.Float).SetPrec(256).Sub(scaled, new(big.Float).SetPrec(256).SetInt(intPart))
+			if frac.Sign() != 0 {
+				intPart.Sub(intPart, big.NewInt(1))
+			}
+		}
+
+		floor := new(big.Float).SetPrec(256).SetInt(intPart)
+		frac := new(big.Float).SetPrec(256).Sub(scaled, floor)
+		half := new(big.Float).SetPrec(256).SetFloat64(0.5)
+
+		var rounded *big.Int
+		cmp := frac.Cmp(half)
+		if cmp < 0 {
+			rounded = new(big.Int).Set(intPart)
+		} else if cmp > 0 {
+			rounded = new(big.Int).Add(intPart, big.NewInt(1))
+		} else {
+			// Exactly 0.5: round to even
+			rem := new(big.Int).Mod(new(big.Int).Abs(intPart), big.NewInt(2))
+			if rem.Sign() == 0 {
+				rounded = new(big.Int).Set(intPart) // already even
+			} else {
+				rounded = new(big.Int).Add(intPart, big.NewInt(1))
+			}
+		}
+
+		result := new(big.Float).SetPrec(256).SetInt(rounded)
+		result.Quo(result, scale)
+		f, _ := result.Float64()
+		// Preserve negative zero per IEEE 754
+		if f == 0 && math.Signbit(n) {
+			return math.Copysign(0, -1)
+		}
+		return f
+	}
+
+	// Negative precision: round to 10^(-precision)
+	bf := new(big.Float).SetPrec(256).SetFloat64(n)
+	divisor := bigPow10(-precision)
+	scaled := new(big.Float).SetPrec(256).Quo(bf, divisor)
+
+	intPart, _ := scaled.Int(nil)
+	if scaled.Sign() < 0 {
+		frac := new(big.Float).SetPrec(256).Sub(scaled, new(big.Float).SetPrec(256).SetInt(intPart))
+		if frac.Sign() != 0 {
+			intPart.Sub(intPart, big.NewInt(1))
+		}
+	}
+
+	floor := new(big.Float).SetPrec(256).SetInt(intPart)
+	frac := new(big.Float).SetPrec(256).Sub(scaled, floor)
+	half := new(big.Float).SetPrec(256).SetFloat64(0.5)
+
+	var rounded *big.Int
+	cmp := frac.Cmp(half)
+	if cmp < 0 {
+		rounded = new(big.Int).Set(intPart)
+	} else if cmp > 0 {
+		rounded = new(big.Int).Add(intPart, big.NewInt(1))
+	} else {
+		rem := new(big.Int).Mod(new(big.Int).Abs(intPart), big.NewInt(2))
+		if rem.Sign() == 0 {
+			rounded = new(big.Int).Set(intPart)
+		} else {
+			rounded = new(big.Int).Add(intPart, big.NewInt(1))
+		}
+	}
+
+	result := new(big.Float).SetPrec(256).SetInt(rounded)
+	result.Mul(result, divisor)
+	f, _ := result.Float64()
+	// Preserve negative zero per IEEE 754
+	if f == 0 && math.Signbit(n) {
+		return math.Copysign(0, -1)
+	}
+	return f
 }
 
 func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -331,10 +494,15 @@ func roundIntegerHalfUp(n *big.Int, scale int) *big.Int {
 	if cmp < 0 {
 		return new(big.Int).Mul(q, pow)
 	}
-	// Half or more: round towards positive infinity
+	// cmp >= 0: at or past halfway. XPath round: "half towards +infinity".
 	if n.Sign() >= 0 {
+		// Positive: round up (towards +∞)
 		q.Add(q, big.NewInt(1))
+	} else if cmp > 0 {
+		// Negative and strictly past halfway: round away from zero (towards -∞)
+		q.Sub(q, big.NewInt(1))
 	}
+	// Negative and exactly half: round towards +∞ = towards zero = no change
 	return new(big.Int).Mul(q, pow)
 }
 

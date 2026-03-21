@@ -27,7 +27,8 @@ func (c *compiler) compileUsePackage(elem *helium.Element) error {
 
 	rc, pkgBaseURI, err := c.packageResolver.ResolvePackage(pkgName, pkgVersion)
 	if err != nil {
-		return fmt.Errorf("xsl:use-package: cannot resolve package %q version %q: %w", pkgName, pkgVersion, err)
+		return staticError(errCodeXTSE3000,
+			"xsl:use-package: cannot resolve package %q version %q: %v", pkgName, pkgVersion, err)
 	}
 	defer func() { _ = rc.Close() }()
 

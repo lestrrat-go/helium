@@ -187,6 +187,12 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		}
 	}
 
+	// Handle xml:space on xsl:template
+	savedPreserveSpace := c.preserveSpace
+	if xs := getAttr(elem, "xml:space"); xs != "" {
+		c.preserveSpace = (xs == "preserve")
+	}
+
 	// Handle version on xsl:template for forwards-compatible processing
 	savedVersion := c.effectiveVersion
 	if ver := getAttr(elem, "version"); ver != "" {
@@ -197,6 +203,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	ctxDecl, body, params, err := c.compileTemplateBodyEx(elem, false)
 	c.effectiveVersion = savedVersion
 	c.expandText = savedExpandText
+	c.preserveSpace = savedPreserveSpace
 	c.localExcludes = savedExcludes
 	if err != nil {
 		return err
@@ -323,8 +330,21 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 	var body []Instruction
 	var ctxDecl *contextItemDecl
 
+	// Pre-scan: find the last declaration/param child so we can strip
+	// whitespace-only text in the prologue even under xml:space="preserve".
+	var lastDeclNode helium.Node
+	for ch := elem.FirstChild(); ch != nil; ch = ch.NextSibling() {
+		if e, ok := ch.(*helium.Element); ok && e.URI() == NSXSLT {
+			ln := e.LocalName()
+			if ln == "context-item" || ln == "param" {
+				lastDeclNode = ch
+			}
+		}
+	}
+
 	inParams := true
 	sawContextItem := false
+	pastDecls := lastDeclNode == nil // true if no declarations at all
 	sawContent := false // true once non-whitespace text or non-param/context-item element seen
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		switch v := child.(type) {
@@ -352,6 +372,9 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 				// based on whether template is match or named.
 				ctxDecl = &contextItemDecl{as: asVal, use: useVal}
 				sawContextItem = true
+				if child == lastDeclNode {
+					pastDecls = true
+				}
 				continue
 			}
 			if v.URI() == NSXSLT && v.LocalName() == "param" && inParams {
@@ -366,6 +389,9 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 					return nil, nil, nil, err
 				}
 				params = append(params, p)
+				if child == lastDeclNode {
+					pastDecls = true
+				}
 				continue
 			}
 			if v.URI() == NSXSLT && v.LocalName() == "param" {
@@ -383,6 +409,11 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 			}
 		case *helium.Text:
 			text := string(v.Content())
+			// Strip whitespace-only text in the declaration/param prologue
+			// even under xml:space="preserve" (XSLT 3.0 §9.5).
+			if !pastDecls && strings.TrimSpace(text) == "" {
+				continue
+			}
 			if !c.shouldStripText(text) {
 				inParams = false
 				sawContent = true
