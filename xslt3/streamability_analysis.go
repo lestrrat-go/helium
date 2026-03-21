@@ -1399,6 +1399,27 @@ func exprEndsWithGrounding(expr xpath3.Expr) bool {
 		// A LocationPath ending with a grounding step? Not typical.
 		// Check last step for function-like patterns.
 		return false
+	case xpath3.RangeExpr:
+		// A range expression (X to Y) always produces integers.
+		// Even if its arguments access descendants (e.g., 1 to count(.//*)),
+		// the result is atomic — not streamed nodes.
+		return true
+	}
+	return false
+}
+
+// exprProducesAtomicResult returns true if the top-level expression is known
+// to produce only atomic items (no node items). Such expressions are safe as
+// for-each selects in streaming context because the iteration items are not
+// streamed nodes.
+func exprProducesAtomicResult(expr xpath3.Expr) bool {
+	expr = derefXPathExpr(expr)
+	switch expr.(type) {
+	case xpath3.RangeExpr:
+		return true
+	}
+	if isAtomicResultExpr(expr) {
+		return true
 	}
 	return false
 }
