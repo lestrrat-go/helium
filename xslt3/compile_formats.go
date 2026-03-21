@@ -458,6 +458,13 @@ const nsSerializationParams = "http://www.w3.org/2010/xslt-xquery-serialization"
 // and applies its settings to the given OutputDef. Parameters explicitly set on
 // the xsl:output element take precedence; the parameter document provides defaults.
 func (c *compiler) loadParameterDocument(outDef *OutputDef, baseURI, href string) error {
+	return loadParameterDocumentFromFile(outDef, baseURI, href)
+}
+
+// loadParameterDocumentFromFile loads a serialization parameter document and
+// applies its settings to the given OutputDef. This standalone version can be
+// called at both compile-time and runtime.
+func loadParameterDocumentFromFile(outDef *OutputDef, baseURI, href string) error {
 	uri := href
 	if baseURI != "" && !strings.Contains(href, "://") && !filepath.IsAbs(href) {
 		baseDir := filepath.Dir(baseURI)

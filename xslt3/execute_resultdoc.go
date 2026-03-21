@@ -222,9 +222,13 @@ func (ec *execContext) resolveResultDocMethod(ctx context.Context, inst *ResultD
 			return strings.TrimSpace(v)
 		}
 	}
-	// Compile-time method attribute.
+	// Compile-time method attribute (may have been set from parameter-document).
 	if inst.Method != "" {
 		return inst.Method
+	}
+	// Parameter-document output definition.
+	if inst.ParameterDocOutputDef != nil && inst.ParameterDocOutputDef.Method != "" {
+		return inst.ParameterDocOutputDef.Method
 	}
 	// Named format.
 	format, _ := ec.resolveResultDocFormat(ctx, inst)
@@ -279,6 +283,21 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 	effectiveFormat, fmtErr := ec.resolveResultDocFormat(ctx, inst)
 	if fmtErr != nil {
 		return fmtErr
+	}
+
+	// Resolve parameter-document if specified as AVT.
+	if inst.ParameterDocAVT != nil && inst.ParameterDocOutputDef == nil {
+		pdHref, pdErr := inst.ParameterDocAVT.evaluate(ctx, ec.contextNode)
+		if pdErr == nil && pdHref != "" {
+			outDef := &OutputDef{}
+			baseURI := ec.effectiveStaticBaseURI()
+			if loadErr := loadParameterDocumentFromFile(outDef, baseURI, pdHref); loadErr == nil {
+				inst.ParameterDocOutputDef = outDef
+				if outDef.Method != "" && inst.Method == "" {
+					inst.Method = outDef.Method
+				}
+			}
+		}
 	}
 
 	// Resolve effective item-separator: xsl:result-document attribute takes
@@ -476,7 +495,8 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 	effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
 	savedMethod := ec.currentResultDocMethod
 	ec.currentResultDocMethod = effectiveMethod
-	ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpDoc, itemSeparator: itemSep})
+	captureSecondary := isItemSerializationMethod(effectiveMethod)
+	ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpDoc, itemSeparator: itemSep, captureItems: captureSecondary})
 	if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
 		ec.currentResultDocMethod = savedMethod
 		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
@@ -540,7 +560,8 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 	hasAny := inst.MethodAVT != nil || inst.Standalone != nil || inst.Indent != nil ||
 		inst.OmitXMLDeclaration != nil || inst.DoctypeSystem != nil || inst.DoctypePublic != nil ||
 		inst.CDATASectionElements != nil || inst.Encoding != nil || inst.OutputVersion != nil ||
-		inst.ByteOrderMark != nil || inst.EscapeURIAttributes != nil
+		inst.ByteOrderMark != nil || inst.EscapeURIAttributes != nil ||
+		inst.ParameterDocOutputDef != nil
 	effectiveFormat, fmtErr := ec.resolveResultDocFormat(ctx, inst)
 	if fmtErr != nil {
 		return nil, fmtErr
@@ -549,14 +570,20 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 		return nil, nil
 	}
 
-	// Start with the named format or default output def.
+	// Start with parameter-document defaults (lowest priority).
 	var base OutputDef
+	if inst.ParameterDocOutputDef != nil {
+		base = *inst.ParameterDocOutputDef
+	}
+	// Named format overrides parameter-document.
 	if effectiveFormat != "" {
 		if fmtDef, ok := ec.stylesheet.outputs[effectiveFormat]; ok {
 			base = *fmtDef
 		}
-	} else if defDef, ok := ec.stylesheet.outputs[""]; ok {
-		base = *defDef
+	} else if inst.ParameterDocOutputDef == nil {
+		if defDef, ok := ec.stylesheet.outputs[""]; ok {
+			base = *defDef
+		}
 	}
 
 	evalAVT := func(avt *AVT) (string, error) {
@@ -695,6 +722,11 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 // result document, combining the named format with result-document overrides.
 func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *ResultDocumentInst, formatName, method string) (*OutputDef, error) {
 	var base OutputDef
+	// Start with parameter-document defaults (lowest priority).
+	if inst.ParameterDocOutputDef != nil {
+		base = *inst.ParameterDocOutputDef
+	}
+	// Named format overrides parameter-document.
 	if formatName != "" {
 		if fmtDef, ok := ec.stylesheet.outputs[formatName]; ok {
 			base = *fmtDef

@@ -590,7 +590,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 	if !ok {
 		// XTDE0420: it is a dynamic error if the result sequence used to
 		// construct the content of a document node contains an attribute node.
-		if _, isDoc := out.current.(*helium.Document); isDoc && !out.sequenceMode {
+		if _, isDoc := out.current.(*helium.Document); isDoc && !out.sequenceMode && !ec.isItemOutputMethod() {
 			return dynamicError(errCodeXTDE0420,
 				"cannot add attribute %q to a document node", name)
 		}
