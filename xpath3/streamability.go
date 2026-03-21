@@ -1,5 +1,7 @@
 package xpath3
 
+import "math/big"
+
 // AST returns the root AST node of the compiled expression.
 // This is used by streamability analysis in xslt3.
 func (e *Expression) AST() Expr {
@@ -354,10 +356,24 @@ func predicateIsNonMotionless(pred Expr) bool {
 				return false
 			}
 		case FunctionCall:
-			if v.Prefix == "" && v.Name == "last" {
+			if v.Prefix == "" && (v.Name == "last" || v.Name == "position") {
 				nonMotionless = true
 				return false
 			}
+		case LiteralExpr:
+			// A numeric literal predicate like [1] is positional (equivalent
+			// to [position()=1]) and therefore non-motionless.
+			switch v.Value.(type) {
+			case float64, *big.Int, *big.Rat:
+				nonMotionless = true
+				return false
+			}
+		case InstanceOfExpr, CastableExpr:
+			// Type-checking expressions (instance of, castable as) are
+			// motionless — they inspect the dynamic type of the item
+			// without consuming its value. Skip their children so that
+			// "." inside them is not flagged.
+			return false
 		case ContextItemExpr:
 			// "." in a predicate means the predicate accesses the context item,
 			// which for a streaming step is consuming
@@ -367,6 +383,38 @@ func predicateIsNonMotionless(pred Expr) bool {
 		return true
 	})
 	return nonMotionless
+}
+
+// ExprTreeHasNonMotionlessPredicate walks an entire AST tree and returns true
+// if any step or filter within it contains a non-motionless predicate. This is
+// used to check match patterns in streaming modes.
+func ExprTreeHasNonMotionlessPredicate(expr Expr) bool {
+	found := false
+	WalkExpr(expr, func(e Expr) bool {
+		if found {
+			return false
+		}
+		switch v := e.(type) {
+		case LocationPath:
+			for _, step := range v.Steps {
+				for _, pred := range step.Predicates {
+					if predicateIsNonMotionless(pred) {
+						found = true
+						return false
+					}
+				}
+			}
+		case FilterExpr:
+			for _, pred := range v.Predicates {
+				if predicateIsNonMotionless(pred) {
+					found = true
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return found
 }
 
 // CountDownwardSelections counts the number of independent downward selections

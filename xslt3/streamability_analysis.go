@@ -27,6 +27,18 @@ func analyzeStreamability(ss *Stylesheet) error {
 		if md == nil || !md.Streamable {
 			continue
 		}
+		// Match patterns in streaming modes must be motionless — positional
+		// predicates like [1], [last()], or predicates that navigate downward
+		// are not allowed (XTSE3430).
+		if tmpl.Match != nil {
+			for _, alt := range tmpl.Match.Alternatives {
+				if xpath3.ExprTreeHasNonMotionlessPredicate(alt.expr) {
+					return staticError(errCodeXTSE3430,
+						"match pattern %q has a non-motionless predicate, which is not allowed in streaming mode %q",
+						tmpl.Match.source, modeName)
+				}
+			}
+		}
 		if err := checkStreamableTemplateBody(ss, tmpl.Body); err != nil {
 			return err
 		}
@@ -34,7 +46,10 @@ func analyzeStreamability(ss *Stylesheet) error {
 
 	// Check streamable accumulators: initial-value must be motionless.
 	for _, acc := range ss.accumulators {
-		if acc.Streamable && acc.Initial != nil {
+		if !acc.Streamable {
+			continue
+		}
+		if acc.Initial != nil {
 			if err := checkStreamableExpr(acc.Initial); err != nil {
 				return err
 			}
@@ -43,6 +58,24 @@ func analyzeStreamability(ss *Stylesheet) error {
 				return staticError(errCodeXTSE3430,
 					"streamable accumulator %q has non-motionless initial-value expression %q",
 					acc.Name, acc.Initial.String())
+			}
+		}
+		// Accumulator rule match patterns must be motionless in streaming.
+		for _, rule := range acc.Rules {
+			if rule.Match == nil {
+				continue
+			}
+			for _, alt := range rule.Match.Alternatives {
+				if xpath3.ExprTreeHasNonMotionlessPredicate(alt.expr) {
+					return staticError(errCodeXTSE3430,
+						"streamable accumulator %q rule match pattern %q has a non-motionless predicate",
+						acc.Name, rule.Match.source)
+				}
+				if patternHasCurrentOnElementStep(alt.expr) {
+					return staticError(errCodeXTSE3430,
+						"streamable accumulator %q rule match pattern %q uses current() on an element-matching step, which is not motionless",
+						acc.Name, rule.Match.source)
+				}
 			}
 		}
 	}
@@ -2525,4 +2558,64 @@ func getChildInstructions(inst Instruction) [][]Instruction {
 	}
 
 	return children
+}
+
+// patternHasCurrentOnElementStep checks if a pattern expression has a
+// current() call in a predicate of a step that matches element nodes.
+// In streaming mode, current() on an element step accesses the element's
+// string value, which requires reading children — non-motionless.
+// For text nodes, current() is motionless since the value is immediate.
+func patternHasCurrentOnElementStep(expr xpath3.Expr) bool {
+	found := false
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		if lp, ok := e.(xpath3.LocationPath); ok {
+			for _, step := range lp.Steps {
+				if !stepMatchesElements(step) {
+					continue
+				}
+				for _, pred := range step.Predicates {
+					if exprUsesCurrent(pred) {
+						found = true
+						return false
+					}
+				}
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// stepMatchesElements returns true if the step's node test could match
+// element nodes (NameTest or generic node() test, but not text()/comment()/etc.).
+func stepMatchesElements(step xpath3.Step) bool {
+	switch step.NodeTest.(type) {
+	case xpath3.NameTest:
+		return true // name tests match elements by default
+	case xpath3.TypeTest:
+		tt := step.NodeTest.(xpath3.TypeTest)
+		return tt.Kind == xpath3.NodeKindNode
+	}
+	return false
+}
+
+// exprUsesCurrent returns true if the expression contains a call to current().
+func exprUsesCurrent(expr xpath3.Expr) bool {
+	found := false
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		if fc, ok := e.(xpath3.FunctionCall); ok {
+			if fc.Prefix == "" && fc.Name == "current" {
+				found = true
+				return false
+			}
+		}
+		return true
+	})
+	return found
 }
