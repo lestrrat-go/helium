@@ -332,6 +332,10 @@ func (c *compiler) compileTemplateBody(elem *helium.Element) ([]Instruction, []*
 				params = append(params, p)
 				continue
 			}
+			if v.URI() == NSXSLT && v.LocalName() == "param" {
+				return nil, nil, staticError(errCodeXTSE0010,
+					"xsl:param must appear before other content in xsl:template/xsl:function")
+			}
 			inParams = false
 			inst, err := c.compileInstruction(v)
 			if err != nil {

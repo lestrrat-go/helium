@@ -236,29 +236,51 @@ func parseXSDTime(s string) (time.Time, error) {
 // normalizeMidnight24DateTime checks if a dateTime string has T24:00:00 and
 // replaces it with T00:00:00. Returns the normalized string and true if it was
 // a midnight-24 value. The caller must advance the date by one day.
-// 24:00:00.xxx (with fractional seconds) is NOT valid per XSD.
+// 24:00:00.nnn is valid only when the fractional part is all zeros.
 func normalizeMidnight24DateTime(s string) (string, bool) {
 	idx := strings.Index(s, "T24:00:00")
 	if idx < 0 {
 		return s, false
 	}
-	// Check that minutes and seconds are exactly 00:00 (no fractional seconds allowed with hour 24)
 	rest := s[idx+len("T24:00:00"):]
+	// Allow fractional seconds only if all digits are zero (e.g. .000)
 	if len(rest) > 0 && rest[0] == '.' {
-		return s, false // 24:00:00.xxx is invalid
+		i := 1
+		for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
+			if rest[i] != '0' {
+				return s, false // non-zero fractional part is invalid
+			}
+			i++
+		}
+		if i == 1 {
+			return s, false // bare "." with no digits is invalid
+		}
+		// Strip the all-zero fractional part
+		rest = rest[i:]
 	}
 	return s[:idx] + "T00:00:00" + rest, true
 }
 
 // normalizeMidnight24Time checks if a time string starts with 24:00:00 and
 // replaces it with 00:00:00. For xs:time, 24:00:00 equals 00:00:00 (no date rollover).
+// 24:00:00.nnn is valid only when the fractional part is all zeros.
 func normalizeMidnight24Time(s string) (string, bool) {
 	if !strings.HasPrefix(s, "24:00:00") {
 		return s, false
 	}
 	rest := s[len("24:00:00"):]
 	if len(rest) > 0 && rest[0] == '.' {
-		return s, false // 24:00:00.xxx is invalid
+		i := 1
+		for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
+			if rest[i] != '0' {
+				return s, false // non-zero fractional part is invalid
+			}
+			i++
+		}
+		if i == 1 {
+			return s, false
+		}
+		rest = rest[i:]
 	}
 	return "00:00:00" + rest, true
 }

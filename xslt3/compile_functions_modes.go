@@ -85,6 +85,9 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
 		prefix := name[:idx]
 		local := name[idx+1:]
+		if !isValidNCName(prefix) || !isValidNCName(local) {
+			return staticError(errCodeXTSE0020, "xsl:function name %q is not a valid QName", name)
+		}
 		uri := c.nsBindings[prefix]
 		if uri == "" {
 			uri = c.stylesheet.namespaces[prefix]
@@ -112,11 +115,55 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		}
 	}
 
+	// XTSE0020: validate override-extension-function (boolean)
+	if oef, has := elem.GetAttribute("override-extension-function"); has {
+		if err := validateBooleanAttr("xsl:function", "override-extension-function", oef); err != nil {
+			return err
+		}
+	}
+	// XTSE0020: validate override (boolean)
+	if ov, hasOv := elem.GetAttribute("override"); hasOv {
+		if err := validateBooleanAttr("xsl:function", "override", ov); err != nil {
+			return err
+		}
+		// Both override and override-extension-function is XTSE0020
+		if _, hasOEF := elem.GetAttribute("override-extension-function"); hasOEF {
+			return staticError(errCodeXTSE0020,
+				"xsl:function must not have both @override and @override-extension-function")
+		}
+	}
+	// XTSE0020: validate new-each-time (yes|no|maybe)
+	if net := getAttr(elem, "new-each-time"); net != "" {
+		switch net {
+		case "yes", "no", "maybe":
+			// valid
+		default:
+			return staticError(errCodeXTSE0020,
+				"%q is not a valid value for xsl:function/@new-each-time", net)
+		}
+	}
+
 	// Compile function body (params + instructions)
 	body, params, err := c.compileTemplateBody(elem)
 	c.expandText = savedExpandText
 	if err != nil {
 		return err
+	}
+
+	// XTSE0020: xsl:param inside xsl:function must not have @required attribute
+	// (even required="no" is disallowed by the spec)
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if childElem.URI() == NSXSLT && childElem.LocalName() == "param" {
+			if _, hasReq := childElem.GetAttribute("required"); hasReq {
+				pname := getAttr(childElem, "name")
+				return staticError(errCodeXTSE0020,
+					"xsl:param %q in xsl:function must not have @required", pname)
+			}
+		}
 	}
 
 	fnAs := getAttr(elem, "as")
