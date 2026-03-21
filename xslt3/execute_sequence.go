@@ -194,9 +194,23 @@ func (ec *execContext) execText(inst *TextInst) error {
 			return nil
 		}
 	}
-	// Note: xsl:text with empty literal content still produces a zero-length
-	// text node. This is needed for variables with as="text()" to receive
-	// exactly 1 item. Only TVT-expanded empty values are skipped (above).
+	// xsl:text with empty literal content produces a zero-length text node
+	// only in sequenceMode (needed for as="text()" variables to receive
+	// exactly 1 item). Outside sequenceMode, empty literal text is
+	// transparent — it does not break atomic adjacency chains (XSLT 3.0
+	// §5.7.2: zero-length text nodes are eliminated before complex content
+	// construction rules apply).
+	if value == "" && inst.TVT == nil {
+		out := ec.currentOutput()
+		if out.sequenceMode {
+			text, err := ec.resultDoc.CreateText(nil)
+			if err != nil {
+				return err
+			}
+			return ec.addNode(text)
+		}
+		return nil
+	}
 	if inst.DisableOutputEscaping {
 		pi, err := ec.resultDoc.CreatePI("disable-output-escaping", "")
 		if err != nil {
