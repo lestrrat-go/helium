@@ -272,11 +272,15 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 	}
 
 	prevWasAtomic := out.prevWasAtomic
+	localAtomic := false // true when prevWasAtomic was set by an item in THIS call
+	hadAtomic := false   // tracks whether any atomic (including empty) was seen
 	seq := flattenArraysInSequence(result.Sequence())
 	for _, item := range seq {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
 			prevWasAtomic = false
+			localAtomic = false
+			hadAtomic = false
 			if normalizeNode(v.Node) == nil {
 				continue
 			}
@@ -319,6 +323,32 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 			if sErr != nil {
 				return sErr
 			}
+			// Zero-length atomic strings produce no text node (XSLT 3.0
+			// §11.4.1). Within a single select expression, skip separator
+			// for empty strings so that "23, '', date" produces "23 date"
+			// not "23  date". Between separate instructions, the original
+			// separator logic applies via prevWasAtomic inheritance.
+			if s == "" {
+				if prevWasAtomic && !localAtomic {
+					// Inherited from a previous instruction: insert separator
+					sepStr := " "
+					if out.itemSeparator != nil {
+						sepStr = *out.itemSeparator
+					}
+					if sepStr != "" {
+						sep, tErr := ec.resultDoc.CreateText([]byte(sepStr))
+						if tErr != nil {
+							return tErr
+						}
+						if err := ec.addNodeUntracked(sep); err != nil {
+							return err
+						}
+					}
+				}
+				localAtomic = true
+				hadAtomic = true
+				continue
+			}
 			// Insert separator between consecutive atomic values.
 			// Use item-separator from the output frame if set, otherwise default space.
 			if prevWasAtomic {
@@ -345,6 +375,8 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 				return err
 			}
 			prevWasAtomic = true
+			localAtomic = true
+			hadAtomic = true
 		case xpath3.FunctionItem, xpath3.MapItem, *xpath3.ArrayItem:
 			// XTDE0450: function items (including maps and arrays) cannot
 			// appear in result tree content.
@@ -359,7 +391,15 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 			}
 		}
 	}
-	out.prevWasAtomic = prevWasAtomic
+	// Set prevWasAtomic based on whether any atomic was encountered
+	// (including empty strings). This allows separate xsl:sequence
+	// instructions producing empty strings to generate inter-atomic
+	// separators, while empty strings within a single expression don't.
+	if hadAtomic {
+		out.prevWasAtomic = true
+	} else {
+		out.prevWasAtomic = prevWasAtomic
+	}
 	return nil
 }
 
@@ -429,6 +469,10 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 			s, sErr := xpath3.AtomicToString(v)
 			if sErr != nil {
 				return sErr
+			}
+			if s == "" {
+				prevWasAtomic = true
+				continue
 			}
 			if prevWasAtomic {
 				// Use the item-separator from the output frame if set,
