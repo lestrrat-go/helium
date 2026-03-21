@@ -19,7 +19,7 @@ type SequenceType struct {
 // parseSequenceType parses an "as" attribute value into a SequenceType.
 // Examples: "item()*", "xs:string", "element()+", "xs:integer?", "text()", "empty-sequence()".
 func parseSequenceType(as string) SequenceType {
-	s := strings.TrimSpace(as)
+	s := stripXPathComments(strings.TrimSpace(as))
 	if s == "" {
 		return SequenceType{ItemType: "item()", Occurrence: '*'}
 	}

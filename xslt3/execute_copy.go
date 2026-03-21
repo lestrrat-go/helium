@@ -217,8 +217,8 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 				}
 			}
 		}
-		// When copy-namespaces="no": we do not copy source namespace
-		// declarations.  Only the element's own namespace (required for
+		// When copy-namespaces="no": do not copy source namespace
+		// declarations. Only the element's own namespace (required for
 		// well-formedness) is declared below.
 		if srcElem.URI() != "" {
 			// Always declare the element's own namespace
