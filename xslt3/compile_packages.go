@@ -132,6 +132,48 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 	// Parse xsl:override children (collect overridden component names)
 	overrideNames := c.collectOverrideNames(usePackageElem, nsBindings)
 
+	// XTSE3051: it is a static error if xsl:accept makes a component private
+	// and the same component is overridden via xsl:override.
+	if len(acceptRules) > 0 && len(overrideNames) > 0 {
+		// Check functions (which need arity-aware keys)
+		for fk, fn := range pkg.functions {
+			key := functionVisKey(fk.Name, len(fn.Params))
+			if _, overridden := overrideNames[xslElemFunction+":"+fmt.Sprintf("{%s}%s", fk.Name.URI, fk.Name.Name)]; !overridden {
+				continue
+			}
+			pkgVis := getComponentVisibility(pkg, xslElemFunction, key)
+			acceptVis := applyAcceptRules(xslElemFunction, key, acceptRules, pkgVis)
+			if acceptVis == visPrivate {
+				return staticError(errCodeXTSE3051, "component %s set to private by xsl:accept cannot be overridden", key)
+			}
+		}
+		// Check templates
+		for _, tmpl := range pkg.templates {
+			if tmpl.Name == "" {
+				continue
+			}
+			if _, overridden := overrideNames[xslElemTemplate+":"+tmpl.Name]; !overridden {
+				continue
+			}
+			pkgVis := getComponentVisibility(pkg, xslElemTemplate, tmpl.Name)
+			acceptVis := applyAcceptRules(xslElemTemplate, tmpl.Name, acceptRules, pkgVis)
+			if acceptVis == visPrivate {
+				return staticError(errCodeXTSE3051, "component %s set to private by xsl:accept cannot be overridden", tmpl.Name)
+			}
+		}
+		// Check variables
+		for _, v := range pkg.globalVars {
+			if _, overridden := overrideNames[xslElemVariable+":"+v.Name]; !overridden {
+				continue
+			}
+			pkgVis := getComponentVisibility(pkg, xslElemVariable, v.Name)
+			acceptVis := applyAcceptRules(xslElemVariable, v.Name, acceptRules, pkgVis)
+			if acceptVis == visPrivate {
+				return staticError(errCodeXTSE3051, "component %s set to private by xsl:accept cannot be overridden", v.Name)
+			}
+		}
+	}
+
 	// Merge templates (with lower import precedence than current)
 	for _, tmpl := range pkg.templates {
 		if tmpl.Name != "" {

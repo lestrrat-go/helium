@@ -518,7 +518,12 @@ func normalizeMapKey(key AtomicValue) mapKey {
 
 	switch v := key.Value.(type) {
 	case time.Time:
-		return mapKey{typeName: tn, value: v.UTC().Format(time.RFC3339Nano)}
+		// Per XPath 3.1, dateTimes with and without timezone are not equal
+		// (they are incomparable), so they must be different map keys.
+		if HasTimezone(v) {
+			return mapKey{typeName: tn, value: v.UTC().Format(time.RFC3339Nano)}
+		}
+		return mapKey{typeName: tn, value: "notz:" + v.Format("2006-01-02T15:04:05.999999999")}
 	case []byte:
 		return mapKey{typeName: tn, value: hex.EncodeToString(v)}
 	case QNameValue:

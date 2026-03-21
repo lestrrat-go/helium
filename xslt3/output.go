@@ -1,14 +1,19 @@
 package xslt3
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
 	htmlpkg "github.com/lestrrat-go/helium/html"
 	"github.com/lestrrat-go/helium/stream"
 	"github.com/lestrrat-go/helium/xpath3"
+	"golang.org/x/text/encoding/htmlindex"
+	"golang.org/x/text/unicode/norm"
 )
 
 // outputFrame represents the current output target during transformation.
@@ -71,14 +76,115 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		charMap = charMaps[0]
 	}
 
+	// Check if we need encoding conversion (non-UTF-8/UTF-16)
+	enc := strings.ToLower(outDef.Encoding)
+	needsEncodingConversion := enc != "" && enc != "utf-8" && enc != "utf8" && enc != "utf-16" && enc != "utf16"
+
+	// Check if we need Unicode normalization
+	needsNormalization := outDef.NormalizationForm != "" && outDef.NormalizationForm != "NONE"
+
+	// Buffer when post-processing is needed
+	needsBuffer := needsEncodingConversion || needsNormalization
+	var target io.Writer
+	var buf bytes.Buffer
+	if needsBuffer {
+		target = &buf
+	} else {
+		target = w
+	}
+
+	var err error
 	switch outDef.Method {
 	case "text":
-		return serializeText(w, doc, charMap)
+		err = serializeText(target, doc, charMap)
 	case "html":
-		return serializeHTML(w, doc, outDef)
+		err = serializeHTML(target, doc, outDef)
 	default:
-		return serializeXML(w, doc, outDef, charMap)
+		err = serializeXML(target, doc, outDef, charMap)
 	}
+	if err != nil {
+		return err
+	}
+
+	if needsBuffer {
+		data := buf.Bytes()
+
+		// Apply Unicode normalization if requested
+		if needsNormalization {
+			data = applyUnicodeNormalization(data, outDef.NormalizationForm)
+		}
+
+		if needsEncodingConversion {
+			return transcodeToEncoding(w, data, enc)
+		}
+		_, err = w.Write(data)
+		return err
+	}
+	return nil
+}
+
+// applyUnicodeNormalization applies the specified Unicode normalization form
+// to the given UTF-8 data.
+func applyUnicodeNormalization(data []byte, form string) []byte {
+	var nf norm.Form
+	switch form {
+	case "NFC":
+		nf = norm.NFC
+	case "NFD":
+		nf = norm.NFD
+	case "NFKC":
+		nf = norm.NFKC
+	case "NFKD":
+		nf = norm.NFKD
+	case "FULLY-NORMALIZED":
+		// Fully-normalized is NFC plus additional constraints.
+		// For practical purposes, NFC is sufficient.
+		nf = norm.NFC
+	default:
+		return data
+	}
+	return nf.Bytes(data)
+}
+
+// transcodeToEncoding converts UTF-8 bytes to the target encoding,
+// replacing characters that cannot be represented with XML character references.
+func transcodeToEncoding(w io.Writer, utf8Data []byte, encName string) error {
+	codec, err := htmlindex.Get(encName)
+	if err != nil {
+		// Unknown encoding — fall back to writing UTF-8
+		_, werr := w.Write(utf8Data)
+		return werr
+	}
+
+	encoder := codec.NewEncoder()
+
+	// Process character by character: try to encode each rune,
+	// and if it fails, output a character reference instead.
+	for len(utf8Data) > 0 {
+		r, size := utf8.DecodeRune(utf8Data)
+		if r == utf8.RuneError && size <= 1 {
+			utf8Data = utf8Data[1:]
+			continue
+		}
+
+		s := string(utf8Data[:size])
+		encoded, err := encoder.Bytes([]byte(s))
+		if err != nil {
+			// Character cannot be encoded — use character reference
+			ref := fmt.Sprintf("&#x%X;", r)
+			if _, werr := io.WriteString(w, ref); werr != nil {
+				return werr
+			}
+			// Reset encoder state after error
+			encoder = codec.NewEncoder()
+		} else {
+			if _, werr := w.Write(encoded); werr != nil {
+				return werr
+			}
+		}
+		utf8Data = utf8Data[size:]
+	}
+	return nil
 }
 
 func defaultOutputDef() *OutputDef {
@@ -90,7 +196,12 @@ func defaultOutputDef() *OutputDef {
 }
 
 func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
-	if len(charMap) > 0 || hasDOEMarkers(doc) {
+	// For non-UTF-8 encodings, use the stream-based serializer which
+	// always outputs UTF-8. The encoding conversion is handled by
+	// serializeResult's transcoding layer.
+	targetEnc := strings.ToLower(outDef.Encoding)
+	isNonUTF8 := targetEnc != "" && targetEnc != "utf-8" && targetEnc != "utf8" && targetEnc != "utf-16" && targetEnc != "utf16"
+	if len(charMap) > 0 || hasDOEMarkers(doc) || isNonUTF8 {
 		return serializeXMLWithCharMap(w, doc, outDef, charMap)
 	}
 	// Set encoding on the document so the XML declaration includes it.

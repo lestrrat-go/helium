@@ -105,7 +105,6 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 		return SingleString(""), nil
 	}
 	base := ""
-	baseFromContext := false
 	if len(args) >= 2 {
 		base, err = coerceArgToString(args[1])
 		if err != nil {
@@ -117,7 +116,6 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 		if cfg := getEvalConfig(ctx); cfg != nil {
 			base = cfg.baseURI
 		}
-		baseFromContext = true
 	}
 	if base == "" {
 		return SingleString(relative), nil
@@ -136,8 +134,9 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	// Convert absolute file paths to file: URIs so that resolve-uri works
 	// correctly with file system paths (e.g. from static-base-uri()).
-	// Only apply to bases from the static context, not explicit user args.
-	if baseFromContext && strings.HasPrefix(base, "/") && !strings.Contains(base, "://") {
+	// This applies to both context-derived bases and explicit arguments,
+	// since an absolute file path is not a valid URI base without a scheme.
+	if strings.HasPrefix(base, "/") && !strings.Contains(base, "://") {
 		base = "file://" + base
 	}
 	parsedBase, err := parseURIReference(base)

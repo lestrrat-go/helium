@@ -211,6 +211,10 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.ItemSeparator = &is
 	}
 
+	if nf := getAttr(elem, "normalization-form"); nf != "" {
+		outDef.NormalizationForm = strings.ToUpper(strings.TrimSpace(nf))
+	}
+
 	if ucm := getAttr(elem, "use-character-maps"); ucm != "" {
 		for _, n := range strings.Fields(ucm) {
 			outDef.UseCharacterMaps = append(outDef.UseCharacterMaps, resolveQName(n, c.nsBindings))
@@ -261,6 +265,9 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		}
 		if getAttr(elem, "item-separator") == "" {
 			outDef.ItemSeparator = existing.ItemSeparator
+		}
+		if getAttr(elem, "normalization-form") == "" {
+			outDef.NormalizationForm = existing.NormalizationForm
 		}
 		if outDef.IncludeContentType == nil {
 			outDef.IncludeContentType = existing.IncludeContentType
