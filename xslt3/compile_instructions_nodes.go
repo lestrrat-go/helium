@@ -471,6 +471,12 @@ func (c *compiler) compileNumber(elem *helium.Element) (*NumberInst, error) {
 	}
 
 	if valueAttr := getAttr(elem, "value"); valueAttr != "" {
+		// XTSE0975: when value is present, select/level/count/from must be absent.
+		_, hasLevel := elem.GetAttribute("level")
+		if getAttr(elem, "select") != "" || getAttr(elem, "count") != "" ||
+			getAttr(elem, "from") != "" || hasLevel {
+			return nil, staticError(errCodeXTSE0975, "xsl:number: when @value is present, @select, @level, @count, and @from must be absent")
+		}
 		expr, err := compileXPath(valueAttr, c.nsBindings)
 		if err != nil {
 			return nil, err
