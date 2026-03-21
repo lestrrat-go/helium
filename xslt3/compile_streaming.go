@@ -687,6 +687,10 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error
 		return nil, staticError(errCodeXTSE3195, "xsl:merge-source must not have both for-each-source and for-each-item attributes")
 	}
 
+	// XTSE3430: sort-before-merge="yes" is incompatible with streamable="yes".
+	if src.SortBeforeMerge && src.StreamableAttr {
+		return nil, staticError(errCodeXTSE3430, "xsl:merge-source must not have both sort-before-merge='yes' and streamable='yes'")
+	}
 	return src, nil
 }
 
