@@ -422,6 +422,7 @@ func (c *compiler) compileAccumulator(elem *helium.Element) error {
 		Name:       expandedName,
 		As:         getAttr(elem, "as"),
 		Streamable: xsdBoolTrue(getAttr(elem, "streamable")),
+		ImportPrec: c.importPrec,
 	}
 
 	// Read initial-value attribute
@@ -449,9 +450,20 @@ func (c *compiler) compileAccumulator(elem *helium.Element) error {
 		}
 	}
 
-	if _, exists := c.stylesheet.accumulators[expandedName]; exists {
-		return staticError(errCodeXTSE3350,
-			"duplicate accumulator name %q", expandedName)
+	// XTSE0010: an accumulator must have at least one rule
+	if len(acc.Rules) == 0 {
+		return staticError(errCodeXTSE0010, "xsl:accumulator %q must have at least one xsl:accumulator-rule", expandedName)
+	}
+
+	if existing, exists := c.stylesheet.accumulators[expandedName]; exists {
+		// Higher or equal import precedence wins; lower is silently discarded.
+		// Per XSLT 3.0 §10.4: same-name accumulators at different import
+		// precedence are resolved by import precedence (highest wins).
+		// Duplicates at the same level are replaced (last definition wins).
+		if acc.ImportPrec >= existing.ImportPrec {
+			c.stylesheet.accumulators[expandedName] = acc
+		}
+		return nil
 	}
 	c.stylesheet.accumulatorOrder = append(c.stylesheet.accumulatorOrder, expandedName)
 	c.stylesheet.accumulators[expandedName] = acc
