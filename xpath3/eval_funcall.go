@@ -158,6 +158,24 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 	if err != nil {
 		return nil, err
 	}
+
+	// Check if the function restricts dynamic references (e.g. current-group#0).
+	// If so, create a function item that always raises the specified error.
+	if dr, ok := fn.(DynamicRefRestricted); ok && dr.NoDynamicRef() {
+		errCode := dr.DynRefErrorCode()
+		fnName := e.Name
+		ns, _ := resolvePrefix(ec, e.Prefix)
+		fi := FunctionItem{
+			Arity:     e.Arity,
+			Name:      fnName,
+			Namespace: ns,
+			Invoke: func(_ context.Context, _ []Sequence) (Sequence, error) {
+				return nil, &XPathError{Code: errCode, Message: fmt.Sprintf("%s: dynamic call to %s is not allowed", errCode, fnName)}
+			},
+		}
+		return Sequence{fi}, nil
+	}
+
 	minArity := fn.MinArity()
 	ns, _ := resolvePrefix(ec, e.Prefix)
 	// Per XPath 3.1 Section 3.1.6: if the function is focus-dependent,

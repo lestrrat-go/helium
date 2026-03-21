@@ -17,6 +17,15 @@ type Function interface {
 	Call(ctx context.Context, args []Sequence) (Sequence, error)
 }
 
+// DynamicRefRestricted marks a Function that must not be used via
+// named function reference (e.g. current-group#0). When the XPath
+// evaluator encounters a NamedFunctionRef for such a function, it
+// creates a function item that raises the specified error on call.
+type DynamicRefRestricted interface {
+	NoDynamicRef() bool
+	DynRefErrorCode() string
+}
+
 // TypedFunction extends Function with type signature information.
 // Implementations that expose parameter and return types enable
 // correct instance-of checks and function coercion for user-defined functions.
