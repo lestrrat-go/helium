@@ -160,6 +160,14 @@ func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*SortKey
 					"unknown collation URI %q", uri)
 			}
 			levels[i].compare = cmpFn
+		} else if sk.Lang != nil || sk.CaseOrder != nil {
+			uri := buildImplicitCollationURI(ctx, ec, sk)
+			if uri != "" {
+				cmpFn, err := xpath3.ResolveCollationCompareFunc(uri)
+				if err == nil {
+					levels[i].compare = cmpFn
+				}
+			}
 		}
 	}
 	return resolvedSort{levels: levels}, nil
@@ -197,8 +205,44 @@ func resolveLevel1(ctx context.Context, ec *execContext, sk *SortKey) (resolvedL
 				"unknown collation URI %q", uri)
 		}
 		rl.compare = cmpFn
+	} else if sk.Lang != nil || sk.CaseOrder != nil {
+		// Build a UCA collation from lang/case-order when no explicit collation.
+		uri := buildImplicitCollationURI(ctx, ec, sk)
+		if uri != "" {
+			cmpFn, err := xpath3.ResolveCollationCompareFunc(uri)
+			if err == nil {
+				rl.compare = cmpFn
+			}
+		}
 	}
 	return rl, nil
+}
+
+// buildImplicitCollationURI constructs a UCA collation URI from lang and
+// case-order attributes when no explicit collation is specified.
+func buildImplicitCollationURI(ctx context.Context, ec *execContext, sk *SortKey) string {
+	var params []string
+	if sk.Lang != nil {
+		lang, err := sk.Lang.evaluate(ctx, ec.contextNode)
+		if err == nil && lang != "" {
+			params = append(params, "lang="+lang)
+		}
+	}
+	if sk.CaseOrder != nil {
+		co, err := sk.CaseOrder.evaluate(ctx, ec.contextNode)
+		if err == nil && co != "" {
+			switch co {
+			case "upper-first":
+				params = append(params, "caseFirst=upper")
+			case "lower-first":
+				params = append(params, "caseFirst=lower")
+			}
+		}
+	}
+	if len(params) == 0 {
+		return ""
+	}
+	return "http://www.w3.org/2013/collation/UCA?" + strings.Join(params, ";")
 }
 
 // validateSortKeyAttrs validates sort key attribute values (lang, collation, etc.)
