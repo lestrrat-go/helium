@@ -389,6 +389,7 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 			prevWasAtomic = false
 			// Remember the last child before copying so we can identify new nodes.
 			lastBefore := out.current.LastChild()
+			pendingBefore := len(out.pendingItems)
 			if err := ec.copyNodeToOutput(v.Node, copyNS); err != nil {
 				return err
 			}
@@ -427,12 +428,19 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 			// Transfer accumulator state when copy-accumulators="yes"
 			if inst.CopyAccumulators && len(ec.stylesheet.accumulators) > 0 {
 				_ = ec.ensureAccumulatorStates(ctx, v.Node)
-				// Identify the copied node: it's the first new child after lastBefore
+				// Identify the copied node: check DOM tree first, then pendingItems (sequence mode)
 				var copiedNode helium.Node
 				if lastBefore == nil {
 					copiedNode = out.current.FirstChild()
 				} else {
 					copiedNode = lastBefore.NextSibling()
+				}
+				// In sequence mode, the copied node is captured in pendingItems
+				// rather than attached to the DOM tree.
+				if copiedNode == nil && out.sequenceMode && len(out.pendingItems) > pendingBefore {
+					if ni, ok := out.pendingItems[len(out.pendingItems)-1].(xpath3.NodeItem); ok {
+						copiedNode = ni.Node
+					}
 				}
 				if copiedNode != nil {
 					ec.transferAccumulatorStates(v.Node, copiedNode)

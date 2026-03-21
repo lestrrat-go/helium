@@ -938,11 +938,18 @@ func cloneAccumulatorSnapshot(state map[string]xpath3.Sequence) map[string]xpath
 	return snapshot
 }
 
-func (ec *execContext) storeAccumulatorSnapshot(dst map[helium.Node]map[string]xpath3.Sequence, node helium.Node, state map[string]xpath3.Sequence) {
+func (ec *execContext) storeAccumulatorSnapshot(dst map[helium.Node]map[string]xpath3.Sequence, dstErr map[helium.Node]map[string]error, node helium.Node, state map[string]xpath3.Sequence, stateErr map[string]error) {
 	if node == nil {
 		return
 	}
 	dst[node] = cloneAccumulatorSnapshot(state)
+	if len(stateErr) > 0 {
+		errs := make(map[string]error, len(stateErr))
+		for k, v := range stateErr {
+			errs[k] = v
+		}
+		dstErr[node] = errs
+	}
 }
 
 func (ec *execContext) prepareMergeSourceAccumulators(ctx context.Context, src *MergeSource, node helium.Node) error {
@@ -989,8 +996,15 @@ func (ec *execContext) computeAccumulatorStates(ctx context.Context, doc helium.
 	if ec.accumulatorAfterByNode == nil {
 		ec.accumulatorAfterByNode = make(map[helium.Node]map[string]xpath3.Sequence)
 	}
+	if ec.accumulatorBeforeErrorByNode == nil {
+		ec.accumulatorBeforeErrorByNode = make(map[helium.Node]map[string]error)
+	}
+	if ec.accumulatorAfterErrorByNode == nil {
+		ec.accumulatorAfterErrorByNode = make(map[helium.Node]map[string]error)
+	}
 
 	state := make(map[string]xpath3.Sequence, len(names))
+	stateErr := make(map[string]error, len(names))
 	for _, name := range names {
 		def, ok := ec.stylesheet.accumulators[name]
 		if !ok {
@@ -1002,21 +1016,30 @@ func (ec *execContext) computeAccumulatorStates(ctx context.Context, doc helium.
 			xpathCtx := ec.newXPathContext(doc)
 			result, err := def.Initial.Evaluate(xpathCtx, doc)
 			if err != nil {
-				return err
+				// Defer error: store it and use empty sequence as placeholder
+				stateErr[name] = err
+				state[name] = xpath3.EmptySequence()
+				continue
 			}
 			checked, err := ec.checkAccumulatorType(def, result.Sequence())
 			if err != nil {
-				return err
+				stateErr[name] = err
+				state[name] = xpath3.EmptySequence()
+				continue
 			}
 			state[name] = cloneAccumulatorSequence(checked)
 		case len(def.InitialBody) > 0:
 			seq, err := ec.evaluateBodyAsSequence(ctx, def.InitialBody)
 			if err != nil {
-				return err
+				stateErr[name] = err
+				state[name] = xpath3.EmptySequence()
+				continue
 			}
 			checked, err := ec.checkAccumulatorType(def, seq)
 			if err != nil {
-				return err
+				stateErr[name] = err
+				state[name] = xpath3.EmptySequence()
+				continue
 			}
 			state[name] = cloneAccumulatorSequence(checked)
 		default:
@@ -1025,17 +1048,20 @@ func (ec *execContext) computeAccumulatorStates(ctx context.Context, doc helium.
 	}
 
 	savedState := ec.accumulatorState
+	savedStateErr := ec.accumulatorStateError
 	savedCurrent := ec.currentNode
 	savedContext := ec.contextNode
 	savedItem := ec.contextItem
 	savedEval := ec.evaluatingAccumulator
 	ec.accumulatorState = state
+	ec.accumulatorStateError = stateErr
 	ec.currentNode = doc
 	ec.contextNode = doc
 	ec.contextItem = nil
 	ec.evaluatingAccumulator = true
 	defer func() {
 		ec.accumulatorState = savedState
+		ec.accumulatorStateError = savedStateErr
 		ec.currentNode = savedCurrent
 		ec.contextNode = savedContext
 		ec.contextItem = savedItem
@@ -1054,7 +1080,7 @@ func (ec *execContext) walkAccumulatorTree(ctx context.Context, node helium.Node
 		return err
 	}
 
-	ec.storeAccumulatorSnapshot(ec.accumulatorBeforeByNode, node, ec.accumulatorState)
+	ec.storeAccumulatorSnapshot(ec.accumulatorBeforeByNode, ec.accumulatorBeforeErrorByNode, node, ec.accumulatorState, ec.accumulatorStateError)
 
 	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 		if err := ec.walkAccumulatorTree(ctx, child, names); err != nil {
@@ -1066,7 +1092,7 @@ func (ec *execContext) walkAccumulatorTree(ctx context.Context, node helium.Node
 		return err
 	}
 
-	ec.storeAccumulatorSnapshot(ec.accumulatorAfterByNode, node, ec.accumulatorState)
+	ec.storeAccumulatorSnapshot(ec.accumulatorAfterByNode, ec.accumulatorAfterErrorByNode, node, ec.accumulatorState, ec.accumulatorStateError)
 	return nil
 }
 
@@ -1087,6 +1113,13 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 		def, ok := ec.stylesheet.accumulators[name]
 		if !ok {
 			continue
+		}
+
+		// If this accumulator already has a deferred error, skip rule evaluation.
+		if ec.accumulatorStateError != nil {
+			if _, hasErr := ec.accumulatorStateError[name]; hasErr {
+				continue
+			}
 		}
 
 		for _, rule := range def.Rules {
@@ -1123,11 +1156,20 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 
 			ec.popVarScope()
 			if err != nil {
-				return err
+				// Defer error: store it for later retrieval via accumulator-before/after
+				if ec.accumulatorStateError == nil {
+					ec.accumulatorStateError = make(map[string]error)
+				}
+				ec.accumulatorStateError[name] = err
+				break
 			}
 			checked, err := ec.checkAccumulatorType(def, newValue)
 			if err != nil {
-				return err
+				if ec.accumulatorStateError == nil {
+					ec.accumulatorStateError = make(map[string]error)
+				}
+				ec.accumulatorStateError[name] = err
+				break
 			}
 			ec.accumulatorState[name] = checked
 		}
