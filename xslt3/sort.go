@@ -35,9 +35,10 @@ const (
 type dataTypeMode uint8
 
 const (
-	dataTypeAuto   dataTypeMode = iota // no explicit data-type attr; detect from first numeric result
-	dataTypeText                       // explicit data-type="text"
-	dataTypeNumber                     // explicit data-type="number"
+	dataTypeAuto       dataTypeMode = iota // no explicit data-type attr; detect from first numeric result
+	dataTypeText                           // explicit data-type="text"
+	dataTypeNumber                         // explicit data-type="number"
+	dataTypeNumberAuto                     // auto-detected from first numeric/date value
 )
 
 // sortValueKind identifies the type of a pre-extracted sort key.
@@ -271,19 +272,37 @@ func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *SortKey) err
 	return nil
 }
 
+// sortKeyFamily returns a family name for type compatibility checking.
+// All numeric types belong to the "numeric" family and are mutually comparable.
+func sortKeyFamily(tn string) string {
+	switch tn {
+	case xpath3.TypeInteger, xpath3.TypeDecimal, xpath3.TypeFloat, xpath3.TypeDouble,
+		xpath3.TypeLong, xpath3.TypeInt, xpath3.TypeShort, xpath3.TypeByte,
+		xpath3.TypeUnsignedLong, xpath3.TypeUnsignedInt, xpath3.TypeUnsignedShort, xpath3.TypeUnsignedByte,
+		xpath3.TypeNonNegativeInteger, xpath3.TypeNonPositiveInteger,
+		xpath3.TypePositiveInteger, xpath3.TypeNegativeInteger:
+		return "numeric"
+	}
+	return tn
+}
+
 // checkSortKeyTypeConsistency raises XTDE1030 if sort keys have incompatible types.
 // For example, mixing xs:untypedAtomic with xs:date is invalid because they
 // can't be compared using the lt operator without explicit casting.
+// All numeric types (integer, decimal, float, double, etc.) are mutually compatible.
 func checkSortKeyTypeConsistency[T interface{ keyType() string }](entries []T) error {
 	var firstNonString string
+	var firstFamily string
 	for _, e := range entries {
 		tn := e.keyType()
 		if tn == "" || tn == xpath3.TypeString || tn == xpath3.TypeUntypedAtomic {
 			continue
 		}
+		fam := sortKeyFamily(tn)
 		if firstNonString == "" {
 			firstNonString = tn
-		} else if firstNonString != tn {
+			firstFamily = fam
+		} else if firstFamily != fam {
 			return dynamicError(errCodeXTDE1030,
 				"sort keys have incompatible types: %s and %s", firstNonString, tn)
 		}
@@ -394,6 +413,12 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 		seq := result.Sequence()
 
 		if *dtMode == dataTypeNumber {
+			// Explicit data-type="number": use number() semantics.
+			// Dates/times are not numeric → convert via string → NaN.
+			return extractNumericValueExplicit(seq, result), nil
+		}
+		if *dtMode == dataTypeNumberAuto {
+			// Auto-detected numeric: preserve date/time ordering.
 			return extractNumericValueFromResult(seq, result), nil
 		}
 
@@ -403,7 +428,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 			case xpath3.AtomicValue:
 				sv.typeName = v.TypeName
 				if *dtMode == dataTypeAuto && v.IsNumeric() {
-					*dtMode = dataTypeNumber
+					*dtMode = dataTypeNumberAuto
 				}
 				// Duration types: use numeric comparison based on total months or seconds
 				if v.TypeName == xpath3.TypeYearMonthDuration || v.TypeName == xpath3.TypeDayTimeDuration {
@@ -419,7 +444,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 					}
 					sv = sortValue{kind: sortValueNumber, num: f, typeName: v.TypeName}
 					if *dtMode == dataTypeAuto {
-						*dtMode = dataTypeNumber
+						*dtMode = dataTypeNumberAuto
 					}
 				}
 				// Date/time types: use Unix nanoseconds for numeric comparison
@@ -429,7 +454,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 					// Use seconds with sub-second precision for ordering
 					sv = sortValue{kind: sortValueNumber, num: float64(t.UnixNano()) / 1e9, typeName: v.TypeName}
 					if *dtMode == dataTypeAuto {
-						*dtMode = dataTypeNumber
+						*dtMode = dataTypeNumberAuto
 					}
 				}
 			case xpath3.NodeItem:
@@ -443,7 +468,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 	}
 
 	if len(sk.Body) == 0 {
-		if *dtMode == dataTypeNumber {
+		if *dtMode == dataTypeNumber || *dtMode == dataTypeNumberAuto {
 			return sortValue{kind: sortValueNaN}, nil
 		}
 		return sortValue{}, nil
@@ -465,6 +490,9 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 	}
 
 	if *dtMode == dataTypeNumber {
+		return extractNumericValueExplicitSeq(val), nil
+	}
+	if *dtMode == dataTypeNumberAuto {
 		return extractNumericValueFromSeq(val), nil
 	}
 
@@ -472,7 +500,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 	if *dtMode == dataTypeAuto && len(val) == 1 {
 		if av, ok := val[0].(xpath3.AtomicValue); ok {
 			if av.IsNumeric() {
-				*dtMode = dataTypeNumber
+				*dtMode = dataTypeNumberAuto
 			} else if av.TypeName == xpath3.TypeYearMonthDuration || av.TypeName == xpath3.TypeDayTimeDuration {
 				d := av.DurationVal()
 				var f float64
@@ -485,7 +513,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 					f = -f
 				}
 				sv = sortValue{kind: sortValueNumber, num: f, typeName: av.TypeName}
-				*dtMode = dataTypeNumber
+				*dtMode = dataTypeNumberAuto
 			}
 		}
 	}
@@ -506,6 +534,32 @@ func extractSortValues(ctx context.Context, ec *execContext, sortKeys []*SortKey
 }
 
 // --- Numeric extraction helpers ---
+
+// extractNumericValueExplicit handles explicit data-type="number".
+// Per XSLT spec, sort key values are converted using number() semantics.
+// Only actual numeric types use direct conversion; others (date, duration)
+// fall through to string → double (producing NaN for dates).
+func extractNumericValueExplicit(seq xpath3.Sequence, result xpath3.Result) sortValue {
+	if len(seq) == 1 {
+		if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
+			if sv, ok := atomicToNumericSortValue(av); ok {
+				return sv
+			}
+		}
+	}
+	return parseToNumericSortValue(result.StringValue())
+}
+
+func extractNumericValueExplicitSeq(seq xpath3.Sequence) sortValue {
+	if len(seq) == 1 {
+		if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
+			if sv, ok := atomicToNumericSortValue(av); ok {
+				return sv
+			}
+		}
+	}
+	return parseToNumericSortValue(stringifySequence(seq))
+}
 
 func extractNumericValueFromResult(seq xpath3.Sequence, result xpath3.Result) sortValue {
 	if len(seq) == 1 {
@@ -611,7 +665,7 @@ func initDataTypeMode1(ctx context.Context, ec *execContext, sk *SortKey) (dataT
 func finalizeLevels(rs *resolvedSort, dtModes []dataTypeMode, entries interface{ convertAutoNumeric(level int) }) {
 	for i, m := range dtModes {
 		switch m {
-		case dataTypeNumber:
+		case dataTypeNumber, dataTypeNumberAuto:
 			rs.levels[i].mode = sortModeNumber
 			entries.convertAutoNumeric(i)
 		default:
@@ -644,7 +698,7 @@ func (ki keyedItems) convertAutoNumeric(level int) {
 
 func finalizeLevel1Nodes(level *resolvedLevel, dtMode dataTypeMode, entries []keyedNode1) {
 	switch dtMode {
-	case dataTypeNumber:
+	case dataTypeNumber, dataTypeNumberAuto:
 		level.mode = sortModeNumber
 		for i := range entries {
 			if entries[i].key.kind == sortValueText {
@@ -658,7 +712,7 @@ func finalizeLevel1Nodes(level *resolvedLevel, dtMode dataTypeMode, entries []ke
 
 func finalizeLevel1Items(level *resolvedLevel, dtMode dataTypeMode, entries []keyedItem1) {
 	switch dtMode {
-	case dataTypeNumber:
+	case dataTypeNumber, dataTypeNumberAuto:
 		level.mode = sortModeNumber
 		for i := range entries {
 			if entries[i].key.kind == sortValueText {
@@ -672,7 +726,7 @@ func finalizeLevel1Items(level *resolvedLevel, dtMode dataTypeMode, entries []ke
 
 func finalizeLevel1Groups(level *resolvedLevel, dtMode dataTypeMode, entries []keyedGroup1) {
 	switch dtMode {
-	case dataTypeNumber:
+	case dataTypeNumber, dataTypeNumberAuto:
 		level.mode = sortModeNumber
 		for i := range entries {
 			if entries[i].key.kind == sortValueText {
