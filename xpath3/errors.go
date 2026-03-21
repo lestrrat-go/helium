@@ -6,6 +6,7 @@ import (
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
+const errCodeXPST0003 = "XPST0003"
 const errCodeXPTY0004 = "XPTY0004"
 const errCodeXPDY0002 = "XPDY0002"
 const errCodeXPDY0050 = "XPDY0050"

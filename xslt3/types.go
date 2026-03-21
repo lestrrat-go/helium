@@ -211,9 +211,30 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 		return item, nil
 	}
 
-	// Handle function(...) — any function
+	// Handle function(...) — function type coercion
 	if strings.HasPrefix(itemType, "function(") {
-		return item, nil // function items are checked by the XPath layer
+		// function(*) matches any function item
+		if itemType == "function(*)" {
+			switch item.(type) {
+			case xpath3.FunctionItem, xpath3.MapItem, *xpath3.ArrayItem:
+				return item, nil
+			}
+			return nil, fmt.Errorf("expected %s, got %s", itemType, describeItem(item))
+		}
+		// Parse the function type and use xpath3 coercion
+		st, err := xpath3.ParseSequenceType(itemType)
+		if err != nil {
+			return item, nil // unparseable → pass through
+		}
+		seq := xpath3.Sequence{item}
+		coerced, ok := xpath3.CoerceToSequenceType(seq, st)
+		if !ok {
+			return nil, fmt.Errorf("cannot coerce %s to %s", describeItem(item), itemType)
+		}
+		if len(coerced) == 1 {
+			return coerced[0], nil
+		}
+		return item, nil
 	}
 
 	// Handle element(name) / element(name, type) patterns.
@@ -836,4 +857,5 @@ const (
 	errCodeXTTE0505 = "XTTE0505" // template return type mismatch
 	errCodeXTTE0570 = "XTTE0570" // variable/param type mismatch
 	errCodeXTTE0780 = "XTTE0780" // function return type mismatch
+	errCodeXTTE0790 = "XTTE0790" // function parameter type mismatch
 )

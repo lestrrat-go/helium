@@ -1964,6 +1964,13 @@ func (p *parser) parseItemType() (NodeTest, error) {
 				return nil, err
 			}
 			returnType = rt
+		} else if len(paramTypes) > 0 {
+			// Per XPath 3.1 §3.1.5.4: when parameter types are present,
+			// "as SequenceType" is required.
+			return nil, &XPathError{
+				Code:    errCodeXPST0003,
+				Message: "function type with parameter types requires 'as ReturnType'",
+			}
 		}
 		return FunctionTest{ParamTypes: paramTypes, ReturnType: returnType}, nil
 	}

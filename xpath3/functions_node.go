@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -458,6 +459,11 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	a, err := AtomizeItem(args[0][0])
 	if err != nil {
+		// FOTY0013 (atomizing function items) must propagate per XPath 3.1 §2.7.2
+		var xpErr *XPathError
+		if errors.As(err, &xpErr) && xpErr.Code == "FOTY0013" {
+			return nil, err
+		}
 		return SingleDouble(math.NaN()), nil
 	}
 	dbl, err := CastAtomic(a, TypeDouble)

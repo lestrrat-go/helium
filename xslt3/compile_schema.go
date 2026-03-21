@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -160,6 +161,15 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 func (c *compiler) validateAsSequenceType(as string, context string) error {
 	if as == "" {
 		return nil
+	}
+	// Validate syntax of the sequence type expression (catches errors
+	// like function(xs:integer) missing "as ReturnType").
+	if _, err := xpath3.ParseSequenceType(as); err != nil {
+		var xpErr *xpath3.XPathError
+		if errors.As(err, &xpErr) {
+			return staticError(xpErr.Code, "%s: invalid 'as' type: %s", context, err)
+		}
+		return staticError("XPST0003", "%s: invalid 'as' type: %s", context, err)
 	}
 	if !c.stylesheet.schemaAware || len(c.stylesheet.schemas) == 0 {
 		return nil
