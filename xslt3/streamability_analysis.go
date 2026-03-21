@@ -1408,22 +1408,6 @@ func exprEndsWithGrounding(expr xpath3.Expr) bool {
 	return false
 }
 
-// exprProducesAtomicResult returns true if the top-level expression is known
-// to produce only atomic items (no node items). Such expressions are safe as
-// for-each selects in streaming context because the iteration items are not
-// streamed nodes.
-func exprProducesAtomicResult(expr xpath3.Expr) bool {
-	expr = derefXPathExpr(expr)
-	switch expr.(type) {
-	case xpath3.RangeExpr:
-		return true
-	}
-	if isAtomicResultExpr(expr) {
-		return true
-	}
-	return false
-}
-
 // countDownwardFromCurrentGroup counts how many distinct downward selections
 // occur after current-group() in a single expression. For example,
 // current-group()/(AUTHOR||TITLE) has 2 downward selections (AUTHOR and TITLE).
