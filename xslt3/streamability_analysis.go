@@ -1714,8 +1714,22 @@ func countStreamingDownwardSelectionsInner(expr xpath3.Expr, grounded bool) int 
 		}
 	case xpath3.PathStepExpr:
 		leftGrounding := isGroundingExpr(e.Left)
-		count += countStreamingDownwardSelectionsInner(e.Left, false)
-		count += countStreamingDownwardSelectionsInner(e.Right, leftGrounding)
+		// A path step like A/B is a single selection path — the left side
+		// provides context for the right side. Count the right side's
+		// distinct downward selections; if the left side also has downward
+		// steps, they combine into one path, not two separate paths.
+		leftCount := countStreamingDownwardSelectionsInner(e.Left, false)
+		rightCount := countStreamingDownwardSelectionsInner(e.Right, leftGrounding)
+		if leftCount > 0 && rightCount > 0 {
+			// Left and right form a single combined path.
+			// The right side may have multiple branches (e.g., sequence expressions).
+			// Count as: the max of (left alone as 1 path) + (right branches - 1).
+			// For chapter/(chtitle, @nr): left=1 (chapter), right=1 (chtitle only).
+			// Result: 1 path, not 2.
+			count += rightCount
+		} else {
+			count += leftCount + rightCount
+		}
 		if e.DescOrSelf && !leftGrounding {
 			// The // shorthand adds a descendant-or-self step
 			// Only count if not after a grounding function
