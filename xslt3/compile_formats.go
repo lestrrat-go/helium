@@ -145,8 +145,29 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.Encoding = "UTF-8"
 	}
 
-	outDef.Indent = getAttr(elem, "indent") == "yes"
-	outDef.OmitDeclaration = getAttr(elem, "omit-xml-declaration") == "yes"
+	// Validate and parse boolean output attributes.
+	// SEPM0016: invalid boolean values.
+	if v := getAttr(elem, "indent"); v != "" {
+		b, ok := parseXSDBool(v)
+		if !ok {
+			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@indent", v)
+		}
+		outDef.Indent = b
+	}
+	if v := getAttr(elem, "omit-xml-declaration"); v != "" {
+		b, ok := parseXSDBool(v)
+		if !ok {
+			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@omit-xml-declaration", v)
+		}
+		outDef.OmitDeclaration = b
+	}
+	if v := getAttr(elem, "undeclare-prefixes"); v != "" {
+		b, ok := parseXSDBool(v)
+		if !ok {
+			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@undeclare-prefixes", v)
+		}
+		outDef.UndeclarePrefixes = b
+	}
 	outDef.Standalone = getAttr(elem, "standalone")
 	outDef.DoctypePublic = getAttr(elem, "doctype-public")
 	outDef.DoctypeSystem = getAttr(elem, "doctype-system")
