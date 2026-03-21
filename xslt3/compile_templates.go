@@ -63,6 +63,13 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 			if m[0] != '#' && !isValidQName(m) {
 				return staticError(errCodeXTSE0550, "invalid mode name %q on xsl:template", m)
 			}
+			// XTSE0280: check for undeclared prefix in mode name.
+			if idx := strings.IndexByte(m, ':'); idx > 0 {
+				prefix := m[:idx]
+				if _, ok := c.nsBindings[prefix]; !ok {
+					return staticError(errCodeXTSE0280, "undeclared namespace prefix %q in mode name %q", prefix, m)
+				}
+			}
 			if m == "#all" {
 				hasAll = true
 			}
