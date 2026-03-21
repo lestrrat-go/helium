@@ -309,10 +309,11 @@ func (ec *execContext) execOnEmpty(ctx context.Context, inst *OnEmptyInst) error
 	}
 	scopeIdx := len(out.conditionalScopes) - 1
 	out.conditionalScopes[scopeIdx].actions = append(out.conditionalScopes[scopeIdx].actions, conditionalAction{
-		ctx:         ctx,
-		kind:        conditionalOnEmpty,
-		content:     content,
-		placeholder: placeholder,
+		ctx:           ctx,
+		kind:          conditionalOnEmpty,
+		content:       content,
+		placeholder:   placeholder,
+		prevWasAtomic: out.prevWasAtomic,
 	})
 	return nil
 }
@@ -335,10 +336,11 @@ func (ec *execContext) execOnNonEmpty(ctx context.Context, inst *OnNonEmptyInst)
 	}
 	scopeIdx := len(out.conditionalScopes) - 1
 	out.conditionalScopes[scopeIdx].actions = append(out.conditionalScopes[scopeIdx].actions, conditionalAction{
-		ctx:         ctx,
-		kind:        conditionalOnNonEmpty,
-		content:     content,
-		placeholder: placeholder,
+		ctx:           ctx,
+		kind:          conditionalOnNonEmpty,
+		content:       content,
+		placeholder:   placeholder,
+		prevWasAtomic: out.prevWasAtomic,
 	})
 	return nil
 }

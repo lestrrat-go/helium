@@ -35,10 +35,11 @@ const (
 )
 
 type conditionalAction struct {
-	ctx         context.Context
-	kind        conditionalKind
-	content     xpath3.Sequence
-	placeholder helium.Node
+	ctx            context.Context
+	kind           conditionalKind
+	content        xpath3.Sequence
+	placeholder    helium.Node
+	prevWasAtomic  bool // whether the output preceding this action was an atomic value
 }
 
 type conditionalScope struct {
