@@ -107,7 +107,7 @@ func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
 	defer func() { c.breakAllowed = savedBreak }()
 
 	// Validate attributes
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {}, "namespace": {}, "inherit-namespaces": {},
 		"use-attribute-sets": {}, "type": {}, "validation": {},
 	}); err != nil {
@@ -657,7 +657,7 @@ func (c *compiler) compileDocument(elem *helium.Element) (*DocumentInst, error) 
 }
 
 func (c *compiler) compileSequence(elem *helium.Element) (Instruction, error) {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"select": {},
 	}); err != nil {
 		return nil, err

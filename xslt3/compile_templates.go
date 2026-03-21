@@ -13,7 +13,7 @@ var templateAllowedAttrs = map[string]struct{}{
 }
 
 func (c *compiler) compileTemplate(elem *helium.Element) error {
-	if err := validateXSLTAttrs(elem, templateAllowedAttrs); err != nil {
+	if err := c.validateXSLTAttrs(elem, templateAllowedAttrs); err != nil {
 		return err
 	}
 	// Collect namespace declarations and xpath-default-namespace before
@@ -488,7 +488,7 @@ var contextItemAllowedAttrs = map[string]struct{}{
 // validateContextItem checks compile-time constraints on xsl:context-item.
 func (c *compiler) validateContextItem(elem *helium.Element) error {
 	// XTSE0090: reject unknown attributes (e.g. select)
-	if err := validateXSLTAttrs(elem, contextItemAllowedAttrs); err != nil {
+	if err := c.validateXSLTAttrs(elem, contextItemAllowedAttrs); err != nil {
 		return err
 	}
 
@@ -537,7 +537,7 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 	defer func() { c.nsBindings = savedNS }()
 
 	// Validate attributes on xsl:param
-	if err := validateXSLTAttrs(elem, paramAllowedAttrs); err != nil {
+	if err := c.validateXSLTAttrs(elem, paramAllowedAttrs); err != nil {
 		return nil, err
 	}
 
@@ -661,7 +661,7 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 	defer func() { c.expandText = savedExpandText }()
 
 	// Validate attributes on xsl:variable
-	if err := validateXSLTAttrs(elem, variableAllowedAttrs); err != nil {
+	if err := c.validateXSLTAttrs(elem, variableAllowedAttrs); err != nil {
 		return err
 	}
 

@@ -14,7 +14,7 @@ import (
 )
 
 func (c *compiler) compileImport(elem *helium.Element) error {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"href": {}, "use-when": {},
 	}); err != nil {
 		return err

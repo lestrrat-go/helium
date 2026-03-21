@@ -7,7 +7,7 @@ import (
 )
 
 func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesInst, error) {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"select": {}, "mode": {},
 	}); err != nil {
 		return nil, err
@@ -99,7 +99,7 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 }
 
 func (c *compiler) compileCallTemplate(elem *helium.Element) (*CallTemplateInst, error) {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {},
 	}); err != nil {
 		return nil, err
@@ -487,7 +487,7 @@ func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
 
 	// Validate attributes: xsl:with-param allows name, select, as, tunnel
 	// but NOT required (that's only for xsl:param)
-	if err := validateXSLTAttrs(elem, withParamAllowedAttrs); err != nil {
+	if err := c.validateXSLTAttrs(elem, withParamAllowedAttrs); err != nil {
 		return nil, err
 	}
 
@@ -629,7 +629,7 @@ func (c *compiler) compileNextMatch(elem *helium.Element) (*NextMatchInst, error
 }
 
 func (c *compiler) compileApplyImports(elem *helium.Element) (*ApplyImportsInst, error) {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{}); err != nil {
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{}); err != nil {
 		return nil, err
 	}
 	inst := &ApplyImportsInst{}

@@ -10,7 +10,7 @@ import (
 )
 
 func (c *compiler) compileCharacterMap(elem *helium.Element) error {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {}, "use-character-maps": {}, "use-when": {},
 	}); err != nil {
 		return err
@@ -83,7 +83,7 @@ func (c *compiler) compileCharacterMap(elem *helium.Element) error {
 }
 
 func (c *compiler) compileKey(elem *helium.Element) error {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {}, "match": {}, "use": {}, "collation": {}, "composite": {},
 		"use-when": {},
 	}); err != nil {
@@ -164,7 +164,7 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 }
 
 func (c *compiler) compileOutput(elem *helium.Element) error {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {}, "method": {}, "version": {}, "encoding": {},
 		"omit-xml-declaration": {}, "standalone": {}, "doctype-public": {},
 		"doctype-system": {}, "cdata-section-elements": {}, "indent": {},
@@ -376,7 +376,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 }
 
 func (c *compiler) compileAttributeSet(elem *helium.Element) error {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {}, "use-attribute-sets": {}, "visibility": {},
 		"streamable": {}, "use-when": {},
 	}); err != nil {
@@ -481,7 +481,7 @@ func checkAttributeSetCycles(ss *Stylesheet) error {
 }
 
 func (c *compiler) compileDecimalFormat(elem *helium.Element) error {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {}, "decimal-separator": {}, "grouping-separator": {},
 		"infinity": {}, "minus-sign": {}, "NaN": {}, "percent": {},
 		"per-mille": {}, "zero-digit": {}, "digit": {},
@@ -708,7 +708,7 @@ func firstRune(s string) rune {
 }
 
 func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) error {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"elements": {},
 	}); err != nil {
 		return err

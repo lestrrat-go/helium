@@ -8,7 +8,7 @@ import (
 )
 
 func (c *compiler) compileGlobalContextItem(elem *helium.Element) error {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"as": {}, "use": {}, "use-when": {},
 	}); err != nil {
 		return err
@@ -65,7 +65,7 @@ func isReservedFunctionNS(uri string) bool {
 }
 
 func (c *compiler) compileFunction(elem *helium.Element) error {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {}, "as": {}, "visibility": {}, "streamable": {},
 		"streamability": {},
 		"override-extension-function": {}, "override": {},
@@ -246,7 +246,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 }
 
 func (c *compiler) compileMode(elem *helium.Element) error {
-	if err := validateXSLTAttrs(elem, map[string]struct{}{
+	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {}, "streamable": {}, "on-no-match": {}, "on-multiple-match": {},
 		"warning-on-no-match": {}, "warning-on-multiple-match": {},
 		"typed": {}, "visibility": {}, "use-when": {}, "use-accumulators": {},
