@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -34,7 +35,8 @@ func ValidateElementAgainstType(elem *helium.Element, td *TypeDef, schema *Schem
 	}
 	cfg := &validateConfig{}
 	var out strings.Builder
-	err := validateElementContent(elem, nil, td, schema, cfg, "", &out)
+	vc := newValidationContext(context.Background(), schema, cfg, "", &out)
+	err := vc.validateElementContent(elem, nil, td)
 	if err != nil {
 		msg := out.String()
 		if msg != "" {

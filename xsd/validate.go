@@ -12,6 +12,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	filename := cfg.filename
 	var out strings.Builder
 	valid := true
+	vc := newValidationContext(ctx, schema, cfg, filename, &out)
 
 	// Initialize annotations map if requested.
 	if cfg.annotations != nil && *cfg.annotations == nil {
@@ -30,7 +31,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			return nil
 		}
 		elem := n.(*helium.Element)
-		if err := validateElement(elem, schema, cfg, filename, &out); err != nil {
+		if err := vc.validateElement(elem); err != nil {
 			valid = false
 		}
 		return nil
@@ -42,9 +43,9 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			return nil
 		}
 		elem := n.(*helium.Element)
-		edecl := lookupElemDecl(elem, schema)
+		edecl := lookupElemDecl(elem, vc.schema)
 		if edecl != nil && len(edecl.IDCs) > 0 {
-			if err := validateIDConstraints(ctx, elem, edecl, schema, filename, &out); err != nil {
+			if err := vc.validateIDConstraints(elem, edecl); err != nil {
 				valid = false
 			}
 		}
@@ -59,34 +60,34 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	return out.String(), valid
 }
 
-func validateElement(elem *helium.Element, schema *Schema, cfg *validateConfig, filename string, out *strings.Builder) error {
+func (vc *validationContext) validateElement(elem *helium.Element) error {
 	parent := elem.Parent()
 	if parent == nil || parent.Type() == helium.DocumentNode {
 		// Root element — must match a global element declaration.
-		return validateRootElement(elem, schema, cfg, filename, out)
+		return vc.validateRootElement(elem)
 	}
 	// Non-root elements are validated by their parent's content model.
 	return nil
 }
 
-func validateRootElement(elem *helium.Element, schema *Schema, cfg *validateConfig, filename string, out *strings.Builder) error {
+func (vc *validationContext) validateRootElement(elem *helium.Element) error {
 	local := elem.LocalName()
 	ns := elem.URI()
-	edecl, ok := schema.LookupElement(local, ns)
+	edecl, ok := vc.schema.LookupElement(local, ns)
 	if !ok {
 		// Try with empty namespace.
-		edecl, ok = schema.LookupElement(local, "")
+		edecl, ok = vc.schema.LookupElement(local, "")
 	}
 	if !ok {
 		msg := "No matching global declaration available for the validation root."
-		out.WriteString(validityError(filename, elem.Line(), local, msg))
+		vc.out.WriteString(validityError(vc.filename, elem.Line(), local, msg))
 		return fmt.Errorf("no matching global declaration")
 	}
 
 	if edecl.Type == nil {
 		// Substitution group members inherit the type from the head element.
 		if edecl.SubstitutionGroup != (QName{}) {
-			headDecl, headOK := schema.LookupElement(edecl.SubstitutionGroup.Local, edecl.SubstitutionGroup.NS)
+			headDecl, headOK := vc.schema.LookupElement(edecl.SubstitutionGroup.Local, edecl.SubstitutionGroup.NS)
 			if headOK && headDecl.Type != nil {
 				edecl = headDecl
 			} else {
@@ -97,43 +98,43 @@ func validateRootElement(elem *helium.Element, schema *Schema, cfg *validateConf
 		}
 	}
 
-	td, err := resolveXsiType(elem, edecl.Type, schema, filename, out)
+	td, err := vc.resolveXsiType(elem, edecl.Type)
 	if err != nil {
 		return err
 	}
 	// Check block flags against xsi:type derivation.
 	if td != edecl.Type && edecl.Type != nil && isDerivationBlocked(td, edecl.Type, edecl.Block) {
 		msg := "The xsi:type definition is blocked by the element declaration."
-		out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+		vc.out.WriteString(validityError(vc.filename, elem.Line(), elemDisplayName(elem), msg))
 		td = edecl.Type // fall back to declared type
 	}
 	if td != nil && td.Abstract {
 		msg := "The type definition is abstract."
-		out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+		vc.out.WriteString(validityError(vc.filename, elem.Line(), elemDisplayName(elem), msg))
 		return fmt.Errorf("abstract type")
 	}
 
 	// Annotate root element with its type.
-	annotateElement(cfg, elem, td)
+	vc.annotateElement(elem, td)
 
 	if hasXsiNil(elem) {
-		return validateNilledElement(elem, edecl, td, schema, cfg, filename, out)
+		return vc.validateNilledElement(elem, edecl, td)
 	}
 
-	return validateElementContent(elem, edecl, td, schema, cfg, filename, out)
+	return vc.validateElementContent(elem, edecl, td)
 }
 
-func validateElementContent(elem *helium.Element, edecl *ElementDecl, td *TypeDef, schema *Schema, cfg *validateConfig, filename string, out *strings.Builder) error {
+func (vc *validationContext) validateElementContent(elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
 	// Validate attributes and annotate them.
-	if err := validateAttributes(elem, td, schema, cfg, filename, out); err != nil {
+	if err := vc.validateAttributes(elem, td); err != nil {
 		return err
 	}
 
 	switch td.ContentType {
 	case ContentTypeEmpty:
-		return validateEmptyContent(elem, filename, out)
+		return vc.validateEmptyContent(elem)
 	case ContentTypeSimple:
-		return validateSimpleContent(elem, edecl, td, filename, out)
+		return vc.validateSimpleContent(elem, edecl, td)
 	case ContentTypeElementOnly, ContentTypeMixed:
 		// For element-only content, non-whitespace text children are not allowed.
 		if td.ContentType == ContentTypeElementOnly {
@@ -141,7 +142,7 @@ func validateElementContent(elem *helium.Element, edecl *ElementDecl, td *TypeDe
 				if child.Type() == helium.TextNode || child.Type() == helium.CDATASectionNode {
 					if strings.TrimSpace(string(child.Content())) != "" {
 						msg := "Character content other than whitespace is not allowed because the content type is 'element-only'."
-						out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+						vc.out.WriteString(validityError(vc.filename, elem.Line(), elemDisplayName(elem), msg))
 						return fmt.Errorf("text content in element-only type")
 					}
 				}
@@ -150,20 +151,20 @@ func validateElementContent(elem *helium.Element, edecl *ElementDecl, td *TypeDe
 		if td.ContentModel == nil {
 			// No content model means anything goes (for mixed) or empty (for element-only).
 			if td.ContentType == ContentTypeElementOnly {
-				return validateEmptyContent(elem, filename, out)
+				return vc.validateEmptyContent(elem)
 			}
 			return nil
 		}
-		return validateContentModel(elem, td.ContentModel, schema, cfg, filename, out)
+		return vc.validateContentModel(elem, td.ContentModel)
 	}
 	return nil
 }
 
-func validateSimpleContent(elem *helium.Element, edecl *ElementDecl, td *TypeDef, filename string, out *strings.Builder) error {
+func (vc *validationContext) validateSimpleContent(elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
 	// Simple content types must not have child elements.
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		if child.Type() == helium.ElementNode {
-			out.WriteString(validityError(filename, elem.Line(), elem.LocalName(),
+			vc.out.WriteString(validityError(vc.filename, elem.Line(), elem.LocalName(),
 				"Element content is not allowed, because the content type is a simple type definition."))
 			return fmt.Errorf("element content not allowed")
 		}
@@ -186,29 +187,29 @@ func validateSimpleContent(elem *helium.Element, edecl *ElementDecl, td *TypeDef
 	if !isEmpty && edecl != nil && edecl.Fixed != nil {
 		if strings.TrimSpace(value) != strings.TrimSpace(*edecl.Fixed) {
 			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", strings.TrimSpace(value), *edecl.Fixed)
-			out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+			vc.out.WriteString(validityError(vc.filename, elem.Line(), elemDisplayName(elem), msg))
 			return fmt.Errorf("fixed value constraint")
 		}
 	}
 
 	// Validate the text value against the type.
 	if td != nil && (td.Facets != nil || resolveVariety(td) == TypeVarietyList || resolveVariety(td) == TypeVarietyUnion || builtinBaseLocal(td) != "" && builtinBaseLocal(td) != "string" && builtinBaseLocal(td) != "anySimpleType") {
-		return validateValue(effectiveValue, collectNSContext(elem), td, elemDisplayName(elem), filename, elem.Line(), out)
+		return validateValue(effectiveValue, collectNSContext(elem), td, elemDisplayName(elem), vc.filename, elem.Line(), vc.out)
 	}
 
 	return nil
 }
 
-func validateEmptyContent(elem *helium.Element, filename string, out *strings.Builder) error {
+func (vc *validationContext) validateEmptyContent(elem *helium.Element) error {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		switch child.Type() {
 		case helium.ElementNode:
 			ce := child.(*helium.Element)
-			out.WriteString(validityError(filename, ce.Line(), ce.LocalName(), "This element is not expected."))
+			vc.out.WriteString(validityError(vc.filename, ce.Line(), ce.LocalName(), "This element is not expected."))
 			return fmt.Errorf("not expected")
 		case helium.TextNode:
 			if !isBlank(child.Content()) {
-				out.WriteString(validityError(filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the type definition is simple."))
+				vc.out.WriteString(validityError(vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the type definition is simple."))
 				return fmt.Errorf("not expected")
 			}
 		}
@@ -216,9 +217,9 @@ func validateEmptyContent(elem *helium.Element, filename string, out *strings.Bu
 	return nil
 }
 
-func validateContentModel(elem *helium.Element, mg *ModelGroup, schema *Schema, cfg *validateConfig, filename string, out *strings.Builder) error {
+func (vc *validationContext) validateContentModel(elem *helium.Element, mg *ModelGroup) error {
 	children := collectChildElements(elem)
-	return validateContentModelTop(elem, mg, children, schema, cfg, filename, out)
+	return vc.validateContentModelTop(elem, mg, children)
 }
 
 type childElem struct {
@@ -279,7 +280,7 @@ func attrDisplayName(a *helium.Attribute) string {
 	return a.LocalName()
 }
 
-func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, cfg *validateConfig, filename string, out *strings.Builder) error {
+func (vc *validationContext) validateAttributes(elem *helium.Element, td *TypeDef) error {
 	var hasErr bool
 
 	if len(td.Attributes) == 0 && td.AnyAttribute == nil {
@@ -291,7 +292,7 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, cfg *
 			}
 			ad := attrDisplayName(a)
 			msg := fmt.Sprintf("The attribute '%s' is not allowed.", ad)
-			out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
+			vc.out.WriteString(validityErrorAttr(vc.filename, elem.Line(), elemDisplayName(elem), ad, msg))
 			hasErr = true
 		}
 		if hasErr {
@@ -316,35 +317,35 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, cfg *
 			if au.Fixed != nil && a.Value() != *au.Fixed {
 				ad := attrDisplayName(a)
 				msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
-				out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
+				vc.out.WriteString(validityErrorAttr(vc.filename, elem.Line(), elemDisplayName(elem), ad, msg))
 				hasErr = true
 			}
 			// Validate the attribute value against its declared type.
 			if au.TypeName.Local != "" {
-				attrTD, tdOK := schema.LookupType(au.TypeName.Local, au.TypeName.NS)
+				attrTD, tdOK := vc.schema.LookupType(au.TypeName.Local, au.TypeName.NS)
 				if tdOK && attrTD.ContentType == ContentTypeSimple {
 					if err := ValidateSimpleValueWithNS(a.Value(), collectNSContext(elem), attrTD); err != nil {
 						ad := attrDisplayName(a)
 						msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
-						out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
+						vc.out.WriteString(validityErrorAttr(vc.filename, elem.Line(), elemDisplayName(elem), ad, msg))
 						hasErr = true
 					}
 				}
 			}
 			// Annotate the attribute with its declared type.
-			annotateAttrUse(cfg, a, au, schema)
+			vc.annotateAttrUse(a, au)
 			continue
 		}
 		// Not in explicit declarations — check anyAttribute wildcard.
 		if td.AnyAttribute != nil && wildcardMatchesAttr(td.AnyAttribute, a.URI()) {
-			if err := validateWildcardAttr(a, elem, td.AnyAttribute, schema, filename, out); err != nil {
+			if err := vc.validateWildcardAttr(a, elem, td.AnyAttribute); err != nil {
 				hasErr = true
 			}
 			continue
 		}
 		ad := attrDisplayName(a)
 		msg := fmt.Sprintf("The attribute '%s' is not allowed.", ad)
-		out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
+		vc.out.WriteString(validityErrorAttr(vc.filename, elem.Line(), elemDisplayName(elem), ad, msg))
 		hasErr = true
 	}
 
@@ -363,7 +364,7 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, cfg *
 		}
 		if !found {
 			msg := fmt.Sprintf("The attribute '%s' is required but missing.", au.Name.Local)
-			out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+			vc.out.WriteString(validityError(vc.filename, elem.Line(), elemDisplayName(elem), msg))
 			hasErr = true
 		}
 	}
@@ -396,7 +397,7 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, cfg *
 			// Annotate the newly inserted attribute.
 			for _, a := range elem.Attributes() {
 				if a.LocalName() == au.Name.Local && a.URI() == au.Name.NS {
-					annotateAttrUse(cfg, a, au, schema)
+					vc.annotateAttrUse(a, au)
 					break
 				}
 			}
@@ -411,20 +412,20 @@ func validateAttributes(elem *helium.Element, td *TypeDef, schema *Schema, cfg *
 
 // validateWildcardAttr validates an attribute matched by a wildcard according
 // to its processContents setting (strict, lax, or skip).
-func validateWildcardAttr(a *helium.Attribute, elem *helium.Element, wc *Wildcard, schema *Schema, filename string, out *strings.Builder) error {
+func (vc *validationContext) validateWildcardAttr(a *helium.Attribute, elem *helium.Element, wc *Wildcard) error {
 	if wc.ProcessContents == ProcessSkip {
 		return nil
 	}
 
 	// Look up global attribute declaration.
 	aqn := QName{Local: a.LocalName(), NS: a.URI()}
-	globalAttr, found := schema.globalAttrs[aqn]
+	globalAttr, found := vc.schema.globalAttrs[aqn]
 
 	if !found {
 		if wc.ProcessContents == ProcessStrict {
 			ad := attrDisplayName(a)
 			msg := "No matching global attribute declaration available, but demanded by the strict wildcard."
-			out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
+			vc.out.WriteString(validityErrorAttr(vc.filename, elem.Line(), elemDisplayName(elem), ad, msg))
 			return fmt.Errorf("strict wildcard: no global attr")
 		}
 		// Lax: no global declaration found — skip validation.
@@ -433,7 +434,7 @@ func validateWildcardAttr(a *helium.Attribute, elem *helium.Element, wc *Wildcar
 
 	// Global attribute found — validate value against its type if known.
 	if globalAttr.TypeName.Local != "" {
-		attrTD, ok := schema.types[globalAttr.TypeName]
+		attrTD, ok := vc.schema.types[globalAttr.TypeName]
 		if ok {
 			value := a.Value()
 			trimmed := strings.TrimSpace(value)
@@ -442,7 +443,7 @@ func validateWildcardAttr(a *helium.Attribute, elem *helium.Element, wc *Wildcar
 				ad := attrDisplayName(a)
 				typeName := typeDisplayName(attrTD)
 				msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", trimmed, typeName)
-				out.WriteString(validityErrorAttr(filename, elem.Line(), elemDisplayName(elem), ad, msg))
+				vc.out.WriteString(validityErrorAttr(vc.filename, elem.Line(), elemDisplayName(elem), ad, msg))
 				return err
 			}
 		}
@@ -507,18 +508,18 @@ func hasXsiNil(elem *helium.Element) bool {
 // If the declaration is nillable, validates that the element has no character
 // or element content (attributes are still checked).  If not nillable,
 // reports a validity error.
-func validateNilledElement(elem *helium.Element, edecl *ElementDecl, td *TypeDef, schema *Schema, cfg *validateConfig, filename string, out *strings.Builder) error {
+func (vc *validationContext) validateNilledElement(elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
 	dn := elemDisplayName(elem)
 
 	if !edecl.Nillable {
-		out.WriteString(validityError(filename, elem.Line(), dn,
+		vc.out.WriteString(validityError(vc.filename, elem.Line(), dn,
 			"Element is not nillable."))
 		return fmt.Errorf("element not nillable")
 	}
 
 	// Validate attributes even for nilled elements.
 	if td != nil {
-		if err := validateAttributes(elem, td, schema, cfg, filename, out); err != nil {
+		if err := vc.validateAttributes(elem, td); err != nil {
 			return err
 		}
 	}
@@ -528,12 +529,12 @@ func validateNilledElement(elem *helium.Element, edecl *ElementDecl, td *TypeDef
 		switch child.Type() {
 		case helium.ElementNode:
 			ce := child.(*helium.Element)
-			out.WriteString(validityError(filename, ce.Line(), elemDisplayName(ce),
+			vc.out.WriteString(validityError(vc.filename, ce.Line(), elemDisplayName(ce),
 				"This element is not expected, because the element '"+dn+"' is nilled."))
 			return fmt.Errorf("content in nilled element")
 		case helium.TextNode, helium.CDATASectionNode:
 			if !isBlank(child.Content()) {
-				out.WriteString(validityError(filename, elem.Line(), dn,
+				vc.out.WriteString(validityError(vc.filename, elem.Line(), dn,
 					"Character content is not allowed, because the element is nilled."))
 				return fmt.Errorf("content in nilled element")
 			}
@@ -565,7 +566,7 @@ func isDerivedFrom(derived, base *TypeDef) bool {
 // resolves it to a type definition in the schema. Returns the resolved type
 // or the original declaredType if no xsi:type is present. Returns an error
 // if the xsi:type value doesn't resolve or is not derived from the declared type.
-func resolveXsiType(elem *helium.Element, declaredType *TypeDef, schema *Schema, filename string, out *strings.Builder) (*TypeDef, error) {
+func (vc *validationContext) resolveXsiType(elem *helium.Element, declaredType *TypeDef) (*TypeDef, error) {
 	var xsiTypeVal string
 	for _, a := range elem.Attributes() {
 		if a.URI() == xsiNS && a.LocalName() == "type" {
@@ -589,14 +590,14 @@ func resolveXsiType(elem *helium.Element, declaredType *TypeDef, schema *Schema,
 		ns = lookupNS(elem, "")
 	}
 
-	td, ok := schema.LookupType(local, ns)
+	td, ok := vc.schema.LookupType(local, ns)
 	if !ok {
 		// Try with schema's target namespace.
-		td, ok = schema.LookupType(local, schema.TargetNamespace())
+		td, ok = vc.schema.LookupType(local, vc.schema.TargetNamespace())
 	}
 	if !ok {
 		msg := fmt.Sprintf("The value '%s' of the xsi:type attribute does not resolve to a type definition.", xsiTypeVal)
-		out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+		vc.out.WriteString(validityError(vc.filename, elem.Line(), elemDisplayName(elem), msg))
 		return nil, fmt.Errorf("xsi:type not found")
 	}
 
@@ -604,7 +605,7 @@ func resolveXsiType(elem *helium.Element, declaredType *TypeDef, schema *Schema,
 	if declaredType != nil && !isDerivedFrom(td, declaredType) {
 		msg := fmt.Sprintf("The type definition '%s' is not validly derived from the type definition '%s'.",
 			typeDisplayName(td), typeDisplayName(declaredType))
-		out.WriteString(validityError(filename, elem.Line(), elemDisplayName(elem), msg))
+		vc.out.WriteString(validityError(vc.filename, elem.Line(), elemDisplayName(elem), msg))
 		return nil, fmt.Errorf("xsi:type not derived")
 	}
 
@@ -643,24 +644,24 @@ func xsdTypeName(td *TypeDef) string {
 }
 
 // annotateElement records a type annotation for an element node.
-func annotateElement(cfg *validateConfig, elem *helium.Element, td *TypeDef) {
-	if cfg == nil || cfg.annotations == nil {
+func (vc *validationContext) annotateElement(elem *helium.Element, td *TypeDef) {
+	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
 	}
-	(*cfg.annotations)[elem] = xsdTypeName(td)
+	(*vc.cfg.annotations)[elem] = xsdTypeName(td)
 }
 
 // annotateAttrUse records a type annotation for an attribute node based on its AttrUse declaration.
-func annotateAttrUse(cfg *validateConfig, a *helium.Attribute, au *AttrUse, schema *Schema) {
-	if cfg == nil || cfg.annotations == nil {
+func (vc *validationContext) annotateAttrUse(a *helium.Attribute, au *AttrUse) {
+	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
 	}
 	if au.TypeName.Local == "" {
 		return
 	}
-	td, ok := schema.types[au.TypeName]
+	td, ok := vc.schema.types[au.TypeName]
 	if !ok {
 		return
 	}
-	(*cfg.annotations)[a] = xsdTypeName(td)
+	(*vc.cfg.annotations)[a] = xsdTypeName(td)
 }
