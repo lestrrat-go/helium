@@ -231,7 +231,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	if err := validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {}, "streamable": {}, "on-no-match": {}, "on-multiple-match": {},
 		"warning-on-no-match": {}, "warning-on-multiple-match": {},
-		"typed": {}, "visibility": {}, "use-when": {},
+		"typed": {}, "visibility": {}, "use-when": {}, "use-accumulators": {},
 	}); err != nil {
 		return err
 	}
