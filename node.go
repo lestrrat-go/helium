@@ -141,6 +141,13 @@ func setLastChild(n Node, cur Node) {
 	n.baseDocNode().lastChild = cur
 }
 
+// SetLastChild updates the last-child pointer of a parent node.
+// This is needed when manually splicing nodes into a sibling list
+// without going through AddChild/AddSibling.
+func SetLastChild(n Node, cur Node) {
+	setLastChild(n, cur)
+}
+
 func (n *docnode) SetOwnerDocument(doc *Document) {
 	n.doc = doc
 }
