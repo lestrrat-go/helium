@@ -402,10 +402,11 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 					}
 				}
 			}
-			// Write attributes
+			// Write attributes with character map awareness.
+			// Mapped characters are written raw (unescaped) while
+			// unmapped characters go through normal XML attribute escaping.
 			for _, attr := range elem.Attributes() {
-				attrVal := applyCharacterMap(attr.Value(), charMap)
-				if err := sw.WriteAttribute(attr.Name(), attrVal); err != nil {
+				if err := writeAttrWithCharMap(sw, attr.Name(), attr.Value(), charMap); err != nil {
 					return err
 				}
 			}
@@ -468,6 +469,52 @@ func writeTextWithCharMap(sw *stream.Writer, text string, charMap map[rune]strin
 		return sw.WriteString(unmapped.String())
 	}
 	return nil
+}
+
+// writeAttrWithCharMap writes an XML attribute with character map awareness.
+// Mapped characters are written raw (unescaped) while unmapped characters
+// go through normal XML attribute escaping.
+func writeAttrWithCharMap(sw *stream.Writer, name, value string, charMap map[rune]string) error {
+	if len(charMap) == 0 {
+		return sw.WriteAttribute(name, value)
+	}
+	// Check if any character in the value has a mapping
+	hasMapped := false
+	for _, r := range value {
+		if _, ok := charMap[r]; ok {
+			hasMapped = true
+			break
+		}
+	}
+	if !hasMapped {
+		return sw.WriteAttribute(name, value)
+	}
+	// Write attribute with mixed raw/escaped content
+	if err := sw.StartAttribute(name); err != nil {
+		return err
+	}
+	var unmapped strings.Builder
+	for _, r := range value {
+		if repl, ok := charMap[r]; ok {
+			if unmapped.Len() > 0 {
+				if err := sw.WriteString(unmapped.String()); err != nil {
+					return err
+				}
+				unmapped.Reset()
+			}
+			if err := sw.WriteRaw(repl); err != nil {
+				return err
+			}
+		} else {
+			unmapped.WriteRune(r)
+		}
+	}
+	if unmapped.Len() > 0 {
+		if err := sw.WriteString(unmapped.String()); err != nil {
+			return err
+		}
+	}
+	return sw.EndAttribute()
 }
 
 func serializeText(w io.Writer, doc *helium.Document, charMap map[rune]string) error {
