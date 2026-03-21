@@ -777,6 +777,16 @@ func undeclareInheritedNamespaces(parent *helium.Element) {
 			if alreadyDeclared {
 				continue
 			}
+			// If the child element itself uses this prefix (i.e., its
+			// namespace matches the inherited binding), add an explicit
+			// declaration rather than undeclaring. This preserves the
+			// element's own namespace while blocking further inheritance.
+			childPrefix := childElem.Prefix()
+			childURI := childElem.URI()
+			if childPrefix == prefix && childURI != "" {
+				_ = childElem.DeclareNamespace(prefix, childURI)
+				continue
+			}
 			// Add an undeclaration (empty URI) so the prefix is not visible
 			// when walking the ancestor chain.
 			_ = childElem.DeclareNamespace(prefix, "")
