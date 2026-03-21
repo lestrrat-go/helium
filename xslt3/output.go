@@ -139,6 +139,24 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 // serializeXMLWithCharMap serializes an XML document applying character map
 // substitutions. Replacement strings are written raw (not escaped).
 func serializeXMLWithCharMap(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
+	// When indent="no", buffer the output and strip the newline after the
+	// XML declaration, same as the non-charmap path.
+	if !outDef.Indent && !outDef.OmitDeclaration {
+		var buf strings.Builder
+		if err := serializeXMLWithCharMapInner(&buf, doc, outDef, charMap); err != nil {
+			return err
+		}
+		out := buf.String()
+		if idx := strings.Index(out, "?>\n"); idx >= 0 {
+			out = out[:idx+2] + out[idx+3:]
+		}
+		_, err := io.WriteString(w, out)
+		return err
+	}
+	return serializeXMLWithCharMapInner(w, doc, outDef, charMap)
+}
+
+func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
 	sw := stream.NewWriter(w)
 
 	if !outDef.OmitDeclaration {
