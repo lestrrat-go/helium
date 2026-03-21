@@ -849,6 +849,16 @@ func xmlToJSONRootElement(node helium.Node) (*helium.Element, error) {
 		if root == nil {
 			return nil, &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: document has no document element"}
 		}
+		// FOJS0006: document must have exactly one element child.
+		elemCount := 0
+		for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+			if child.Type() == helium.ElementNode {
+				elemCount++
+			}
+		}
+		if elemCount != 1 {
+			return nil, &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: document must have exactly one element child"}
+		}
 		return root, nil
 	case *helium.Element:
 		return n, nil

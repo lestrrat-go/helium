@@ -458,11 +458,11 @@ func (c *compiler) validateContextItem(elem *helium.Element) error {
 
 	// xsl:context-item must not have child elements or text content
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		switch child.(type) {
-		case *helium.Element:
+		if child.Type() == helium.ElementNode {
 			return staticError(errCodeXTSE0010, "xsl:context-item must be empty")
-		case *helium.Text:
-			if !c.shouldStripText(string(child.(*helium.Text).Content())) {
+		}
+		if child.Type() == helium.TextNode {
+			if !c.shouldStripText(string(child.Content())) {
 				return staticError(errCodeXTSE0010, "xsl:context-item must be empty")
 			}
 		}
