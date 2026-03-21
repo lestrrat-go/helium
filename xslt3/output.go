@@ -116,19 +116,23 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	if outDef.OmitDeclaration {
 		opts = append(opts, helium.WithNoDecl())
 	}
-	// The helium XML serializer adds a newline after the XML declaration
-	// and after each top-level child (libxml2 behavior). For XSLT output,
-	// when indent="no" we strip the newline after the declaration to
-	// produce a conformant XSLT serialization.
-	if !outDef.Indent && !outDef.OmitDeclaration {
+	// When standalone is "yes" or "no", or when indent="no" and
+	// the declaration is not omitted, buffer and post-process.
+	needStandalone := !outDef.OmitDeclaration && (outDef.Standalone == "yes" || outDef.Standalone == "no")
+	needStripNewline := !outDef.Indent && !outDef.OmitDeclaration
+	if needStandalone || needStripNewline {
 		var buf strings.Builder
 		if err := doc.XML(&buf, opts...); err != nil {
 			return err
 		}
 		out := buf.String()
-		// Remove the newline that immediately follows the XML declaration.
-		if idx := strings.Index(out, "?>\n"); idx >= 0 {
-			out = out[:idx+2] + out[idx+3:]
+		if needStandalone {
+			out = injectStandalone(out, outDef.Standalone)
+		}
+		if needStripNewline {
+			if idx := strings.Index(out, "?>\n"); idx >= 0 {
+				out = out[:idx+2] + out[idx+3:]
+			}
 		}
 		_, err := io.WriteString(w, out)
 		return err
@@ -136,19 +140,36 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	return doc.XML(w, opts...)
 }
 
+// injectStandalone inserts standalone="yes" or standalone="no" into the
+// XML declaration before the closing "?>".
+func injectStandalone(xml, value string) string {
+	const declEnd = "?>"
+	idx := strings.Index(xml, declEnd)
+	if idx < 0 {
+		return xml
+	}
+	return xml[:idx] + " standalone=\"" + value + "\"" + xml[idx:]
+}
+
 // serializeXMLWithCharMap serializes an XML document applying character map
 // substitutions. Replacement strings are written raw (not escaped).
 func serializeXMLWithCharMap(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
-	// When indent="no", buffer the output and strip the newline after the
-	// XML declaration, same as the non-charmap path.
-	if !outDef.Indent && !outDef.OmitDeclaration {
+	// Buffer and post-process when standalone or indent="no".
+	needStandalone := !outDef.OmitDeclaration && (outDef.Standalone == "yes" || outDef.Standalone == "no")
+	needStripNewline := !outDef.Indent && !outDef.OmitDeclaration
+	if needStandalone || needStripNewline {
 		var buf strings.Builder
 		if err := serializeXMLWithCharMapInner(&buf, doc, outDef, charMap); err != nil {
 			return err
 		}
 		out := buf.String()
-		if idx := strings.Index(out, "?>\n"); idx >= 0 {
-			out = out[:idx+2] + out[idx+3:]
+		if needStandalone {
+			out = injectStandalone(out, outDef.Standalone)
+		}
+		if needStripNewline {
+			if idx := strings.Index(out, "?>\n"); idx >= 0 {
+				out = out[:idx+2] + out[idx+3:]
+			}
 		}
 		_, err := io.WriteString(w, out)
 		return err

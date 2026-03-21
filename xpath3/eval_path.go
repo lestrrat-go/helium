@@ -440,7 +440,7 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 			return false
 		}
 		if test.Name != "" && test.Name != "*" {
-			if ixpath.LocalNameOf(n) != test.Name {
+			if !matchElementOrAttributeName(test.Name, n, ec) {
 				return false
 			}
 		}
@@ -462,7 +462,7 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 			return false
 		}
 		if test.Name != "" && test.Name != "*" {
-			if ixpath.LocalNameOf(n) != test.Name {
+			if !matchElementOrAttributeName(test.Name, n, ec) {
 				return false
 			}
 		}
@@ -530,6 +530,27 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 		return true
 	}
 	return false
+}
+
+// matchElementOrAttributeName matches an element/attribute name from an
+// ElementTest or AttributeTest against a node. Handles URIQualifiedNames
+// (Q{uri}local), prefixed names (prefix:local), and plain local names.
+func matchElementOrAttributeName(name string, n helium.Node, ec *evalContext) bool {
+	if strings.HasPrefix(name, "Q{") {
+		if idx := strings.Index(name, "}"); idx >= 0 {
+			uri := name[2:idx]
+			local := name[idx+1:]
+			return ixpath.LocalNameOf(n) == local && ixpath.NodeNamespaceURI(n) == uri
+		}
+	}
+	prefix, local := splitQName(name)
+	if ixpath.LocalNameOf(n) != local {
+		return false
+	}
+	if prefix != "" {
+		return matchPrefix(prefix, n, ec)
+	}
+	return true
 }
 
 func matchNameTest(test NameTest, n helium.Node, axis AxisType, ec *evalContext) bool {
