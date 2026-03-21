@@ -50,7 +50,12 @@ func (c *compiler) compileCharacterMap(elem *helium.Element) error {
 	if c.stylesheet.characterMaps == nil {
 		c.stylesheet.characterMaps = make(map[string]*CharacterMapDef)
 	}
-	// Merge: later declarations override earlier ones for the same name
+	// XTSE1580: duplicate character-map declarations with same name at same
+	// import precedence. Imported character maps merge silently.
+	if _, ok := c.stylesheet.characterMaps[name]; ok && !c.insideImport {
+		return staticError(errCodeXTSE1580,
+			"duplicate character-map declaration %q", name)
+	}
 	if existing, ok := c.stylesheet.characterMaps[name]; ok {
 		for r, s := range cm.Mappings {
 			existing.Mappings[r] = s
