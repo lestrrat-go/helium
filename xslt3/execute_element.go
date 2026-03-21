@@ -766,13 +766,13 @@ func collectInScopeNamespaces(elem *helium.Element) []*helium.Namespace {
 // inherit-namespaces="no" semantics: children must not inherit ANY namespace
 // reachable through the parent in the DOM tree.
 func undeclareInheritedNamespaces(parent *helium.Element) {
-	// Collect all in-scope namespace prefixes visible from the parent,
-	// including those inherited from grandparent and beyond.
-	inScope := make(map[string]struct{})
+	// Collect all in-scope namespace prefix→URI bindings visible from the
+	// parent, including those inherited from grandparent and beyond.
+	inScope := make(map[string]string) // prefix → URI
 	for cur := parent; cur != nil; {
 		for _, ns := range cur.Namespaces() {
 			if _, ok := inScope[ns.Prefix()]; !ok {
-				inScope[ns.Prefix()] = struct{}{}
+				inScope[ns.Prefix()] = ns.URI()
 			}
 		}
 		p := cur.Parent()
@@ -793,16 +793,29 @@ func undeclareInheritedNamespaces(parent *helium.Element) {
 		if !ok {
 			continue
 		}
-		for prefix := range inScope {
-			// Skip if the child already has an explicit declaration for this prefix.
+		for prefix, parentURI := range inScope {
+			// Check if the child already has an explicit declaration for this prefix.
 			alreadyDeclared := false
+			var childNSURI string
 			for _, cns := range childElem.Namespaces() {
 				if cns.Prefix() == prefix {
 					alreadyDeclared = true
+					childNSURI = cns.URI()
 					break
 				}
 			}
 			if alreadyDeclared {
+				// If the child's declaration is identical to the parent's,
+				// remove it — the serializer will see the parent's
+				// declaration in scope, so repeating it is redundant.
+				if childNSURI == parentURI {
+					childElem.RemoveNamespaceByPrefix(prefix)
+				}
+				continue
+			}
+			// If the parent binding is already an undeclaration (empty URI),
+			// the prefix is already not bound in scope — no need to redeclare.
+			if parentURI == "" {
 				continue
 			}
 			// If the child element itself uses this prefix (i.e., its
@@ -818,6 +831,35 @@ func undeclareInheritedNamespaces(parent *helium.Element) {
 			// Add an undeclaration (empty URI) so the prefix is not visible
 			// when walking the ancestor chain.
 			_ = childElem.DeclareNamespace(prefix, "")
+		}
+		// After processing this child, clean up redundant undeclarations
+		// in its descendants. An inner inherit-namespaces="no" element
+		// may have added undeclarations that are now superseded by the
+		// undeclarations we just added on this child.
+		removeRedundantDescendantUndecls(childElem)
+	}
+}
+
+// removeRedundantDescendantUndecls removes namespace undeclarations from
+// descendant elements that are redundant because the same prefix is already
+// undeclared (or bound to the same URI) on an ancestor in the serialized output.
+func removeRedundantDescendantUndecls(elem *helium.Element) {
+	// Build the set of namespace bindings on this element.
+	bindings := make(map[string]string)
+	for _, ns := range elem.Namespaces() {
+		bindings[ns.Prefix()] = ns.URI()
+	}
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		// Remove any namespace declaration on the child that is identical
+		// to what's already in scope from this element.
+		for _, cns := range childElem.Namespaces() {
+			if parentURI, ok := bindings[cns.Prefix()]; ok && cns.URI() == parentURI {
+				childElem.RemoveNamespaceByPrefix(cns.Prefix())
+			}
 		}
 	}
 }
