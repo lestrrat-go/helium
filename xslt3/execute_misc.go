@@ -78,16 +78,9 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStrin
 		return dynamicError(errCodeXTDE1140, "xsl:analyze-string invalid regex: %v", err)
 	}
 
-	// Check if regex matches the empty string
-	if isV2 {
-		matchesEmpty, emptyErr := re.MatchString("")
-		if emptyErr != nil {
-			return dynamicError(errCodeXTDE1140, "xsl:analyze-string regex error: %v", emptyErr)
-		}
-		if matchesEmpty {
-			return dynamicError(errCodeXTDE1150, "xsl:analyze-string regex must not match a zero-length string")
-		}
-	}
+	// XSLT 3.0 removed the XTDE1150 error for zero-length regex matches.
+	// Zero-length matches are handled by advancing past each one to avoid
+	// infinite loops (see below).
 
 	// Find all matches.
 	// In XSLT 3.0, zero-length matches are allowed (unlike XSLT 2.0
