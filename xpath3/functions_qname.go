@@ -57,7 +57,7 @@ func fnPrefixFromQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if qv.Prefix == "" {
 		return nil, nil
 	}
-	return SingleString(qv.Prefix), nil
+	return Sequence{AtomicValue{TypeName: TypeNCName, Value: qv.Prefix}}, nil
 }
 
 func fnLocalNameFromQName(_ context.Context, args []Sequence) (Sequence, error) {
@@ -72,7 +72,7 @@ func fnLocalNameFromQName(_ context.Context, args []Sequence) (Sequence, error) 
 	if a.TypeName != TypeQName {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected QName"}
 	}
-	return SingleString(a.QNameVal().Local), nil
+	return Sequence{AtomicValue{TypeName: TypeNCName, Value: a.QNameVal().Local}}, nil
 }
 
 func fnNamespaceURIFromQName(_ context.Context, args []Sequence) (Sequence, error) {
