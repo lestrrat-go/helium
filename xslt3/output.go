@@ -130,6 +130,19 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 	// Check if we need Unicode normalization
 	needsNormalization := outDef.NormalizationForm != "" && outDef.NormalizationForm != "NONE"
 
+	// Per the serialization spec, character map output is "immune" to
+	// normalization. When both are active, use sentinel-wrapped char
+	// map substitutions so that normalization skips them.
+	serCharMap := charMap
+	var sentinelCharMap map[rune]string
+	if needsNormalization && len(charMap) > 0 {
+		sentinelCharMap = make(map[rune]string, len(charMap))
+		for k, v := range charMap {
+			sentinelCharMap[k] = "\x00CMSTART\x00" + v + "\x00CMEND\x00"
+		}
+		serCharMap = sentinelCharMap
+	}
+
 	// Buffer when post-processing is needed
 	needsBuffer := needsEncodingConversion || needsNormalization
 	var target io.Writer
@@ -150,16 +163,16 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 	var err error
 	switch outDef.Method {
 	case "text":
-		err = serializeText(target, doc, charMap)
+		err = serializeText(target, doc, serCharMap)
 	case "html":
-		if len(charMap) > 0 {
+		if len(serCharMap) > 0 {
 			// For HTML with character maps, serialize to buffer, then apply
 			// character map to text content only (not inside tags).
 			var htmlBuf bytes.Buffer
 			if herr := serializeHTML(&htmlBuf, doc, outDef); herr != nil {
 				err = herr
 			} else {
-				result := applyCharMapToHTMLText(htmlBuf.String(), charMap)
+				result := applyCharMapToHTMLText(htmlBuf.String(), serCharMap)
 				result = escapeC1ControlsInString(result)
 				_, err = io.WriteString(target, result)
 			}
@@ -172,22 +185,22 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 			}
 		}
 	case "xhtml":
-		err = serializeXHTML(target, doc, outDef, charMap)
+		err = serializeXHTML(target, doc, outDef, serCharMap)
 	case "json":
-		if len(charMap) > 0 {
+		if len(serCharMap) > 0 {
 			var jsonBuf strings.Builder
 			if jerr := serializeJSONItems(&jsonBuf, nil, doc, outDef); jerr != nil {
 				err = jerr
 			} else {
-				_, err = io.WriteString(target, applyCharMap(jsonBuf.String(), charMap))
+				_, err = io.WriteString(target, applyCharMap(jsonBuf.String(), serCharMap))
 			}
 		} else {
 			err = serializeJSONItems(target, nil, doc, outDef)
 		}
 	case "adaptive":
-		err = serializeAdaptiveItems(target, nil, doc, charMap)
+		err = serializeAdaptiveItems(target, nil, doc, serCharMap)
 	default:
-		err = serializeXML(target, doc, outDef, charMap)
+		err = serializeXML(target, doc, outDef, serCharMap)
 	}
 	if err != nil {
 		return err
@@ -198,7 +211,13 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 
 		// Apply Unicode normalization if requested
 		if needsNormalization {
-			data = applyUnicodeNormalization(data, outDef.NormalizationForm)
+			if sentinelCharMap != nil {
+				// Extract sentinel-wrapped segments, normalize the rest,
+				// then re-insert the original (un-normalized) segments.
+				data = normalizeSentinelAware(data, outDef.NormalizationForm)
+			} else {
+				data = applyUnicodeNormalization(data, outDef.NormalizationForm)
+			}
 		}
 
 		if needsEncodingConversion {
@@ -253,13 +272,17 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 		}
 		return serializeXML(w, doc, defaultOutputDef(), cm)
 	}
+	var cm map[rune]string
+	if len(charMaps) > 0 {
+		cm = charMaps[0]
+	}
 	for i, item := range items {
 		if i > 0 {
 			if _, err := io.WriteString(w, "\n"); err != nil {
 				return err
 			}
 		}
-		s := serializeItemAdaptive(item)
+		s := serializeItemAdaptive(item, cm)
 		if _, err := io.WriteString(w, s); err != nil {
 			return err
 		}
@@ -540,12 +563,18 @@ func jsonEscapeString(s string) string {
 }
 
 // serializeItemAdaptive serializes a single item using the adaptive method.
-func serializeItemAdaptive(item xpath3.Item) string {
+func serializeItemAdaptive(item xpath3.Item, charMap map[rune]string) string {
+	maybeApply := func(s string) string {
+		if len(charMap) > 0 {
+			return applyCharMap(s, charMap)
+		}
+		return s
+	}
 	switch v := item.(type) {
 	case xpath3.MapItem:
-		return serializeMapAdaptive(v)
+		return serializeMapAdaptive(v, charMap)
 	case xpath3.ArrayItem:
-		return serializeArrayAdaptive(v)
+		return serializeArrayAdaptive(v, charMap)
 	case xpath3.NodeItem:
 		var buf bytes.Buffer
 		if elem, ok := v.Node.(*helium.Element); ok {
@@ -555,21 +584,21 @@ func serializeItemAdaptive(item xpath3.Item) string {
 		} else {
 			buf.WriteString(string(v.Node.Content()))
 		}
-		return buf.String()
+		return maybeApply(buf.String())
 	case xpath3.AtomicValue:
 		s, _ := xpath3.AtomicToString(v)
-		return s
+		return maybeApply(s)
 	default:
 		if av, ok := item.(xpath3.AtomicValue); ok {
 			s, _ := xpath3.AtomicToString(av)
-			return s
+			return maybeApply(s)
 		}
 		return fmt.Sprintf("%v", item)
 	}
 }
 
 // serializeMapAdaptive serializes a map using adaptive serialization.
-func serializeMapAdaptive(m xpath3.MapItem) string {
+func serializeMapAdaptive(m xpath3.MapItem, charMap map[rune]string) string {
 	var buf bytes.Buffer
 	buf.WriteString("map{")
 	first := true
@@ -582,7 +611,7 @@ func serializeMapAdaptive(m xpath3.MapItem) string {
 		buf.WriteString(jsonEscapeString(ks))
 		buf.WriteByte(':')
 		if len(v) == 1 {
-			buf.WriteString(serializeItemAdaptive(v[0]))
+			buf.WriteString(serializeItemAdaptive(v[0], charMap))
 		} else if len(v) == 0 {
 			buf.WriteString("()")
 		} else {
@@ -591,7 +620,7 @@ func serializeMapAdaptive(m xpath3.MapItem) string {
 				if i > 0 {
 					buf.WriteByte(',')
 				}
-				buf.WriteString(serializeItemAdaptive(vi))
+				buf.WriteString(serializeItemAdaptive(vi, charMap))
 			}
 			buf.WriteByte(')')
 		}
@@ -602,7 +631,7 @@ func serializeMapAdaptive(m xpath3.MapItem) string {
 }
 
 // serializeArrayAdaptive serializes an array using adaptive serialization.
-func serializeArrayAdaptive(a xpath3.ArrayItem) string {
+func serializeArrayAdaptive(a xpath3.ArrayItem, charMap map[rune]string) string {
 	var buf bytes.Buffer
 	buf.WriteByte('[')
 	members := a.Members()
@@ -611,7 +640,7 @@ func serializeArrayAdaptive(a xpath3.ArrayItem) string {
 			buf.WriteByte(',')
 		}
 		if len(member) == 1 {
-			buf.WriteString(serializeItemAdaptive(member[0]))
+			buf.WriteString(serializeItemAdaptive(member[0], charMap))
 		} else if len(member) == 0 {
 			buf.WriteString("()")
 		} else {
@@ -620,7 +649,7 @@ func serializeArrayAdaptive(a xpath3.ArrayItem) string {
 				if j > 0 {
 					buf.WriteByte(',')
 				}
-				buf.WriteString(serializeItemAdaptive(vi))
+				buf.WriteString(serializeItemAdaptive(vi, charMap))
 			}
 			buf.WriteByte(')')
 		}
@@ -663,6 +692,45 @@ func applyUnicodeNormalization(data []byte, form string) []byte {
 		return data
 	}
 	return normalizeXMLContent(data, nf)
+}
+
+// normalizeSentinelAware applies Unicode normalization while preserving
+// sentinel-wrapped character map segments intact.  Segments delimited by
+// \x00CMSTART\x00 ... \x00CMEND\x00 are extracted before normalization
+// and re-inserted afterwards, then the sentinel markers are stripped.
+func normalizeSentinelAware(data []byte, form string) []byte {
+	nf, ok := resolveNormForm(form)
+	if !ok {
+		// Unknown form — just strip sentinels.
+		s := strings.ReplaceAll(string(data), "\x00CMSTART\x00", "")
+		return []byte(strings.ReplaceAll(s, "\x00CMEND\x00", ""))
+	}
+
+	// Split on sentinels, normalize non-sentinel parts, recombine.
+	s := string(data)
+	var out strings.Builder
+	out.Grow(len(s))
+	for {
+		startIdx := strings.Index(s, "\x00CMSTART\x00")
+		if startIdx < 0 {
+			// No more sentinels — normalize the rest.
+			out.Write(normalizeXMLContent([]byte(s), nf))
+			break
+		}
+		// Normalize the part before the sentinel.
+		out.Write(normalizeXMLContent([]byte(s[:startIdx]), nf))
+		s = s[startIdx+len("\x00CMSTART\x00"):]
+		endIdx := strings.Index(s, "\x00CMEND\x00")
+		if endIdx < 0 {
+			// Malformed — write remainder as-is.
+			out.WriteString(s)
+			break
+		}
+		// Write the char-map segment un-normalized.
+		out.WriteString(s[:endIdx])
+		s = s[endIdx+len("\x00CMEND\x00"):]
+	}
+	return []byte(out.String())
 }
 
 // normalizeXMLContent applies Unicode normalization to text content and
@@ -1914,6 +1982,85 @@ func applyCharMap(s string, charMap map[rune]string) string {
 			out.WriteString(repl)
 		} else {
 			out.WriteRune(r)
+		}
+	}
+	return out.String()
+}
+
+// applyCharMapToXMLContent applies a character map to serialized XML/XHTML
+// output, replacing mapped characters only in text content and attribute
+// values.  Tag names, the XML declaration, and other markup syntax are left
+// untouched so that e.g. a mapping for 'c' does not corrupt "encoding".
+func applyCharMapToXMLContent(s string, charMap map[rune]string) string {
+	var out strings.Builder
+	out.Grow(len(s))
+	i := 0
+	for i < len(s) {
+		if s[i] == '<' {
+			// Copy tag/declaration as-is, but apply charMap to attr values.
+			end := strings.IndexByte(s[i:], '>')
+			if end < 0 {
+				out.WriteString(s[i:])
+				break
+			}
+			tag := s[i : i+end+1]
+			out.WriteString(applyCharMapToXMLTag(tag, charMap))
+			i += end + 1
+			continue
+		}
+		// Text content — apply character map
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if repl, ok := charMap[r]; ok {
+			out.WriteString(repl)
+		} else {
+			out.WriteRune(r)
+		}
+		i += size
+	}
+	return out.String()
+}
+
+// applyCharMapToXMLTag applies charMap only inside attribute values of an
+// XML tag.  Tag names and attribute names are left as-is.
+func applyCharMapToXMLTag(tag string, charMap map[rune]string) string {
+	// Processing instructions and closing tags: no attribute values to map.
+	if strings.HasPrefix(tag, "<?") || strings.HasPrefix(tag, "</") {
+		return tag
+	}
+	var out strings.Builder
+	out.Grow(len(tag))
+	i := 0
+	for i < len(tag) {
+		eqIdx := strings.IndexByte(tag[i:], '=')
+		if eqIdx < 0 {
+			out.WriteString(tag[i:])
+			break
+		}
+		// Copy up to and including '='
+		out.WriteString(tag[i : i+eqIdx+1])
+		i += eqIdx + 1
+		if i >= len(tag) {
+			break
+		}
+		quote := tag[i]
+		if quote != '"' && quote != '\'' {
+			continue
+		}
+		out.WriteByte(quote)
+		i++
+		// Apply charMap inside the attribute value until closing quote.
+		for i < len(tag) && tag[i] != quote {
+			r, size := utf8.DecodeRuneInString(tag[i:])
+			if repl, ok := charMap[r]; ok {
+				out.WriteString(repl)
+			} else {
+				out.WriteRune(r)
+			}
+			i += size
+		}
+		if i < len(tag) {
+			out.WriteByte(quote)
+			i++
 		}
 	}
 	return out.String()
