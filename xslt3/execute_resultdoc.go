@@ -476,5 +476,27 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 			}
 		}
 	}
+	if inst.MediaType != nil {
+		v, err := evalAVT(inst.MediaType)
+		if err != nil {
+			return nil, err
+		}
+		base.MediaType = strings.TrimSpace(v)
+	}
+	if inst.HTMLVersion != nil {
+		v, err := evalAVT(inst.HTMLVersion)
+		if err != nil {
+			return nil, err
+		}
+		base.HTMLVersion = strings.TrimSpace(v)
+	}
+	if inst.IncludeContentType != nil {
+		v, err := evalAVT(inst.IncludeContentType)
+		if err != nil {
+			return nil, err
+		}
+		b, _ := parseXSDBool(strings.TrimSpace(v))
+		base.IncludeContentType = &b
+	}
 	return &base, nil
 }
