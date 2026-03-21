@@ -281,9 +281,29 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 	}
 	// Do NOT set ec.currentTemplate here: xsl:call-template preserves the
 	// current template rule for xsl:apply-imports/xsl:next-match.
+
+	// xsl:context-item use="absent": make the context item absent within the
+	// called template's body. This means xsl:next-match will fail with
+	// XTDE0560 because there is no context node to match against.
+	savedContextNode := ec.contextNode
+	savedContextItem := ec.contextItem
+	savedCurrentNode := ec.currentNode
+	savedCurrentTemplate := ec.currentTemplate
+	if tmpl.ContextItemUse == "absent" {
+		ec.contextNode = nil
+		ec.contextItem = nil
+		ec.currentNode = nil
+		ec.currentTemplate = nil
+	}
 	defer func() {
 		ec.cachedFnsNS = savedFnsNS
 		ec.currentPackage = savedPackage
+		if tmpl.ContextItemUse == "absent" {
+			ec.contextNode = savedContextNode
+			ec.contextItem = savedContextItem
+			ec.currentNode = savedCurrentNode
+			ec.currentTemplate = savedCurrentTemplate
+		}
 	}()
 
 	ec.pushVarScope()
