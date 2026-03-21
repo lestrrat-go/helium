@@ -1,0 +1,9 @@
+<!ELEMENT document (people, departaments)>
+<!ELEMENT people (person*)>
+<!ELEMENT person EMPTY>
+<!ATTLIST person id ID #REQUIRED>
+<!ATTLIST person name CDATA #IMPLIED>
+<!ELEMENT departaments (departament*)>
+<!ELEMENT departament EMPTY>
+<!ATTLIST departament nam CDATA #REQUIRED>
+<!ATTLIST departament people IDREFS #REQUIRED>
