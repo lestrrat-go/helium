@@ -40,47 +40,6 @@ func (c *compiler) compileLocalVariable(elem *helium.Element) (*VariableInst, er
 	return inst, nil
 }
 
-func (c *compiler) compileLocalParam(elem *helium.Element) (*ParamInst, error) {
-	name := getAttr(elem, "name")
-	if name == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
-	}
-
-	asAttr := c.resolveAsType(getAttr(elem, "as"))
-	if err := c.validateAsSequenceType(asAttr, "xsl:param "+name); err != nil {
-		return nil, err
-	}
-
-	inst := &ParamInst{
-		Name:     resolveQName(name, c.nsBindings),
-		Required: getAttr(elem, "required") == "yes",
-		As:       asAttr,
-	}
-
-	inst.Tunnel = xsdBoolTrue(getAttr(elem, "tunnel"))
-
-	selectAttr := getAttr(elem, "select")
-	if selectAttr != "" {
-		// XTSE0620: select and non-empty content are mutually exclusive.
-		if err := c.validateEmptyElement(elem, "xsl:param"); err != nil {
-			return nil, staticError(errCodeXTSE0620, "xsl:param %q has both @select and content", name)
-		}
-		expr, err := compileXPath(selectAttr, c.nsBindings)
-		if err != nil {
-			return nil, err
-		}
-		inst.Select = expr
-	} else {
-		body, err := c.compileChildren(elem)
-		if err != nil {
-			return nil, err
-		}
-		inst.Body = body
-	}
-
-	return inst, nil
-}
-
 func (c *compiler) compileMessage(elem *helium.Element) (*MessageInst, error) {
 	inst := &MessageInst{}
 
