@@ -59,22 +59,27 @@ func aggregateTypeFamily(typeName string) string {
 	return ""
 }
 
-// validateCollationArg checks if the collation argument at args[idx] is supported.
-func validateCollationArg(args []Sequence, idx int) error {
+// resolveCollationArg resolves the optional collation argument at args[idx].
+// Returns nil collation (use default) if the argument is absent or is the
+// codepoint collation.
+func resolveCollationArg(args []Sequence, idx int) (*collationImpl, error) {
 	if len(args) <= idx || len(args[idx]) == 0 {
-		return nil
+		return nil, nil
 	}
 	uri, err := coerceArgToString(args[idx])
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if uri != codepointCollationURI {
-		return &XPathError{
-			Code:    errCodeFOCH0002,
-			Message: fmt.Sprintf("unsupported collation: %s", uri),
-		}
+	if uri == codepointCollationURI {
+		return nil, nil
 	}
-	return nil
+	return resolveCollation(uri, "")
+}
+
+// validateCollationArg checks if the collation argument at args[idx] is supported.
+func validateCollationArg(args []Sequence, idx int) error {
+	_, err := resolveCollationArg(args, idx)
+	return err
 }
 
 func checkSumAvgType(a AtomicValue) error {
@@ -293,10 +298,11 @@ func fnMax(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(atoms) == 0 {
 		return nil, nil
 	}
-	if err := validateCollationArg(args, 1); err != nil {
+	coll, err := resolveCollationArg(args, 1)
+	if err != nil {
 		return nil, err
 	}
-	return maxMinCommon(atoms, true)
+	return maxMinCommon(atoms, true, coll)
 }
 
 func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
@@ -307,13 +313,14 @@ func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(atoms) == 0 {
 		return nil, nil
 	}
-	if err := validateCollationArg(args, 1); err != nil {
+	coll, err := resolveCollationArg(args, 1)
+	if err != nil {
 		return nil, err
 	}
-	return maxMinCommon(atoms, false)
+	return maxMinCommon(atoms, false, coll)
 }
 
-func maxMinCommon(atoms []AtomicValue, isMax bool) (Sequence, error) {
+func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequence, error) {
 	fnName := "fn:min"
 	if isMax {
 		fnName = "fn:max"
@@ -376,13 +383,18 @@ func maxMinCommon(atoms []AtomicValue, isMax bool) (Sequence, error) {
 			continue
 		}
 		var cmp bool
-		if isMax {
-			cmp, err = ValueCompare(TokenGt, a, best)
+		if coll != nil && family == "string" {
+			r := coll.compare(a.StringVal(), best.StringVal())
+			cmp = (isMax && r > 0) || (!isMax && r < 0)
 		} else {
-			cmp, err = ValueCompare(TokenLt, a, best)
-		}
-		if err != nil {
-			return nil, err
+			if isMax {
+				cmp, err = ValueCompare(TokenGt, a, best)
+			} else {
+				cmp, err = ValueCompare(TokenLt, a, best)
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 		if cmp {
 			best = a

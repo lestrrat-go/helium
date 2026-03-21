@@ -469,7 +469,8 @@ func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Validate optional collation argument (3rd arg)
+	// Resolve optional collation argument (3rd arg)
+	var coll *collationImpl
 	if len(args) > 2 {
 		if len(args[2]) == 0 {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "collation argument must not be empty"}
@@ -478,9 +479,10 @@ func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		coll := collA.StringVal()
-		if coll != codepointCollationURI {
-			return nil, &XPathError{Code: errCodeFOCH0002, Message: "unsupported collation: " + coll}
+		collURI := collA.StringVal()
+		coll, err = resolveCollation(collURI, "")
+		if err != nil {
+			return nil, err
 		}
 	}
 	// Per spec: untypedAtomic values are cast to xs:string for comparison
@@ -499,9 +501,15 @@ func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
 		if a.TypeName == TypeUntypedAtomic {
 			a = AtomicValue{TypeName: TypeString, Value: a.StringVal()}
 		}
-		eq, err := compareAtomic(TokenEq, a, search)
-		if err != nil {
-			continue // incomparable types are silently skipped
+		var eq bool
+		if coll != nil && isStringDerived(a.TypeName) && isStringDerived(search.TypeName) {
+			eq = coll.compare(a.StringVal(), search.StringVal()) == 0
+		} else {
+			matched, cmpErr := compareAtomic(TokenEq, a, search)
+			if cmpErr != nil {
+				continue // incomparable types are silently skipped
+			}
+			eq = matched
 		}
 		if eq {
 			result = append(result, AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(i + 1))})
