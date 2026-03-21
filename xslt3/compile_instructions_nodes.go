@@ -681,6 +681,9 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 
 	// xsl:inherit-namespaces on LRE
 	if inAttr, ok := elem.GetAttributeNS("inherit-namespaces", NSXSLT); ok {
+		if err := validateBooleanAttr("literal result element", "xsl:inherit-namespaces", inAttr); err != nil {
+			return nil, err
+		}
 		if v, vok := parseXSDBool(inAttr); vok {
 			lre.InheritNamespaces = v
 		}
