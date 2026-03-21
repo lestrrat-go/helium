@@ -170,6 +170,15 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStrin
 }
 
 func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopulatedInst) error {
+	out := ec.currentOutput()
+
+	// When the outer frame captures items (e.g. inside xsl:variable with
+	// as="map(*)?"), use sequence mode so maps/arrays aren't rejected as
+	// XTDE0450. Delegate filtering to isItemSequencePopulated.
+	if out.captureItems {
+		return ec.execWherePopulatedSequence(ctx, inst)
+	}
+
 	// Execute body into a temporary document, then filter per XSLT 3.0 section 8.4.
 	tmpDoc := helium.NewDefaultDocument()
 	tmpRoot, err := tmpDoc.CreateElement("_tmp")
@@ -237,6 +246,23 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopula
 	return nil
 }
 
+// execWherePopulatedSequence handles xsl:where-populated inside a sequence
+// context (xsl:variable with as= or similar). The body is evaluated as a
+// sequence and items are filtered using the XSLT 3.0 populated-item rules.
+func (ec *execContext) execWherePopulatedSequence(ctx context.Context, inst *WherePopulatedInst) error {
+	seq, err := ec.evaluateBodyAsSequence(ctx, inst.Body)
+	if err != nil {
+		return err
+	}
+	if !isItemSequencePopulated(seq) {
+		return nil
+	}
+	out := ec.currentOutput()
+	out.pendingItems = append(out.pendingItems, seq...)
+	out.noteOutput()
+	return nil
+}
+
 // isPopulated checks if a node is "populated" per XSLT 3.0 xsl:where-populated semantics
 // (section 11.1.8). A node N is significant unless:
 //   - N is a text node with zero-length string value
@@ -276,6 +302,45 @@ func isPopulated(node helium.Node) bool {
 		return len(node.Content()) > 0
 	default:
 		return false
+	}
+}
+
+// isItemSequencePopulated returns true if the XDM item sequence contains
+// at least one "significant" item per XSLT 3.0 xsl:where-populated rules.
+//
+// - A map is significant if it has at least one entry.
+// - An array is significant if at least one member (recursively) is
+//   a non-empty sequence containing a significant item.
+// - An empty string ("") is not significant.
+// - Any other atomic value, node, or non-empty-string is significant.
+func isItemSequencePopulated(items xpath3.Sequence) bool {
+	for _, item := range items {
+		if isItemSignificant(item) {
+			return true
+		}
+	}
+	return false
+}
+
+func isItemSignificant(item xpath3.Item) bool {
+	switch v := item.(type) {
+	case xpath3.MapItem:
+		return v.Size() > 0
+	case xpath3.ArrayItem:
+		for i := 1; i <= v.Size(); i++ {
+			member, _ := v.Get(i)
+			if isItemSequencePopulated(member) {
+				return true
+			}
+		}
+		return false
+	case xpath3.AtomicValue:
+		s, _ := xpath3.AtomicToString(v)
+		return s != ""
+	case xpath3.NodeItem:
+		return isPopulated(v.Node)
+	default:
+		return true
 	}
 }
 
