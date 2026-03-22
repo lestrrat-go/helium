@@ -29,9 +29,9 @@ const (
 	// Err is the XPath/XQuery error namespace.
 	Err = "http://www.w3.org/2005/xqt-errors"
 
-	// XML is the XML namespace (predeclared, prefix "xml").
-	XML = "http://www.w3.org/XML/1998/namespace"
+	// NamespaceXML is the XML namespace URI (predeclared, prefix "xml").
+	NamespaceXML = "http://www.w3.org/XML/1998/namespace"
 
-	// XMLNS is the XML Namespaces namespace (prefix "xmlns").
-	XMLNS = "http://www.w3.org/2000/xmlns/"
+	// NamespaceXMLNS is the XML Namespaces namespace URI (prefix "xmlns").
+	NamespaceXMLNS = "http://www.w3.org/2000/xmlns/"
 )

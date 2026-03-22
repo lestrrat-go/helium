@@ -98,7 +98,7 @@ func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.E
 
 // parseEntries walks child elements of parent and appends catalog entries.
 func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.Prefer, baseURI string, entries *[]icatalog.Entry, eh helium.ErrorHandler) {
-	if v := getAttrNS(parent, lexicon.AttrBase, lexicon.XML); v != "" {
+	if v := getAttrNS(parent, lexicon.AttrBase, lexicon.NamespaceXML); v != "" {
 		baseURI = icatalog.ResolveURI(baseURI, v)
 	}
 
@@ -115,7 +115,7 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 		localName := elem.LocalName()
 
 		elemBase := baseURI
-		if v := getAttrNS(elem, lexicon.AttrBase, lexicon.XML); v != "" {
+		if v := getAttrNS(elem, lexicon.AttrBase, lexicon.NamespaceXML); v != "" {
 			elemBase = icatalog.ResolveURI(baseURI, v)
 		}
 

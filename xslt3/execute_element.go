@@ -45,7 +45,7 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 			return err
 		}
 		// XTDE0835: namespace URI must not be the reserved xmlns namespace
-		if nsURI == lexicon.XMLNS {
+		if nsURI == lexicon.NamespaceXMLNS {
 			return dynamicError(errCodeXTDE0835,
 				"namespace URI %q is reserved and cannot be used", nsURI)
 		}
@@ -625,7 +625,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 	}
 
 	// XTDE0855: when no namespace attribute, name must not be "xmlns"
-	if inst.Namespace == nil && name == "xmlns" {
+	if inst.Namespace == nil && name == lexicon.PrefixXMLNS {
 		return dynamicError(errCodeXTDE0855,
 			"xsl:attribute name must not be %q when no namespace attribute is specified", name)
 	}
@@ -642,7 +642,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 			return err
 		}
 		// XTDE0865: the xmlns namespace URI is reserved
-		if nsURI == lexicon.XMLNS {
+		if nsURI == lexicon.NamespaceXMLNS {
 			return dynamicError(errCodeXTDE0865,
 				"namespace URI %q is reserved and cannot be used for attributes", nsURI)
 		}
@@ -1135,7 +1135,7 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 
 	// XTDE0920: the name must be either a zero-length string or an NCName,
 	// and must not be "xmlns".
-	if name == "xmlns" {
+	if name == lexicon.PrefixXMLNS {
 		return dynamicError(errCodeXTDE0920,
 			"cannot create namespace node with prefix %q", name)
 	}
@@ -1145,18 +1145,18 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 	}
 	// XTDE0925: xml prefix requires the XML namespace URI, and
 	// the XML namespace URI requires the xml prefix.
-	if name == "xml" && value != lexicon.XML {
+	if name == lexicon.PrefixXML && value != lexicon.NamespaceXML {
 		return dynamicError(errCodeXTDE0925,
 			"namespace prefix %q must be bound to %q, got %q",
-			name, lexicon.XML, value)
+			name, lexicon.NamespaceXML, value)
 	}
-	if value == lexicon.XML && name != "xml" {
+	if value == lexicon.NamespaceXML && name != lexicon.PrefixXML {
 		return dynamicError(errCodeXTDE0925,
 			"namespace URI %q can only be bound to prefix %q, got %q",
-			value, "xml", name)
+			value, lexicon.PrefixXML, name)
 	}
 	// XTDE0905: the xmlns namespace URI is reserved
-	if value == lexicon.XMLNS {
+	if value == lexicon.NamespaceXMLNS {
 		return dynamicError(errCodeXTDE0905,
 			"namespace URI %q is reserved and cannot be used", value)
 	}
@@ -1175,7 +1175,7 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 	// The xml namespace is always implicitly declared — skip it to
 	// avoid creating a redundant namespace declaration that some
 	// serializers might output as an element.
-	if name == "xml" && value == lexicon.XML {
+	if name == lexicon.PrefixXML && value == lexicon.NamespaceXML {
 		return nil
 	}
 

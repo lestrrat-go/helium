@@ -1193,7 +1193,7 @@ func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 		if idx := strings.Index(tok.Value, "}"); idx >= 0 {
 			uri := tok.Value[2:idx]
 			local := tok.Value[idx+1:]
-			if uri == lexicon.XMLNS {
+			if uri == lexicon.NamespaceXMLNS {
 				return nil, &XPathError{Code: errCodeXPST0081, Message: "the xmlns namespace URI cannot be used in name tests"}
 			}
 			return NameTest{URI: uri, Local: local}, nil

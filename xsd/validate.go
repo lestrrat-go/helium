@@ -250,7 +250,7 @@ func isSpecialAttr(a *helium.Attribute) bool {
 	if uri == lexicon.XSI {
 		return true
 	}
-	if uri == lexicon.XML {
+	if uri == lexicon.NamespaceXML {
 		return true
 	}
 	return false

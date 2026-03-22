@@ -451,7 +451,7 @@ func validateXMLNSAttr(localName, value string) (string, bool, error) {
 // ("", false, nil) when no matching global attribute declaration is found.
 func (r *schemaRegistry) ValidateAttribute(localName, nsURI, value string) (string, bool, error) {
 	// Check built-in XML namespace declarations.
-	if nsURI == lexicon.XML {
+	if nsURI == lexicon.NamespaceXML {
 		if r.hasXMLNSImport() {
 			return validateXMLNSAttr(localName, value)
 		}
@@ -629,7 +629,7 @@ func walkElementsForID(node helium.Node, ids map[string]struct{}) error {
 			continue
 		}
 		for _, attr := range elem.Attributes() {
-			if attr.URI() == lexicon.XML && attr.LocalName() == "id" {
+			if attr.URI() == lexicon.NamespaceXML && attr.LocalName() == "id" {
 				val := attr.Value()
 				if _, dup := ids[val]; dup {
 					return dynamicError(errCodeXTTE1555,

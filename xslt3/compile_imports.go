@@ -664,7 +664,7 @@ func findElementByID(doc *helium.Document, id string) *helium.Element {
 			if v, found := elem.GetAttribute("id"); found && v == id {
 				return elem
 			}
-			if v, found := elem.GetAttributeNS("id", lexicon.XML); found && v == id {
+			if v, found := elem.GetAttributeNS("id", lexicon.NamespaceXML); found && v == id {
 				return elem
 			}
 			if result := walk(elem); result != nil {
