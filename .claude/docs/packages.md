@@ -93,6 +93,23 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
 - Imports: helium, xpath3, xsd, internal/lexicon
 - Tests: `xslt3_test.go` runs phase-1 W3C XSLT 3.0 test sets from `testdata/xslt30/source/` when fetched
 
+## xslt3/internal/elements/
+
+XSLT element registry: metadata for all ~80 recognized XSLT 3.0 elements.
+
+- **NewRegistry() → *Registry** — create fully initialized element registry
+- **Registry.IsKnown(name) → bool** — recognized XSLT element check
+- **Registry.IsTopLevel(name) → bool** — allowed as xsl:stylesheet child
+- **Registry.IsInstruction(name) → bool** — allowed in sequence constructors
+- **Registry.IsImplemented(name) → bool** — recognized and implemented
+- **Registry.MinVersion(name) → string** — minimum XSLT version ("1.0", "2.0", "3.0")
+- **Registry.AllowedAttrs(name) → (map[string]struct{}, bool)** — element-specific unprefixed attrs
+- **Registry.ValidParents(name) → []string** — valid parent elements for child-only elements
+- **Registry.IsValidChild(child, parent) → bool** — parent-child validation
+- Types: `ElementInfo`, `ElementContext` (bitmask: `CtxTopLevel`, `CtxInstruction`, `CtxChildOnly`, `CtxRoot`)
+- Files: `elements.go` (Registry API), `data.go` (element definitions)
+- Imports: internal/lexicon
+
 ## xsd/
 
 XML Schema (XSD) 1.0 compilation and validation.
@@ -257,7 +274,8 @@ Shared spec vocabulary strings reused across packages.
 - Namespaces: XML Catalog, XSLT, XSD, XSI, XPath/XQuery function namespaces, XML, XMLNS
 - XML vocabulary: common prefixes + attribute/value names such as `xml:base`
 - Catalog vocabulary: OASIS catalog element names, attribute names, `prefer` values
-- Files: `ns.go`, `xml.go`, `catalog.go`
+- XSLT vocabulary: `XSLTElement*` constants for all XSLT element local names
+- Files: `ns.go`, `xml.go`, `catalog.go`, `xslt.go`
 - Imports: none
 
 - **Load(name) → encoding.Encoding** — lookup by normalized name
