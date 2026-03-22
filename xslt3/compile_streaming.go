@@ -813,8 +813,18 @@ func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 	return inst, nil
 }
 
+// mergeSourceAllowedAttrs lists the valid attributes on xsl:merge-source.
+var mergeSourceAllowedAttrs = map[string]struct{}{
+	"name": {}, "for-each-item": {}, "for-each-source": {},
+	"select": {}, "streamable": {}, "sort-before-merge": {},
+	"use-accumulators": {}, "validation": {},
+}
+
 // compileMergeSource compiles an xsl:merge-source element.
 func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error) {
+	if err := c.validateXSLTAttrs(elem, mergeSourceAllowedAttrs); err != nil {
+		return nil, err
+	}
 	src := &MergeSource{
 		Name:    getAttr(elem, "name"),
 		BaseURI: stylesheetBaseURI(elem, c.baseURI),

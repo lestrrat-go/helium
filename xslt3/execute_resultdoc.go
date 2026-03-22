@@ -286,6 +286,14 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		return fmtErr
 	}
 
+	// XTDE1460: the format attribute must reference a declared xsl:output.
+	if effectiveFormat != "" {
+		if _, ok := ec.stylesheet.outputs[effectiveFormat]; !ok {
+			return dynamicError(errCodeXTDE1460,
+				"xsl:result-document format %q does not match any declared xsl:output", effectiveFormat)
+		}
+	}
+
 	// Resolve parameter-document if specified as AVT.
 	if inst.ParameterDocAVT != nil && inst.ParameterDocOutputDef == nil {
 		pdHref, pdErr := inst.ParameterDocAVT.evaluate(ctx, ec.contextNode)

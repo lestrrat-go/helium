@@ -76,7 +76,7 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 			if err := serializeJSONItems(&buf, items, doc, outDef); err != nil {
 				return err
 			}
-			_, err := io.WriteString(w, applyCharMap(buf.String(), outDef.ResolvedCharMap))
+			_, err := io.WriteString(w, applyCharMapJSON(buf.String(), outDef.ResolvedCharMap))
 			return err
 		}
 		return serializeJSONItems(w, items, doc, outDef)
@@ -257,7 +257,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 			if jerr := serializeJSONItems(&jsonBuf, nil, doc, outDef); jerr != nil {
 				err = jerr
 			} else {
-				_, err = io.WriteString(target, applyCharMap(jsonBuf.String(), serCharMap))
+				_, err = io.WriteString(target, applyCharMapJSON(jsonBuf.String(), serCharMap))
 			}
 		} else {
 			err = serializeJSONItems(target, nil, doc, outDef)
@@ -2063,6 +2063,61 @@ func applyCharMap(s string, charMap map[rune]string) string {
 		} else {
 			out.WriteRune(r)
 		}
+	}
+	return out.String()
+}
+
+// applyCharMapJSON applies a character map to JSON-serialized output.
+// JSON escape sequences (e.g., \/) are recognized: if the unescaped
+// character is in the character map, the entire escape sequence is
+// replaced with the map value.
+func applyCharMapJSON(s string, charMap map[rune]string) string {
+	var out strings.Builder
+	out.Grow(len(s))
+	i := 0
+	for i < len(s) {
+		if s[i] == '\\' && i+1 < len(s) {
+			next := s[i+1]
+			// Map JSON escape sequences to their unescaped character
+			var unescaped rune
+			switch next {
+			case '/':
+				unescaped = '/'
+			case 'n':
+				unescaped = '\n'
+			case 'r':
+				unescaped = '\r'
+			case 't':
+				unescaped = '\t'
+			case 'b':
+				unescaped = '\b'
+			case 'f':
+				unescaped = '\f'
+			case '"':
+				unescaped = '"'
+			case '\\':
+				unescaped = '\\'
+			default:
+				out.WriteByte(s[i])
+				i++
+				continue
+			}
+			if repl, ok := charMap[unescaped]; ok {
+				out.WriteString(repl)
+				i += 2
+				continue
+			}
+			out.WriteByte(s[i])
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if repl, ok := charMap[r]; ok {
+			out.WriteString(repl)
+		} else {
+			out.WriteRune(r)
+		}
+		i += size
 	}
 	return out.String()
 }

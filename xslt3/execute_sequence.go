@@ -390,7 +390,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 			// addNodeUntracked is used so the separator does NOT count as
 			// output for on-empty detection.
 			if s == "" {
-				if prevWasAtomic && out.emptyAtomicGen != out.seqConstructorGen {
+				if prevWasAtomic && !out.wherePopulated && out.emptyAtomicGen != out.seqConstructorGen {
 					sepStr := " "
 					if out.itemSeparator != nil {
 						sepStr = *out.itemSeparator
