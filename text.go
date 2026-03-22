@@ -7,12 +7,14 @@ type Text struct {
 	node
 }
 
+const textNodeName = "(text)"
+
 func newText(b []byte) *Text {
 	t := Text{}
 	t.etype = TextNode
 	t.content = make([]byte, len(b))
 	copy(t.content, b)
-	t.name = "(text)"
+	t.name = textNodeName
 	return &t
 }
 

@@ -296,21 +296,23 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 	if prefix != "" {
 		elemName = prefix + ":" + localname
 	}
-	for _, a := range e.Attributes() {
+	e.ForEachAttribute(func(a *Attribute) bool {
 		aLocalName := a.LocalName()
 		aPrefix := a.Prefix()
 		if decl := lookupAttributeDecl(doc, aLocalName, aPrefix, elemName); decl != nil {
 			a.SetAType(decl.AType())
 		}
-	}
+		return true
+	})
 
 	// Register ID attributes in the document's ID table for O(1) lookup.
 	if !ctx.loadsubset.IsSet(SkipIDs) {
-		for _, a := range e.Attributes() {
+		e.ForEachAttribute(func(a *Attribute) bool {
 			if a.Name() == lexicon.QNameXMLID || a.AType() == enum.AttrID {
 				doc.RegisterID(a.Value(), e)
 			}
-		}
+			return true
+		})
 	}
 
 	var parent Node

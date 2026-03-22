@@ -174,6 +174,11 @@ func appendText(n Node, b []byte) error {
 	if last := n.LastChild(); last != nil && last.Type() == TextNode {
 		return last.(*Text).AppendText(b)
 	}
+	// Use slab allocator when the node belongs to a document.
+	if doc := n.OwnerDocument(); doc != nil {
+		t, _ := doc.CreateText(b)
+		return n.AddChild(t)
+	}
 	t := newText(b)
 	return n.AddChild(t)
 }
@@ -271,8 +276,18 @@ func addChild(n Node, cur Node) error {
 		return nil
 	}
 
+	// Fast path: when lastChild has no next sibling (the normal case),
+	// link directly without virtual dispatch through AddSibling.
+	if l.NextSibling() == nil && !(cur.Type() == TextNode && l.Type() == TextNode) {
+		l.SetNextSibling(cur)
+		cur.SetPrevSibling(l)
+		cur.SetParent(n)
+		setLastChild(n, cur)
+		return nil
+	}
+
 	// AddSibling handles setting the parent, and the
-	// lastChild pointer
+	// lastChild pointer (also merges adjacent text nodes)
 	if err := l.AddSibling(cur); err != nil {
 		return err
 	}
