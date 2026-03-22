@@ -1002,10 +1002,10 @@ func predicateIsNonMotionlessSS(ss *Stylesheet, pred xpath3.Expr) bool {
 				}
 			}
 		case xpath3.ContextItemExpr:
-			// "." in a predicate means the predicate accesses the context item.
-			// This is consuming (reads the string value / content).
-			nonMotionless = true
-			return false
+			// "." in a predicate refers to the context item of the step being
+			// filtered, not the streaming context. Accessing the context item's
+			// value (e.g., [. < 1000]) is a motionless operation — it does not
+			// navigate the document tree. This is safe in streaming predicates.
 		}
 		return true
 	})
