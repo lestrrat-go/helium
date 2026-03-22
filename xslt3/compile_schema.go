@@ -150,59 +150,52 @@ func checkTypedModePatterns(ss *Stylesheet) error {
 // element name tests that don't exist in the imported schemas.
 func checkPatternAgainstSchema(p *Pattern, reg *schemaRegistry) error {
 	for _, alt := range p.Alternatives {
-		if err := checkExprAgainstSchema(alt.expr, reg, p.xpathDefaultNS); err != nil {
+		if err := checkExprAgainstSchema(alt.expr, reg, p.xpathDefaultNS, p.nsBindings); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// checkExprAgainstSchema walks an expression AST and checks element name
-// tests in axis steps against imported schemas.
-func checkExprAgainstSchema(expr xpath3.Expr, reg *schemaRegistry, xpathDefaultNS string) error {
+// checkExprAgainstSchema walks an expression AST and checks the first step
+// of each relative path expression for element name tests against imported
+// schemas. Per the XSLT 3.0 spec, XTSE3105 only applies to the first
+// StepExprP of a RelativePathExprP.
+func checkExprAgainstSchema(expr xpath3.Expr, reg *schemaRegistry, xpathDefaultNS string, nsBindings map[string]string) error {
 	switch e := expr.(type) {
 	case xpath3.LocationPath:
-		for _, step := range e.Steps {
-			if err := checkStepAgainstSchema(step, reg, xpathDefaultNS); err != nil {
-				return err
-			}
+		if len(e.Steps) > 0 {
+			return checkStepAgainstSchema(e.Steps[0], reg, xpathDefaultNS, nsBindings)
 		}
 	case *xpath3.LocationPath:
-		for _, step := range e.Steps {
-			if err := checkStepAgainstSchema(step, reg, xpathDefaultNS); err != nil {
-				return err
-			}
+		if len(e.Steps) > 0 {
+			return checkStepAgainstSchema(e.Steps[0], reg, xpathDefaultNS, nsBindings)
 		}
 	case xpath3.PathStepExpr:
-		if err := checkExprAgainstSchema(e.Left, reg, xpathDefaultNS); err != nil {
-			return err
-		}
-		return checkExprAgainstSchema(e.Right, reg, xpathDefaultNS)
+		// For path/step, check the leftmost expression's first step
+		return checkExprAgainstSchema(e.Left, reg, xpathDefaultNS, nsBindings)
 	case *xpath3.PathStepExpr:
-		if err := checkExprAgainstSchema(e.Left, reg, xpathDefaultNS); err != nil {
-			return err
-		}
-		return checkExprAgainstSchema(e.Right, reg, xpathDefaultNS)
+		return checkExprAgainstSchema(e.Left, reg, xpathDefaultNS, nsBindings)
 	case xpath3.FilterExpr:
-		return checkExprAgainstSchema(e.Expr, reg, xpathDefaultNS)
+		return checkExprAgainstSchema(e.Expr, reg, xpathDefaultNS, nsBindings)
 	case *xpath3.FilterExpr:
-		return checkExprAgainstSchema(e.Expr, reg, xpathDefaultNS)
+		return checkExprAgainstSchema(e.Expr, reg, xpathDefaultNS, nsBindings)
 	case xpath3.UnionExpr:
-		if err := checkExprAgainstSchema(e.Left, reg, xpathDefaultNS); err != nil {
+		if err := checkExprAgainstSchema(e.Left, reg, xpathDefaultNS, nsBindings); err != nil {
 			return err
 		}
-		return checkExprAgainstSchema(e.Right, reg, xpathDefaultNS)
+		return checkExprAgainstSchema(e.Right, reg, xpathDefaultNS, nsBindings)
 	case *xpath3.UnionExpr:
-		if err := checkExprAgainstSchema(e.Left, reg, xpathDefaultNS); err != nil {
+		if err := checkExprAgainstSchema(e.Left, reg, xpathDefaultNS, nsBindings); err != nil {
 			return err
 		}
-		return checkExprAgainstSchema(e.Right, reg, xpathDefaultNS)
+		return checkExprAgainstSchema(e.Right, reg, xpathDefaultNS, nsBindings)
 	}
 	return nil
 }
 
 // checkStepAgainstSchema checks if a step's NameTest is a declared element.
-func checkStepAgainstSchema(step xpath3.Step, reg *schemaRegistry, xpathDefaultNS string) error {
+func checkStepAgainstSchema(step xpath3.Step, reg *schemaRegistry, xpathDefaultNS string, nsBindings map[string]string) error {
 	// Only check axes whose principal node kind is Element
 	if step.Axis == xpath3.AxisAttribute || step.Axis == xpath3.AxisNamespace {
 		return nil
@@ -220,6 +213,10 @@ func checkStepAgainstSchema(step xpath3.Step, reg *schemaRegistry, xpathDefaultN
 	}
 	// Determine element namespace
 	ns := nt.URI
+	if ns == "" && nt.Prefix != "" {
+		// Resolve prefix using compile-time namespace bindings
+		ns = nsBindings[nt.Prefix]
+	}
 	if ns == "" && nt.Prefix == "" {
 		ns = xpathDefaultNS
 	}

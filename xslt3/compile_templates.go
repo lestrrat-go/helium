@@ -288,6 +288,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 					source:         tmpl.Match.source,
 					Alternatives:   []*PatternAlt{alt},
 					xpathDefaultNS: tmpl.Match.xpathDefaultNS,
+					nsBindings:     tmpl.Match.nsBindings,
 				}
 				split.Priority = alt.priority
 				splitCopy := split // allocate separate heap object
