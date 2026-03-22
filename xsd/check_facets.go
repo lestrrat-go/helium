@@ -51,7 +51,7 @@ func (c *compiler) checkFacetConsistency() {
 		if td.Facets == nil {
 			continue
 		}
-		if qn.NS == lexicon.XSD {
+		if qn.NS == lexicon.NamespaceXSD {
 			continue
 		}
 		entries = append(entries, facetEntry{qn: qn, td: td})

@@ -45,12 +45,12 @@ type TypedFunctionByArity interface {
 
 // Namespace URIs for standard XPath 3.1 function namespaces.
 const (
-	NSFn    = lexicon.Fn
-	NSMath  = lexicon.Math
-	NSMap   = lexicon.Map
-	NSArray = lexicon.Array
-	NSErr   = lexicon.Err
-	NSXS    = lexicon.XSD
+	NSFn    = lexicon.NamespaceFn
+	NSMath  = lexicon.NamespaceMath
+	NSMap   = lexicon.NamespaceMap
+	NSArray = lexicon.NamespaceArray
+	NSErr   = lexicon.NamespaceErr
+	NSXS    = lexicon.NamespaceXSD
 )
 
 // Default prefix → URI mappings.

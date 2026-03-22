@@ -1324,7 +1324,6 @@ type serializeOptions struct {
 	encoding            string
 }
 
-const serializeParamsNS = "http://www.w3.org/2010/xslt-xquery-serialization"
 
 func parseSerializeOptions(args []Sequence) (serializeOptions, error) {
 	opts := serializeOptions{
@@ -1446,7 +1445,7 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 	if !ok {
 		return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options node must be an element"}
 	}
-	if elem.URI() != serializeParamsNS || elem.LocalName() != "serialization-parameters" {
+	if elem.URI() != lexicon.NamespaceSerialization || elem.LocalName() != "serialization-parameters" {
 		return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options root must be output:serialization-parameters"}
 	}
 	if len(elem.Attributes()) != 0 {
@@ -1479,7 +1478,7 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 		}
 		seen[key] = struct{}{}
 
-		if param.URI() != serializeParamsNS {
+		if param.URI() != lexicon.NamespaceSerialization {
 			if _, err := readSerializeParamValue(param); err != nil {
 				return opts, err
 			}
@@ -1608,7 +1607,7 @@ func validateSerializeCharacterMapsElement(elem *helium.Element) error {
 		}
 
 		charMap := child.(*helium.Element)
-		if charMap.URI() != serializeParamsNS || charMap.LocalName() != "character-map" {
+		if charMap.URI() != lexicon.NamespaceSerialization || charMap.LocalName() != "character-map" {
 			return &XPathError{Code: errCodeXPTY0004, Message: "use-character-maps children must be output:character-map"}
 		}
 		if hasNonWhitespaceContent(charMap) {

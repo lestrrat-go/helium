@@ -172,7 +172,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 				// Root is "html" in no namespace → HTML output method.
 				outDef.Method = "html"
 				outDef.OmitDeclaration = true
-			} else if strings.EqualFold(string(root.LocalName()), "html") && string(root.URI()) == xhtmlNS {
+			} else if strings.EqualFold(string(root.LocalName()), "html") && string(root.URI()) == lexicon.NamespaceXHTML {
 				// Root is "html" in XHTML namespace → XHTML output method.
 				outDef.Method = "xhtml"
 			}
@@ -1854,7 +1854,6 @@ func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMa
 	return err
 }
 
-const xhtmlNS = "http://www.w3.org/1999/xhtml"
 
 // normalizeXHTMLNamespace walks the document and converts prefixed XHTML
 // namespace elements to use the default namespace (unprefixed), as required
@@ -1871,7 +1870,7 @@ func normalizeXHTMLNamespace(doc *helium.Document) {
 		if !ok {
 			return nil
 		}
-		if string(elem.URI()) != xhtmlNS {
+		if string(elem.URI()) != lexicon.NamespaceXHTML {
 			return nil
 		}
 		if string(elem.Prefix()) == "" {
@@ -1879,7 +1878,7 @@ func normalizeXHTMLNamespace(doc *helium.Document) {
 			// haven't seen one yet.
 			if sharedNS == nil {
 				for _, ns := range elem.Namespaces() {
-					if ns.Prefix() == "" && ns.URI() == xhtmlNS {
+					if ns.Prefix() == "" && ns.URI() == lexicon.NamespaceXHTML {
 						sharedNS = ns
 						break
 					}
@@ -1894,10 +1893,10 @@ func normalizeXHTMLNamespace(doc *helium.Document) {
 
 		if !rootDone {
 			// First prefixed element: declare default XHTML namespace here
-			_ = elem.DeclareNamespace("", xhtmlNS)
+			_ = elem.DeclareNamespace("", lexicon.NamespaceXHTML)
 			// Find the namespace node we just created
 			for _, ns := range elem.Namespaces() {
-				if ns.Prefix() == "" && ns.URI() == xhtmlNS {
+				if ns.Prefix() == "" && ns.URI() == lexicon.NamespaceXHTML {
 					sharedNS = ns
 					break
 				}
@@ -1914,10 +1913,6 @@ func normalizeXHTMLNamespace(doc *helium.Document) {
 	}))
 }
 
-const (
-	svgNS     = "http://www.w3.org/2000/svg"
-	mathmlNS  = "http://www.w3.org/1998/Math/MathML"
-)
 
 // normalizeForeignNamespaces converts prefixed SVG and MathML elements to use
 // their default namespace (unprefixed) for HTML5 XHTML output. Each element
@@ -1930,7 +1925,7 @@ func normalizeForeignNamespaces(doc *helium.Document) {
 			return nil
 		}
 		uri := string(elem.URI())
-		if uri != svgNS && uri != mathmlNS {
+		if uri != lexicon.NamespaceSVG && uri != lexicon.NamespaceMathML {
 			return nil
 		}
 		if string(elem.Prefix()) == "" {

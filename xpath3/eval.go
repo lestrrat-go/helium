@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -244,7 +245,7 @@ func (ec *evalContext) getImplicitTimezone() *time.Location {
 // dynamic context's default collation URI.  Returns nil when the default
 // is the codepoint collation (the XPath default), so callers can fast-path.
 func (ec *evalContext) resolveDefaultCollation() *collationImpl {
-	if ec.defaultCollation == "" || ec.defaultCollation == codepointCollationURI {
+	if ec.defaultCollation == "" || ec.defaultCollation == lexicon.CollationCodepoint {
 		return nil
 	}
 	coll, err := resolveCollation(ec.defaultCollation, "")

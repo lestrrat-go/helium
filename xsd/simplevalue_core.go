@@ -16,7 +16,7 @@ func resolveWhiteSpace(td *TypeDef) string {
 			return *cur.Facets.WhiteSpace
 		}
 		// Check if we've reached a built-in type with known whitespace behavior.
-		if cur.Name.NS == lexicon.XSD {
+		if cur.Name.NS == lexicon.NamespaceXSD {
 			switch cur.Name.Local {
 			case "string":
 				return "preserve"
@@ -223,7 +223,7 @@ func validateListValue(value string, td *TypeDef, elemName, filename string, lin
 func builtinBaseLocal(td *TypeDef) string {
 	cur := td
 	for cur != nil {
-		if cur.Name.NS == lexicon.XSD && cur.Name.Local != "" {
+		if cur.Name.NS == lexicon.NamespaceXSD && cur.Name.Local != "" {
 			return cur.Name.Local
 		}
 		cur = cur.BaseType
@@ -255,7 +255,7 @@ func typeDisplayName(td *TypeDef) string {
 		}
 		return ""
 	}
-	if td.Name.NS == lexicon.XSD {
+	if td.Name.NS == lexicon.NamespaceXSD {
 		return "xs:" + td.Name.Local
 	}
 	return td.Name.Local

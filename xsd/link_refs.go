@@ -53,7 +53,7 @@ func (c *compiler) resolveRefs() {
 			td, ok := c.schema.types[qn]
 			if !ok {
 				// Report unresolved type error for XSD built-in types that should exist.
-				if qn.NS == lexicon.XSD {
+				if qn.NS == lexicon.NamespaceXSD {
 					if src, hasSrc := c.elemRefSources[edecl]; hasSrc && c.filename != "" {
 						msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
 						c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaElemDeclErrorAttr(c.filename, src.line, src.elemName, attrType, msg), helium.ErrorLevelFatal))

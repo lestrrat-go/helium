@@ -453,7 +453,6 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	return nil
 }
 
-const nsSerializationParams = "http://www.w3.org/2010/xslt-xquery-serialization"
 
 // loadParameterDocument loads a serialization parameter document (XSLT 3.0 §9.2)
 // and applies its settings to the given OutputDef. Parameters explicitly set on
@@ -481,8 +480,8 @@ func loadParameterDocumentFromFile(outDef *OutputDef, baseURI, href string) erro
 		return staticError(errCodeXTSE0090, "cannot parse parameter-document %q: %v", href, err)
 	}
 	root := doc.DocumentElement()
-	if root == nil || root.LocalName() != "serialization-parameters" || root.URI() != nsSerializationParams {
-		return staticError(errCodeXTSE0090, "parameter-document %q: root element must be {%s}serialization-parameters", href, nsSerializationParams)
+	if root == nil || root.LocalName() != "serialization-parameters" || root.URI() != lexicon.NamespaceSerialization {
+		return staticError(errCodeXTSE0090, "parameter-document %q: root element must be {%s}serialization-parameters", href, lexicon.NamespaceSerialization)
 	}
 
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
@@ -490,7 +489,7 @@ func loadParameterDocumentFromFile(outDef *OutputDef, baseURI, href string) erro
 		if !ok {
 			continue
 		}
-		if elem.URI() != nsSerializationParams {
+		if elem.URI() != lexicon.NamespaceSerialization {
 			continue
 		}
 		val := getAttr(elem, "value")

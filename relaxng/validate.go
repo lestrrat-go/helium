@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // validator holds state during document validation.
@@ -1069,7 +1070,7 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 		return 0
 	case patternValue:
 		if ret := v.matchValue(pat, text); ret != 0 {
-			if elem != nil && pat.dataType != nil && pat.dataType.library == xsdDatatypeLibrary {
+			if elem != nil && pat.dataType != nil && pat.dataType.library == lexicon.NamespaceXSDDatatypes {
 				if validateXSDType(pat.dataType.name, strings.TrimSpace(text), nil) != 0 {
 					v.addError(elem, fmt.Sprintf("failed to compare type %s", pat.dataType.name))
 				}
@@ -1533,7 +1534,7 @@ func (v *validator) matchValue(pat *pattern, text string) int {
 				text = normalizeToken(text)
 				expected = normalizeToken(expected)
 			}
-		case xsdDatatypeLibrary:
+		case lexicon.NamespaceXSDDatatypes:
 			// XSD type-aware comparison: normalize both values
 			text = strings.TrimSpace(text)
 			expected = strings.TrimSpace(expected)
@@ -1556,7 +1557,7 @@ func (v *validator) matchData(pat *pattern, text string) int {
 	text = strings.TrimSpace(text)
 
 	switch dt.library {
-	case xsdDatatypeLibrary:
+	case lexicon.NamespaceXSDDatatypes:
 		return validateXSDType(dt.name, text, pat.params)
 	case "":
 		switch dt.name {

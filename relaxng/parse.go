@@ -8,10 +8,9 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
-const rngNS = "http://relaxng.org/ns/structure/1.0"
-const xsdDatatypeLibrary = "http://www.w3.org/2001/XMLSchema-datatypes"
 
 // compiler holds state during schema compilation.
 type compiler struct {
@@ -977,7 +976,7 @@ func elemNS(elem *helium.Element) string {
 }
 
 func isRNGElement(elem *helium.Element) bool {
-	return elem.Namespace() != nil && elemNS(elem) == rngNS
+	return elem.Namespace() != nil && elemNS(elem) == lexicon.NamespaceRelaxNG
 }
 
 func isRNG(elem *helium.Element, localName string) bool {

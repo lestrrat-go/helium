@@ -941,13 +941,12 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
 	// When a non-codepoint collation or locale-specific sorting is used,
 	// we can't reliably verify sort order so we skip the check.
 	collation := getAttr(elem, "collation")
-	codepointCollation := "http://www.w3.org/2005/xpath-functions/collation/codepoint"
 	mk.Collation = collation
 	mk.Lang = getAttr(elem, "lang")
 	mk.CaseOrder = getAttr(elem, "case-order")
 	if mk.Lang != "" || mk.CaseOrder != "" {
 		mk.HasCollation = true
-	} else if collation != "" && collation != codepointCollation {
+	} else if collation != "" && collation != lexicon.CollationCodepoint {
 		mk.HasCollation = true
 	}
 

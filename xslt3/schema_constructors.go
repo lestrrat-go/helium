@@ -161,7 +161,7 @@ func schemaConstructorArg(seq xpath3.Sequence, typeName string) (xpath3.AtomicVa
 }
 
 func (ec *execContext) schemaTypeName(uri, local string) string {
-	if uri == lexicon.XSD {
+	if uri == lexicon.NamespaceXSD {
 		return "xs:" + local
 	}
 	// Use Q{ns}local annotation format for consistency with type annotations
@@ -280,7 +280,7 @@ func schemaBuiltinXPathType(td *xsd.TypeDef) string {
 
 func schemaBuiltinBaseLocal(td *xsd.TypeDef) string {
 	for cur := td; cur != nil; cur = cur.BaseType {
-		if cur.Name.NS == lexicon.XSD && cur.Name.Local != "" {
+		if cur.Name.NS == lexicon.NamespaceXSD && cur.Name.Local != "" {
 			return cur.Name.Local
 		}
 	}

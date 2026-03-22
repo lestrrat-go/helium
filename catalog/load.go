@@ -76,9 +76,9 @@ func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.E
 		return nil, fmt.Errorf("catalog: no root element in %q", baseURI)
 	}
 
-	if root.URI() != lexicon.Catalog {
+	if root.URI() != lexicon.NamespaceCatalog {
 		return nil, fmt.Errorf("catalog: root element namespace %q is not %q in %q",
-			root.URI(), lexicon.Catalog, baseURI)
+			root.URI(), lexicon.NamespaceCatalog, baseURI)
 	}
 
 	cat := &icatalog.Catalog{
@@ -108,7 +108,7 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 		}
 		elem := child.(*helium.Element)
 
-		if elem.URI() != lexicon.Catalog {
+		if elem.URI() != lexicon.NamespaceCatalog {
 			continue
 		}
 

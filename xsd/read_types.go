@@ -426,7 +426,7 @@ func (c *compiler) parseFacets(restriction *helium.Element) *FacetSet {
 			continue
 		}
 		ce := child.(*helium.Element)
-		if ce.URI() != lexicon.XSD {
+		if ce.URI() != lexicon.NamespaceXSD {
 			continue
 		}
 		val := getAttr(ce, "value")

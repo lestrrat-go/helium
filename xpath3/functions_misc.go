@@ -7,6 +7,8 @@ import (
 	"os"
 	"sort"
 	"time"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 var qt3EnvironmentVariables = map[string]string{
@@ -41,7 +43,7 @@ func fnStaticBaseURI(ctx context.Context, _ []Sequence) (Sequence, error) {
 }
 
 func fnDefaultCollation(ctx context.Context, _ []Sequence) (Sequence, error) {
-	uri := codepointCollationURI
+	uri := lexicon.CollationCodepoint
 	if ec := getFnContext(ctx); ec != nil && ec.defaultCollation != "" {
 		uri = ec.defaultCollation
 	}

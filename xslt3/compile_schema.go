@@ -62,7 +62,7 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 		if !ok {
 			continue
 		}
-		if childElem.LocalName() == "schema" && childElem.URI() == lexicon.XSD {
+		if childElem.LocalName() == "schema" && childElem.URI() == lexicon.NamespaceXSD {
 			inlineDoc := helium.NewDefaultDocument()
 			copied, err := helium.CopyNode(childElem, inlineDoc)
 			if err != nil {
@@ -253,7 +253,7 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 		if closeIdx > 0 {
 			uri := qname[2:closeIdx]
 			local := qname[closeIdx+1:]
-			if uri == lexicon.XSD {
+			if uri == lexicon.NamespaceXSD {
 				return "xs:" + local
 			}
 			return qname
@@ -267,7 +267,7 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 			return "xs:" + local
 		}
 		if uri, ok := nsBindings[prefix]; ok {
-			if uri == lexicon.XSD {
+			if uri == lexicon.NamespaceXSD {
 				return "xs:" + local
 			}
 			// User-defined type: resolve to Q{ns}local canonical form.

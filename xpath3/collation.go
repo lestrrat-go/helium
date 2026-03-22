@@ -612,14 +612,6 @@ func IsCollationSupported(uri string) bool {
 	return err == nil
 }
 
-// codepointCollationURI is the default XPath collation URI.
-const codepointCollationURI = "http://www.w3.org/2005/xpath-functions/collation/codepoint"
-
-// ucaCollationURI is the Unicode Collation Algorithm base URI.
-const ucaCollationURI = "http://www.w3.org/2013/collation/UCA"
-
-// htmlASCIICaseInsensitiveURI is the HTML ASCII case-insensitive collation URI.
-const htmlASCIICaseInsensitiveURI = "http://www.w3.org/2005/xpath-functions/collation/html-ascii-case-insensitive"
 
 // caseblindCollationURI is the QT3 test suite's case-blind collation URI.
 const caseblindCollationURI = "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind"
@@ -639,13 +631,13 @@ func resolveCollation(uri, baseURI string) (*collationImpl, error) {
 	}
 
 	switch {
-	case uri == codepointCollationURI:
+	case uri == lexicon.CollationCodepoint:
 		return codepointCollation, nil
-	case uri == htmlASCIICaseInsensitiveURI:
+	case uri == lexicon.CollationHTMLASCII:
 		return htmlASCIICaseInsensitiveCollation, nil
 	case uri == caseblindCollationURI:
 		return htmlASCIICaseInsensitiveCollation, nil
-	case strings.HasPrefix(uri, ucaCollationURI):
+	case strings.HasPrefix(uri, lexicon.CollationUCA):
 		if cached, ok := ucaCollationCache.Load(uri); ok {
 			return cached.(*collationImpl), nil
 		}

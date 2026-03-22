@@ -19,8 +19,6 @@ import (
 )
 
 const (
-	xiNamespaceLegacy = "http://www.w3.org/2001/XInclude"
-	xiNamespaceNew    = "http://www.w3.org/2003/XInclude"
 	maxDepth          = 40
 	maxURILength      = 2000
 )
@@ -191,7 +189,7 @@ func (p *processor) processInclude(ctx context.Context, inc *helium.Element) err
 	}
 
 	// 2003 namespace with fragment in href is an error per spec
-	if getNamespaceURI(inc) == xiNamespaceNew && fragment != "" {
+	if getNamespaceURI(inc) == lexicon.NamespaceXInclude11 && fragment != "" {
 		return p.handleFallback(inc, fmt.Errorf("xi:include: invalid fragment identifier in URI, use the xpointer attribute"))
 	}
 
@@ -709,7 +707,7 @@ func spliceReplace(target helium.Node, nodes []helium.Node) {
 }
 
 func isXINamespace(ns string) bool {
-	return ns == xiNamespaceLegacy || ns == xiNamespaceNew
+	return ns == lexicon.NamespaceXInclude || ns == lexicon.NamespaceXInclude11
 }
 
 func isFallback(n helium.Node) bool {
@@ -797,10 +795,10 @@ func getNamespaceURI(n helium.Node) string {
 func getAttr(elem *helium.Element, name string) string {
 	elemNS := getNamespaceURI(elem)
 	var otherNS string
-	if elemNS == xiNamespaceLegacy {
-		otherNS = xiNamespaceNew
+	if elemNS == lexicon.NamespaceXInclude {
+		otherNS = lexicon.NamespaceXInclude11
 	} else {
-		otherNS = xiNamespaceLegacy
+		otherNS = lexicon.NamespaceXInclude
 	}
 
 	attrs := elem.Attributes()

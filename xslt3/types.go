@@ -603,7 +603,7 @@ func normalizeTypeName(name string, ec ...*execContext) string {
 		local := name[idx+1:]
 		if len(ec) > 0 && ec[0] != nil {
 			if ns, ok := ec[0].stylesheet.namespaces[prefix]; ok {
-				if ns == lexicon.XSD {
+				if ns == lexicon.NamespaceXSD {
 					return "xs:" + local
 				}
 				return xpath3.QAnnotation(ns, local)

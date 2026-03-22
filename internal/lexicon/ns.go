@@ -2,36 +2,69 @@
 package lexicon
 
 const (
-	// Catalog is the OASIS XML Catalog namespace.
-	Catalog = "urn:oasis:names:tc:entity:xmlns:xml:catalog"
+	// NamespaceCatalog is the OASIS XML Catalog namespace.
+	NamespaceCatalog = "urn:oasis:names:tc:entity:xmlns:xml:catalog"
 
-	// XSLT is the XSLT 1.0/2.0/3.0 namespace.
-	XSLT = "http://www.w3.org/1999/XSL/Transform"
+	// NamespaceXSLT is the XSLT 1.0/2.0/3.0 namespace.
+	NamespaceXSLT = "http://www.w3.org/1999/XSL/Transform"
 
-	// XSD is the W3C XML Schema namespace.
-	XSD = "http://www.w3.org/2001/XMLSchema"
+	// NamespaceXSD is the W3C XML Schema namespace.
+	NamespaceXSD = "http://www.w3.org/2001/XMLSchema"
 
-	// XSI is the XML Schema instance namespace.
-	XSI = "http://www.w3.org/2001/XMLSchema-instance"
+	// NamespaceXSI is the XML Schema instance namespace.
+	NamespaceXSI = "http://www.w3.org/2001/XMLSchema-instance"
 
-	// Fn is the XPath 3.1 standard function namespace.
-	Fn = "http://www.w3.org/2005/xpath-functions"
+	// NamespaceFn is the XPath 3.1 standard function namespace.
+	NamespaceFn = "http://www.w3.org/2005/xpath-functions"
 
-	// Math is the XPath 3.1 math function namespace.
-	Math = "http://www.w3.org/2005/xpath-functions/math"
+	// NamespaceMath is the XPath 3.1 math function namespace.
+	NamespaceMath = "http://www.w3.org/2005/xpath-functions/math"
 
-	// Map is the XPath 3.1 map function namespace.
-	Map = "http://www.w3.org/2005/xpath-functions/map"
+	// NamespaceMap is the XPath 3.1 map function namespace.
+	NamespaceMap = "http://www.w3.org/2005/xpath-functions/map"
 
-	// Array is the XPath 3.1 array function namespace.
-	Array = "http://www.w3.org/2005/xpath-functions/array"
+	// NamespaceArray is the XPath 3.1 array function namespace.
+	NamespaceArray = "http://www.w3.org/2005/xpath-functions/array"
 
-	// Err is the XPath/XQuery error namespace.
-	Err = "http://www.w3.org/2005/xqt-errors"
+	// NamespaceErr is the XPath/XQuery error namespace.
+	NamespaceErr = "http://www.w3.org/2005/xqt-errors"
 
 	// NamespaceXML is the XML namespace URI (predeclared, prefix "xml").
 	NamespaceXML = "http://www.w3.org/XML/1998/namespace"
 
 	// NamespaceXMLNS is the XML Namespaces namespace URI (prefix "xmlns").
 	NamespaceXMLNS = "http://www.w3.org/2000/xmlns/"
+
+	// NamespaceXSDDatatypes is the XSD datatypes library namespace (used by RelaxNG).
+	NamespaceXSDDatatypes = "http://www.w3.org/2001/XMLSchema-datatypes"
+
+	// NamespaceXHTML is the XHTML namespace.
+	NamespaceXHTML = "http://www.w3.org/1999/xhtml"
+
+	// NamespaceSVG is the SVG namespace.
+	NamespaceSVG = "http://www.w3.org/2000/svg"
+
+	// NamespaceMathML is the MathML namespace.
+	NamespaceMathML = "http://www.w3.org/1998/Math/MathML"
+
+	// NamespaceXInclude is the XInclude 1.0 (Second Edition) namespace.
+	NamespaceXInclude = "http://www.w3.org/2001/XInclude"
+
+	// NamespaceXInclude11 is the XInclude 1.1 namespace.
+	NamespaceXInclude11 = "http://www.w3.org/2003/XInclude"
+
+	// NamespaceRelaxNG is the RELAX NG structure namespace.
+	NamespaceRelaxNG = "http://relaxng.org/ns/structure/1.0"
+
+	// NamespaceSerialization is the XSLT/XQuery serialization parameters namespace.
+	NamespaceSerialization = "http://www.w3.org/2010/xslt-xquery-serialization"
+
+	// CollationCodepoint is the XPath codepoint collation URI.
+	CollationCodepoint = "http://www.w3.org/2005/xpath-functions/collation/codepoint"
+
+	// CollationUCA is the Unicode Collation Algorithm (UCA) collation URI.
+	CollationUCA = "http://www.w3.org/2013/collation/UCA"
+
+	// CollationHTMLASCII is the HTML ASCII case-insensitive collation URI.
+	CollationHTMLASCII = "http://www.w3.org/2005/xpath-functions/collation/html-ascii-case-insensitive"
 )

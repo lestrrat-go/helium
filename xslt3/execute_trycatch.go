@@ -245,7 +245,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	// Extract error code and QName from the error.
 	// Unwrap wrapper errors (e.g., AVT XTDE0045 wrapping FOAR0001) to find
 	// the most specific XPath/XSLT error code for catch clause matching.
-	errNS := lexicon.Err
+	errNS := lexicon.NamespaceErr
 	errCode := errCodeXSLT0000
 	errDesc := tryErr.Error()
 	var errQName xpath3.QNameValue
@@ -398,7 +398,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *TryCatc
 	ec.pushVarScope()
 	defer ec.popVarScope()
 
-	errNS := lexicon.Err
+	errNS := lexicon.NamespaceErr
 	errCode := errCodeXSLT0000
 	errDesc := tryErr.Error()
 	var errQName xpath3.QNameValue

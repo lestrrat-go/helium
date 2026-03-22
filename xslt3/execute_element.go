@@ -466,7 +466,7 @@ func (ec *execContext) annotateAttributesFromType(elem *helium.Element, typeName
 			if au.Name.Local == attr.LocalName() && au.Name.NS == attr.URI() {
 				if au.TypeName.Local != "" {
 					var ann string
-					if au.TypeName.NS == lexicon.XSD {
+					if au.TypeName.NS == lexicon.NamespaceXSD {
 						ann = "xs:" + au.TypeName.Local
 					} else {
 						ann = xpath3.QAnnotation(au.TypeName.NS, au.TypeName.Local)

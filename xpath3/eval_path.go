@@ -728,7 +728,7 @@ func resolveTestTypeName(raw string, ec *evalContext) string {
 		}
 		if ec != nil && ec.namespaces != nil {
 			if uri, ok := ec.namespaces[prefix]; ok {
-				if uri == lexicon.XSD {
+				if uri == lexicon.NamespaceXSD {
 					return "xs:" + local
 				}
 				return QAnnotation(uri, local)

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xsd"
 )
 
@@ -20,7 +21,7 @@ func loadSchemasFromSchemaLocation(ctx context.Context, doc *helium.Document) ([
 	seen := make(map[string]struct{})
 	var paths []string
 	for _, attr := range root.Attributes() {
-		if attr.URI() != "http://www.w3.org/2001/XMLSchema-instance" {
+		if attr.URI() != lexicon.NamespaceXSI {
 			continue
 		}
 		switch attr.LocalName() {

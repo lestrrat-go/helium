@@ -30,7 +30,7 @@ func collectNSContext(elem *helium.Element) map[string]string {
 }
 
 func isXSDElement(elem *helium.Element, localName string) bool {
-	return elem.LocalName() == localName && elem.URI() == lexicon.XSD
+	return elem.LocalName() == localName && elem.URI() == lexicon.NamespaceXSD
 }
 
 func getAttr(elem *helium.Element, name string) string {
@@ -146,7 +146,7 @@ func registerBuiltinTypes(s *Schema) {
 		"anyType", "anySimpleType",
 	}
 	for _, name := range builtins {
-		qn := QName{Local: name, NS: lexicon.XSD}
+		qn := QName{Local: name, NS: lexicon.NamespaceXSD}
 		ct := ContentTypeSimple
 		td := &TypeDef{
 			Name:        qn,

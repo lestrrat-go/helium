@@ -286,9 +286,9 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 		// Qualified attribute must not be in the XSI namespace.
 		form := getAttr(elem, attrForm)
 		if form == "qualified" || (form == "" && c.schema.attrFormQualified) {
-			if c.schema.targetNamespace == lexicon.XSI {
+			if c.schema.targetNamespace == lexicon.NamespaceXSI {
 				c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.filename, line, local, "attribute",
-					"The target namespace must not match '"+lexicon.XSI+"'."), helium.ErrorLevelFatal))
+					"The target namespace must not match '"+lexicon.NamespaceXSI+"'."), helium.ErrorLevelFatal))
 				c.errorCount++
 			}
 		}

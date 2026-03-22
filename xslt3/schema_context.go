@@ -549,7 +549,7 @@ func findDocumentElement(doc *helium.Document) *helium.Element {
 // compare against the declared type hierarchy.
 func xsdTypeNameFromDef(td *xsd.TypeDef) string {
 	for cur := td; cur != nil; cur = cur.BaseType {
-		if cur.Name.NS == lexicon.XSD && cur.Name.Local != "" {
+		if cur.Name.NS == lexicon.NamespaceXSD && cur.Name.Local != "" {
 			return "xs:" + cur.Name.Local
 		}
 		if cur.Name.NS != "" && cur.Name.Local != "" {
@@ -619,7 +619,6 @@ func collectXMLIDsFromDoc(doc *helium.Document, ids map[string]struct{}) error {
 	return walkElementsForID(doc.FirstChild(), ids)
 }
 
-const nsXSI = "http://www.w3.org/2001/XMLSchema-instance"
 
 // walkElementsForID recursively walks sibling node chains collecting xml:id values.
 func walkElementsForID(node helium.Node, ids map[string]struct{}) error {
@@ -662,7 +661,7 @@ func collectXSITypeIDREFsFromNode(node helium.Node, idrefs *[]string) {
 		}
 		// Check for xsi:type="xs:IDREF" or xsi:type="xs:IDREFS".
 		for _, attr := range elem.Attributes() {
-			if attr.URI() == nsXSI && attr.LocalName() == "type" {
+			if attr.URI() == lexicon.NamespaceXSI && attr.LocalName() == "type" {
 				xsiType := attr.Value()
 				// Strip prefix to get local type name (e.g., "xs:IDREFS" → "IDREFS").
 				if idx := len(xsiType) - len("IDREFS"); idx >= 0 && xsiType[idx:] == "IDREFS" {

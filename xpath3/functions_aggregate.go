@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"strconv"
 	"time"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func init() {
@@ -70,7 +72,7 @@ func resolveCollationArg(args []Sequence, idx int) (*collationImpl, error) {
 	if err != nil {
 		return nil, err
 	}
-	if uri == codepointCollationURI {
+	if uri == lexicon.CollationCodepoint {
 		return nil, nil
 	}
 	return resolveCollation(uri, "")
