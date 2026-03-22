@@ -80,8 +80,9 @@ type vmLocationPathExpr struct {
 func (vmLocationPathExpr) exprNode() {}
 
 type vmPathExpr struct {
-	Filter Expr
-	Path   *vmLocationPathExpr
+	Filter        Expr
+	Path          *vmLocationPathExpr
+	PreserveOrder bool // true when filter is reverse()/sort() — skip doc-order sort
 }
 
 func (vmPathExpr) exprNode() {}
@@ -585,7 +586,7 @@ func (b *vmBuilder) lowerPathExpr(expr PathExpr) (Expr, error) {
 		lp := lowered.(vmLocationPathExpr)
 		path = &lp
 	}
-	return vmPathExpr{Filter: filter, Path: path}, nil
+	return vmPathExpr{Filter: filter, Path: path, PreserveOrder: filterPreservesOrder(expr.Filter)}, nil
 }
 
 func (b *vmBuilder) lowerVMPathExpr(expr vmPathExpr) (Expr, error) {
@@ -602,7 +603,7 @@ func (b *vmBuilder) lowerVMPathExpr(expr vmPathExpr) (Expr, error) {
 		lp := lowered.(vmLocationPathExpr)
 		path = &lp
 	}
-	return vmPathExpr{Filter: filter, Path: path}, nil
+	return vmPathExpr{Filter: filter, Path: path, PreserveOrder: expr.PreserveOrder}, nil
 }
 
 func (b *vmBuilder) lowerPathStepExpr(expr PathStepExpr) (Expr, error) {

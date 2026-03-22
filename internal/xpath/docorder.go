@@ -188,6 +188,37 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 	return result, nil
 }
 
+// DeduplicateNodesPreserveOrder removes duplicate nodes while preserving
+// the input order (no document-order sort). Used when the caller has
+// explicitly ordered the sequence (e.g. fn:reverse, fn:sort).
+// Returns ErrNodeSetLimit if the result exceeds maxNodes.
+func DeduplicateNodesPreserveOrder(nodes []helium.Node, maxNodes int) ([]helium.Node, error) {
+	if len(nodes) <= 1 {
+		return nodes, nil
+	}
+	seen := make(map[helium.Node]struct{}, len(nodes))
+	nsKeys := make(map[NSNodeKey]struct{})
+	result := make([]helium.Node, 0, len(nodes))
+	for _, n := range nodes {
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		if n.Type() == helium.NamespaceNode {
+			key := NSNodeKey{Parent: n.Parent(), Prefix: n.Name()}
+			if _, ok := nsKeys[key]; ok {
+				continue
+			}
+			nsKeys[key] = struct{}{}
+		}
+		seen[n] = struct{}{}
+		result = append(result, n)
+	}
+	if len(result) > maxNodes {
+		return nil, ErrNodeSetLimit
+	}
+	return result, nil
+}
+
 // CompareNodeOrder compares two nodes by document order using ancestor-chain
 // walking. Returns -1 if a comes before b, +1 if after, 0 if same node.
 // This is O(depth) per call, avoiding the need to index the entire document.

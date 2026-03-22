@@ -351,7 +351,14 @@ func evalPathExpr(evalFn exprEvaluator, ec *evalContext, e PathExpr) (Sequence, 
 		result = append(result, subNodes...)
 	}
 	// Per XPath 3.1 §3.3.5: E1/E2 returns nodes in document order.
-	deduped, err := ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
+	// However, when the filter is an ordering function (reverse, sort),
+	// preserve the explicit ordering and only deduplicate.
+	var deduped []helium.Node
+	if filterPreservesOrder(e.Filter) {
+		deduped, err = ixpath.DeduplicateNodesPreserveOrder(result, ec.maxNodes)
+	} else {
+		deduped, err = ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +392,12 @@ func evalVMPathExpr(evalFn exprEvaluator, ec *evalContext, e vmPathExpr) (Sequen
 		subNodes, _ := NodesFrom(subResult)
 		result = append(result, subNodes...)
 	}
-	deduped, err := ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
+	var deduped []helium.Node
+	if e.PreserveOrder {
+		deduped, err = ixpath.DeduplicateNodesPreserveOrder(result, ec.maxNodes)
+	} else {
+		deduped, err = ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -394,6 +406,21 @@ func evalVMPathExpr(evalFn exprEvaluator, ec *evalContext, e vmPathExpr) (Sequen
 		seq[i] = nodeItemFor(ec, n)
 	}
 	return seq, nil
+}
+
+// filterPreservesOrder returns true if the filter expression is a function
+// call that explicitly controls sequence order (reverse, sort). In these
+// cases, a subsequent path step (/@attr) should preserve the caller's
+// ordering rather than re-sorting into document order.
+func filterPreservesOrder(e Expr) bool {
+	fc, ok := e.(FunctionCall)
+	if !ok {
+		return false
+	}
+	if fc.Prefix != "" {
+		return false
+	}
+	return fc.Name == "reverse" || fc.Name == "sort"
 }
 
 // evalPathStepExpr evaluates E1/E2 where E2 is a non-axis expression.
@@ -438,7 +465,11 @@ func evalPathStepExpr(evalFn exprEvaluator, ec *evalContext, e PathStepExpr) (Se
 	}
 
 	if isNodeResult {
-		allNodes, err = ixpath.DeduplicateNodes(allNodes, ec.docOrder, ec.maxNodes)
+		if filterPreservesOrder(e.Left) {
+			allNodes, err = ixpath.DeduplicateNodesPreserveOrder(allNodes, ec.maxNodes)
+		} else {
+			allNodes, err = ixpath.DeduplicateNodes(allNodes, ec.docOrder, ec.maxNodes)
+		}
 		if err != nil {
 			return nil, err
 		}
