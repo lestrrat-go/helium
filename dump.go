@@ -1283,7 +1283,7 @@ func (d *Writer) dumpXHTMLAttrList(out io.Writer, e *Element) {
 			nameAttr = attr
 		case "lang":
 			langAttr = attr
-		case "xml:lang":
+		case lexicon.QNameXMLLang:
 			xmlLangAttr = attr
 		}
 

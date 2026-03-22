@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -703,7 +704,7 @@ func (d *Document) GetElementByID(id string) *Element {
 		elem := n.(*Element)
 		for _, a := range elem.Attributes() {
 			// Check xml:id (normalize value — xs:ID collapses whitespace)
-			if a.Name() == "xml:id" && strings.TrimSpace(a.Value()) == id {
+			if a.Name() == lexicon.QNameXMLID && strings.TrimSpace(a.Value()) == id {
 				found = elem
 				return errors.New("found")
 			}

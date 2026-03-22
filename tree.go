@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/strcursor"
@@ -306,7 +307,7 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 	// Register ID attributes in the document's ID table for O(1) lookup.
 	if !ctx.loadsubset.IsSet(SkipIDs) {
 		for _, a := range e.Attributes() {
-			if a.Name() == "xml:id" || a.AType() == enum.AttrID {
+			if a.Name() == lexicon.QNameXMLID || a.AType() == enum.AttrID {
 				doc.RegisterID(a.Value(), e)
 			}
 		}
@@ -632,7 +633,7 @@ func (t *TreeBuilder) AttributeDecl(ctxif context.Context, eName string, aName s
 
 	ctx := getParserCtx(ctxif)
 
-	if aName == "xml:id" && typ != enum.AttrID {
+	if aName == lexicon.QNameXMLID && typ != enum.AttrID {
 		// libxml2 says "raise the error but keep the validity flag"
 		// but I don't know if we can do that..
 		return errors.New("xml:id: attribute type should be enum.AttrID")

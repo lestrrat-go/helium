@@ -215,7 +215,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 
 	// Handle xml:space on xsl:template
 	savedPreserveSpace := c.preserveSpace
-	if xs := getAttr(elem, "xml:space"); xs != "" {
+	if xs := getAttr(elem, lexicon.QNameXMLSpace); xs != "" {
 		c.preserveSpace = (xs == "preserve")
 	}
 

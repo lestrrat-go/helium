@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/xpointer"
 )
@@ -864,7 +865,7 @@ func resolveURI(href, base string) (string, error) {
 func computeAndSetBaseURI(elem *helium.Element, includedURI, targetBase string) {
 	// If the included element already has xml:base set, leave it alone
 	for _, a := range elem.Attributes() {
-		if a.Name() == "xml:base" {
+		if a.Name() == lexicon.QNameXMLBase {
 			return
 		}
 	}
@@ -875,7 +876,7 @@ func computeAndSetBaseURI(elem *helium.Element, includedURI, targetBase string) 
 		return
 	}
 
-	_ = elem.SetAttribute("xml:base", base)
+	_ = elem.SetAttribute(lexicon.QNameXMLBase, base)
 }
 
 // computeBaseForIncludedNode sets xml:base on a node that was included via
@@ -886,7 +887,7 @@ func computeBaseForIncludedNode(elem *helium.Element, srcEffectiveBase, targetEf
 	// Check if this element has an existing xml:base attribute
 	var existingBase string
 	for _, a := range elem.Attributes() {
-		if a.Name() == "xml:base" {
+		if a.Name() == lexicon.QNameXMLBase {
 			existingBase = a.Value()
 			break
 		}
@@ -904,14 +905,14 @@ func computeBaseForIncludedNode(elem *helium.Element, srcEffectiveBase, targetEf
 		if newBase == "" {
 			return
 		}
-		_ = elem.SetAttribute("xml:base", newBase)
+		_ = elem.SetAttribute(lexicon.QNameXMLBase, newBase)
 	} else {
 		// No xml:base — set one relative to the target's effective base.
 		newBase := relativeURI(srcEffectiveBase, targetEffectiveBase)
 		if newBase == "" {
 			return
 		}
-		_ = elem.SetAttribute("xml:base", newBase)
+		_ = elem.SetAttribute(lexicon.QNameXMLBase, newBase)
 	}
 }
 
@@ -1046,7 +1047,7 @@ func effectiveBaseURI(node helium.Node, docURI string) string {
 	for n := node; n != nil; n = n.Parent() {
 		if elem, ok := n.(*helium.Element); ok {
 			for _, a := range elem.Attributes() {
-				if a.Name() == "xml:base" {
+				if a.Name() == lexicon.QNameXMLBase {
 					bases = append(bases, a.Value())
 					break
 				}

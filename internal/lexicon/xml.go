@@ -9,6 +9,11 @@ const (
 	AttrLang  = "lang"
 	AttrSpace = "space"
 
+	QNameXMLBase  = "xml:base"
+	QNameXMLID    = "xml:id"
+	QNameXMLLang  = "xml:lang"
+	QNameXMLSpace = "xml:space"
+
 	SpaceDefault  = "default"
 	SpacePreserve = "preserve"
 
