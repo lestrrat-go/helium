@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -368,12 +369,18 @@ func groupLookupKey(item xpath3.Item, collationKeyFn func(string) string) (strin
 // is treated as a single composite key.
 func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByExpr *xpath3.Expression, composite bool, collationKeyFn func(string) string) ([]fegGroup, error) {
 	type entry struct {
-		key    string
-		keySeq xpath3.Sequence
-		items  xpath3.Sequence
+		key      string
+		keyAtom  xpath3.AtomicValue // original atomic value for eq comparison
+		keySeq   xpath3.Sequence
+		items    xpath3.Sequence
+		orderIdx int // index into order slice
 	}
 	var order []string
 	groupMap := make(map[string]*entry)
+	// numericGroups holds entries whose key is numeric so that
+	// non-transitive cross-type comparisons (float/double/decimal)
+	// can be resolved via linear scan using AtomicEquals.
+	var numericGroups []*entry
 
 	savedPos := ec.position
 	savedSize := ec.size
@@ -431,18 +438,50 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 			// Track which groups this item has already been added to,
 			// since an item with duplicate key values (e.g., pop=5
 			// and name-length=5) should appear only once in a group.
-			addedToGroup := make(map[string]struct{})
+			addedToGroup := make(map[int]struct{})
 			for _, keyItem := range resultSeq {
-				lookupKey, keySeq := groupLookupKey(keyItem, collationKeyFn)
-				if _, already := addedToGroup[lookupKey]; already {
-					continue
-				}
-				addedToGroup[lookupKey] = struct{}{}
-				if e, ok := groupMap[lookupKey]; ok {
-					e.items = append(e.items, item)
+				av, atomErr := xpath3.AtomizeItem(keyItem)
+				isNumeric := atomErr == nil && av.IsNumeric()
+
+				if isNumeric && collationKeyFn == nil {
+					// Numeric keys require value-based comparison
+					// because of non-transitive equality across
+					// float/double/decimal (XSLT erratum E25).
+					matched := false
+					for _, ng := range numericGroups {
+						if xpath3.AtomicEquals(av, ng.keyAtom) {
+							if _, already := addedToGroup[ng.orderIdx]; !already {
+								ng.items = append(ng.items, item)
+								addedToGroup[ng.orderIdx] = struct{}{}
+							}
+							matched = true
+							break
+						}
+					}
+					if !matched {
+						idx := len(order)
+						lookupKey := "N:" + strconv.Itoa(idx)
+						e := &entry{keyAtom: av, keySeq: xpath3.Sequence{av}, items: xpath3.Sequence{item}, orderIdx: idx}
+						groupMap[lookupKey] = e
+						numericGroups = append(numericGroups, e)
+						order = append(order, lookupKey)
+						addedToGroup[idx] = struct{}{}
+					}
 				} else {
-					groupMap[lookupKey] = &entry{keySeq: keySeq, items: xpath3.Sequence{item}}
-					order = append(order, lookupKey)
+					lookupKey, keySeq := groupLookupKey(keyItem, collationKeyFn)
+					// Use a sentinel based on order index for dedup.
+					if e, ok := groupMap[lookupKey]; ok {
+						if _, already := addedToGroup[e.orderIdx]; !already {
+							e.items = append(e.items, item)
+							addedToGroup[e.orderIdx] = struct{}{}
+						}
+					} else {
+						idx := len(order)
+						e := &entry{keySeq: keySeq, items: xpath3.Sequence{item}, orderIdx: idx}
+						groupMap[lookupKey] = e
+						order = append(order, lookupKey)
+						addedToGroup[idx] = struct{}{}
+					}
 				}
 			}
 		}
