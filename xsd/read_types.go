@@ -68,7 +68,7 @@ func (c *compiler) parseComplexType(elem *helium.Element) (*TypeDef, error) {
 		td.ContentType = ContentTypeMixed
 	}
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -144,7 +144,7 @@ func (c *compiler) parseComplexType(elem *helium.Element) (*TypeDef, error) {
 }
 
 func (c *compiler) parseComplexContent(elem *helium.Element, td *TypeDef) error {
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -168,7 +168,7 @@ func (c *compiler) parseRestriction(elem *helium.Element, td *TypeDef) error {
 	}
 
 	// Parse child model groups and attributes.
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -224,7 +224,7 @@ func (c *compiler) parseExtension(elem *helium.Element, td *TypeDef) error {
 		c.typeRefs[td] = qn
 	}
 	// Parse child content model (if any).
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -281,7 +281,7 @@ func (c *compiler) parseExtension(elem *helium.Element, td *TypeDef) error {
 
 func (c *compiler) parseSimpleContent(elem *helium.Element, td *TypeDef) {
 	td.ContentType = ContentTypeSimple
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -310,7 +310,7 @@ func (c *compiler) parseSimpleContent(elem *helium.Element, td *TypeDef) {
 // parseSimpleContentChildren parses attribute/attributeGroup children within
 // a simpleContent extension or restriction element.
 func (c *compiler) parseSimpleContentChildren(derivation *helium.Element, td *TypeDef) {
-	for child := derivation.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(derivation) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -335,7 +335,7 @@ func (c *compiler) parseSimpleType(elem *helium.Element) (*TypeDef, error) {
 		ContentType: ContentTypeSimple,
 	}
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -348,7 +348,7 @@ func (c *compiler) parseSimpleType(elem *helium.Element) (*TypeDef, error) {
 				c.typeRefs[td] = qn
 			} else {
 				// Look for inline <simpleType> child as the base type.
-				for gc := ce.FirstChild(); gc != nil; gc = gc.NextSibling() {
+				for gc := range helium.Children(ce) {
 					if gc.Type() != helium.ElementNode {
 						continue
 					}
@@ -373,7 +373,7 @@ func (c *compiler) parseSimpleType(elem *helium.Element) (*TypeDef, error) {
 				c.itemTypeRefs[td] = qn
 			} else {
 				// Look for inline <simpleType> child as the item type.
-				for gc := ce.FirstChild(); gc != nil; gc = gc.NextSibling() {
+				for gc := range helium.Children(ce) {
 					if gc.Type() != helium.ElementNode {
 						continue
 					}
@@ -398,7 +398,7 @@ func (c *compiler) parseSimpleType(elem *helium.Element) (*TypeDef, error) {
 				}
 			}
 			// Parse inline <simpleType> children.
-			for gc := ce.FirstChild(); gc != nil; gc = gc.NextSibling() {
+			for gc := range helium.Children(ce) {
 				if gc.Type() != helium.ElementNode {
 					continue
 				}
@@ -421,7 +421,7 @@ func (c *compiler) parseSimpleType(elem *helium.Element) (*TypeDef, error) {
 func (c *compiler) parseFacets(restriction *helium.Element) *FacetSet {
 	var fs *FacetSet
 
-	for child := restriction.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(restriction) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}

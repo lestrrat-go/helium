@@ -78,7 +78,7 @@ func (c *compiler) checkGlobalElement(elem *helium.Element) {
 
 	// type and inline complexType/simpleType are mutually exclusive.
 	if getAttr(elem, attrType) != "" {
-		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(elem) {
 			if child.Type() != helium.ElementNode {
 				continue
 			}
@@ -157,7 +157,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 		}
 
 		// First child not allowed with ref (except annotation).
-		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(elem) {
 			if child.Type() != helium.ElementNode {
 				continue
 			}
@@ -210,7 +210,7 @@ func (c *compiler) checkLocalElement(elem *helium.Element) {
 
 		// type and inline complexType/simpleType checks.
 		hasType := getAttr(elem, attrType) != ""
-		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(elem) {
 			if child.Type() != helium.ElementNode {
 				continue
 			}
@@ -264,7 +264,7 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 		}
 
 		// simpleType child not allowed with ref.
-		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(elem) {
 			if child.Type() != helium.ElementNode {
 				continue
 			}
@@ -312,7 +312,7 @@ func (c *compiler) checkAttributeUse(elem *helium.Element) {
 
 		// type and inline simpleType are mutually exclusive.
 		if getAttr(elem, attrType) != "" {
-			for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			for child := range helium.Children(elem) {
 				if child.Type() != helium.ElementNode {
 					continue
 				}
@@ -351,7 +351,7 @@ func (c *compiler) checkAnnotation(elem *helium.Element) {
 
 	// Check for invalid content (non-element children like text nodes).
 	hasInvalidContent := false
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() == helium.TextNode {
 			text := strings.TrimSpace(string(child.Content()))
 			if text != "" {
@@ -367,7 +367,7 @@ func (c *compiler) checkAnnotation(elem *helium.Element) {
 	}
 
 	// Check children (appinfo, documentation).
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}

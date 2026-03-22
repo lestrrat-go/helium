@@ -10,7 +10,7 @@ import (
 
 // processIncludesAndImports handles xs:include and xs:import elements.
 func (c *compiler) processIncludes(root *helium.Element) error {
-	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(root) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -218,7 +218,7 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 	}
 
 	// Phase B: Process redefine children (overrides).
-	for child := redefineElem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(redefineElem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -319,7 +319,7 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 			// inline. parseNamedAttributeGroup only collects xs:attribute children
 			// and doesn't handle xs:attributeGroup ref children within a definition.
 			var attrs []*AttrUse
-			for gc := elem.FirstChild(); gc != nil; gc = gc.NextSibling() {
+			for gc := range helium.Children(elem) {
 				if gc.Type() != helium.ElementNode {
 					continue
 				}

@@ -121,7 +121,7 @@ func (c *compiler) readElementType(elem *helium.Element, decl *ElementDecl, sour
 		return nil
 	}
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}

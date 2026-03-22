@@ -193,7 +193,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 
 // parseSchemaChildren parses the children of an xs:schema element.
 func (c *compiler) parseSchemaChildren(root *helium.Element) error {
-	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(root) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}

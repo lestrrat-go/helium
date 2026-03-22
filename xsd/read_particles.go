@@ -13,7 +13,7 @@ func (c *compiler) parseNamedGroup(elem *helium.Element) error {
 	}
 
 	// A named group has exactly one child compositor (sequence, choice, or all).
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -48,7 +48,7 @@ func (c *compiler) parseNamedAttributeGroup(elem *helium.Element) error {
 
 	qn := QName{Local: name, NS: c.schema.targetNamespace}
 	var attrs []*AttrUse
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -70,7 +70,7 @@ func (c *compiler) parseModelGroup(elem *helium.Element, compositor ModelGroupKi
 		MaxOccurs:  maxOccurs,
 	}
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}

@@ -162,7 +162,7 @@ func (c *compiler) parseAttributeUse(elem *helium.Element) *AttrUse {
 // parseIDConstraints scans element children for xs:key, xs:keyref, xs:unique declarations.
 func (c *compiler) parseIDConstraints(elem *helium.Element) []*IDConstraint {
 	var idcs []*IDConstraint
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -200,7 +200,7 @@ func (c *compiler) parseIDConstraint(elem *helium.Element, kind IDCKind) *IDCons
 	if kind == IDCKeyRef {
 		idc.Refer = getAttr(elem, attrRefer)
 	}
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}

@@ -139,7 +139,7 @@ func (vc *validationContext) validateElementContent(elem *helium.Element, edecl 
 	case ContentTypeElementOnly, ContentTypeMixed:
 		// For element-only content, non-whitespace text children are not allowed.
 		if td.ContentType == ContentTypeElementOnly {
-			for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			for child := range helium.Children(elem) {
 				if child.Type() == helium.TextNode || child.Type() == helium.CDATASectionNode {
 					if strings.TrimSpace(string(child.Content())) != "" {
 						msg := "Character content other than whitespace is not allowed because the content type is 'element-only'."
@@ -163,7 +163,7 @@ func (vc *validationContext) validateElementContent(elem *helium.Element, edecl 
 
 func (vc *validationContext) validateSimpleContent(elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
 	// Simple content types must not have child elements.
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() == helium.ElementNode {
 			vc.out.WriteString(validityError(vc.filename, elem.Line(), elem.LocalName(),
 				"Element content is not allowed, because the content type is a simple type definition."))
@@ -202,7 +202,7 @@ func (vc *validationContext) validateSimpleContent(elem *helium.Element, edecl *
 }
 
 func (vc *validationContext) validateEmptyContent(elem *helium.Element) error {
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.ElementNode:
 			ce := child.(*helium.Element)
@@ -232,7 +232,7 @@ type childElem struct {
 
 func collectChildElements(elem *helium.Element) []childElem {
 	var children []childElem
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() == helium.ElementNode {
 			ce := child.(*helium.Element)
 			children = append(children, childElem{elem: ce, name: ce.LocalName(), ns: ce.URI(), displayName: elemDisplayName(ce)})
@@ -475,7 +475,7 @@ func lookupElemDecl(elem *helium.Element, schema *Schema) *ElementDecl {
 
 func elemTextContent(elem *helium.Element) string {
 	var buf []byte
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			buf = append(buf, child.Content()...)
@@ -524,7 +524,7 @@ func (vc *validationContext) validateNilledElement(elem *helium.Element, edecl *
 	}
 
 	// xsi:nil="true" — the element must have no character or element children.
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.ElementNode:
 			ce := child.(*helium.Element)
