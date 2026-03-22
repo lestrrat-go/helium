@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -251,7 +252,7 @@ func (ec *execContext) evaluateWithParam(ctx context.Context, wp *WithParam) (xp
 //    from the package to be called by other templates in the same package
 func (ec *execContext) resolveNamedTemplate(name string) (*Template, bool) {
 	// Handle xsl:original — resolve to the original overridden template
-	if name == "{"+NSXSLT+"}original" {
+	if name == "{"+lexicon.NamespaceXSLT+"}original" {
 		if ec.overridingTemplate != nil && ec.overridingTemplate.OriginalTemplate != nil {
 			return ec.overridingTemplate.OriginalTemplate, true
 		}

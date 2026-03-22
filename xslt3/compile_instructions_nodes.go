@@ -694,7 +694,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 
 	// XTDE0160: xsl:version < 2.0 on a LRE when backwards compatibility
 	// is not supported
-	if ver, ok := elem.GetAttributeNS("version", NSXSLT); ok {
+	if ver, ok := elem.GetAttributeNS("version", lexicon.NamespaceXSLT); ok {
 		ver = strings.TrimSpace(ver)
 		if ver != "" {
 			if f, err := strconv.ParseFloat(ver, 64); err == nil && f < 2.0 {
@@ -714,7 +714,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	}
 
 	// xsl:inherit-namespaces on LRE
-	if inAttr, ok := elem.GetAttributeNS("inherit-namespaces", NSXSLT); ok {
+	if inAttr, ok := elem.GetAttributeNS("inherit-namespaces", lexicon.NamespaceXSLT); ok {
 		if err := validateBooleanAttr("literal result element", "xsl:inherit-namespaces", inAttr); err != nil {
 			return nil, err
 		}
@@ -727,10 +727,10 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	// xsl:extension-element-prefixes (cumulative with parent)
 	savedExcludes := c.localExcludes
 	needNewExcludes := false
-	if _, ok := elem.GetAttributeNS("exclude-result-prefixes", NSXSLT); ok {
+	if _, ok := elem.GetAttributeNS("exclude-result-prefixes", lexicon.NamespaceXSLT); ok {
 		needNewExcludes = true
 	}
-	if _, ok := elem.GetAttributeNS("extension-element-prefixes", NSXSLT); ok {
+	if _, ok := elem.GetAttributeNS("extension-element-prefixes", lexicon.NamespaceXSLT); ok {
 		needNewExcludes = true
 	}
 	if needNewExcludes {
@@ -742,7 +742,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 		// exclude-result-prefixes applies to URIs, not prefixes.
 		// When a child element rebinds a prefix to a different URI,
 		// the original URI (not the new one) remains excluded.
-		if erp, ok := elem.GetAttributeNS("exclude-result-prefixes", NSXSLT); ok {
+		if erp, ok := elem.GetAttributeNS("exclude-result-prefixes", lexicon.NamespaceXSLT); ok {
 			if erp == "#all" {
 				for prefix := range c.stylesheet.namespaces {
 					if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
@@ -770,7 +770,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 				}
 			}
 		}
-		if eep, ok := elem.GetAttributeNS("extension-element-prefixes", NSXSLT); ok {
+		if eep, ok := elem.GetAttributeNS("extension-element-prefixes", lexicon.NamespaceXSLT); ok {
 			for _, prefix := range strings.Fields(eep) {
 				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 					newExcludes[uri] = struct{}{}
@@ -786,7 +786,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	// in those namespaces are recognised as extension elements (and their
 	// xsl:fallback children are compiled).
 	savedExtURIs := c.extensionURIs
-	if eep, ok := elem.GetAttributeNS("extension-element-prefixes", NSXSLT); ok {
+	if eep, ok := elem.GetAttributeNS("extension-element-prefixes", lexicon.NamespaceXSLT); ok {
 		newExtURIs := make(map[string]struct{})
 		for k, v := range c.extensionURIs {
 			newExtURIs[k] = v
@@ -825,7 +825,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	// rather than c.stylesheet.namespaces (which accumulates globally and
 	// leaks namespaces from sibling variable trees).
 	for prefix, uri := range c.nsBindings {
-		if uri == NSXSLT || prefix == "" {
+		if uri == lexicon.NamespaceXSLT || prefix == "" {
 			continue
 		}
 		if isExcluded(prefix, uri) {
@@ -840,7 +840,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	for _, ns := range elem.Namespaces() {
 		uri := ns.URI()
 		prefix := ns.Prefix()
-		if uri == NSXSLT {
+		if uri == lexicon.NamespaceXSLT {
 			continue
 		}
 		if prefix == "" && uri == "" {
@@ -857,7 +857,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 
 	// Validate and compile attributes
 	for _, attr := range elem.Attributes() {
-		if attr.URI() == NSXSLT {
+		if attr.URI() == lexicon.NamespaceXSLT {
 			// XTSE0805: only certain XSLT attributes are allowed on LREs
 			if _, ok := lreAllowedXSLTAttrs[attr.LocalName()]; !ok {
 				// In forwards-compatible mode (version > 3.0), unknown
@@ -940,7 +940,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	}
 
 	// Handle xsl:use-attribute-sets
-	if uas, ok := elem.GetAttributeNS("use-attribute-sets", NSXSLT); ok {
+	if uas, ok := elem.GetAttributeNS("use-attribute-sets", lexicon.NamespaceXSLT); ok {
 		for _, name := range strings.Fields(uas) {
 			resolved := resolveQName(name, c.nsBindings)
 			lre.UseAttributeSets = append(lre.UseAttributeSets, resolved)
@@ -950,7 +950,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	}
 
 	// Handle xsl:validation
-	if valAttr, ok := elem.GetAttributeNS("validation", NSXSLT); ok {
+	if valAttr, ok := elem.GetAttributeNS("validation", lexicon.NamespaceXSLT); ok {
 		if err := validateValidationAttr("LRE (xsl:validation)", valAttr); err != nil {
 			return nil, err
 		}
@@ -961,7 +961,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	}
 
 	// Handle xsl:type
-	if typeAttr, ok := elem.GetAttributeNS("type", NSXSLT); ok {
+	if typeAttr, ok := elem.GetAttributeNS("type", lexicon.NamespaceXSLT); ok {
 		if err := c.checkTypeAttrSchemaAware("LRE (xsl:type)", typeAttr); err != nil {
 			return nil, err
 		}

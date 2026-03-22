@@ -59,7 +59,7 @@ func (c *compiler) compileGlobalContextItem(elem *helium.Element) error {
 // by the XSLT 3.0 spec and may not be used for user-defined functions.
 func isReservedFunctionNS(uri string) bool {
 	switch uri {
-	case NSXSLT, xpath3.NSFn, xpath3.NSMath, xpath3.NSMap, xpath3.NSArray, xpath3.NSXS:
+	case lexicon.NamespaceXSLT, xpath3.NSFn, xpath3.NSMath, xpath3.NSMap, xpath3.NSArray, xpath3.NSXS:
 		return true
 	}
 	return false
@@ -177,7 +177,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		if !ok {
 			continue
 		}
-		if childElem.URI() == NSXSLT && childElem.LocalName() == "param" {
+		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == "param" {
 			if reqVal, hasReq := childElem.GetAttribute("required"); hasReq {
 				if reqVal != lexicon.ValueYes && reqVal != "1" && reqVal != "true" {
 					pname := getAttr(childElem, "name")

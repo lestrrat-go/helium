@@ -102,7 +102,7 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 	// Process namespace-alias declarations from the included module.
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 		ce, ok := child.(*helium.Element)
-		if !ok || ce.URI() != NSXSLT {
+		if !ok || ce.URI() != lexicon.NamespaceXSLT {
 			continue
 		}
 		if ce.LocalName() == "namespace-alias" {
@@ -115,7 +115,7 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 	// Process imports and recursively collect imports from nested includes.
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 		ce, ok := child.(*helium.Element)
-		if !ok || ce.URI() != NSXSLT {
+		if !ok || ce.URI() != lexicon.NamespaceXSLT {
 			continue
 		}
 		switch ce.LocalName() {
@@ -187,8 +187,8 @@ func (c *compiler) loadAndCacheInclude(uri, importKey string) (*helium.Element, 
 	if root == nil {
 		return nil, staticError(errCodeXTSE0010, "included document %q is not a stylesheet", uri)
 	}
-	if root.URI() != NSXSLT {
-		if _, ok := root.GetAttributeNS("version", NSXSLT); ok {
+	if root.URI() != lexicon.NamespaceXSLT {
+		if _, ok := root.GetAttributeNS("version", lexicon.NamespaceXSLT); ok {
 			// Simplified stylesheet — no XSLT root, cache as nil to signal
 			// that compileIncludeTemplates should fall back to compileInclude.
 			c.includeRoots[importKey] = nil
@@ -267,7 +267,7 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 	// Evaluate static params and variables so they're available for shadow attributes.
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
-		if !ok || elem.URI() != NSXSLT {
+		if !ok || elem.URI() != lexicon.NamespaceXSLT {
 			continue
 		}
 		ln := elem.LocalName()
@@ -299,7 +299,7 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 	// interleaved to preserve effective document order.
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 		ce, ok := child.(*helium.Element)
-		if !ok || ce.URI() != NSXSLT {
+		if !ok || ce.URI() != lexicon.NamespaceXSLT {
 			continue
 		}
 
@@ -493,8 +493,8 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
 	}
 	// If the root is not in the XSLT namespace, check for simplified stylesheet
-	if importedRoot.URI() != NSXSLT {
-		if _, ok := importedRoot.GetAttributeNS("version", NSXSLT); ok {
+	if importedRoot.URI() != lexicon.NamespaceXSLT {
+		if _, ok := importedRoot.GetAttributeNS("version", lexicon.NamespaceXSLT); ok {
 			// Simplified stylesheet — compile as a single template matching "/"
 			simplified, err := compileSimplified(doc, importedRoot, &compileConfig{baseURI: uri})
 			if err != nil {
@@ -592,7 +592,7 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 // as root).
 func compileSimplified(doc *helium.Document, root *helium.Element, cfg *compileConfig) (*Stylesheet, error) {
 	// XTSE0150: simplified stylesheet must have xsl:version attribute
-	if _, ok := root.GetAttributeNS("version", NSXSLT); !ok {
+	if _, ok := root.GetAttributeNS("version", lexicon.NamespaceXSLT); !ok {
 		return nil, staticError("XTSE0150",
 			"simplified stylesheet (literal result element) must have an xsl:version attribute")
 	}

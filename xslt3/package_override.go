@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -32,7 +33,7 @@ func (c *compiler) processOverrides(usePackageElem *helium.Element, pkg *Stylesh
 
 	for child := usePackageElem.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
-		if !ok || elem.URI() != NSXSLT || elem.LocalName() != xslElemOverride {
+		if !ok || elem.URI() != lexicon.NamespaceXSLT || elem.LocalName() != xslElemOverride {
 			continue
 		}
 
@@ -60,7 +61,7 @@ func (c *compiler) compileOverrideChildren(overrideElem *helium.Element, pkg *St
 			}
 			continue
 		}
-		if elem.URI() != NSXSLT {
+		if elem.URI() != lexicon.NamespaceXSLT {
 			return staticError(errCodeXTSE0010,
 				"non-XSLT element %q is not allowed inside xsl:override", elem.Name())
 		}
@@ -496,7 +497,7 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 		if !ok {
 			continue
 		}
-		if childElem.URI() == NSXSLT && childElem.LocalName() == "attribute" {
+		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == "attribute" {
 			inst, err := c.compileAttribute(childElem)
 			if err != nil {
 				return nil, err

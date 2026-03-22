@@ -81,7 +81,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 
 	// XTSE0080: template name must not be in the XSLT namespace
 	// Exception: xsl:initial-template is explicitly allowed (XSLT 3.0 §3.11).
-	if tmpl.Name != "" && strings.HasPrefix(tmpl.Name, "{"+NSXSLT+"}") && tmpl.Name != "{"+NSXSLT+"}initial-template" {
+	if tmpl.Name != "" && strings.HasPrefix(tmpl.Name, "{"+lexicon.NamespaceXSLT+"}") && tmpl.Name != "{"+lexicon.NamespaceXSLT+"}initial-template" {
 		return staticError(errCodeXTSE0080, "xsl:template name %q is in the XSLT namespace", getAttr(elem, "name"))
 	}
 
@@ -361,7 +361,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 	// whitespace-only text in the prologue even under xml:space="preserve".
 	var lastDeclNode helium.Node
 	for ch := elem.FirstChild(); ch != nil; ch = ch.NextSibling() {
-		if e, ok := ch.(*helium.Element); ok && e.URI() == NSXSLT {
+		if e, ok := ch.(*helium.Element); ok && e.URI() == lexicon.NamespaceXSLT {
 			ln := e.LocalName()
 			if ln == "context-item" || ln == "param" {
 				lastDeclNode = ch
@@ -376,7 +376,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		switch v := child.(type) {
 		case *helium.Element:
-			if v.URI() == NSXSLT && v.LocalName() == "context-item" {
+			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == "context-item" {
 				// XTSE0010: xsl:context-item is not allowed in xsl:function
 				if isFunction {
 					return nil, nil, nil, staticError(errCodeXTSE0010, "xsl:context-item is not allowed in xsl:function")
@@ -404,7 +404,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 				}
 				continue
 			}
-			if v.URI() == NSXSLT && v.LocalName() == "param" && inParams {
+			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == "param" && inParams {
 				// XTSE0020: static is only valid on global params, not template/function params
 				if _, hasStatic := v.GetAttribute("static"); hasStatic {
 					pname := getAttr(v, "name")
@@ -421,7 +421,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 				}
 				continue
 			}
-			if v.URI() == NSXSLT && v.LocalName() == "param" {
+			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == "param" {
 				return nil, nil, nil, staticError(errCodeXTSE0010,
 					"xsl:param must appear before other content in xsl:template/xsl:function")
 			}

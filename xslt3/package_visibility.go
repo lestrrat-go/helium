@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -126,7 +127,7 @@ func parseAcceptRules(usePackageElem *helium.Element, nsBindings map[string]stri
 	var rules []acceptRule
 	for child := usePackageElem.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
-		if !ok || elem.URI() != NSXSLT || elem.LocalName() != xslElemAccept {
+		if !ok || elem.URI() != lexicon.NamespaceXSLT || elem.LocalName() != xslElemAccept {
 			continue
 		}
 		comp := getAttr(elem, xslAttrComponent)
@@ -404,7 +405,7 @@ func (c *compiler) processExpose(root *helium.Element) error {
 	// Process xsl:expose children
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
-		if !ok || elem.URI() != NSXSLT || elem.LocalName() != xslElemExpose {
+		if !ok || elem.URI() != lexicon.NamespaceXSLT || elem.LocalName() != xslElemExpose {
 			continue
 		}
 		if err := c.compileExpose(elem); err != nil {
@@ -855,12 +856,12 @@ func (c *compiler) collectOverrideNames(usePackageElem *helium.Element, nsBindin
 	names := make(map[string]struct{})
 	for child := usePackageElem.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := child.(*helium.Element)
-		if !ok || elem.URI() != NSXSLT || elem.LocalName() != xslElemOverride {
+		if !ok || elem.URI() != lexicon.NamespaceXSLT || elem.LocalName() != xslElemOverride {
 			continue
 		}
 		for oc := elem.FirstChild(); oc != nil; oc = oc.NextSibling() {
 			oe, ok := oc.(*helium.Element)
-			if !ok || oe.URI() != NSXSLT {
+			if !ok || oe.URI() != lexicon.NamespaceXSLT {
 				continue
 			}
 			switch oe.LocalName() {
@@ -876,7 +877,7 @@ func (c *compiler) collectOverrideNames(usePackageElem *helium.Element, nsBindin
 					// Count xsl:param children to determine arity
 					arity := 0
 					for pc := oe.FirstChild(); pc != nil; pc = pc.NextSibling() {
-						if pe, ok := pc.(*helium.Element); ok && pe.URI() == NSXSLT && pe.LocalName() == "param" {
+						if pe, ok := pc.(*helium.Element); ok && pe.URI() == lexicon.NamespaceXSLT && pe.LocalName() == "param" {
 							arity++
 						}
 					}
