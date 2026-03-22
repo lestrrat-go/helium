@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -69,81 +70,81 @@ const (
 	// on-multiple-match values for xsl:mode.
 	onMultipleMatchUseLast = "use-last"
 
-	// XSLT element local names for compile-time dispatch and checks.
-	elemAccumulator          = "accumulator"
-	elemAccumulatorRule      = "accumulator-rule"
-	elemAnalyzeString        = "analyze-string"
-	elemApplyImports         = "apply-imports"
-	elemApplyTemplates       = "apply-templates"
-	elemAssert               = "assert"
-	elemAttribute            = "attribute"
-	elemAttributeSet         = "attribute-set"
-	elemBreak                = "break"
-	elemCallTemplate         = "call-template"
-	elemCatch                = "catch"
-	elemCharacterMap         = "character-map"
-	elemChoose               = "choose"
-	elemComment              = "comment"
-	elemContextItem          = "context-item"
-	elemCopy                 = "copy"
-	elemCopyOf               = "copy-of"
-	elemDecimalFormat        = "decimal-format"
-	elemDocument             = "document"
-	elemElement              = "element"
-	elemEvaluate             = "evaluate"
-	elemExpose               = "expose"
-	elemFallback             = "fallback"
-	elemForEach              = "for-each"
-	elemForEachGroup         = "for-each-group"
-	elemFork                 = "fork"
-	elemFunction             = "function"
-	elemGlobalContextItem    = "global-context-item"
-	elemIf                   = "if"
-	elemImport               = "import"
-	elemImportSchema         = "import-schema"
-	elemInclude              = "include"
-	elemIterate              = "iterate"
-	elemKey                  = "key"
-	elemMap                  = "map"
-	elemMapEntry             = "map-entry"
-	elemMatchingSubstring    = "matching-substring"
-	elemMerge                = "merge"
-	elemMergeAction          = "merge-action"
-	elemMergeKey             = "merge-key"
-	elemMergeSource          = "merge-source"
-	elemMessage              = "message"
-	elemMode                 = "mode"
-	elemNamespace            = "namespace"
-	elemNamespaceAlias       = "namespace-alias"
-	elemNextIteration        = "next-iteration"
-	elemNextMatch            = "next-match"
-	elemNonMatchingSubstring = "non-matching-substring"
-	elemNumber               = "number"
-	elemOnCompletion         = "on-completion"
-	elemOnEmpty              = "on-empty"
-	elemOnNonEmpty           = "on-non-empty"
-	elemOtherwise            = "otherwise"
-	elemOutput               = "output"
-	elemOutputCharacter      = "output-character"
-	elemParam                = "param"
-	elemPerformSort          = "perform-sort"
-	elemProcessingInstruction = "processing-instruction"
-	elemPreserveSpace        = "preserve-space"
-	elemResultDocument       = "result-document"
-	elemSchema               = "schema"
-	elemSequence             = "sequence"
-	elemSort                 = "sort"
-	elemSourceDocument       = "source-document"
-	elemStripSpace           = "strip-space"
-	elemTemplate             = "template"
-	elemText                 = "text"
-	elemTry                  = "try"
-	elemUsePackage           = "use-package"
-	elemValueOf              = "value-of"
-	elemVariable             = "variable"
-	elemWhen                 = "when"
-	elemWherePopulated       = "where-populated"
-	elemWithParam            = "with-param"
+	// XSLT element local names — aliases for lexicon.XSLTElement* constants.
+	elemAccumulator           = lexicon.XSLTElementAccumulator
+	elemAccumulatorRule       = lexicon.XSLTElementAccumulatorRule
+	elemAnalyzeString         = lexicon.XSLTElementAnalyzeString
+	elemApplyImports          = lexicon.XSLTElementApplyImports
+	elemApplyTemplates        = lexicon.XSLTElementApplyTemplates
+	elemAssert                = lexicon.XSLTElementAssert
+	elemAttribute             = lexicon.XSLTElementAttribute
+	elemAttributeSet          = lexicon.XSLTElementAttributeSet
+	elemBreak                 = lexicon.XSLTElementBreak
+	elemCallTemplate          = lexicon.XSLTElementCallTemplate
+	elemCatch                 = lexicon.XSLTElementCatch
+	elemCharacterMap          = lexicon.XSLTElementCharacterMap
+	elemChoose                = lexicon.XSLTElementChoose
+	elemComment               = lexicon.XSLTElementComment
+	elemContextItem           = lexicon.XSLTElementContextItem
+	elemCopy                  = lexicon.XSLTElementCopy
+	elemCopyOf                = lexicon.XSLTElementCopyOf
+	elemDecimalFormat         = lexicon.XSLTElementDecimalFormat
+	elemDocument              = lexicon.XSLTElementDocument
+	elemElement               = lexicon.XSLTElementElement
+	elemEvaluate              = lexicon.XSLTElementEvaluate
+	elemExpose                = lexicon.XSLTElementExpose
+	elemFallback              = lexicon.XSLTElementFallback
+	elemForEach               = lexicon.XSLTElementForEach
+	elemForEachGroup          = lexicon.XSLTElementForEachGroup
+	elemFork                  = lexicon.XSLTElementFork
+	elemFunction              = lexicon.XSLTElementFunction
+	elemGlobalContextItem     = lexicon.XSLTElementGlobalContextItem
+	elemIf                    = lexicon.XSLTElementIf
+	elemImport                = lexicon.XSLTElementImport
+	elemImportSchema          = lexicon.XSLTElementImportSchema
+	elemInclude               = lexicon.XSLTElementInclude
+	elemIterate               = lexicon.XSLTElementIterate
+	elemKey                   = lexicon.XSLTElementKey
+	elemMap                   = lexicon.XSLTElementMap
+	elemMapEntry              = lexicon.XSLTElementMapEntry
+	elemMatchingSubstring     = lexicon.XSLTElementMatchingSubstring
+	elemMerge                 = lexicon.XSLTElementMerge
+	elemMergeAction           = lexicon.XSLTElementMergeAction
+	elemMergeKey              = lexicon.XSLTElementMergeKey
+	elemMergeSource           = lexicon.XSLTElementMergeSource
+	elemMessage               = lexicon.XSLTElementMessage
+	elemMode                  = lexicon.XSLTElementMode
+	elemNamespace             = lexicon.XSLTElementNamespace
+	elemNamespaceAlias        = lexicon.XSLTElementNamespaceAlias
+	elemNextIteration         = lexicon.XSLTElementNextIteration
+	elemNextMatch             = lexicon.XSLTElementNextMatch
+	elemNonMatchingSubstring  = lexicon.XSLTElementNonMatchingSubstring
+	elemNumber                = lexicon.XSLTElementNumber
+	elemOnCompletion          = lexicon.XSLTElementOnCompletion
+	elemOnEmpty               = lexicon.XSLTElementOnEmpty
+	elemOnNonEmpty            = lexicon.XSLTElementOnNonEmpty
+	elemOtherwise             = lexicon.XSLTElementOtherwise
+	elemOutput                = lexicon.XSLTElementOutput
+	elemOutputCharacter       = lexicon.XSLTElementOutputCharacter
+	elemParam                 = lexicon.XSLTElementParam
+	elemPerformSort           = lexicon.XSLTElementPerformSort
+	elemProcessingInstruction = lexicon.XSLTElementProcessingInstruction
+	elemPreserveSpace         = lexicon.XSLTElementPreserveSpace
+	elemResultDocument        = lexicon.XSLTElementResultDocument
+	elemSchema                = lexicon.XSLTElementSchema
+	elemSequence              = lexicon.XSLTElementSequence
+	elemSort                  = lexicon.XSLTElementSort
+	elemSourceDocument        = lexicon.XSLTElementSourceDocument
+	elemStripSpace            = lexicon.XSLTElementStripSpace
+	elemTemplate              = lexicon.XSLTElementTemplate
+	elemText                  = lexicon.XSLTElementText
+	elemTry                   = lexicon.XSLTElementTry
+	elemUsePackage            = lexicon.XSLTElementUsePackage
+	elemValueOf               = lexicon.XSLTElementValueOf
+	elemVariable              = lexicon.XSLTElementVariable
+	elemWhen                  = lexicon.XSLTElementWhen
+	elemWherePopulated        = lexicon.XSLTElementWherePopulated
+	elemWithParam             = lexicon.XSLTElementWithParam
 )
 
 // funcKey identifies an xsl:function by its expanded QName and arity.
