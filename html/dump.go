@@ -60,7 +60,7 @@ func WriteDoc(out io.Writer, doc *helium.Document, options ...WriteOption) error
 		_, _ = io.WriteString(out, defaultHTMLDTD)
 	}
 
-	d := htmlDumper{format: !cfg.noFormat, preserveCase: cfg.preserveCase, noEscapeURIAttributes: cfg.noEscapeURIAttributes}
+	d := htmlDumper{format: !cfg.noFormat, preserveCase: cfg.preserveCase, noEscapeURIAttributes: cfg.noEscapeURIAttributes, escapeControlChars: cfg.escapeControlChars}
 
 	// Serialize all children of the document
 	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
@@ -81,6 +81,7 @@ type htmlDumper struct {
 	format                bool
 	preserveCase          bool
 	noEscapeURIAttributes bool
+	escapeControlChars    bool
 	// nsEmitted tracks namespace prefix→URI bindings that were actually
 	// emitted (serialized) by ancestor elements. Used to suppress
 	// redundant declarations.
@@ -98,7 +99,7 @@ func WriteNode(out io.Writer, n helium.Node, options ...WriteOption) error {
 	for _, o := range options {
 		o(&cfg)
 	}
-	d := htmlDumper{format: !cfg.noFormat, preserveCase: cfg.preserveCase, noEscapeURIAttributes: cfg.noEscapeURIAttributes}
+	d := htmlDumper{format: !cfg.noFormat, preserveCase: cfg.preserveCase, noEscapeURIAttributes: cfg.noEscapeURIAttributes, escapeControlChars: cfg.escapeControlChars}
 	return d.dumpNode(out, n)
 }
 
@@ -174,24 +175,36 @@ func (d *htmlDumper) dumpText(out io.Writer, n helium.Node) error {
 	}
 
 	// Normal text: escape &, <, >
-	return htmlEscapeText(out, n.Content())
+	return htmlEscapeText(out, n.Content(), d.escapeControlChars)
 }
 
 // htmlEscapeText escapes &, <, > in text content for HTML output.
 // Unlike XML escaping, \n, \r, \t are NOT escaped.
-func htmlEscapeText(w io.Writer, s []byte) error {
+// When escCtrl is true, characters in the U+007F-U+009F range are emitted
+// as hexadecimal numeric character references (HTML5 serialization).
+func htmlEscapeText(w io.Writer, s []byte, escCtrl bool) error {
 	var esc []byte
 	last := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
 		i += width
-		switch r {
-		case '&':
+		switch {
+		case r == '&':
 			esc = htmlAttrEscAmp
-		case '<':
+		case r == '<':
 			esc = htmlAttrEscLt
-		case '>':
+		case r == '>':
 			esc = htmlAttrEscGt
+		case escCtrl && r >= 0x7F && r <= 0x9F:
+			if _, err := w.Write(s[last : i-width]); err != nil {
+				return err
+			}
+			ref := fmt.Sprintf("&#x%X;", r)
+			if _, err := io.WriteString(w, ref); err != nil {
+				return err
+			}
+			last = i
+			continue
 		default:
 			continue
 		}

@@ -1112,17 +1112,9 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 
 	// SERE0014: HTML method with characters in #x7F-#x9F range in text.
 	// HTML5 allows these characters as character references, so skip for version >= 5.
-	// Per the XSLT serialization spec, the processor may either report an error
-	// or output the character as a character reference. We choose to escape them
-	// as character references, which matches the W3C test expectations.
-	htmlVer := outDef.HTMLVersion
-	if htmlVer == "" {
-		htmlVer = outDef.Version
-	}
-	// SERE0014: HTML method with characters in #x7F-#x9F range in text.
-	// HTML5 allows these characters as character references, so skip for version >= 5.
 	// For HTML 4.x, raise the error as required by the spec.
-	if method == "html" && !isHTMLVersion5(htmlVer) {
+	// XSLT 3.0 §20: the default value of html-version is 5.
+	if method == "html" && !effectiveHTMLVersion5(outDef) {
 		if err := checkHTMLInvalidChars(doc); err != nil {
 			return err
 		}
@@ -1669,7 +1661,10 @@ func serializeText(w io.Writer, doc *helium.Document, charMap map[rune]string) e
 func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 	// Determine DOCTYPE handling.
 	hasDoctypeAttrs := outDef.DoctypePublic != "" || outDef.DoctypeSystem != ""
+	// Use explicit HTMLVersion for DOCTYPE/structural decisions.
 	isHTML5 := isHTMLVersion5(outDef.HTMLVersion)
+	// Use effective version (with XSLT 3.0 default=5) for character escaping.
+	escapeCtrl := effectiveHTMLVersion5(outDef)
 
 	if hasDoctypeAttrs {
 		rootName := "html"
@@ -1708,6 +1703,9 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 			htmlpkg.WithNoFormat(),
 			htmlpkg.WithPreserveCase(),
 		}
+		if escapeCtrl {
+			nodeOpts = append(nodeOpts, htmlpkg.WithEscapeControlChars())
+		}
 		if noEscapeURI {
 			nodeOpts = append(nodeOpts, htmlpkg.WithNoEscapeURIAttributes())
 		}
@@ -1734,6 +1732,9 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 	}
 	if noEscapeURI {
 		opts = append(opts, htmlpkg.WithNoEscapeURIAttributes())
+	}
+	if escapeCtrl {
+		opts = append(opts, htmlpkg.WithEscapeControlChars())
 	}
 	return htmlpkg.WriteDoc(w, doc, opts...)
 }
@@ -2361,6 +2362,20 @@ func canRepresentInEncoding(r rune, encoding string) bool {
 		// For unknown encodings, assume ASCII-safe
 		return r < 128
 	}
+}
+
+// effectiveHTMLVersion5 returns true when the output definition's effective
+// HTML version is 5 or higher. It checks HTMLVersion first, falls back to
+// Version, and defaults to 5 per XSLT 3.0 §20.
+func effectiveHTMLVersion5(outDef *OutputDef) bool {
+	if outDef.HTMLVersion != "" {
+		return isHTMLVersion5(outDef.HTMLVersion)
+	}
+	if outDef.Version != "" {
+		return isHTMLVersion5(outDef.Version)
+	}
+	// XSLT 3.0 default: html-version=5
+	return true
 }
 
 // isHTMLVersion5 returns true when the html-version string represents

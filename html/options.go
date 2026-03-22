@@ -45,10 +45,11 @@ func WithNoWarning() ParseOption {
 
 // dumpConfig holds configuration for HTML serialization.
 type dumpConfig struct {
-	noDefaultDTD        bool
-	noFormat            bool
-	preserveCase        bool
+	noDefaultDTD          bool
+	noFormat              bool
+	preserveCase          bool
 	noEscapeURIAttributes bool
+	escapeControlChars    bool
 }
 
 // WriteOption configures HTML serialization behavior.
@@ -83,5 +84,14 @@ func WithPreserveCase() WriteOption {
 func WithNoEscapeURIAttributes() WriteOption {
 	return func(c *dumpConfig) {
 		c.noEscapeURIAttributes = true
+	}
+}
+
+// WithEscapeControlChars causes characters in the U+007F-U+009F range to be
+// emitted as numeric character references (e.g. &#x9F;). HTML5 serialization
+// requires this instead of raising SERE0014.
+func WithEscapeControlChars() WriteOption {
+	return func(c *dumpConfig) {
+		c.escapeControlChars = true
 	}
 }
