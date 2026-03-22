@@ -842,6 +842,11 @@ func isGroundingExpr(expr xpath3.Expr) bool {
 
 func isGroundingExprSS(ss *Stylesheet, expr xpath3.Expr) bool {
 	expr = derefXPathExpr(expr)
+	// A range expression (X to Y) always produces a sequence of integers —
+	// it never navigates the streaming source, so it is inherently grounded.
+	if _, ok := expr.(xpath3.RangeExpr); ok {
+		return true
+	}
 	if fc, ok := expr.(xpath3.FunctionCall); ok {
 		if fc.Prefix == "" {
 			return isGroundingFuncName(fc.Name)
