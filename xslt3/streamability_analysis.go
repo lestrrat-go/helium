@@ -323,6 +323,14 @@ func countDownwardInBody(ss *Stylesheet, body []Instruction) int {
 
 // checkStreamableInstruction checks a single instruction for streamability violations.
 func checkStreamableInstruction(ss *Stylesheet, inst Instruction) error {
+	return checkStreamableInstructionCtx(ss, inst, false)
+}
+
+// checkStreamableInstructionCtx checks a single instruction for streamability violations.
+// When inResultDoc is true, certain checks are relaxed (e.g., xsl:sequence select="."
+// inside for-each is allowed because nodes flow to a serializer rather than being
+// returned as a sequence).
+func checkStreamableInstructionCtx(ss *Stylesheet, inst Instruction, inResultDoc bool) error {
 	switch v := inst.(type) {
 	case *ApplyTemplatesInst:
 		if v.Select != nil && xpath3.ExprUsesDescendantOrSelf(v.Select) &&
@@ -370,7 +378,7 @@ func checkStreamableInstruction(ss *Stylesheet, inst Instruction) error {
 	}
 
 	// Check for-each/iterate with crawling select or variable-bound streaming in loop.
-	if err := checkForEachStreamable(ss, inst); err != nil {
+	if err := checkForEachStreamable(ss, inst, inResultDoc); err != nil {
 		return err
 	}
 
@@ -399,9 +407,16 @@ func checkStreamableInstruction(ss *Stylesheet, inst Instruction) error {
 			return nil
 		}
 	}
+	// When entering a result-document, propagate the inResultDoc flag so
+	// that child for-each bodies allow xsl:sequence select="." (nodes flow
+	// to a serializer).
+	childInResultDoc := inResultDoc
+	if _, ok := inst.(*ResultDocumentInst); ok {
+		childInResultDoc = true
+	}
 	for _, children := range getChildInstructions(inst) {
 		for _, child := range children {
-			if err := checkStreamableInstruction(ss, child); err != nil {
+			if err := checkStreamableInstructionCtx(ss, child, childInResultDoc); err != nil {
 				return err
 			}
 		}
@@ -1602,7 +1617,11 @@ func countAttributeSetDownward(ss *Stylesheet, asDef *AttributeSetDef) int {
 // - crawling select expression (//a/b = descendant-or-self then child)
 // - variable bound to streamed node used consumingly in loop body
 // - xsl:sequence select="." returning streamed nodes from for-each body
-func checkForEachStreamable(_ *Stylesheet, inst Instruction) error {
+//
+// When inResultDoc is true, the xsl:sequence select="." check is skipped
+// because nodes flow to a serializer (xsl:result-document) rather than
+// being returned as a sequence that requires materialization.
+func checkForEachStreamable(_ *Stylesheet, inst Instruction, inResultDoc bool) error {
 	switch v := inst.(type) {
 	case *ForEachInst:
 		// Check if select expression is crawling AND body consumes context.
@@ -1615,13 +1634,17 @@ func checkForEachStreamable(_ *Stylesheet, inst Instruction) error {
 					"xsl:for-each with crawling select expression %q and consuming body is not streamable", v.Select.String())
 			}
 		}
-		// Check for xsl:sequence select="." returning streamed nodes
-		for _, bi := range v.Body {
-			if seq, ok := bi.(*XSLSequenceInst); ok && seq.Select != nil {
-				ast := seq.Select.AST()
-				if _, ok := ast.(xpath3.ContextItemExpr); ok {
-					return staticError(errCodeXTSE3430,
-						"xsl:for-each body returns streamed nodes via xsl:sequence select=\".\", which is not streamable")
+		// Check for xsl:sequence select="." returning streamed nodes.
+		// Skip this check when inside xsl:result-document — nodes are
+		// written to a secondary output (serializer), not returned.
+		if !inResultDoc {
+			for _, bi := range v.Body {
+				if seq, ok := bi.(*XSLSequenceInst); ok && seq.Select != nil {
+					ast := seq.Select.AST()
+					if _, ok := ast.(xpath3.ContextItemExpr); ok {
+						return staticError(errCodeXTSE3430,
+							"xsl:for-each body returns streamed nodes via xsl:sequence select=\".\", which is not streamable")
+					}
 				}
 			}
 		}
