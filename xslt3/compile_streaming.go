@@ -180,7 +180,15 @@ func (c *compiler) compileIterate(elem *helium.Element) (Instruction, error) {
 	for i, bc := range bodyChildren {
 		if bc.elem == nil {
 			// Text node
-			inst.Body = append(inst.Body, &LiteralTextInst{Value: bc.text})
+			lit := &LiteralTextInst{Value: bc.text}
+			if c.expandText && strings.ContainsAny(bc.text, "{}") {
+				avt, err := compileAVT(bc.text, c.nsBindings)
+				if err != nil {
+					return nil, err
+				}
+				lit.TVT = avt
+			}
+			inst.Body = append(inst.Body, lit)
 			continue
 		}
 		c.breakAllowed = (i == lastSignificant)

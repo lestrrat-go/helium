@@ -2139,20 +2139,100 @@ func checkIterateStreamable(_ *Stylesheet, inst Instruction) error {
 // bodyAccumulatesStreamedNodes checks if an iterate body accumulates streamed
 // nodes by passing context items to element()* parameters via next-iteration.
 func bodyAccumulatesStreamedNodes(body []Instruction, elemParams map[string]bool) bool {
+	// Collect variables whose select expressions reference "." (context item),
+	// either directly or transitively through other variables.
+	taintedVars := collectTaintedVars(body)
+
+	return bodyAccumulatesStreamedNodesInner(body, elemParams, taintedVars)
+}
+
+// collectTaintedVars finds all variables in the instruction tree whose select
+// expressions reference the context item "." either directly or transitively
+// through other variables that reference ".".
+func collectTaintedVars(body []Instruction) map[string]bool {
+	// First pass: collect all variable select expressions.
+	varExprs := make(map[string]xpath3.Expr)
+	collectVarExprs(body, varExprs)
+
+	// Build direct taint set: variables whose select directly contains ".".
+	tainted := make(map[string]bool)
+	for name, expr := range varExprs {
+		if exprReferencesContextItem(expr) {
+			tainted[name] = true
+		}
+	}
+
+	// Propagate taint: if a variable references a tainted variable, it's tainted too.
+	// Fixed-point iteration.
+	changed := true
+	for changed {
+		changed = false
+		for name, expr := range varExprs {
+			if tainted[name] {
+				continue
+			}
+			if exprReferencesAnyVar(expr, tainted) {
+				tainted[name] = true
+				changed = true
+			}
+		}
+	}
+
+	return tainted
+}
+
+// collectVarExprs collects variable name→expression mappings from instructions.
+func collectVarExprs(body []Instruction, varExprs map[string]xpath3.Expr) {
+	for _, inst := range body {
+		if vi, ok := inst.(*VariableInst); ok && vi.Select != nil {
+			varExprs[vi.Name] = vi.Select.AST()
+		}
+		for _, children := range getChildInstructions(inst) {
+			collectVarExprs(children, varExprs)
+		}
+	}
+}
+
+// exprReferencesAnyVar returns true if the expression references any variable
+// in the given set.
+func exprReferencesAnyVar(expr xpath3.Expr, vars map[string]bool) bool {
+	found := false
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		if ve, ok := e.(xpath3.VariableExpr); ok {
+			if vars[ve.Name] {
+				found = true
+				return false
+			}
+		}
+		return true
+	})
+	return found
+}
+
+func bodyAccumulatesStreamedNodesInner(body []Instruction, elemParams map[string]bool, taintedVars map[string]bool) bool {
 	for _, inst := range body {
 		if ni, ok := inst.(*NextIterationInst); ok {
 			for _, wp := range ni.Params {
 				if !elemParams[wp.Name] {
 					continue
 				}
-				if wp.Select != nil && exprReferencesContextItem(wp.Select.AST()) {
-					return true
+				if wp.Select != nil {
+					ast := wp.Select.AST()
+					if exprReferencesContextItem(ast) {
+						return true
+					}
+					if exprReferencesAnyVar(ast, taintedVars) {
+						return true
+					}
 				}
 			}
 		}
 		// Recurse into child instructions (e.g., inside choose/if)
 		for _, children := range getChildInstructions(inst) {
-			if bodyAccumulatesStreamedNodes(children, elemParams) {
+			if bodyAccumulatesStreamedNodesInner(children, elemParams, taintedVars) {
 				return true
 			}
 		}
