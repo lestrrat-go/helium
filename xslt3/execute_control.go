@@ -132,14 +132,14 @@ func (ec *execContext) execForEach(ctx context.Context, inst *ForEachInst) error
 	savedSize := ec.size
 	savedTemplate := ec.currentTemplate
 	// XSLT spec: inside xsl:for-each, the current template rule is absent.
-	ec.currentTemplate = nil
+	ec.setCurrentTemplate(nil)
 	defer func() {
 		ec.currentNode = savedCurrent
 		ec.contextNode = savedContext
 		ec.contextItem = savedItem
 		ec.position = savedPos
 		ec.size = savedSize
-		ec.currentTemplate = savedTemplate
+		ec.setCurrentTemplate(savedTemplate)
 	}()
 
 	if isNodes {

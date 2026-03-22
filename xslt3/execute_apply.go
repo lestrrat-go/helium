@@ -319,7 +319,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 		ec.contextNode = nil
 		ec.contextItem = nil
 		ec.currentNode = nil
-		ec.currentTemplate = nil
+		ec.setCurrentTemplate(nil)
 	}
 	defer func() {
 		ec.cachedFnsNS = savedFnsNS
@@ -329,7 +329,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 			ec.contextNode = savedContextNode
 			ec.contextItem = savedContextItem
 			ec.currentNode = savedCurrentNode
-			ec.currentTemplate = savedCurrentTemplate
+			ec.setCurrentTemplate(savedCurrentTemplate)
 		}
 	}()
 
