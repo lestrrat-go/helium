@@ -376,7 +376,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 	for child := range helium.Children(elem) {
 		switch v := child.(type) {
 		case *helium.Element:
-			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == "context-item" {
+			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == elemContextItem {
 				// XTSE0010: xsl:context-item is not allowed in xsl:function
 				if isFunction {
 					return nil, nil, nil, staticError(errCodeXTSE0010, "xsl:context-item is not allowed in xsl:function")
@@ -404,7 +404,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 				}
 				continue
 			}
-			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == "param" && inParams {
+			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == elemParam && inParams {
 				// XTSE0020: static is only valid on global params, not template/function params
 				if _, hasStatic := v.GetAttribute("static"); hasStatic {
 					pname := getAttr(v, "name")
@@ -421,7 +421,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 				}
 				continue
 			}
-			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == "param" {
+			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == elemParam {
 				return nil, nil, nil, staticError(errCodeXTSE0010,
 					"xsl:param must appear before other content in xsl:template/xsl:function")
 			}

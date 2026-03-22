@@ -105,7 +105,7 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 		if !ok || ce.URI() != lexicon.NamespaceXSLT {
 			continue
 		}
-		if ce.LocalName() == "namespace-alias" {
+		if ce.LocalName() == elemNamespaceAlias {
 			if err := c.compileNamespaceAlias(ce); err != nil {
 				return err
 			}
@@ -119,11 +119,11 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 			continue
 		}
 		switch ce.LocalName() {
-		case "import":
+		case elemImport:
 			if err := c.compileImport(ce); err != nil {
 				return err
 			}
-		case "include":
+		case elemInclude:
 			if err := c.collectIncludeImports(ce); err != nil {
 				return err
 			}
@@ -309,73 +309,73 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 		}
 
 		switch ce.LocalName() {
-		case "import", "namespace-alias":
+		case elemImport, elemNamespaceAlias:
 			// Already processed in collectIncludeImports
-		case "include":
+		case elemInclude:
 			if err := c.compileIncludeTemplates(ce); err != nil {
 				return err
 			}
-		case "use-package":
+		case elemUsePackage:
 			if err := c.compileUsePackage(ce); err != nil {
 				return err
 			}
-		case "template":
+		case elemTemplate:
 			if err := c.compileTemplate(ce); err != nil {
 				return err
 			}
-		case "variable":
+		case elemVariable:
 			if err := c.compileGlobalVariable(ce); err != nil {
 				return err
 			}
-		case "param":
+		case elemParam:
 			if err := c.compileGlobalParam(ce); err != nil {
 				return err
 			}
-		case "key":
+		case elemKey:
 			if err := c.compileKey(ce); err != nil {
 				return err
 			}
-		case "output":
+		case elemOutput:
 			if err := c.compileOutput(ce); err != nil {
 				return err
 			}
-		case "strip-space":
+		case elemStripSpace:
 			if err := c.compileSpaceHandling(ce, true); err != nil {
 				return err
 			}
-		case "preserve-space":
+		case elemPreserveSpace:
 			if err := c.compileSpaceHandling(ce, false); err != nil {
 				return err
 			}
-		case "function":
+		case elemFunction:
 			if err := c.compileFunction(ce); err != nil {
 				return err
 			}
-		case "decimal-format":
+		case elemDecimalFormat:
 			if err := c.compileDecimalFormat(ce); err != nil {
 				return err
 			}
-		case "mode":
+		case elemMode:
 			if err := c.compileMode(ce); err != nil {
 				return err
 			}
-		case "import-schema":
+		case elemImportSchema:
 			if err := c.compileImportSchema(ce); err != nil {
 				return err
 			}
-		case "accumulator":
+		case elemAccumulator:
 			if err := c.compileAccumulator(ce); err != nil {
 				return err
 			}
-		case "attribute-set":
+		case elemAttributeSet:
 			if err := c.compileAttributeSet(ce); err != nil {
 				return err
 			}
-		case "global-context-item":
+		case elemGlobalContextItem:
 			if err := c.compileGlobalContextItem(ce); err != nil {
 				return err
 			}
-		case "character-map":
+		case elemCharacterMap:
 			if err := c.compileCharacterMap(ce); err != nil {
 				return err
 			}

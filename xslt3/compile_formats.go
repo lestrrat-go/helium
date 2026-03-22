@@ -44,7 +44,7 @@ func (c *compiler) compileCharacterMap(elem *helium.Element) error {
 		if !ok {
 			continue
 		}
-		if childElem.URI() != lexicon.NamespaceXSLT || childElem.LocalName() != "output-character" {
+		if childElem.URI() != lexicon.NamespaceXSLT || childElem.LocalName() != elemOutputCharacter {
 			continue
 		}
 		charAttr := getAttr(childElem, "character")
@@ -674,7 +674,7 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 			}
 			continue
 		}
-		if childElem.URI() != lexicon.NamespaceXSLT || childElem.LocalName() != "attribute" {
+		if childElem.URI() != lexicon.NamespaceXSLT || childElem.LocalName() != elemAttribute {
 			return staticError(errCodeXTSE0010, "only xsl:attribute is allowed as a child of xsl:attribute-set")
 		}
 		inst, err := c.compileAttribute(childElem)

@@ -26,12 +26,12 @@ const (
 	xslElemAccept       = "accept"
 	xslElemExpose       = "expose"
 	xslElemOverride     = "override"
-	xslElemTemplate     = "template"
-	xslElemFunction     = "function"
-	xslElemVariable     = "variable"
-	xslElemParam        = "param"
-	xslElemAttributeSet = "attribute-set"
-	xslElemMode         = "mode"
+	xslElemTemplate     = elemTemplate
+	xslElemFunction     = elemFunction
+	xslElemVariable     = elemVariable
+	xslElemParam        = elemParam
+	xslElemAttributeSet = elemAttributeSet
+	xslElemMode         = elemMode
 
 	xslWildcard = "*"
 )
@@ -877,7 +877,7 @@ func (c *compiler) collectOverrideNames(usePackageElem *helium.Element, nsBindin
 					// Count xsl:param children to determine arity
 					arity := 0
 					for pc := range helium.Children(oe) {
-						if pe, ok := pc.(*helium.Element); ok && pe.URI() == lexicon.NamespaceXSLT && pe.LocalName() == "param" {
+						if pe, ok := pc.(*helium.Element); ok && pe.URI() == lexicon.NamespaceXSLT && pe.LocalName() == elemParam {
 							arity++
 						}
 					}

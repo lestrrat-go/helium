@@ -177,7 +177,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 		if !ok {
 			continue
 		}
-		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == "param" {
+		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == elemParam {
 			if reqVal, hasReq := childElem.GetAttribute("required"); hasReq {
 				if reqVal != lexicon.ValueYes && reqVal != "1" && reqVal != "true" {
 					pname := getAttr(childElem, "name")

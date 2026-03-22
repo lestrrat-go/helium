@@ -66,7 +66,7 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 			return nil, staticError(errCodeXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:apply-templates", childElem.Name())
 		}
 		switch childElem.LocalName() {
-		case "sort":
+		case elemSort:
 			// XTSE1017: @stable only on first xsl:sort
 			if sortCount > 0 {
 				if _, has := childElem.GetAttribute("stable"); has {
@@ -82,7 +82,7 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 				inst.Sort = append(inst.Sort, sk)
 				sortCount++
 			}
-		case "with-param":
+		case elemWithParam:
 			wp, err := c.compileWithParam(childElem)
 			if err != nil {
 				return nil, err
@@ -123,7 +123,7 @@ func (c *compiler) compileCallTemplate(elem *helium.Element) (*CallTemplateInst,
 		if childElem.URI() != lexicon.NamespaceXSLT {
 			return nil, staticError(errCodeXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:call-template", childElem.Name())
 		}
-		if childElem.LocalName() != "with-param" {
+		if childElem.LocalName() != elemWithParam {
 			return nil, staticError(errCodeXTSE0010, "xsl:%s is not allowed as a child of xsl:call-template", childElem.LocalName())
 		}
 		wp, err := c.compileWithParam(childElem)
@@ -181,7 +181,7 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 		}
 
 		switch childElem.LocalName() {
-		case "when":
+		case elemWhen:
 			// XTSE0010: xsl:when must not appear after xsl:otherwise
 			if hasOtherwise {
 				return nil, staticError(errCodeXTSE0010, "xsl:when must not appear after xsl:otherwise in xsl:choose")
@@ -234,7 +234,7 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 				return nil, err
 			}
 			inst.When = append(inst.When, wc)
-		case "otherwise":
+		case elemOtherwise:
 			// XTSE0010: at most one xsl:otherwise is allowed
 			if hasOtherwise {
 				return nil, staticError(errCodeXTSE0010, "xsl:choose must not contain more than one xsl:otherwise")
@@ -303,7 +303,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 		if !ok {
 			continue
 		}
-		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == "sort" {
+		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == elemSort {
 			if pastSortContent {
 				return nil, staticError(errCodeXTSE0010, "xsl:sort must come before other content in xsl:for-each")
 			}
@@ -334,7 +334,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 	var lastSort helium.Node
 	for child := range helium.Children(elem) {
 		if childElem, ok := child.(*helium.Element); ok {
-			if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == "sort" {
+			if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == elemSort {
 				lastSort = child
 			}
 		}
@@ -347,7 +347,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 		}
 		switch v := child.(type) {
 		case *helium.Element:
-			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == "sort" {
+			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == elemSort {
 				continue
 			}
 			pastSort = true
@@ -575,7 +575,7 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*PerformSortInst, e
 		if !ok {
 			continue
 		}
-		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == "sort" {
+		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == elemSort {
 			if pastSort {
 				return nil, staticError(errCodeXTSE0010, "xsl:sort must come before other content in xsl:perform-sort")
 			}
@@ -616,7 +616,7 @@ func (c *compiler) compileNextMatch(elem *helium.Element) (*NextMatchInst, error
 		if !ok {
 			continue
 		}
-		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == "with-param" {
+		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == elemWithParam {
 			wp, err := c.compileWithParam(childElem)
 			if err != nil {
 				return nil, err
@@ -645,7 +645,7 @@ func (c *compiler) compileApplyImports(elem *helium.Element) (*ApplyImportsInst,
 		if childElem.URI() != lexicon.NamespaceXSLT {
 			return nil, staticError(errCodeXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:apply-imports", childElem.Name())
 		}
-		if childElem.LocalName() != "with-param" {
+		if childElem.LocalName() != elemWithParam {
 			return nil, staticError(errCodeXTSE0010, "xsl:%s is not allowed as a child of xsl:apply-imports", childElem.LocalName())
 		}
 		wp, err := c.compileWithParam(childElem)
@@ -688,7 +688,7 @@ func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 			}
 			continue
 		}
-		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == "catch" {
+		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == elemCatch {
 			clause := &CatchClause{}
 
 			// Parse errors attribute (space-separated list of error codes).
@@ -727,7 +727,7 @@ func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 				clause.Body = body
 			}
 			inst.Catches = append(inst.Catches, clause)
-		} else if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == "fallback" {
+		} else if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == elemFallback {
 			// xsl:fallback inside xsl:try is silently ignored
 			continue
 		} else {
@@ -850,7 +850,7 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 	for child := range helium.Children(elem) {
 		switch v := child.(type) {
 		case *helium.Element:
-			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == "sort" {
+			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == elemSort {
 				// XTSE1017: @stable only on first xsl:sort
 				if sortCount > 0 {
 					if _, has := v.GetAttribute("stable"); has {
@@ -939,7 +939,7 @@ func (c *compiler) compileAnalyzeString(elem *helium.Element) (*AnalyzeStringIns
 			continue
 		}
 		switch childElem.LocalName() {
-		case "matching-substring":
+		case elemMatchingSubstring:
 			if phase >= phaseMatching {
 				return nil, staticError(errCodeXTSE0010, "xsl:matching-substring must precede xsl:non-matching-substring and xsl:fallback")
 			}
@@ -949,7 +949,7 @@ func (c *compiler) compileAnalyzeString(elem *helium.Element) (*AnalyzeStringIns
 				return nil, err
 			}
 			inst.MatchingBody = body
-		case "non-matching-substring":
+		case elemNonMatchingSubstring:
 			if phase >= phaseNonMatch {
 				return nil, staticError(errCodeXTSE0010, "xsl:non-matching-substring out of order in xsl:analyze-string")
 			}
@@ -959,7 +959,7 @@ func (c *compiler) compileAnalyzeString(elem *helium.Element) (*AnalyzeStringIns
 				return nil, err
 			}
 			inst.NonMatchingBody = body
-		case "fallback":
+		case elemFallback:
 			phase = phaseFallback
 		}
 	}
@@ -1044,7 +1044,7 @@ func (c *compiler) compileEvaluate(elem *helium.Element) (Instruction, error) {
 		if childElem.URI() != lexicon.NamespaceXSLT {
 			continue
 		}
-		if childElem.LocalName() == "with-param" {
+		if childElem.LocalName() == elemWithParam {
 			wp, err := c.compileWithParam(childElem)
 			if err != nil {
 				return nil, err
@@ -1052,7 +1052,7 @@ func (c *compiler) compileEvaluate(elem *helium.Element) (Instruction, error) {
 			if wp != nil {
 				inst.Params = append(inst.Params, wp)
 			}
-		} else if childElem.LocalName() == "fallback" {
+		} else if childElem.LocalName() == elemFallback {
 			// skip
 		} else {
 			return nil, staticError(errCodeXTSE0010, "xsl:evaluate may only contain xsl:with-param or xsl:fallback, found xsl:%s", childElem.LocalName())
