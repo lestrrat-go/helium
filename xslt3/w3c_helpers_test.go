@@ -880,6 +880,12 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		AnnotationHandler(recv).
 		TraceWriter(io.Discard)
 
+	// Capture secondary result document output definitions for serialization.
+	testName := t.Name()
+	ctx = xslt3.WithResultDocOutputDefHandler(ctx, func(href string, outDef *xslt3.OutputDef) {
+		w3cResultDocOutputDefs.Store(testName+"\x00"+href, outDef)
+	})
+
 	// Set up collection resolver if collections are defined or if the test
 	// requires well-known collections (e.g., merge tests using log-files).
 	collections := tc.Collections

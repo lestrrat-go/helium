@@ -507,14 +507,17 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 	ec.currentResultDocMethod = savedMethod
 	ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 
-	// For json/adaptive serialization, store captured items and output definition.
+	// For json/adaptive serialization, store captured items.
 	if isItemSerializationMethod(effectiveMethod) && len(frame.pendingItems) > 0 {
 		ec.resultDocItems[href] = frame.pendingItems
-		// Build and store the effective output definition for this result document.
-		effOutDef, err := ec.buildEffectiveOutputDef(ctx, inst, effectiveFormat, effectiveMethod)
-		if err == nil && effOutDef != nil {
-			ec.resultDocOutputDefs[href] = effOutDef
-		}
+	}
+
+	// Always store the effective output definition for secondary result documents
+	// so that serialization parameters (omit-xml-declaration, indent, etc.) from
+	// the named format are applied when serializing the result.
+	effOutDef, err := ec.buildEffectiveOutputDef(ctx, inst, effectiveFormat, effectiveMethod)
+	if err == nil && effOutDef != nil {
+		ec.resultDocOutputDefs[href] = effOutDef
 	}
 
 	// Validate the result document if requested.
