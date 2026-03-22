@@ -2114,6 +2114,11 @@ func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, gro
 			count++
 		}
 	case xpath3.PathStepExpr:
+		// A path rooted in a variable reference (e.g., $var/text()) navigates
+		// the variable's value, not the streaming source. Return 0.
+		if _, isVar := derefXPathExpr(e.Left).(xpath3.VariableExpr); isVar {
+			return 0
+		}
 		leftGrounding := isGroundingExprSS(ss, e.Left)
 		// A path step like A/B is a single selection path — the left side
 		// provides context for the right side. Count the right side's
@@ -2137,6 +2142,11 @@ func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, gro
 			count++
 		}
 	case xpath3.PathExpr:
+		// A path rooted in a variable reference (e.g., $var/text()) navigates
+		// the variable's value, not the streaming source. Return 0.
+		if _, isVar := derefXPathExpr(e.Filter).(xpath3.VariableExpr); isVar {
+			return 0
+		}
 		filterGrounding := isGroundingExprSS(ss, e.Filter)
 		filterCount := countStreamingDownwardSelectionsInner(ss, e.Filter, false)
 		pathCount := 0
