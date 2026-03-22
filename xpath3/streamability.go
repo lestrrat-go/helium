@@ -360,6 +360,18 @@ func predicateIsNonMotionless(pred Expr) bool {
 				nonMotionless = true
 				return false
 			}
+			// Property-access functions (name, local-name, node-name, etc.)
+			// only inspect node properties without consuming children.
+			// current() in match patterns returns the node being matched,
+			// which is motionless. Skip children so "." inside is not flagged.
+			if v.Prefix == "" {
+				switch v.Name {
+				case "name", "local-name", "namespace-uri", "node-name",
+					"self", "generate-id", "base-uri", "document-uri",
+					"nilled", "has-children", "string-length", "current":
+					return false
+				}
+			}
 		case LiteralExpr:
 			// A numeric literal predicate like [1] is positional (equivalent
 			// to [position()=1]) and therefore non-motionless — but only when
