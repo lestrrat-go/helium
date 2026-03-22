@@ -630,6 +630,40 @@ func jsonEscapeString(s string) string {
 	return buf.String()
 }
 
+// adaptiveQuoteString wraps a string in double quotes for adaptive output.
+// Unlike JSON escaping, adaptive serialization only escapes embedded double
+// quotes by doubling them (XSLT 3.0 §26.3.5). Other characters such as
+// backslashes are emitted literally.
+func adaptiveQuoteString(s string) string {
+	var buf bytes.Buffer
+	buf.WriteByte('"')
+	for _, r := range s {
+		if r == '"' {
+			buf.WriteString("\"\"")
+		} else {
+			buf.WriteRune(r)
+		}
+	}
+	buf.WriteByte('"')
+	return buf.String()
+}
+
+// isAdaptiveQuotedType returns true when an atomic type should be serialized
+// with double-quote wrapping in adaptive output (XSLT 3.0 §26.3.5).
+// String-like types use JSON quoting; numeric types and xs:boolean do not.
+func isAdaptiveQuotedType(typeName string) bool {
+	switch typeName {
+	case "xs:boolean",
+		"xs:integer", "xs:decimal", "xs:float", "xs:double",
+		"xs:long", "xs:int", "xs:short", "xs:byte",
+		"xs:unsignedLong", "xs:unsignedInt", "xs:unsignedShort", "xs:unsignedByte",
+		"xs:nonNegativeInteger", "xs:nonPositiveInteger",
+		"xs:positiveInteger", "xs:negativeInteger":
+		return false
+	}
+	return true
+}
+
 // serializeItemAdaptive serializes a single item using the adaptive method.
 func serializeItemAdaptive(item xpath3.Item, charMap map[rune]string) string {
 	maybeApply := func(s string) string {
@@ -660,11 +694,19 @@ func serializeItemAdaptive(item xpath3.Item, charMap map[rune]string) string {
 		return maybeApply(buf.String())
 	case xpath3.AtomicValue:
 		s, _ := xpath3.AtomicToString(v)
-		return maybeApply(s)
+		s = maybeApply(s)
+		if isAdaptiveQuotedType(v.TypeName) {
+			return adaptiveQuoteString(s)
+		}
+		return s
 	default:
 		if av, ok := item.(xpath3.AtomicValue); ok {
 			s, _ := xpath3.AtomicToString(av)
-			return maybeApply(s)
+			s = maybeApply(s)
+			if isAdaptiveQuotedType(av.TypeName) {
+				return adaptiveQuoteString(s)
+			}
+			return s
 		}
 		return fmt.Sprintf("%v", item)
 	}
