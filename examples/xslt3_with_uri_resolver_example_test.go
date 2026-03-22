@@ -30,12 +30,18 @@ func Example_xslt3_with_uri_resolver() {
 
 	ctx := context.Background()
 
+	// URI resolvers are used at stylesheet compile time for xsl:include,
+	// xsl:import, and other external reads. They are a good fit when your
+	// stylesheets live in memory, in an embedded filesystem, or behind a custom
+	// storage layer instead of regular disk paths.
 	stylesheetDoc, err := helium.Parse(ctx, []byte(mainStylesheetSrc))
 	if err != nil {
 		fmt.Printf("failed to parse stylesheet: %s\n", err)
 		return
 	}
 
+	// The base URI matters because relative href values such as "common.xsl"
+	// are resolved against it before the resolver is called.
 	compileCtx := xslt3.WithCompileBaseURI(ctx, "/virtual/main.xsl")
 	compileCtx = xslt3.WithCompileURIResolver(compileCtx, exampleXSLTResolver{
 		"/virtual/common.xsl": includedStylesheetSrc,

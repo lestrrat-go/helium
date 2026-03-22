@@ -15,6 +15,9 @@ func Example_xpath3_evaluate() {
 		return
 	}
 
+	// xpath3.Evaluate returns a Result wrapper because XPath expressions can
+	// produce different kinds of values. Use the typed accessors that match the
+	// expression you ran.
 	r, err := xpath3.Evaluate(context.Background(), doc, "string(//item[1])")
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
@@ -27,6 +30,7 @@ func Example_xpath3_evaluate() {
 	}
 	fmt.Printf("string: %s\n", s)
 
+	// The same document can be queried again for a numeric result.
 	r, err = xpath3.Evaluate(context.Background(), doc, "sum(//item)")
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
@@ -39,6 +43,7 @@ func Example_xpath3_evaluate() {
 	}
 	fmt.Printf("sum: %.0f\n", n)
 
+	// And again for a boolean result.
 	r, err = xpath3.Evaluate(context.Background(), doc, "count(//item) > 2")
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)

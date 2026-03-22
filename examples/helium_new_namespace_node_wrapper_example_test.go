@@ -14,6 +14,9 @@ func Example_helium_new_namespace_node_wrapper() {
 		return
 	}
 
+	// Namespace declarations are not ordinary element nodes. When an API expects
+	// a helium.Node, NewNamespaceNodeWrapper lets you expose a namespace binding
+	// through that interface while still keeping its owning element context.
 	ns := helium.NewNamespace("p", "urn:p")
 	wrapped := helium.NewNamespaceNodeWrapper(ns, doc.DocumentElement())
 

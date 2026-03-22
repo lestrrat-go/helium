@@ -16,6 +16,9 @@ func Example_c14n_canonicalize_writer() {
 		return
 	}
 
+	// Canonicalize writes directly to an io.Writer. Use this form when you want
+	// to stream canonical XML to a file, network connection, or hash function
+	// without building an intermediate byte slice first.
 	var buf bytes.Buffer
 	if err := c14n.Canonicalize(&buf, doc, c14n.C14N10); err != nil {
 		fmt.Printf("canonicalize failed: %s\n", err)

@@ -15,6 +15,9 @@ func Example_xpath3_find() {
 		return
 	}
 
+	// xpath3.Find is the convenience API for the common "give me the matching
+	// nodes" case. It compiles the XPath expression, evaluates it, and returns
+	// the node slice directly.
 	nodes, err := xpath3.Find(context.Background(), doc, "//book")
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)

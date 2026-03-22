@@ -31,6 +31,11 @@ func Example_xslt3_transform() {
 
 	ctx := context.Background()
 
+	// The basic XSLT workflow is:
+	// 1. parse or load the stylesheet
+	// 2. compile it to *xslt3.Stylesheet
+	// 3. parse the source document
+	// 4. call xslt3.Transform
 	stylesheetDoc, err := helium.Parse(ctx, []byte(stylesheetSrc))
 	if err != nil {
 		fmt.Printf("failed to parse stylesheet: %s\n", err)
@@ -49,6 +54,8 @@ func Example_xslt3_transform() {
 		return
 	}
 
+	// Transform returns the primary result tree as a helium document. You can
+	// keep working with it as a DOM or serialize it afterward.
 	resultDoc, err := xslt3.Transform(ctx, sourceDoc, stylesheet)
 	if err != nil {
 		fmt.Printf("transform failed: %s\n", err)
