@@ -534,6 +534,19 @@ func argHasStreamingDownwardUngrounded(expr xpath3.Expr) bool {
 	if isGroundingExpr(expr) {
 		return false
 	}
+	// If the outermost expression produces atomic values (e.g., data(),
+	// string(), count()), the result is grounded — atomic values are not
+	// streaming nodes and can be accessed randomly.
+	if isAtomicResultExpr(expr) {
+		return false
+	}
+	// If the expression is a path ending in an atomizing function
+	// (e.g., ./path/to/nodes/data()), the result is atomic and safe.
+	if ps, ok := expr.(xpath3.PathStepExpr); ok {
+		if isAtomicResultExpr(ps.Right) {
+			return false
+		}
+	}
 	hasDown := false
 	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
 		if hasDown {
