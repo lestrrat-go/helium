@@ -867,7 +867,7 @@ func walkExprCheckPredicates(ss *Stylesheet, expr xpath3.Expr, grounded bool, fo
 		if !grounded {
 			for _, step := range e.Steps {
 				for _, pred := range step.Predicates {
-					if predicateIsNonMotionlessSS(ss, pred) {
+					if predicateIsNonMotionlessSS(ss, pred, &step) {
 						*found = true
 						return
 					}
@@ -882,7 +882,7 @@ func walkExprCheckPredicates(ss *Stylesheet, expr xpath3.Expr, grounded bool, fo
 		walkExprCheckPredicates(ss, e.Expr, grounded, found)
 		if !g {
 			for _, pred := range e.Predicates {
-				if predicateIsNonMotionlessSS(ss, pred) {
+				if predicateIsNonMotionlessSS(ss, pred, nil) {
 					*found = true
 					return
 				}
@@ -955,10 +955,35 @@ func walkExprCheckPredicates(ss *Stylesheet, expr xpath3.Expr, grounded bool, fo
 // predicateIsNonMotionless returns true if a predicate expression navigates
 // downward (uses child/descendant axes), uses last(), or accesses the context item.
 func predicateIsNonMotionless(pred xpath3.Expr) bool {
-	return predicateIsNonMotionlessSS(nil, pred)
+	return predicateIsNonMotionlessSS(nil, pred, nil)
 }
 
-func predicateIsNonMotionlessSS(ss *Stylesheet, pred xpath3.Expr) bool {
+// stepContextIsAtomic returns true if the context item in a predicate on this
+// step has its string value available without navigating to child nodes.
+// Attribute, text, comment, PI, and namespace nodes have atomic values;
+// element and document nodes require reading descendant text.
+func stepContextIsAtomic(axis xpath3.AxisType, nt xpath3.NodeTest) bool {
+	// Attribute axis always selects attribute nodes — atomic value.
+	if axis == xpath3.AxisAttribute {
+		return true
+	}
+	switch v := nt.(type) {
+	case xpath3.TypeTest:
+		switch v.Kind {
+		case xpath3.NodeKindText, xpath3.NodeKindComment, xpath3.NodeKindProcessingInstruction:
+			return true
+		}
+	case xpath3.AttributeTest:
+		return true
+	case xpath3.NamespaceNodeTest:
+		return true
+	case xpath3.PITest:
+		return true
+	}
+	return false
+}
+
+func predicateIsNonMotionlessSS(ss *Stylesheet, pred xpath3.Expr, step *xpath3.Step) bool {
 	nonMotionless := false
 	xpath3.WalkExpr(pred, func(e xpath3.Expr) bool {
 		if nonMotionless {
@@ -1002,10 +1027,14 @@ func predicateIsNonMotionlessSS(ss *Stylesheet, pred xpath3.Expr) bool {
 				}
 			}
 		case xpath3.ContextItemExpr:
-			// "." in a predicate refers to the context item of the step being
-			// filtered, not the streaming context. Accessing the context item's
-			// value (e.g., [. < 1000]) is a motionless operation — it does not
-			// navigate the document tree. This is safe in streaming predicates.
+			// "." in a predicate on a step that selects atomic-value nodes
+			// (text(), attribute, comment, PI) is motionless — the value is
+			// available without child navigation. On element/document steps,
+			// atomizing "." requires reading descendant text, which is consuming.
+			if step == nil || !stepContextIsAtomic(step.Axis, step.NodeTest) {
+				nonMotionless = true
+				return false
+			}
 		}
 		return true
 	})
