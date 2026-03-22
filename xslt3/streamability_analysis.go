@@ -2025,9 +2025,17 @@ func exprUsesCurrentGroup(expr *xpath3.Expression) bool {
 	return xpath3.ExprUsesFunction(expr, "current-group")
 }
 
-// checkMapStreamable checks xsl:map instructions for streamability violations:
-// - Multiple map-entry children with consuming expressions
-// - Non-map-entry children (like xsl:if wrapping map-entry)
+// checkMapStreamable checks xsl:map instructions for streamability violations.
+//
+// Per the XSLT 3.0 spec, xsl:map with all xsl:map-entry children acts as an
+// implicit fork: each map-entry is processed independently, so multiple
+// consuming entries are allowed. However:
+//   - A single map-entry whose key AND select/body are both consuming is invalid
+//     (multiple consuming references within a single fork branch).
+//   - A map-entry whose select returns ungrounded streaming nodes is invalid
+//     because node references become dangling after the fork branch completes.
+//   - Non-map-entry children (like xsl:if wrapping map-entry) break the implicit
+//     fork guarantee and are invalid when consuming entries are present.
 func checkMapStreamable(ss *Stylesheet, inst Instruction) error {
 	mapInst, ok := inst.(*MapInst)
 	if !ok {
@@ -2038,42 +2046,52 @@ func checkMapStreamable(ss *Stylesheet, inst Instruction) error {
 	hasNonEntryChildren := false
 	for _, child := range mapInst.Body {
 		if me, ok := child.(*MapEntryInst); ok {
-			consuming := false
-			if me.Select != nil {
-				if countStreamingDownwardSelections(ss, me.Select.AST()) > 0 {
-					consuming = true
-				}
-			}
-			if me.Key != nil {
-				if countStreamingDownwardSelections(ss, me.Key.AST()) > 0 {
-					consuming = true
-				}
-			}
-			// Also check child instructions of map-entry for consuming patterns
-			if !consuming {
-				for _, meChild := range me.Body {
-					for _, expr := range getInstructionExprs(meChild) {
-						if countStreamingDownwardSelections(ss, expr.AST()) > 0 {
-							consuming = true
-							break
-						}
-					}
-					if consuming {
+			// Check if key and select/body EACH consume the stream.
+			// Use ExprHasDownwardStep which counts downward steps even
+			// inside grounding functions — each still consumes the stream.
+			keyConsuming := me.Key != nil && xpath3.ExprHasDownwardStep(me.Key)
+			selectConsuming := me.Select != nil && xpath3.ExprHasDownwardStep(me.Select)
+			bodyConsuming := false
+			for _, meChild := range me.Body {
+				for _, expr := range getInstructionExprs(meChild) {
+					if expr != nil && xpath3.ExprHasDownwardStep(expr) {
+						bodyConsuming = true
 						break
 					}
 				}
+				if bodyConsuming {
+					break
+				}
 			}
-			if consuming {
+
+			// Within a single map-entry (one fork branch), key and
+			// select/body must not both consume the stream.
+			consumingParts := 0
+			if keyConsuming {
+				consumingParts++
+			}
+			if selectConsuming || bodyConsuming {
+				consumingParts++
+			}
+			if consumingParts > 1 {
+				return staticError(errCodeXTSE3430,
+					"xsl:map-entry has multiple consuming expressions (key and value), which is not streamable")
+			}
+
+			// A map-entry select that navigates downward into the streaming
+			// source but does not ground or atomize the result produces
+			// streaming nodes that become invalid after the branch completes.
+			if me.Select != nil && argHasStreamingDownwardUngrounded(me.Select.AST()) {
+				return staticError(errCodeXTSE3430,
+					"xsl:map-entry select returns ungrounded streaming nodes, which is not streamable")
+			}
+
+			if keyConsuming || selectConsuming || bodyConsuming {
 				consumingEntries++
 			}
 		} else {
 			hasNonEntryChildren = true
 		}
-	}
-
-	if consumingEntries > 1 {
-		return staticError(errCodeXTSE3430,
-			"xsl:map has multiple map-entry elements with consuming expressions, which is not streamable")
 	}
 
 	if hasNonEntryChildren && consumingEntries > 0 {
