@@ -448,7 +448,15 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 			"expression %q uses a grounding function with a crawling operand, which is not streamable", expr.String())
 	}
 
-	// 7. accumulator-after() on a parent/ancestor axis is not streamable because
+	// 7. Higher-order functions (filter, for-each, fold-left, fold-right) require
+	// their sequence argument to be grounded — a consuming (downward) expression
+	// is not streamable as the first argument.
+	if exprHasHigherOrderWithConsumingArg(expr) {
+		return staticError(errCodeXTSE3430,
+			"expression %q passes a consuming expression to a higher-order function, which is not streamable", expr.String())
+	}
+
+	// 8. accumulator-after() on a parent/ancestor axis is not streamable because
 	// the ancestor's post-descent value is not yet available during streaming.
 	if exprUsesAccumulatorAfterOnAncestor(expr) {
 		return staticError(errCodeXTSE3430,
@@ -483,6 +491,71 @@ func exprHasCrawlingGroundingArg(expr *xpath3.Expression) bool {
 		return true
 	})
 	return found
+}
+
+// exprHasHigherOrderWithConsumingArg returns true if the expression contains a
+// call to filter() or fold-right() whose first argument (the sequence) has a
+// downward (consuming) selection that is not inside a grounding function.
+// These higher-order functions require their sequence argument to be grounded
+// because they need random access to the full sequence. In contrast, for-each()
+// and fold-left() can process items sequentially and accept striding operands.
+func exprHasHigherOrderWithConsumingArg(expr *xpath3.Expression) bool {
+	if expr == nil {
+		return false
+	}
+	found := false
+	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		fc, ok := e.(xpath3.FunctionCall)
+		if !ok || fc.Prefix != "" || len(fc.Args) < 2 {
+			return true
+		}
+		switch fc.Name {
+		case "filter", "fold-right":
+			if argHasStreamingDownwardUngrounded(fc.Args[0]) {
+				found = true
+				return false
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// argHasStreamingDownwardUngrounded returns true if the expression navigates
+// downward into the streaming document (child/descendant axis) and is not
+// wrapped in a grounding function like copy-of() or snapshot().
+func argHasStreamingDownwardUngrounded(expr xpath3.Expr) bool {
+	expr = derefXPathExpr(expr)
+	// If the outermost expression is a grounding function, the result is
+	// grounded and safe for higher-order functions.
+	if isGroundingExpr(expr) {
+		return false
+	}
+	hasDown := false
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		if hasDown {
+			return false
+		}
+		// Skip into grounding function arguments — they are grounded.
+		if fc, ok := e.(xpath3.FunctionCall); ok && isGroundingExpr(fc) {
+			return false
+		}
+		switch v := e.(type) {
+		case xpath3.LocationPath:
+			for _, step := range v.Steps {
+				switch step.Axis {
+				case xpath3.AxisChild, xpath3.AxisDescendant, xpath3.AxisDescendantOrSelf:
+					hasDown = true
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return hasDown
 }
 
 // accRuleMatchesElement returns true if the accumulator rule's match pattern
