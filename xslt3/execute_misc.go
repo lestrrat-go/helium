@@ -23,25 +23,25 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStrin
 	if len(seq) == 0 {
 		if isV2 {
 			// XSLT 2.0: empty sequence is XPTY0004
-			return dynamicError("XPTY0004", "xsl:analyze-string select must be a single xs:string, got empty sequence")
+			return dynamicError(errCodeXPTY0004, "xsl:analyze-string select must be a single xs:string, got empty sequence")
 		}
 		// XSLT 3.0: empty sequence treated as ""
 		return nil
 	}
 	if len(seq) > 1 {
-		return dynamicError("XPTY0004", "xsl:analyze-string select must be a single xs:string, got sequence of %d items", len(seq))
+		return dynamicError(errCodeXPTY0004, "xsl:analyze-string select must be a single xs:string, got sequence of %d items", len(seq))
 	}
 	av, err := xpath3.AtomizeItem(seq[0])
 	if err != nil {
-		return dynamicError("XPTY0004", "xsl:analyze-string select must be xs:string: %v", err)
+		return dynamicError(errCodeXPTY0004, "xsl:analyze-string select must be xs:string: %v", err)
 	}
 	// Reject non-string atomic types (xs:integer, etc.)
 	if av.TypeName != xpath3.TypeString && av.TypeName != xpath3.TypeUntypedAtomic && av.TypeName != xpath3.TypeAnyURI {
-		return dynamicError("XPTY0004", "xsl:analyze-string select must be xs:string, got %s", av.TypeName)
+		return dynamicError(errCodeXPTY0004, "xsl:analyze-string select must be xs:string, got %s", av.TypeName)
 	}
 	input, err := xpath3.AtomicToString(av)
 	if err != nil {
-		return dynamicError("XPTY0004", "xsl:analyze-string select must be xs:string: %v", err)
+		return dynamicError(errCodeXPTY0004, "xsl:analyze-string select must be xs:string: %v", err)
 	}
 
 	// Evaluate regex AVT
@@ -328,11 +328,11 @@ func isPopulated(node helium.Node) bool {
 // isItemSequencePopulated returns true if the XDM item sequence contains
 // at least one "significant" item per XSLT 3.0 xsl:where-populated rules.
 //
-// - A map is significant if it has at least one entry.
-// - An array is significant if at least one member (recursively) is
-//   a non-empty sequence containing a significant item.
-// - An empty string ("") is not significant.
-// - Any other atomic value, node, or non-empty-string is significant.
+//   - A map is significant if it has at least one entry.
+//   - An array is significant if at least one member (recursively) is
+//     a non-empty sequence containing a significant item.
+//   - An empty string ("") is not significant.
+//   - Any other atomic value, node, or non-empty-string is significant.
 func isItemSequencePopulated(items xpath3.Sequence) bool {
 	for _, item := range items {
 		if isItemSignificant(item) {
@@ -506,7 +506,7 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 		}
 		keySeq := keyResult.Sequence()
 		if len(keySeq) != 1 {
-			return dynamicError("XPTY0004", "xsl:map-entry key must be a single atomic value")
+			return dynamicError(errCodeXPTY0004, "xsl:map-entry key must be a single atomic value")
 		}
 		keyAV, err := xpath3.AtomizeItem(keySeq[0])
 		if err != nil {
@@ -544,7 +544,7 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 	}
 	keySeq := keyResult.Sequence()
 	if len(keySeq) != 1 {
-		return dynamicError("XPTY0004", "xsl:map-entry key must be a single atomic value")
+		return dynamicError(errCodeXPTY0004, "xsl:map-entry key must be a single atomic value")
 	}
 	keyAV, err := xpath3.AtomizeItem(keySeq[0])
 	if err != nil {
@@ -933,7 +933,7 @@ func (ec *execContext) checkEvaluateAsType(asType string, seq xpath3.Sequence) e
 					continue
 				}
 			}
-			return dynamicError("XPTY0004", "xsl:evaluate: result does not match as=%q", asType)
+			return dynamicError(errCodeXPTY0004, "xsl:evaluate: result does not match as=%q", asType)
 		}
 	case "xs:integer":
 		for _, item := range seq {
@@ -943,7 +943,7 @@ func (ec *execContext) checkEvaluateAsType(asType string, seq xpath3.Sequence) e
 					continue
 				}
 			}
-			return dynamicError("XPTY0004", "xsl:evaluate: result does not match as=%q", asType)
+			return dynamicError(errCodeXPTY0004, "xsl:evaluate: result does not match as=%q", asType)
 		}
 	case "xs:boolean":
 		for _, item := range seq {
@@ -953,7 +953,7 @@ func (ec *execContext) checkEvaluateAsType(asType string, seq xpath3.Sequence) e
 					continue
 				}
 			}
-			return dynamicError("XPTY0004", "xsl:evaluate: result does not match as=%q", asType)
+			return dynamicError(errCodeXPTY0004, "xsl:evaluate: result does not match as=%q", asType)
 		}
 	case "item()", "item()*":
 		// Any item matches

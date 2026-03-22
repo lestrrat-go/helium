@@ -551,12 +551,12 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 			resultSeq := result.Sequence()
 			if len(resultSeq) == 0 {
 				// XTTE1100: group-adjacent key must not be an empty sequence
-				return nil, dynamicError("XTTE1100",
+				return nil, dynamicError(errCodeXTTE1100,
 					"group-adjacent key is an empty sequence")
 			}
 			if len(resultSeq) > 1 {
 				// XTTE1100: group-adjacent key must be a single atomic value
-				return nil, dynamicError("XTTE1100",
+				return nil, dynamicError(errCodeXTTE1100,
 					"group-adjacent key has %d items (expected 1)", len(resultSeq))
 			}
 			keyVal, keySeq = groupLookupKey(resultSeq[0], nil)

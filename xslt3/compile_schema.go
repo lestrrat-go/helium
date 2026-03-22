@@ -298,7 +298,7 @@ func (c *compiler) validateAsSequenceType(as string, context string) error {
 		if errors.As(err, &xpErr) {
 			return staticError(xpErr.Code, "%s: invalid 'as' type: %s", context, err)
 		}
-		return staticError("XPST0003", "%s: invalid 'as' type: %s", context, err)
+		return staticError(errCodeXPST0003, "%s: invalid 'as' type: %s", context, err)
 	}
 	if !c.stylesheet.schemaAware || len(c.stylesheet.schemas) == 0 {
 		return nil

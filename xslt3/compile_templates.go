@@ -372,7 +372,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 	inParams := true
 	sawContextItem := false
 	pastDecls := lastDeclNode == nil // true if no declarations at all
-	sawContent := false // true once non-whitespace text or non-param/context-item element seen
+	sawContent := false              // true once non-whitespace text or non-param/context-item element seen
 	for child := range helium.Children(elem) {
 		switch v := child.(type) {
 		case *helium.Element:
@@ -729,7 +729,7 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 		// XPST0008: a global variable is out of scope within its own
 		// declaration. Detect self-references in the select expression.
 		if xpathExprReferencesVar(expr.AST(), name, c.nsBindings) {
-			return staticError("XPST0008",
+			return staticError(errCodeXPST0008,
 				"global variable %q references itself in its select expression", name)
 		}
 		v.Select = expr
@@ -745,12 +745,12 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 	// Only flag duplicates within the same module (same importPrec).
 	for _, existing := range c.stylesheet.globalVars {
 		if existing.Name == v.Name && existing.ImportPrec == c.importPrec {
-			return staticError("XTSE0630", "duplicate global variable %q", v.Name)
+			return staticError(errCodeXTSE0630, "duplicate global variable %q", v.Name)
 		}
 	}
 	for _, existing := range c.stylesheet.globalParams {
 		if existing.Name == v.Name && existing.ImportPrec == c.importPrec {
-			return staticError("XTSE0630", "duplicate global variable/param %q", v.Name)
+			return staticError(errCodeXTSE0630, "duplicate global variable/param %q", v.Name)
 		}
 	}
 	v.ImportPrec = c.importPrec
@@ -770,12 +770,12 @@ func (c *compiler) compileGlobalParam(elem *helium.Element) error {
 	// XTSE0630: duplicate global param/variable with same name and same import precedence
 	for _, existing := range c.stylesheet.globalParams {
 		if existing.Name == p.Name && existing.ImportPrec == c.importPrec {
-			return staticError("XTSE0630", "duplicate global param %q", p.Name)
+			return staticError(errCodeXTSE0630, "duplicate global param %q", p.Name)
 		}
 	}
 	for _, existing := range c.stylesheet.globalVars {
 		if existing.Name == p.Name && existing.ImportPrec == c.importPrec {
-			return staticError("XTSE0630", "duplicate global param/variable %q", p.Name)
+			return staticError(errCodeXTSE0630, "duplicate global param/variable %q", p.Name)
 		}
 	}
 	p.ImportPrec = c.importPrec

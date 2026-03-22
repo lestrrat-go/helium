@@ -26,7 +26,7 @@ func (c *compiler) compileGlobalContextItem(elem *helium.Element) error {
 		def.Use = "optional"
 	}
 	if def.Use == "absent" && def.As != "" {
-		return staticError("XTSE3089", "xsl:global-context-item with use=\"absent\" must not specify @as")
+		return staticError(errCodeXTSE3089, "xsl:global-context-item with use=\"absent\" must not specify @as")
 	}
 	moduleKey := c.moduleKey
 	if moduleKey == "" {
@@ -68,7 +68,7 @@ func isReservedFunctionNS(uri string) bool {
 func (c *compiler) compileFunction(elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {}, "as": {}, "visibility": {}, "streamable": {},
-		"streamability": {},
+		"streamability":               {},
 		"override-extension-function": {}, "override": {},
 		"identity-sensitive": {}, "cache": {}, "new-each-time": {},
 		"use-when": {},
@@ -192,18 +192,18 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 			}
 			// XTSE0760: function params must not have a default value
 			if getAttr(childElem, "select") != "" {
-				return staticError("XTSE0760",
+				return staticError(errCodeXTSE0760,
 					"xsl:param %q in xsl:function must not have a select attribute", getAttr(childElem, "name"))
 			}
 			if childElem.FirstChild() != nil {
 				// Check for non-whitespace content (body content = default value)
 				for ch := range helium.Children(childElem) {
 					if ch.Type() == helium.ElementNode {
-						return staticError("XTSE0760",
+						return staticError(errCodeXTSE0760,
 							"xsl:param %q in xsl:function must not have content", getAttr(childElem, "name"))
 					}
 					if ch.Type() == helium.TextNode && strings.TrimSpace(string(ch.Content())) != "" {
-						return staticError("XTSE0760",
+						return staticError(errCodeXTSE0760,
 							"xsl:param %q in xsl:function must not have content", getAttr(childElem, "name"))
 					}
 				}

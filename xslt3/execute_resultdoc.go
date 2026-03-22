@@ -202,7 +202,7 @@ func (ec *execContext) resolveResultDocFormat(ctx context.Context, inst *ResultD
 			if idx := strings.IndexByte(v, ':'); idx >= 0 {
 				prefix := v[:idx]
 				if _, ok := inst.NSBindings[prefix]; !ok {
-					return "", dynamicError("XTDE0290",
+					return "", dynamicError(errCodeXTDE0290,
 						"prefix %q in result-document format has no namespace binding", prefix)
 				}
 			}

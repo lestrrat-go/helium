@@ -113,7 +113,7 @@ func (c *compiler) compileMapEntry(elem *helium.Element) (*MapEntryInst, error) 
 	selectAttr := getAttr(elem, "select")
 	hasBody := hasSignificantChildren(elem)
 	if selectAttr != "" && hasBody {
-		return nil, staticError("XTSE3280", "xsl:map-entry must not have both a select attribute and a sequence constructor body")
+		return nil, staticError(errCodeXTSE3280, "xsl:map-entry must not have both a select attribute and a sequence constructor body")
 	}
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)

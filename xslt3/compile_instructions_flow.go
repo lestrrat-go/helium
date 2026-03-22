@@ -403,7 +403,7 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 	selectAttr := getAttr(elem, "select")
 	// XTSE1015: xsl:sort with select must not have content
 	if selectAttr != "" && c.hasEffectiveContent(elem) {
-		return nil, staticError("XTSE1015", "xsl:sort with a select attribute must not have content")
+		return nil, staticError(errCodeXTSE1015, "xsl:sort with a select attribute must not have content")
 	}
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
@@ -557,11 +557,11 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*PerformSortInst, e
 			if childElem.URI() == lexicon.NamespaceXSLT {
 				ln := childElem.LocalName()
 				if ln != "sort" && ln != "fallback" {
-					return nil, staticError("XTSE1040",
+					return nil, staticError(errCodeXTSE1040,
 						"xsl:perform-sort with select attribute must not contain xsl:%s", ln)
 				}
 			} else {
-				return nil, staticError("XTSE1040",
+				return nil, staticError(errCodeXTSE1040,
 					"xsl:perform-sort with select attribute must not contain non-XSLT content")
 			}
 		}
@@ -781,11 +781,11 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 	hasGroupAdjacent := getAttr(elem, "group-adjacent") != ""
 	if !hasGroupBy && !hasGroupAdjacent {
 		if getAttr(elem, "collation") != "" {
-			return nil, staticError("XTSE1090",
+			return nil, staticError(errCodeXTSE1090,
 				"collation attribute on xsl:for-each-group requires group-by or group-adjacent")
 		}
 		if getAttr(elem, "composite") != "" {
-			return nil, staticError("XTSE1090",
+			return nil, staticError(errCodeXTSE1090,
 				"composite attribute on xsl:for-each-group requires group-by or group-adjacent")
 		}
 	}

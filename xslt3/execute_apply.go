@@ -247,9 +247,9 @@ func (ec *execContext) evaluateWithParam(ctx context.Context, wp *WithParam) (xp
 }
 
 // resolveNamedTemplate looks up a named template by searching:
-// 1. The main stylesheet's namedTemplates map
-// 2. The current package context (if set) - allows private templates
-//    from the package to be called by other templates in the same package
+//  1. The main stylesheet's namedTemplates map
+//  2. The current package context (if set) - allows private templates
+//     from the package to be called by other templates in the same package
 func (ec *execContext) resolveNamedTemplate(name string) (*Template, bool) {
 	// Handle xsl:original — resolve to the original overridden template
 	if name == "{"+lexicon.NamespaceXSLT+"}original" {
@@ -268,7 +268,6 @@ func (ec *execContext) resolveNamedTemplate(name string) (*Template, bool) {
 	}
 	return nil, false
 }
-
 
 func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateInst) error {
 	ec.depth++
@@ -672,7 +671,7 @@ func (ec *execContext) checkContextItemType(tmpl *Template) error {
 
 	// XPDY0002: context item absent when use="required"
 	if len(contextSeq) == 0 && use == "required" {
-		return dynamicError("XPDY0002", "context item is absent but xsl:context-item use=\"required\"")
+		return dynamicError(errCodeXPDY0002, "context item is absent but xsl:context-item use=\"required\"")
 	}
 
 	// Type check: if as is specified and context item exists, check the type.

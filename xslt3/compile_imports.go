@@ -593,7 +593,7 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 func compileSimplified(doc *helium.Document, root *helium.Element, cfg *compileConfig) (*Stylesheet, error) {
 	// XTSE0150: simplified stylesheet must have xsl:version attribute
 	if _, ok := root.GetAttributeNS("version", lexicon.NamespaceXSLT); !ok {
-		return nil, staticError("XTSE0150",
+		return nil, staticError(errCodeXTSE0150,
 			"simplified stylesheet (literal result element) must have an xsl:version attribute")
 	}
 	c := &compiler{

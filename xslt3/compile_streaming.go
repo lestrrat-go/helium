@@ -536,7 +536,7 @@ func (c *compiler) compileAccumulatorRule(parent *AccumulatorDef, elem *helium.E
 	// XPST0008: $value is only in scope in the select expression/body of
 	// an accumulator-rule, not in the match pattern. Reject it early.
 	if containsVarRef(matchAttr, "value") {
-		return staticError("XPST0008", "variable $value is not in scope in accumulator-rule match pattern")
+		return staticError(errCodeXPST0008, "variable $value is not in scope in accumulator-rule match pattern")
 	}
 
 	matchPat, err := compilePattern(matchAttr, c.nsBindings, c.xpathDefaultNS)
@@ -1030,10 +1030,10 @@ func mergeStreamCheck(inst *MergeInst) error {
 		}
 		for _, mk := range src.Keys {
 			if mk.OrderAVT != nil {
-				return staticError("XTSE3470", "xsl:merge-key @order must not be an AVT when xsl:merge-source is streamable")
+				return staticError(errCodeXTSE3470, "xsl:merge-key @order must not be an AVT when xsl:merge-source is streamable")
 			}
 			if mk.DataTypeAVT != nil {
-				return staticError("XTSE3470", "xsl:merge-key @data-type must not be an AVT when xsl:merge-source is streamable")
+				return staticError(errCodeXTSE3470, "xsl:merge-key @data-type must not be an AVT when xsl:merge-source is streamable")
 			}
 		}
 	}

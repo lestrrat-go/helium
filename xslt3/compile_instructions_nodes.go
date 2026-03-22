@@ -619,10 +619,10 @@ func (c *compiler) compileNamespace(elem *helium.Element) (*NamespaceInst, error
 	hasContent := c.hasEffectiveContent(elem)
 	// XTSE0910: select and content are mutually exclusive on xsl:namespace
 	if selectAttr != "" && hasContent {
-		return nil, staticError("XTSE0910", "xsl:namespace must not have both a select attribute and content")
+		return nil, staticError(errCodeXTSE0910, "xsl:namespace must not have both a select attribute and content")
 	}
 	if selectAttr == "" && !hasContent {
-		return nil, staticError("XTSE0910", "xsl:namespace must have either a select attribute or content")
+		return nil, staticError(errCodeXTSE0910, "xsl:namespace must have either a select attribute or content")
 	}
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
@@ -697,7 +697,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 		ver = strings.TrimSpace(ver)
 		if ver != "" {
 			if f, err := strconv.ParseFloat(ver, 64); err == nil && f < 2.0 {
-				return nil, dynamicError("XTDE0160",
+				return nil, dynamicError(errCodeXTDE0160,
 					"backwards-compatible behavior is not supported for XSLT version %s", ver)
 			}
 		}
@@ -763,7 +763,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 					if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 						newExcludes[uri] = struct{}{}
 					} else {
-						return nil, staticError("XTSE0808",
+						return nil, staticError(errCodeXTSE0808,
 							"undeclared namespace prefix %q in exclude-result-prefixes", prefix)
 					}
 				}
@@ -774,7 +774,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 					newExcludes[uri] = struct{}{}
 				} else {
-					return nil, staticError("XTSE1430",
+					return nil, staticError(errCodeXTSE1430,
 						"undeclared namespace prefix %q in extension-element-prefixes", prefix)
 				}
 			}

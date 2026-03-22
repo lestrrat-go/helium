@@ -13,9 +13,9 @@ func checkAtomizable(seq xpath3.Sequence) error {
 	for _, item := range seq {
 		switch item.(type) {
 		case xpath3.MapItem:
-			return dynamicError("FOTY0013", "cannot atomize a map item")
+			return dynamicError(errCodeFOTY0013, "cannot atomize a map item")
 		case xpath3.FunctionItem:
-			return dynamicError("FOTY0013", "cannot atomize a function item")
+			return dynamicError(errCodeFOTY0013, "cannot atomize a function item")
 		}
 	}
 	return nil

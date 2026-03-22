@@ -129,7 +129,7 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 	// XTSE1210: collation must be a recognized URI
 	if collAttr := getAttr(elem, "collation"); collAttr != "" {
 		if !xpath3.IsCollationSupported(collAttr) {
-			return staticError("XTSE1210", "unrecognized collation URI %q on xsl:key", collAttr)
+			return staticError(errCodeXTSE1210, "unrecognized collation URI %q on xsl:key", collAttr)
 		}
 	}
 
@@ -143,10 +143,10 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 	hasContent := c.hasEffectiveContent(elem)
 	// XTSE1205: must have either use attr or content, not both, and not neither
 	if useAttr != "" && hasContent {
-		return staticError("XTSE1205", "xsl:key must not have both a use attribute and content")
+		return staticError(errCodeXTSE1205, "xsl:key must not have both a use attribute and content")
 	}
 	if useAttr == "" && !hasContent {
-		return staticError("XTSE1205", "xsl:key must have either a use attribute or content")
+		return staticError(errCodeXTSE1205, "xsl:key must have either a use attribute or content")
 	}
 	if useAttr != "" {
 		useExpr, err := compileXPath(useAttr, c.nsBindings)
@@ -179,7 +179,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		"item-separator": {}, "json-node-output-method": {},
 		"parameter-document": {}, "build-tree": {},
 		"allow-duplicate-names": {},
-		"use-when": {},
+		"use-when":              {},
 	}); err != nil {
 		return err
 	}
@@ -199,10 +199,10 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 			case methodXML, methodHTML, methodXHTML, methodText, methodJSON, methodAdaptive:
 				// valid
 			default:
-				return staticError("XTSE1570", "invalid output method %q", methodStr)
+				return staticError(errCodeXTSE1570, "invalid output method %q", methodStr)
 			}
 		} else if !isValidQName(methodStr) && !isValidEQName(methodStr) {
-			return staticError("XTSE1570", "invalid output method %q", methodStr)
+			return staticError(errCodeXTSE1570, "invalid output method %q", methodStr)
 		}
 	}
 	outDef := &OutputDef{
@@ -367,11 +367,11 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		// Attributes that are not allowed to conflict (all except cdata-section-elements
 		// and use-character-maps). Check each explicitly set attribute.
 		type attrConflict struct {
-			attrName  string
-			oldVal    string
-			newVal    string
-			newIsSet  bool
-			oldIsSet  bool
+			attrName string
+			oldVal   string
+			newVal   string
+			newIsSet bool
+			oldIsSet bool
 		}
 		checks := []attrConflict{
 			{paramMethod, existing.MethodRaw, getAttr(elem, paramMethod), getAttr(elem, paramMethod) != "", existing.MethodRaw != ""},
@@ -452,7 +452,6 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	c.stylesheet.outputs[name] = outDef
 	return nil
 }
-
 
 // loadParameterDocument loads a serialization parameter document (XSLT 3.0 §9.2)
 // and applies its settings to the given OutputDef. Parameters explicitly set on
@@ -721,7 +720,7 @@ func checkAttributeSetCycles(ss *Stylesheet) error {
 		if asd := ss.attributeSets[name]; asd != nil {
 			for _, ref := range asd.UseAttrSets {
 				if _, ok := ss.attributeSets[ref]; !ok {
-					return staticError("XTSE0710",
+					return staticError(errCodeXTSE0710,
 						"attribute-set %q references undeclared attribute-set %q", name, ref)
 				}
 				if err := visit(ref); err != nil {
@@ -755,7 +754,7 @@ func checkAttributeSetStreamable(ss *Stylesheet) error {
 				continue
 			}
 			if !used.Streamable {
-				return staticError("XTSE0730",
+				return staticError(errCodeXTSE0730,
 					"streamable attribute-set %q references non-streamable attribute-set %q",
 					asd.Name, ref)
 			}
