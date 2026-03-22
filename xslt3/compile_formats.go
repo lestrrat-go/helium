@@ -33,7 +33,7 @@ func (c *compiler) compileCharacterMap(elem *helium.Element) error {
 		Mappings: make(map[rune]string),
 	}
 
-	if ucm := getAttr(elem, "use-character-maps"); ucm != "" {
+	if ucm := getAttr(elem, paramUseCharacterMaps); ucm != "" {
 		for _, n := range strings.Fields(ucm) {
 			cm.UseCharacterMaps = append(cm.UseCharacterMaps, resolveQName(n, c.nsBindings))
 		}
@@ -190,7 +190,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	if name != "" {
 		name = resolveQName(name, c.nsBindings)
 	}
-	methodStr := strings.TrimSpace(strings.ToLower(getAttr(elem, "method")))
+	methodStr := strings.TrimSpace(strings.ToLower(getAttr(elem, paramMethod)))
 	// XTSE1570: validate method value
 	if methodStr != "" {
 		if !strings.Contains(methodStr, ":") {
@@ -209,12 +209,12 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		Name:           name,
 		Method:         methodStr,
 		MethodExplicit: methodStr != "",
-		Encoding:       getAttr(elem, "encoding"),
-		Version:        getAttr(elem, "version"),
+		Encoding:       getAttr(elem, paramEncoding),
+		Version:        getAttr(elem, paramVersion),
 		ImportPrec:     c.importPrec,
-		MethodRaw:      getAttr(elem, "method"),
-		EncodingRaw:    getAttr(elem, "encoding"),
-		VersionRaw:     getAttr(elem, "version"),
+		MethodRaw:      getAttr(elem, paramMethod),
+		EncodingRaw:    getAttr(elem, paramEncoding),
+		VersionRaw:     getAttr(elem, paramVersion),
 	}
 
 	if outDef.Method == "" {
@@ -226,7 +226,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 
 	// Validate and parse boolean output attributes.
 	// SEPM0016: invalid boolean values.
-	if v := getAttr(elem, "indent"); v != "" {
+	if v := getAttr(elem, paramIndent); v != "" {
 		b, ok := parseXSDBool(v)
 		if !ok {
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@indent", v)
@@ -234,7 +234,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.Indent = b
 		outDef.IndentRaw = v
 	}
-	if v := getAttr(elem, "omit-xml-declaration"); v != "" {
+	if v := getAttr(elem, paramOmitXMLDeclaration); v != "" {
 		b, ok := parseXSDBool(v)
 		if !ok {
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@omit-xml-declaration", v)
@@ -242,14 +242,14 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.OmitDeclaration = b
 		outDef.OmitDeclarationExplicit = true
 	}
-	if v := getAttr(elem, "undeclare-prefixes"); v != "" {
+	if v := getAttr(elem, paramUndeclarePrefixes); v != "" {
 		b, ok := parseXSDBool(v)
 		if !ok {
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@undeclare-prefixes", v)
 		}
 		outDef.UndeclarePrefixes = b
 	}
-	if v := getAttr(elem, "byte-order-mark"); v != "" {
+	if v := getAttr(elem, paramByteOrderMark); v != "" {
 		b, ok := parseXSDBool(v)
 		if !ok {
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@byte-order-mark", v)
@@ -257,14 +257,14 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.ByteOrderMark = b
 	}
 	// Parse escape-uri-attributes.
-	if v := getAttr(elem, "escape-uri-attributes"); v != "" {
+	if v := getAttr(elem, paramEscapeURIAttributes); v != "" {
 		b, ok := parseXSDBool(v)
 		if !ok {
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@escape-uri-attributes", v)
 		}
 		outDef.EscapeURIAttributes = &b
 	}
-	if v := getAttr(elem, "include-content-type"); v != "" {
+	if v := getAttr(elem, paramIncludeContentType); v != "" {
 		b, ok := parseXSDBool(v)
 		if !ok {
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@include-content-type", v)
@@ -272,7 +272,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.IncludeContentType = &b
 	}
 	// Validate standalone: must be "yes", "no", "omit", or boolean equivalents.
-	if v := getAttr(elem, "standalone"); v != "" {
+	if v := getAttr(elem, paramStandalone); v != "" {
 		v = strings.TrimSpace(v)
 		switch v {
 		case lexicon.ValueYes, lexicon.ValueNo, "omit":
@@ -285,14 +285,14 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
 		}
 		outDef.Standalone = v
-		outDef.StandaloneRaw = getAttr(elem, "standalone")
+		outDef.StandaloneRaw = getAttr(elem, paramStandalone)
 	} else {
 		outDef.Standalone = ""
 	}
-	outDef.DoctypePublic = getAttr(elem, "doctype-public")
-	outDef.DoctypeSystem = getAttr(elem, "doctype-system")
-	outDef.MediaType = getAttr(elem, "media-type")
-	if hv := getAttr(elem, "html-version"); hv != "" {
+	outDef.DoctypePublic = getAttr(elem, paramDoctypePublic)
+	outDef.DoctypeSystem = getAttr(elem, paramDoctypeSystem)
+	outDef.MediaType = getAttr(elem, paramMediaType)
+	if hv := getAttr(elem, paramHTMLVersion); hv != "" {
 		hv = strings.TrimSpace(hv)
 		if _, err := strconv.ParseFloat(hv, 64); err != nil {
 			return staticError(errCodeXTSE0020, "%q is not a valid value for xsl:output/@html-version", hv)
@@ -300,7 +300,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.HTMLVersion = hv
 	}
 
-	cdataStr := getAttr(elem, "cdata-section-elements")
+	cdataStr := getAttr(elem, paramCDATASectionElements)
 	if cdataStr != "" {
 		names := strings.Fields(cdataStr)
 		resolved := make([]string, len(names))
@@ -310,25 +310,25 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.CDATASections = resolved
 	}
 
-	if is := getAttr(elem, "item-separator"); is != "" {
+	if is := getAttr(elem, paramItemSeparator); is != "" {
 		outDef.ItemSeparator = &is
 	}
 
-	if nf := getAttr(elem, "normalization-form"); nf != "" {
+	if nf := getAttr(elem, paramNormalizationForm); nf != "" {
 		outDef.NormalizationForm = strings.ToUpper(strings.TrimSpace(nf))
 	}
 
-	if ucm := getAttr(elem, "use-character-maps"); ucm != "" {
+	if ucm := getAttr(elem, paramUseCharacterMaps); ucm != "" {
 		for _, n := range strings.Fields(ucm) {
 			outDef.UseCharacterMaps = append(outDef.UseCharacterMaps, resolveQName(n, c.nsBindings))
 		}
 	}
 
-	if v := getAttr(elem, "json-node-output-method"); v != "" {
+	if v := getAttr(elem, paramJSONNodeOutputMethod); v != "" {
 		outDef.JSONNodeOutputMethod = strings.TrimSpace(v)
 	}
 
-	if v := getAttr(elem, "allow-duplicate-names"); v != "" {
+	if v := getAttr(elem, paramAllowDuplicateNames); v != "" {
 		b, ok := parseXSDBool(v)
 		if !ok {
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@allow-duplicate-names", v)
@@ -336,7 +336,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.AllowDuplicateNames = b
 	}
 
-	if v := getAttr(elem, "suppress-indentation"); v != "" {
+	if v := getAttr(elem, paramSuppressIndentation); v != "" {
 		names := strings.Fields(v)
 		resolved := make([]string, len(names))
 		for i, n := range names {
@@ -345,7 +345,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.SuppressIndentation = resolved
 	}
 
-	if v := getAttr(elem, "build-tree"); v != "" {
+	if v := getAttr(elem, paramBuildTree); v != "" {
 		b, ok := parseXSDBool(v)
 		if !ok {
 			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@build-tree", v)
@@ -353,7 +353,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		outDef.BuildTree = &b
 	}
 
-	if v := getAttr(elem, "parameter-document"); v != "" {
+	if v := getAttr(elem, paramParameterDocument); v != "" {
 		outDef.ParameterDocument = v
 		baseURI := stylesheetBaseURI(elem, c.baseURI)
 		if err := c.loadParameterDocument(outDef, baseURI, v); err != nil {
@@ -374,11 +374,11 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 			oldIsSet  bool
 		}
 		checks := []attrConflict{
-			{"method", existing.MethodRaw, getAttr(elem, "method"), getAttr(elem, "method") != "", existing.MethodRaw != ""},
-			{"indent", existing.IndentRaw, getAttr(elem, "indent"), getAttr(elem, "indent") != "", existing.IndentRaw != ""},
-			{"encoding", existing.EncodingRaw, getAttr(elem, "encoding"), getAttr(elem, "encoding") != "", existing.EncodingRaw != ""},
-			{"version", existing.VersionRaw, getAttr(elem, "version"), getAttr(elem, "version") != "", existing.VersionRaw != ""},
-			{"standalone", existing.StandaloneRaw, getAttr(elem, "standalone"), getAttr(elem, "standalone") != "", existing.StandaloneRaw != ""},
+			{paramMethod, existing.MethodRaw, getAttr(elem, paramMethod), getAttr(elem, paramMethod) != "", existing.MethodRaw != ""},
+			{paramIndent, existing.IndentRaw, getAttr(elem, paramIndent), getAttr(elem, paramIndent) != "", existing.IndentRaw != ""},
+			{paramEncoding, existing.EncodingRaw, getAttr(elem, paramEncoding), getAttr(elem, paramEncoding) != "", existing.EncodingRaw != ""},
+			{paramVersion, existing.VersionRaw, getAttr(elem, paramVersion), getAttr(elem, paramVersion) != "", existing.VersionRaw != ""},
+			{paramStandalone, existing.StandaloneRaw, getAttr(elem, paramStandalone), getAttr(elem, paramStandalone) != "", existing.StandaloneRaw != ""},
 		}
 		for _, chk := range checks {
 			if chk.newIsSet && chk.oldIsSet && chk.oldVal != chk.newVal {
@@ -397,27 +397,27 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 			outDef.UseCharacterMaps = append(existing.UseCharacterMaps, outDef.UseCharacterMaps...)
 		}
 		// Preserve fields from earlier declaration when not explicitly set here.
-		if getAttr(elem, "method") == "" {
+		if getAttr(elem, paramMethod) == "" {
 			outDef.Method = existing.Method
 			outDef.MethodExplicit = existing.MethodExplicit
 		}
-		if getAttr(elem, "encoding") == "" {
+		if getAttr(elem, paramEncoding) == "" {
 			outDef.Encoding = existing.Encoding
 		}
-		if getAttr(elem, "version") == "" {
+		if getAttr(elem, paramVersion) == "" {
 			outDef.Version = existing.Version
 		}
-		if getAttr(elem, "indent") == "" {
+		if getAttr(elem, paramIndent) == "" {
 			outDef.Indent = existing.Indent
 		}
-		if getAttr(elem, "omit-xml-declaration") == "" {
+		if getAttr(elem, paramOmitXMLDeclaration) == "" {
 			outDef.OmitDeclaration = existing.OmitDeclaration
 			outDef.OmitDeclarationExplicit = existing.OmitDeclarationExplicit
 		}
-		if getAttr(elem, "standalone") == "" {
+		if getAttr(elem, paramStandalone) == "" {
 			outDef.Standalone = existing.Standalone
 		}
-		if getAttr(elem, "undeclare-prefixes") == "" {
+		if getAttr(elem, paramUndeclarePrefixes) == "" {
 			outDef.UndeclarePrefixes = existing.UndeclarePrefixes
 		}
 		if !elem.HasAttribute("doctype-public") {
@@ -426,25 +426,25 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		if !elem.HasAttribute("doctype-system") {
 			outDef.DoctypeSystem = existing.DoctypeSystem
 		}
-		if getAttr(elem, "media-type") == "" {
+		if getAttr(elem, paramMediaType) == "" {
 			outDef.MediaType = existing.MediaType
 		}
-		if getAttr(elem, "cdata-section-elements") == "" {
+		if getAttr(elem, paramCDATASectionElements) == "" {
 			outDef.CDATASections = existing.CDATASections
 		}
-		if getAttr(elem, "item-separator") == "" {
+		if getAttr(elem, paramItemSeparator) == "" {
 			outDef.ItemSeparator = existing.ItemSeparator
 		}
-		if getAttr(elem, "normalization-form") == "" {
+		if getAttr(elem, paramNormalizationForm) == "" {
 			outDef.NormalizationForm = existing.NormalizationForm
 		}
-		if getAttr(elem, "html-version") == "" {
+		if getAttr(elem, paramHTMLVersion) == "" {
 			outDef.HTMLVersion = existing.HTMLVersion
 		}
 		if outDef.IncludeContentType == nil {
 			outDef.IncludeContentType = existing.IncludeContentType
 		}
-		if getAttr(elem, "json-node-output-method") == "" {
+		if getAttr(elem, paramJSONNodeOutputMethod) == "" {
 			outDef.JSONNodeOutputMethod = existing.JSONNodeOutputMethod
 		}
 	}
@@ -494,29 +494,29 @@ func loadParameterDocumentFromFile(outDef *OutputDef, baseURI, href string) erro
 		}
 		val := getAttr(elem, "value")
 		switch elem.LocalName() {
-		case "method":
+		case paramMethod:
 			if outDef.MethodRaw == "" && val != "" {
 				outDef.Method = strings.ToLower(strings.TrimSpace(val))
 				outDef.MethodExplicit = true
 			}
-		case "indent":
+		case paramIndent:
 			if outDef.IndentRaw == "" && val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.Indent = b
 				}
 			}
-		case "omit-xml-declaration":
+		case paramOmitXMLDeclaration:
 			if !outDef.OmitDeclarationExplicit && val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.OmitDeclaration = b
 					outDef.OmitDeclarationExplicit = true
 				}
 			}
-		case "encoding":
+		case paramEncoding:
 			if outDef.EncodingRaw == "" && val != "" {
 				outDef.Encoding = strings.TrimSpace(val)
 			}
-		case "standalone":
+		case paramStandalone:
 			if outDef.StandaloneRaw == "" && val != "" {
 				v := strings.TrimSpace(val)
 				switch v {
@@ -524,33 +524,33 @@ func loadParameterDocumentFromFile(outDef *OutputDef, baseURI, href string) erro
 					outDef.Standalone = v
 				}
 			}
-		case "cdata-section-elements":
+		case paramCDATASectionElements:
 			if len(outDef.CDATASections) == 0 && val != "" {
 				outDef.CDATASections = strings.Fields(val)
 			}
-		case "doctype-public":
+		case paramDoctypePublic:
 			if outDef.DoctypePublic == "" && val != "" {
 				outDef.DoctypePublic = val
 			}
-		case "doctype-system":
+		case paramDoctypeSystem:
 			if outDef.DoctypeSystem == "" && val != "" {
 				outDef.DoctypeSystem = val
 			}
-		case "media-type":
+		case paramMediaType:
 			if outDef.MediaType == "" && val != "" {
 				outDef.MediaType = val
 			}
-		case "version":
+		case paramVersion:
 			if outDef.VersionRaw == "" && val != "" {
 				outDef.Version = strings.TrimSpace(val)
 			}
-		case "undeclare-prefixes":
+		case paramUndeclarePrefixes:
 			if val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.UndeclarePrefixes = b
 				}
 			}
-		case "use-character-maps":
+		case paramUseCharacterMaps:
 			// Character maps defined in the parameter document.
 			// Each child <character-map> has @character and @map-string.
 			if outDef.ResolvedCharMap == nil {
@@ -573,53 +573,53 @@ func loadParameterDocumentFromFile(outDef *OutputDef, baseURI, href string) erro
 					}
 				}
 			}
-		case "allow-duplicate-names":
+		case paramAllowDuplicateNames:
 			if val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.AllowDuplicateNames = b
 				}
 			}
-		case "item-separator":
+		case paramItemSeparator:
 			if outDef.ItemSeparator == nil && val != "" {
 				outDef.ItemSeparator = &val
 			}
-		case "byte-order-mark":
+		case paramByteOrderMark:
 			if val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.ByteOrderMark = b
 				}
 			}
-		case "escape-uri-attributes":
+		case paramEscapeURIAttributes:
 			if outDef.EscapeURIAttributes == nil && val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.EscapeURIAttributes = &b
 				}
 			}
-		case "include-content-type":
+		case paramIncludeContentType:
 			if outDef.IncludeContentType == nil && val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.IncludeContentType = &b
 				}
 			}
-		case "normalization-form":
+		case paramNormalizationForm:
 			if outDef.NormalizationForm == "" && val != "" {
 				outDef.NormalizationForm = strings.ToUpper(strings.TrimSpace(val))
 			}
-		case "suppress-indentation":
+		case paramSuppressIndentation:
 			if len(outDef.SuppressIndentation) == 0 && val != "" {
 				outDef.SuppressIndentation = strings.Fields(val)
 			}
-		case "html-version":
+		case paramHTMLVersion:
 			if outDef.HTMLVersion == "" && val != "" {
 				outDef.HTMLVersion = strings.TrimSpace(val)
 			}
-		case "build-tree":
+		case paramBuildTree:
 			if outDef.BuildTree == nil && val != "" {
 				if b, ok := parseXSDBool(val); ok {
 					outDef.BuildTree = &b
 				}
 			}
-		case "json-node-output-method":
+		case paramJSONNodeOutputMethod:
 			if outDef.JSONNodeOutputMethod == "" && val != "" {
 				outDef.JSONNodeOutputMethod = strings.TrimSpace(val)
 			}
