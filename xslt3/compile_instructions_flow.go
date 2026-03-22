@@ -365,10 +365,27 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 				continue
 			}
 			if !c.shouldStripText(text) {
-				inst.Body = append(inst.Body, &LiteralTextInst{Value: text})
+				lit := &LiteralTextInst{Value: text}
+				if c.expandText && strings.ContainsAny(text, "{}") {
+					avt, err := compileAVT(text, c.nsBindings)
+					if err != nil {
+						return nil, err
+					}
+					lit.TVT = avt
+				}
+				inst.Body = append(inst.Body, lit)
 			}
 		case *helium.CDATASection:
-			inst.Body = append(inst.Body, &LiteralTextInst{Value: string(v.Content())})
+			text := string(v.Content())
+			lit := &LiteralTextInst{Value: text}
+			if c.expandText && strings.ContainsAny(text, "{}") {
+				avt, err := compileAVT(text, c.nsBindings)
+				if err != nil {
+					return nil, err
+				}
+				lit.TVT = avt
+			}
+			inst.Body = append(inst.Body, lit)
 		}
 	}
 
@@ -878,7 +895,15 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 		case *helium.Text:
 			text := string(v.Content())
 			if !c.shouldStripText(text) {
-				inst.Body = append(inst.Body, &LiteralTextInst{Value: text})
+				lit := &LiteralTextInst{Value: text}
+				if c.expandText && strings.ContainsAny(text, "{}") {
+					avt, err := compileAVT(text, c.nsBindings)
+					if err != nil {
+						return nil, err
+					}
+					lit.TVT = avt
+				}
+				inst.Body = append(inst.Body, lit)
 			}
 		}
 	}
