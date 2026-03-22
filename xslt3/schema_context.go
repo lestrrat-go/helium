@@ -567,6 +567,9 @@ func findDocumentElement(doc *helium.Document) *helium.Element {
 // the nearest named ancestor type, so schema-element() matching can
 // compare against the declared type hierarchy.
 func xsdTypeNameFromDef(td *xsd.TypeDef) string {
+	if td == nil {
+		return "xs:untyped"
+	}
 	for cur := td; cur != nil; cur = cur.BaseType {
 		if cur.Name.NS == lexicon.NamespaceXSD && cur.Name.Local != "" {
 			return "xs:" + cur.Name.Local
@@ -578,7 +581,9 @@ func xsdTypeNameFromDef(td *xsd.TypeDef) string {
 			return "Q{}" + cur.Name.Local
 		}
 	}
-	return "xs:untyped"
+	// Anonymous type with no named ancestor in the base chain: the type
+	// was validated, so it implicitly derives from xs:anyType.
+	return "xs:anyType"
 }
 
 // ValidateDocIDConstraints checks document-level xs:ID uniqueness and xs:IDREF

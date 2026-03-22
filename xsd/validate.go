@@ -639,7 +639,12 @@ func xsdTypeName(td *TypeDef) string {
 			return cur.Name.Local
 		}
 	}
-	return "xs:untyped"
+	// Anonymous type with no named ancestor in the base chain: the type
+	// was successfully validated, so it implicitly derives from xs:anyType.
+	// Returning xs:untyped here would be wrong — xs:untyped means the
+	// element was never validated, while xs:anyType means "validated but
+	// the type is anonymous."
+	return "xs:anyType"
 }
 
 // annotateElement records a type annotation for an element node.
