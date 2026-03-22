@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -247,11 +248,18 @@ func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 
-	result := make(Sequence, 0, len(prefixes))
+	// Collect active prefixes into a sorted slice to ensure deterministic
+	// output order (the XPath 3.1 spec leaves order implementation-defined).
+	sorted := make([]string, 0, len(prefixes))
 	for prefix, active := range prefixes {
-		if !active {
-			continue
+		if active {
+			sorted = append(sorted, prefix)
 		}
+	}
+	sort.Strings(sorted)
+
+	result := make(Sequence, 0, len(sorted))
+	for _, prefix := range sorted {
 		result = append(result, AtomicValue{TypeName: TypeString, Value: prefix})
 	}
 	return result, nil
