@@ -919,10 +919,11 @@ func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk 
 		return cmp.Compare(a.index, b.index)
 	})
 
+	result := make(xpath3.Sequence, len(entries))
 	for i, e := range entries {
-		items[i] = e.item
+		result[i] = e.item
 	}
-	return items, nil
+	return result, nil
 }
 
 // --- Multi-key sort paths ---
@@ -1002,10 +1003,11 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 		return rs.compareKeys(a.keys, b.keys, a.index, b.index)
 	})
 
+	result := make(xpath3.Sequence, len(entries))
 	for i, e := range entries {
-		items[i] = e.item
+		result[i] = e.item
 	}
-	return items, nil
+	return result, nil
 }
 
 func sortGroups1(ctx context.Context, ec *execContext, groups []fegGroup, sk *SortKey, hasKey bool) ([]fegGroup, error) {
