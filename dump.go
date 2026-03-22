@@ -335,7 +335,7 @@ func (d *Writer) writeIndent(out io.Writer) {
 
 // hasOnlyTextChildren returns true when every child is a text or entity-ref node.
 func hasOnlyTextChildren(n Node) bool {
-	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range Children(n) {
 		switch c.Type() {
 		case TextNode, EntityRefNode, CDATASectionNode:
 			// ok
@@ -427,7 +427,7 @@ func (d *Writer) WriteDoc(out io.Writer, doc *Document) error {
 		return err
 	}
 
-	for e := doc.FirstChild(); e != nil; e = e.NextSibling() {
+	for e := range Children(doc) {
 		if d.skipDTD && e.Type() == DTDNode {
 			continue
 		}
@@ -510,7 +510,7 @@ func (d *Writer) dumpDTD(out io.Writer, n Node) error {
 	d.format = false
 	d.indent = -1
 
-	for e := dtd.FirstChild(); e != nil; e = e.NextSibling() {
+	for e := range Children(dtd) {
 		if err := d.WriteNode(out, e); err != nil {
 			d.format = savedFormat
 			d.indent = savedIndent
@@ -1060,7 +1060,7 @@ func (d *Writer) WriteNode(out io.Writer, n Node) error {
 			g := pdebug.IPrintf("START WriteNode(fallthrough->attribute(%s))", attr.Name())
 			_, _ = io.WriteString(out, " "+attr.Name()+`="`)
 			count := 0
-			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
+			for achld := range Children(attr) {
 				count++
 				if achld.Type() == TextNode {
 					if err := escapeAttrValue(out, achld.Content(), d.escapeNonASCII); err != nil {
@@ -1234,7 +1234,7 @@ func (d *Writer) dumpXHTMLNode(out io.Writer, n Node) error {
 		}
 	}
 
-	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range Children(e) {
 		if d.format && !textOnly {
 			d.writeIndent(out)
 		}
@@ -1297,7 +1297,7 @@ func (d *Writer) dumpXHTMLAttrList(out io.Writer, e *Element) {
 		if attrValue == "" && htmlBooleanAttrs[attrName] {
 			_, _ = io.WriteString(out, attrName)
 		} else {
-			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
+			for achld := range Children(attr) {
 				if achld.Type() == TextNode {
 					_ = escapeAttrValue(out, achld.Content(), d.escapeNonASCII)
 				} else {
@@ -1336,7 +1336,7 @@ func (d *Writer) dumpXHTMLAttrList(out io.Writer, e *Element) {
 // headHasContentTypeMeta checks if a <head> element already has a
 // <meta http-equiv="Content-Type"> child.
 func (d *Writer) headHasContentTypeMeta(head *Element) bool {
-	for child := head.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range Children(head) {
 		if child.Type() != ElementNode {
 			continue
 		}

@@ -444,7 +444,7 @@ func checkStandaloneWhitespace(extSubset *DTD, elem *Element, name string, vctx 
 	if !ok || extDecl.decltype != enum.ElementElementType {
 		return
 	}
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range Children(elem) {
 		if child.Type() == TextNode && isBlankContent(child.Content()) {
 			vctx.ve.addf("standalone: element %s declared in the external subset contains white spaces nodes", name)
 			return
@@ -489,7 +489,7 @@ func validateMixedContent(elem *Element, content *ElementContent, ve *Validation
 	// Collect allowed element names from the content model
 	allowed := collectMixedNames(content)
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range Children(elem) {
 		switch child.Type() {
 		case TextNode, CDATASectionNode, EntityRefNode, CommentNode, ProcessingInstructionNode:
 			// Always allowed in mixed content
@@ -526,7 +526,7 @@ func collectMixedNamesRecurse(content *ElementContent, names map[string]struct{}
 // of an element, ignoring text nodes, comments, PIs, etc.
 func collectChildElements(elem *Element) []string {
 	var children []string
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range Children(elem) {
 		switch child.Type() {
 		case ElementNode:
 			children = append(children, child.(*Element).LocalName())

@@ -5694,7 +5694,7 @@ func (pctx *parserCtx) replayEntityNode(ctx context.Context, n Node) error {
 			return err
 		}
 
-		for child := v.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range Children(v) {
 			if err := pctx.replayEntityNode(ctx, child); err != nil {
 				return err
 			}
