@@ -169,7 +169,7 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 	// Validate attributes and content together.
 	// Build child node list, skipping non-content nodes (DTD artifacts, PIs, comments).
 	var children []helium.Node
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.EntityRefNode, helium.EntityNode, helium.ProcessingInstructionNode, helium.CommentNode:
 			continue
@@ -2058,7 +2058,7 @@ func (v *validator) resolveToGroup(pat *pattern) *pattern {
 }
 
 func findDocElement(doc *helium.Document) *helium.Element {
-	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(doc) {
 		if elem, ok := child.(*helium.Element); ok {
 			return elem
 		}

@@ -135,7 +135,7 @@ func (p *processor) processNode(ctx context.Context, n helium.Node) error {
 	// so we loop until no more are found.
 	for {
 		var includes []*helium.Element
-		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		for c := range helium.Children(n) {
 			if isXInclude(c) {
 				includes = append(includes, c.(*helium.Element))
 			}
@@ -151,7 +151,7 @@ func (p *processor) processNode(ctx context.Context, n helium.Node) error {
 	}
 
 	// Recurse into remaining children (including newly inserted content)
-	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(n) {
 		if c.Type() == helium.ElementNode {
 			if isFallback(c) {
 				return fmt.Errorf("xi:fallback is not the child of an 'include'")
@@ -268,7 +268,7 @@ func (p *processor) includeXML(ctx context.Context, inc *helium.Element, uri str
 
 	// Collect top-level children from included document, skipping DTD nodes
 	var nodes []helium.Node
-	for c := doc.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(doc) {
 		if c.Type() == helium.DTDNode {
 			continue
 		}
@@ -442,7 +442,7 @@ func (p *processor) mergeEntities(src, dst *helium.Document) {
 	// Ensure target has an internal subset
 	dstInt := dst.IntSubset()
 	if dstInt == nil {
-		for c := dst.FirstChild(); c != nil; c = c.NextSibling() {
+		for c := range helium.Children(dst) {
 			if c.Type() == helium.ElementNode {
 				var err error
 				dstInt, err = dst.CreateInternalSubset(c.(*helium.Element).LocalName(), "", "")
@@ -610,7 +610,7 @@ func (p *processor) loadText(uri string) ([]byte, error) {
 
 func (p *processor) handleFallback(inc *helium.Element, origErr error) error {
 	nsURI := getNamespaceURI(inc)
-	for c := inc.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(inc) {
 		if c.Type() == helium.ElementNode {
 			if elem, ok := c.(*helium.Element); ok {
 				if elem.LocalName() == "fallback" && getNamespaceURI(elem) == nsURI {
@@ -624,7 +624,7 @@ func (p *processor) handleFallback(inc *helium.Element, origErr error) error {
 
 func (p *processor) processFallback(inc *helium.Element, fb *helium.Element) error {
 	var nodes []helium.Node
-	for c := fb.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(fb) {
 		nodes = append(nodes, c)
 	}
 
@@ -724,7 +724,7 @@ func isFallback(n helium.Node) bool {
 func validateIncludeChildren(inc *helium.Element) error {
 	nsURI := getNamespaceURI(inc)
 	var fallbackCount int
-	for c := inc.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(inc) {
 		if c.Type() != helium.ElementNode {
 			continue
 		}
@@ -1008,7 +1008,7 @@ func fixupNamespaceDecls(n helium.Node) {
 	}
 
 	// Recurse into children
-	for c := elem.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(elem) {
 		fixupNamespaceDecls(c)
 	}
 }

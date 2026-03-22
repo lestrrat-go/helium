@@ -63,7 +63,7 @@ func WriteDoc(out io.Writer, doc *helium.Document, options ...WriteOption) error
 	d := htmlDumper{format: !cfg.noFormat, preserveCase: cfg.preserveCase, noEscapeURIAttributes: cfg.noEscapeURIAttributes, escapeControlChars: cfg.escapeControlChars}
 
 	// Serialize all children of the document
-	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(doc) {
 		if child.Type() == helium.DTDNode {
 			continue // already handled above
 		}
@@ -384,7 +384,7 @@ func (d *htmlDumper) dumpElement(out io.Writer, e *helium.Element) error {
 	}
 
 	// Children
-	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(e) {
 		if err := d.dumpNode(out, child); err != nil {
 			return err
 		}

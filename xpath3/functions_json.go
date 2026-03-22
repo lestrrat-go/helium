@@ -846,7 +846,7 @@ func xmlToJSONRootElement(node helium.Node) (*helium.Element, error) {
 		}
 		// FOJS0006: document must have exactly one element child.
 		elemCount := 0
-		for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(n) {
 			if child.Type() == helium.ElementNode {
 				elemCount++
 			}
@@ -1010,7 +1010,7 @@ func parseXMLJSONMeta(elem *helium.Element, inherited xmlJSONInherited) (xmlJSON
 
 func jsonElementChildren(elem *helium.Element, insideMap bool) ([]*helium.Element, error) {
 	var children []*helium.Element
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch v := child.(type) {
 		case *helium.Element:
 			children = append(children, v)
@@ -1033,7 +1033,7 @@ func jsonElementChildren(elem *helium.Element, insideMap bool) ([]*helium.Elemen
 
 func scalarElementText(elem *helium.Element, allowComments bool) (string, error) {
 	var b strings.Builder
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			b.Write(child.Content())
@@ -1051,7 +1051,7 @@ func scalarElementText(elem *helium.Element, allowComments bool) (string, error)
 }
 
 func validateNullElement(elem *helium.Element) error {
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			if strings.TrimSpace(string(child.Content())) != "" {
@@ -1453,7 +1453,7 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 	}
 
 	seen := make(map[string]struct{})
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			if strings.TrimSpace(string(child.Content())) == "" {
@@ -1592,7 +1592,7 @@ func validateSerializeCharacterMapsElement(elem *helium.Element) error {
 		return &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter use-character-maps must not have attributes"}
 	}
 	seen := make(map[string]struct{})
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			if strings.TrimSpace(string(child.Content())) == "" {
@@ -1643,7 +1643,7 @@ func validateSerializeCharacterMapsElement(elem *helium.Element) error {
 }
 
 func hasNonWhitespaceContent(elem *helium.Element) bool {
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			if strings.TrimSpace(string(child.Content())) != "" {

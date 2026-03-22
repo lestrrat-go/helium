@@ -140,7 +140,7 @@ func axisChild(node helium.Node) []helium.Node {
 		return nil
 	}
 	var result []helium.Node
-	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(node) {
 		if IsXDMChild(c) {
 			result = append(result, c)
 		}
@@ -400,7 +400,7 @@ func collectDescendantsReverse(node helium.Node, result *[]helium.Node, maxNodes
 	}
 
 	var stack []frame
-	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(node) {
 		if IsXDMChild(c) {
 			stack = append(stack, frame{node: c})
 		}

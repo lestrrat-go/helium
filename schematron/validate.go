@@ -287,7 +287,7 @@ func siblingPosition(n helium.Node) int {
 	}
 
 	count := 0
-	for sib := parent.FirstChild(); sib != nil; sib = sib.NextSibling() {
+	for sib := range helium.Children(parent) {
 		if sib.Type() == helium.ElementNode && sib.Name() == name {
 			count++
 		}
@@ -299,7 +299,7 @@ func siblingPosition(n helium.Node) int {
 
 	// Count position.
 	pos := 0
-	for sib := parent.FirstChild(); sib != nil; sib = sib.NextSibling() {
+	for sib := range helium.Children(parent) {
 		if sib.Type() == helium.ElementNode && sib.Name() == name {
 			pos++
 			if sib == n {

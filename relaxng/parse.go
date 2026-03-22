@@ -191,7 +191,7 @@ func (c *compiler) findCycleInPattern(pat *pattern, visiting map[string]bool) *p
 
 // parseGrammarContent parses children of a <grammar> element.
 func (c *compiler) parseGrammarContent(grammarElem *helium.Element) {
-	for child := grammarElem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(grammarElem) {
 		elem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -423,7 +423,7 @@ func (c *compiler) parseInclude(elem *helium.Element) {
 // collectOverrideNames returns the define/start names overridden by an include element.
 func (c *compiler) collectOverrideNames(elem *helium.Element) []string {
 	var names []string
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -448,7 +448,7 @@ func (c *compiler) collectOverrideNames(elem *helium.Element) []string {
 
 // parseIncludeOverrides processes override children of an <include> element.
 func (c *compiler) parseIncludeOverrides(elem *helium.Element) {
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -575,7 +575,7 @@ func (c *compiler) parseElement(node *helium.Element) *pattern {
 
 	// Parse children: first child may be name class, rest are content patterns
 	var contentChildren []*pattern
-	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(node) {
 		elem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -659,7 +659,7 @@ func (c *compiler) parseAttribute(node *helium.Element) *pattern {
 	}
 
 	// Parse children
-	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(node) {
 		elem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -704,7 +704,7 @@ func (c *compiler) parseData(node *helium.Element) *pattern {
 	}
 
 	// Parse <param> and <except> children
-	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(node) {
 		elem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -844,7 +844,7 @@ func (c *compiler) parseNameClass(node *helium.Element) *nameClass {
 		return &nameClass{kind: ncName, name: name, ns: ns}
 	case "anyName":
 		nc := &nameClass{kind: ncAnyName}
-		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(node) {
 			elem, ok := child.(*helium.Element)
 			if !ok {
 				continue
@@ -860,7 +860,7 @@ func (c *compiler) parseNameClass(node *helium.Element) *nameClass {
 			ns = getAncestorNS(node)
 		}
 		nc := &nameClass{kind: ncNsName, ns: ns}
-		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(node) {
 			elem, ok := child.(*helium.Element)
 			if !ok {
 				continue
@@ -872,7 +872,7 @@ func (c *compiler) parseNameClass(node *helium.Element) *nameClass {
 		return nc
 	case "choice":
 		var classes []*nameClass
-		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(node) {
 			elem, ok := child.(*helium.Element)
 			if !ok {
 				continue
@@ -894,7 +894,7 @@ func (c *compiler) parseNameClass(node *helium.Element) *nameClass {
 // and returns them combined as a choice.
 func (c *compiler) parseNameClassChildren(exceptElem *helium.Element) *nameClass {
 	var classes []*nameClass
-	for child := exceptElem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(exceptElem) {
 		elem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -940,7 +940,7 @@ func (c *compiler) parseChildren(parent *helium.Element) *pattern {
 // parsePatternChildren parses all RNG pattern children of an element.
 func (c *compiler) parsePatternChildren(parent *helium.Element) []*pattern {
 	var result []*pattern
-	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(parent) {
 		elem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -959,7 +959,7 @@ func (c *compiler) parsePatternChildren(parent *helium.Element) []*pattern {
 // Helper functions
 
 func findDocumentElement(doc *helium.Document) *helium.Element {
-	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(doc) {
 		if elem, ok := child.(*helium.Element); ok {
 			return elem
 		}
@@ -1150,7 +1150,7 @@ func getInheritedNS(node *helium.Element) string {
 // textContent returns the text content of an element.
 func textContent(elem *helium.Element) string {
 	var sb strings.Builder
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if t, ok := child.(*helium.Text); ok {
 			sb.Write(t.Content())
 		}

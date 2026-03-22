@@ -83,7 +83,7 @@ func compilePattern(compileCtx context.Context, elem *helium.Element, schNS stri
 		p.name = getAttr(elem, "id")
 	}
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		ruleElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -126,7 +126,7 @@ func compileRule(compileCtx context.Context, elem *helium.Element, schNS string,
 		line:        elem.Line(),
 	}
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -211,7 +211,7 @@ func compileTest(compileCtx context.Context, elem *helium.Element, typ testType,
 func parseMessage(compileCtx context.Context, elem *helium.Element, _ string, eh helium.ErrorHandler) []messagePart {
 	var parts []messagePart
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode:
 			parts = append(parts, textPart{text: string(child.Content())})
@@ -363,7 +363,7 @@ func getAttr(elem *helium.Element, name string) string {
 // elemTextContent returns the concatenated text content of an element's children.
 func elemTextContent(elem *helium.Element) string {
 	var sb strings.Builder
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() == helium.TextNode {
 			sb.Write(child.Content())
 		}

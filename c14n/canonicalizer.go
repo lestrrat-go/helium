@@ -195,7 +195,7 @@ func (c *canonicalizer) processElement(e *helium.Element) error {
 	}
 
 	// Recurse children
-	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(e) {
 		if err := c.processNode(child); err != nil {
 			return err
 		}
@@ -237,7 +237,7 @@ func (c *canonicalizer) processNode(n helium.Node) error {
 		return c.writeComment(n.(*helium.Comment))
 	case helium.EntityRefNode:
 		// Expand entity ref children
-		for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(n) {
 			if err := c.processNode(child); err != nil {
 				return err
 			}
@@ -1077,7 +1077,7 @@ func (c *canonicalizer) writeAttribute(entry attrSortEntry) error {
 
 // writeAttrValue writes the canonical attribute value by walking child nodes.
 func (c *canonicalizer) writeAttrValue(attr *helium.Attribute) error {
-	for child := attr.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(attr) {
 		switch child.Type() {
 		case helium.TextNode:
 			if err := escapeAttrValue(c.out, child.Content()); err != nil {
@@ -1085,7 +1085,7 @@ func (c *canonicalizer) writeAttrValue(attr *helium.Attribute) error {
 			}
 		case helium.EntityRefNode:
 			// Expand entity reference children recursively
-			for entChild := child.FirstChild(); entChild != nil; entChild = entChild.NextSibling() {
+			for entChild := range helium.Children(child) {
 				if err := escapeAttrValue(c.out, entChild.Content()); err != nil {
 					return err
 				}
