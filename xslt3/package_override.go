@@ -497,7 +497,7 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 		if !ok {
 			continue
 		}
-		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == elemAttribute {
+		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementAttribute {
 			inst, err := c.compileAttribute(childElem)
 			if err != nil {
 				return nil, err

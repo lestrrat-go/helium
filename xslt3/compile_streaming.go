@@ -100,7 +100,7 @@ func (c *compiler) compileIterate(elem *helium.Element) (Instruction, error) {
 
 		if childElem.URI() == lexicon.NamespaceXSLT {
 			switch childElem.LocalName() {
-			case elemParam:
+			case lexicon.XSLTElementParam:
 				if !inParams {
 					// XTSE0010: xsl:param must come before other content
 					return nil, staticError(errCodeXTSE0010, "xsl:param in xsl:iterate must precede all other children")
@@ -116,7 +116,7 @@ func (c *compiler) compileIterate(elem *helium.Element) (Instruction, error) {
 				paramNames[p.Name] = struct{}{}
 				inst.Params = append(inst.Params, p)
 				continue
-			case elemOnCompletion:
+			case lexicon.XSLTElementOnCompletion:
 				inParams = false
 				if seenOnCompletion {
 					return nil, staticError(errCodeXTSE0010, "xsl:iterate must have at most one xsl:on-completion child")
@@ -127,7 +127,7 @@ func (c *compiler) compileIterate(elem *helium.Element) (Instruction, error) {
 				hasBody := false
 				for ch := childElem.FirstChild(); ch != nil; ch = ch.NextSibling() {
 					if chElem, ok := ch.(*helium.Element); ok {
-						if chElem.URI() == lexicon.NamespaceXSLT && chElem.LocalName() == elemFallback {
+						if chElem.URI() == lexicon.NamespaceXSLT && chElem.LocalName() == lexicon.XSLTElementFallback {
 							continue
 						}
 						hasBody = true
@@ -171,7 +171,7 @@ func (c *compiler) compileIterate(elem *helium.Element) (Instruction, error) {
 	lastSignificant := -1
 	for i := len(bodyChildren) - 1; i >= 0; i-- {
 		bc := bodyChildren[i]
-		if bc.elem != nil && bc.elem.URI() == lexicon.NamespaceXSLT && bc.elem.LocalName() == elemFallback {
+		if bc.elem != nil && bc.elem.URI() == lexicon.NamespaceXSLT && bc.elem.LocalName() == lexicon.XSLTElementFallback {
 			continue
 		}
 		lastSignificant = i
@@ -341,7 +341,7 @@ func (c *compiler) compileFork(elem *helium.Element) (Instruction, error) {
 // compileForkBranch compiles one child of xsl:fork into a branch (slice of instructions).
 func (c *compiler) compileForkBranch(elem *helium.Element) ([]Instruction, error) {
 	// If the child is xsl:sequence, compile its children as the branch body.
-	if elem.URI() == lexicon.NamespaceXSLT && elem.LocalName() == elemSequence {
+	if elem.URI() == lexicon.NamespaceXSLT && elem.LocalName() == lexicon.XSLTElementSequence {
 		selectAttr := getAttr(elem, "select")
 		if selectAttr != "" {
 			expr, err := compileXPath(selectAttr, c.nsBindings)
@@ -381,7 +381,7 @@ func (c *compiler) compileBreak(elem *helium.Element) (Instruction, error) {
 	hasBody := false
 	for ch := elem.FirstChild(); ch != nil; ch = ch.NextSibling() {
 		if chElem, ok := ch.(*helium.Element); ok {
-			if chElem.URI() == lexicon.NamespaceXSLT && chElem.LocalName() == elemFallback {
+			if chElem.URI() == lexicon.NamespaceXSLT && chElem.LocalName() == lexicon.XSLTElementFallback {
 				continue
 			}
 			hasBody = true
@@ -439,7 +439,7 @@ func (c *compiler) compileNextIteration(elem *helium.Element) (Instruction, erro
 		if !ok {
 			continue
 		}
-		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == elemWithParam {
+		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementWithParam {
 			wp, err := c.compileWithParam(childElem)
 			if err != nil {
 				return nil, err
@@ -494,7 +494,7 @@ func (c *compiler) compileAccumulator(elem *helium.Element) error {
 		if childElem.URI() != lexicon.NamespaceXSLT {
 			continue
 		}
-		if childElem.LocalName() == elemAccumulatorRule {
+		if childElem.LocalName() == lexicon.XSLTElementAccumulatorRule {
 			if err := c.compileAccumulatorRule(acc, childElem); err != nil {
 				return err
 			}
@@ -748,13 +748,13 @@ func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 		}
 
 		switch childElem.LocalName() {
-		case elemMergeSource:
+		case lexicon.XSLTElementMergeSource:
 			src, err := c.compileMergeSource(childElem)
 			if err != nil {
 				return nil, err
 			}
 			inst.Sources = append(inst.Sources, src)
-		case elemMergeAction:
+		case lexicon.XSLTElementMergeAction:
 			actionCount++
 			if actionCount > 1 {
 				return nil, staticError(errCodeXTSE0010, "xsl:merge must have at most one xsl:merge-action child")
@@ -764,7 +764,7 @@ func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 				return nil, err
 			}
 			inst.Action = body
-		case elemFallback:
+		case lexicon.XSLTElementFallback:
 			// xsl:fallback is allowed only after xsl:merge-action (XTSE0010).
 			if actionCount == 0 {
 				return nil, staticError(errCodeXTSE0010, "xsl:fallback in xsl:merge must follow xsl:merge-action")
@@ -896,7 +896,7 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error
 		if !ok {
 			continue
 		}
-		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == elemMergeKey {
+		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementMergeKey {
 			mk, err := c.compileMergeKey(childElem)
 			if err != nil {
 				return nil, err
@@ -964,7 +964,7 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
 	if selAttr != "" {
 		for ch := range helium.Children(elem) {
 			if chElem, ok := ch.(*helium.Element); ok {
-				if chElem.URI() == lexicon.NamespaceXSLT && chElem.LocalName() == elemFallback {
+				if chElem.URI() == lexicon.NamespaceXSLT && chElem.LocalName() == lexicon.XSLTElementFallback {
 					continue
 				}
 				return nil, staticError(errCodeXTSE3200, "xsl:merge-key must not have both select attribute and sequence constructor")

@@ -105,7 +105,7 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 		if !ok || ce.URI() != lexicon.NamespaceXSLT {
 			continue
 		}
-		if ce.LocalName() == elemNamespaceAlias {
+		if ce.LocalName() == lexicon.XSLTElementNamespaceAlias {
 			if err := c.compileNamespaceAlias(ce); err != nil {
 				return err
 			}
@@ -119,11 +119,11 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 			continue
 		}
 		switch ce.LocalName() {
-		case elemImport:
+		case lexicon.XSLTElementImport:
 			if err := c.compileImport(ce); err != nil {
 				return err
 			}
-		case elemInclude:
+		case lexicon.XSLTElementInclude:
 			if err := c.collectIncludeImports(ce); err != nil {
 				return err
 			}
@@ -309,73 +309,73 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 		}
 
 		switch ce.LocalName() {
-		case elemImport, elemNamespaceAlias:
+		case lexicon.XSLTElementImport, lexicon.XSLTElementNamespaceAlias:
 			// Already processed in collectIncludeImports
-		case elemInclude:
+		case lexicon.XSLTElementInclude:
 			if err := c.compileIncludeTemplates(ce); err != nil {
 				return err
 			}
-		case elemUsePackage:
+		case lexicon.XSLTElementUsePackage:
 			if err := c.compileUsePackage(ce); err != nil {
 				return err
 			}
-		case elemTemplate:
+		case lexicon.XSLTElementTemplate:
 			if err := c.compileTemplate(ce); err != nil {
 				return err
 			}
-		case elemVariable:
+		case lexicon.XSLTElementVariable:
 			if err := c.compileGlobalVariable(ce); err != nil {
 				return err
 			}
-		case elemParam:
+		case lexicon.XSLTElementParam:
 			if err := c.compileGlobalParam(ce); err != nil {
 				return err
 			}
-		case elemKey:
+		case lexicon.XSLTElementKey:
 			if err := c.compileKey(ce); err != nil {
 				return err
 			}
-		case elemOutput:
+		case lexicon.XSLTElementOutput:
 			if err := c.compileOutput(ce); err != nil {
 				return err
 			}
-		case elemStripSpace:
+		case lexicon.XSLTElementStripSpace:
 			if err := c.compileSpaceHandling(ce, true); err != nil {
 				return err
 			}
-		case elemPreserveSpace:
+		case lexicon.XSLTElementPreserveSpace:
 			if err := c.compileSpaceHandling(ce, false); err != nil {
 				return err
 			}
-		case elemFunction:
+		case lexicon.XSLTElementFunction:
 			if err := c.compileFunction(ce); err != nil {
 				return err
 			}
-		case elemDecimalFormat:
+		case lexicon.XSLTElementDecimalFormat:
 			if err := c.compileDecimalFormat(ce); err != nil {
 				return err
 			}
-		case elemMode:
+		case lexicon.XSLTElementMode:
 			if err := c.compileMode(ce); err != nil {
 				return err
 			}
-		case elemImportSchema:
+		case lexicon.XSLTElementImportSchema:
 			if err := c.compileImportSchema(ce); err != nil {
 				return err
 			}
-		case elemAccumulator:
+		case lexicon.XSLTElementAccumulator:
 			if err := c.compileAccumulator(ce); err != nil {
 				return err
 			}
-		case elemAttributeSet:
+		case lexicon.XSLTElementAttributeSet:
 			if err := c.compileAttributeSet(ce); err != nil {
 				return err
 			}
-		case elemGlobalContextItem:
+		case lexicon.XSLTElementGlobalContextItem:
 			if err := c.compileGlobalContextItem(ce); err != nil {
 				return err
 			}
-		case elemCharacterMap:
+		case lexicon.XSLTElementCharacterMap:
 			if err := c.compileCharacterMap(ce); err != nil {
 				return err
 			}
