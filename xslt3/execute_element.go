@@ -321,6 +321,13 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 		if ec.schemaRegistry == nil {
 			return nil
 		}
+		// For lax validation, if no element declaration exists in any
+		// imported schema, the element is valid and remains untyped.
+		if validation == validationLax {
+			if _, found := ec.schemaRegistry.LookupElement(elem.LocalName(), elem.URI()); !found {
+				return nil
+			}
+		}
 		// Create a temporary document containing a deep copy of the element.
 		tmpDoc := helium.NewDefaultDocument()
 		copied, err := helium.CopyNode(elem, tmpDoc)

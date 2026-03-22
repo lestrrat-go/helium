@@ -223,7 +223,7 @@ func (c *compiler) compileAttribute(elem *helium.Element) (*AttributeInst, error
 		if err := validateValidationAttr("xsl:attribute", valAttr); err != nil {
 			return nil, err
 		}
-		if !c.stylesheet.schemaAware && (valAttr == validationStrict || valAttr == validationLax) {
+		if !c.stylesheet.schemaAware && valAttr == validationStrict {
 			return nil, staticError(errCodeXTSE0220, "validation attribute requires schema-aware processing")
 		}
 		inst.Validation = valAttr
@@ -953,7 +953,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 		if err := validateValidationAttr("LRE (xsl:validation)", valAttr); err != nil {
 			return nil, err
 		}
-		if !c.stylesheet.schemaAware && (valAttr == validationStrict || valAttr == validationLax) {
+		if !c.stylesheet.schemaAware && valAttr == validationStrict {
 			return nil, staticError(errCodeXTSE0220, "xsl:validation requires schema-aware processing")
 		}
 		lre.Validation = valAttr
