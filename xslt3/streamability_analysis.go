@@ -2798,10 +2798,17 @@ func exprUsesVarConsumingly(expr *xpath3.Expression, varName string) bool {
 			}
 		}
 		// $var/child or $var/* — downward navigation (PathExpr form)
-		if pe, ok := e.(xpath3.PathExpr); ok {
+		if pe, ok := e.(xpath3.PathExpr); ok && pe.Path != nil {
+			// Filter may be a bare VariableExpr or wrapped in FilterExpr.
+			if ve, ok := pe.Filter.(xpath3.VariableExpr); ok {
+				if ve.Name == varName {
+					found = true
+					return false
+				}
+			}
 			if fe, ok := pe.Filter.(xpath3.FilterExpr); ok {
 				if ve, ok := fe.Expr.(xpath3.VariableExpr); ok {
-					if ve.Name == varName && pe.Path != nil {
+					if ve.Name == varName {
 						found = true
 						return false
 					}
