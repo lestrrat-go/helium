@@ -240,38 +240,29 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 	case "text":
 		err = serializeText(target, doc, serCharMap)
 	case "html":
-		if len(serCharMap) > 0 {
-			// For HTML with character maps, serialize to buffer, then apply
-			// character map to text content only (not inside tags).
-			var htmlBuf bytes.Buffer
-			if herr := serializeHTML(&htmlBuf, doc, outDef); herr != nil {
-				err = herr
-			} else {
-				result := applyCharMapToHTMLText(htmlBuf.String(), serCharMap)
-				result = escapeC1ControlsInString(result)
-				_, err = io.WriteString(target, result)
-			}
-		} else {
-			var htmlBuf bytes.Buffer
-			if herr := serializeHTML(&htmlBuf, doc, outDef); herr != nil {
-				err = herr
-			} else {
-				_, err = io.WriteString(target, escapeC1ControlsInString(htmlBuf.String()))
-			}
+		var htmlBuf bytes.Buffer
+		err = serializeHTML(&htmlBuf, doc, outDef)
+		if err != nil {
+			break
 		}
+		result := htmlBuf.String()
+		if len(serCharMap) > 0 {
+			result = applyCharMapToHTMLText(result, serCharMap)
+		}
+		_, err = io.WriteString(target, escapeC1ControlsInString(result))
 	case "xhtml":
 		err = serializeXHTML(target, doc, outDef, serCharMap)
 	case "json":
-		if len(serCharMap) > 0 {
-			var jsonBuf strings.Builder
-			if jerr := serializeJSONItems(&jsonBuf, nil, doc, outDef); jerr != nil {
-				err = jerr
-			} else {
-				_, err = io.WriteString(target, applyCharMapJSON(jsonBuf.String(), serCharMap))
-			}
-		} else {
+		if len(serCharMap) == 0 {
 			err = serializeJSONItems(target, nil, doc, outDef)
+			break
 		}
+		var jsonBuf strings.Builder
+		err = serializeJSONItems(&jsonBuf, nil, doc, outDef)
+		if err != nil {
+			break
+		}
+		_, err = io.WriteString(target, applyCharMapJSON(jsonBuf.String(), serCharMap))
 	case "adaptive":
 		err = serializeAdaptiveItems(target, nil, doc, outDef.ItemSeparator, serCharMap)
 	default:
