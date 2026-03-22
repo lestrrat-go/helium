@@ -39,7 +39,7 @@ func (c *compiler) compileCharacterMap(elem *helium.Element) error {
 		}
 	}
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -484,7 +484,7 @@ func loadParameterDocumentFromFile(outDef *OutputDef, baseURI, href string) erro
 		return staticError(errCodeXTSE0090, "parameter-document %q: root element must be {%s}serialization-parameters", href, lexicon.NamespaceSerialization)
 	}
 
-	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(root) {
 		elem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -556,7 +556,7 @@ func loadParameterDocumentFromFile(outDef *OutputDef, baseURI, href string) erro
 			if outDef.ResolvedCharMap == nil {
 				outDef.ResolvedCharMap = make(map[rune]string)
 			}
-			for mapChild := elem.FirstChild(); mapChild != nil; mapChild = mapChild.NextSibling() {
+			for mapChild := range helium.Children(elem) {
 				mapElem, ok := mapChild.(*helium.Element)
 				if !ok {
 					continue
@@ -666,7 +666,7 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 		}
 	}
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			// XTSE0010: text content not allowed in xsl:attribute-set

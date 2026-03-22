@@ -84,7 +84,7 @@ func (c *compiler) compileIterate(elem *helium.Element) (Instruction, error) {
 	}
 	var bodyChildren []bodyChild
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			// Text nodes in the body (after params)
@@ -310,7 +310,7 @@ func (c *compiler) compileIterateParam(elem *helium.Element) (*IterateParam, err
 func (c *compiler) compileFork(elem *helium.Element) (Instruction, error) {
 	inst := &ForkInst{}
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -426,7 +426,7 @@ func (c *compiler) compileNextIteration(elem *helium.Element) (Instruction, erro
 
 	// Check for duplicate with-param names (XTSE0670).
 	wpNames := make(map[string]struct{})
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -478,7 +478,7 @@ func (c *compiler) compileAccumulator(elem *helium.Element) error {
 	acc.Initial = initialExpr
 
 	// Scan children for accumulator-rule elements
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -723,7 +723,7 @@ func (c *compiler) compileMerge(elem *helium.Element) (Instruction, error) {
 	inst := &MergeInst{}
 
 	actionCount := 0
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -883,7 +883,7 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*MergeSource, error
 	}
 
 	// Parse xsl:merge-key children — only xsl:merge-key is allowed
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -954,7 +954,7 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*MergeKey, error) {
 
 	// XTSE3200: merge-key must not have both select and body.
 	if selAttr != "" {
-		for ch := elem.FirstChild(); ch != nil; ch = ch.NextSibling() {
+		for ch := range helium.Children(elem) {
 			if chElem, ok := ch.(*helium.Element); ok {
 				if chElem.URI() == lexicon.NamespaceXSLT && chElem.LocalName() == "fallback" {
 					continue

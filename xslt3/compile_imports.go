@@ -100,7 +100,7 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 	c.collectNamespaces(root)
 
 	// Process namespace-alias declarations from the included module.
-	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(root) {
 		ce, ok := child.(*helium.Element)
 		if !ok || ce.URI() != lexicon.NamespaceXSLT {
 			continue
@@ -113,7 +113,7 @@ func (c *compiler) collectIncludeImports(elem *helium.Element) error {
 	}
 
 	// Process imports and recursively collect imports from nested includes.
-	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(root) {
 		ce, ok := child.(*helium.Element)
 		if !ok || ce.URI() != lexicon.NamespaceXSLT {
 			continue
@@ -265,7 +265,7 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 	}
 
 	// Evaluate static params and variables so they're available for shadow attributes.
-	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(root) {
 		elem, ok := child.(*helium.Element)
 		if !ok || elem.URI() != lexicon.NamespaceXSLT {
 			continue
@@ -297,7 +297,7 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 
 	// Compile non-import elements in document order, with includes
 	// interleaved to preserve effective document order.
-	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(root) {
 		ce, ok := child.(*helium.Element)
 		if !ok || ce.URI() != lexicon.NamespaceXSLT {
 			continue
@@ -656,7 +656,7 @@ func compileSimplified(doc *helium.Document, root *helium.Element, cfg *compileC
 func findElementByID(doc *helium.Document, id string) *helium.Element {
 	var walk func(helium.Node) *helium.Element
 	walk = func(n helium.Node) *helium.Element {
-		for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(n) {
 			elem, ok := child.(*helium.Element)
 			if !ok {
 				continue

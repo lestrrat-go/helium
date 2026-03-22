@@ -57,7 +57,7 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 	}
 
 	// Look for inline xs:schema child
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue

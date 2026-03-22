@@ -360,7 +360,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 	// Pre-scan: find the last declaration/param child so we can strip
 	// whitespace-only text in the prologue even under xml:space="preserve".
 	var lastDeclNode helium.Node
-	for ch := elem.FirstChild(); ch != nil; ch = ch.NextSibling() {
+	for ch := range helium.Children(elem) {
 		if e, ok := ch.(*helium.Element); ok && e.URI() == lexicon.NamespaceXSLT {
 			ln := e.LocalName()
 			if ln == "context-item" || ln == "param" {
@@ -373,7 +373,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 	sawContextItem := false
 	pastDecls := lastDeclNode == nil // true if no declarations at all
 	sawContent := false // true once non-whitespace text or non-param/context-item element seen
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch v := child.(type) {
 		case *helium.Element:
 			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == "context-item" {
@@ -521,7 +521,7 @@ func (c *compiler) validateContextItem(elem *helium.Element) error {
 	}
 
 	// xsl:context-item must not have child elements or text content
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() == helium.ElementNode {
 			return staticError(errCodeXTSE0010, "xsl:context-item must be empty")
 		}
@@ -573,7 +573,7 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 			return nil, staticError(errCodeXTSE0010, "xsl:param with required='yes' must not have a select attribute")
 		}
 		// Check for non-whitespace body content
-		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(elem) {
 			switch child.Type() {
 			case helium.ElementNode:
 				return nil, staticError(errCodeXTSE0010, "xsl:param with required='yes' must not have content")
@@ -603,7 +603,7 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 	}
 
 	if isStatic {
-		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(elem) {
 			switch child.Type() {
 			case helium.ElementNode:
 				return nil, staticError(errCodeXTSE0010,

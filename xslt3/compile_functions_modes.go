@@ -172,7 +172,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 
 	// XTSE0020: xsl:param inside xsl:function must not have required="no"
 	// (function params are implicitly required; required="yes" is allowed as redundant)
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -197,7 +197,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 			}
 			if childElem.FirstChild() != nil {
 				// Check for non-whitespace content (body content = default value)
-				for ch := childElem.FirstChild(); ch != nil; ch = ch.NextSibling() {
+				for ch := range helium.Children(childElem) {
 					if ch.Type() == helium.ElementNode {
 						return staticError("XTSE0760",
 							"xsl:param %q in xsl:function must not have content", getAttr(childElem, "name"))

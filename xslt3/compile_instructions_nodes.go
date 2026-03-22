@@ -30,7 +30,7 @@ func (c *compiler) compileValueOf(elem *helium.Element) (*ValueOfInst, error) {
 
 	// XTSE0350: xsl:value-of with select must not have non-whitespace content
 	if selectAttr != "" {
-		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(elem) {
 			switch child.Type() {
 			case helium.TextNode, helium.CDATASectionNode:
 				if strings.TrimSpace(string(child.Content())) != "" {
@@ -66,7 +66,7 @@ func (c *compiler) compileValueOf(elem *helium.Element) (*ValueOfInst, error) {
 func (c *compiler) compileText(elem *helium.Element) (*TextInst, error) {
 	// xsl:text must contain only text and CDATA sections — no child elements (XTSE0010)
 	var sb strings.Builder
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			sb.Write(child.Content())
@@ -413,7 +413,7 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 
 func (c *compiler) compileCopyOf(elem *helium.Element) (*CopyOfInst, error) {
 	// XTSE0260: xsl:copy-of must have no significant content
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.ElementNode:
 			return nil, staticError(errCodeXTSE0260,

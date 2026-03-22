@@ -53,7 +53,7 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 
 	// Process children: xsl:sort and xsl:with-param
 	sortCount := 0
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			// XTSE0010: non-element content not allowed in xsl:apply-templates
@@ -112,7 +112,7 @@ func (c *compiler) compileCallTemplate(elem *helium.Element) (*CallTemplateInst,
 
 	inst := &CallTemplateInst{Name: resolveQName(name, c.nsBindings)}
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			if isNonWhitespaceTextNode(child) {
@@ -161,7 +161,7 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 	inst := &ChooseInst{DefaultCollation: c.defaultCollation}
 	hasOtherwise := false
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		// XTSE0010: xsl:choose must contain only xsl:when and xsl:otherwise elements
 		switch v := child.(type) {
 		case *helium.Text, *helium.CDATASection:
@@ -298,7 +298,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 	// First pass: collect sort keys. Validate sort comes before content.
 	pastSortContent := false
 	sortCount := 0
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -332,7 +332,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 	// Whitespace-only text nodes before/between sorts are stripped even with
 	// xml:space="preserve" per XSLT §4.2 (element-only content).
 	var lastSort helium.Node
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if childElem, ok := child.(*helium.Element); ok {
 			if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == "sort" {
 				lastSort = child
@@ -340,7 +340,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 		}
 	}
 	pastSort := lastSort == nil // true once we've passed all sort elements
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child == lastSort {
 			pastSort = true
 			continue
@@ -549,7 +549,7 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*PerformSortInst, e
 		}
 		inst.Select = expr
 		// XTSE1040: when select is present, only xsl:sort and xsl:fallback are allowed
-		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(elem) {
 			childElem, ok := child.(*helium.Element)
 			if !ok {
 				continue
@@ -570,7 +570,7 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*PerformSortInst, e
 	// Collect sort keys and body. xsl:sort must come before other content.
 	pastSort := false
 	sortCount := 0
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -611,7 +611,7 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*PerformSortInst, e
 
 func (c *compiler) compileNextMatch(elem *helium.Element) (*NextMatchInst, error) {
 	inst := &NextMatchInst{}
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -634,7 +634,7 @@ func (c *compiler) compileApplyImports(elem *helium.Element) (*ApplyImportsInst,
 		return nil, err
 	}
 	inst := &ApplyImportsInst{}
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			if isNonWhitespaceTextNode(child) {
@@ -675,7 +675,7 @@ func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 		inst.Select = expr
 	}
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			// XTSE3140: when select is present, non-whitespace text is not allowed.
@@ -847,7 +847,7 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 
 	// Compile body (skip sort elements)
 	sortCount := 0
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch v := child.(type) {
 		case *helium.Element:
 			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == "sort" {
@@ -930,7 +930,7 @@ func (c *compiler) compileAnalyzeString(elem *helium.Element) (*AnalyzeStringIns
 		phaseFallback = 3
 	)
 	phase := phaseInit
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -1036,7 +1036,7 @@ func (c *compiler) compileEvaluate(elem *helium.Element) (Instruction, error) {
 	}
 
 	// Compile child xsl:with-param elements
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
