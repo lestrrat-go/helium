@@ -66,6 +66,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 					body:              inst.Body,
 					copyNamespaces:    copyNS,
 					inheritNamespaces: inheritNS,
+					useAttrSets:       inst.UseAttrSets,
 				})
 				ec.contextNode = savedCtx
 				ec.currentNode = savedCur
@@ -75,10 +76,21 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 					return err
 				}
 			case xpath3.AtomicValue:
-				// Atomic values: output as text, body is not evaluated
+				// Atomic values: output as text, body is not evaluated.
+				// Adjacent atomic values are space-separated per XSLT 3.0 §5.7.2.
 				s, err := xpath3.AtomicToString(v)
 				if err != nil {
 					return err
+				}
+				out := ec.currentOutput()
+				if out.prevWasAtomic {
+					sep, tErr := ec.resultDoc.CreateText([]byte(" "))
+					if tErr != nil {
+						return tErr
+					}
+					if err := ec.addNode(sep); err != nil {
+						return err
+					}
 				}
 				text, err := ec.resultDoc.CreateText([]byte(s))
 				if err != nil {
@@ -87,12 +99,40 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 				if err := ec.addNode(text); err != nil {
 					return err
 				}
+				out.prevWasAtomic = true
 			}
 		}
 		return nil
 	}
 
 	if contextNode == nil {
+		// XSLT 3.0: context item may be an atomic value (e.g. inside
+		// xsl:for-each over a sequence of atomics). Copy it as text.
+		if av, ok := ec.contextItem.(xpath3.AtomicValue); ok {
+			s, err := xpath3.AtomicToString(av)
+			if err != nil {
+				return err
+			}
+			out := ec.currentOutput()
+			if out.prevWasAtomic {
+				sep, tErr := ec.resultDoc.CreateText([]byte(" "))
+				if tErr != nil {
+					return tErr
+				}
+				if err := ec.addNode(sep); err != nil {
+					return err
+				}
+			}
+			text, tErr := ec.resultDoc.CreateText([]byte(s))
+			if tErr != nil {
+				return tErr
+			}
+			if err := ec.addNode(text); err != nil {
+				return err
+			}
+			out.prevWasAtomic = true
+			return nil
+		}
 		return dynamicError(errCodeXTTE0945, "xsl:copy: no context item")
 	}
 	if err := ec.execCopyNode(ctx, contextNode, copyNodeOpts{
@@ -361,6 +401,24 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 	case helium.AttributeNode:
 		attr := node.(*helium.Attribute)
 		out := ec.currentOutput()
+		// In sequence mode (e.g. variable with as="attribute(*)*"),
+		// capture the attribute as a standalone item.
+		if out.sequenceMode {
+			var attrNS *helium.Namespace
+			if attr.URI() != "" {
+				ns, nsErr := out.doc.CreateNamespace(attr.Prefix(), attr.URI())
+				if nsErr == nil {
+					attrNS = ns
+				}
+			}
+			copiedAttr, cErr := out.doc.CreateAttribute(attr.Name(), attr.Value(), attrNS)
+			if cErr != nil {
+				return cErr
+			}
+			out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: copiedAttr})
+			out.noteOutput()
+			return nil
+		}
 		elem, ok := out.current.(*helium.Element)
 		if !ok {
 			// XTDE0410: adding attribute to non-element

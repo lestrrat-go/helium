@@ -304,6 +304,19 @@ func (w *Writer) lookupNS(prefix, uri string) bool {
 	return false
 }
 
+// hasDefaultNSInScope returns true if any ancestor has declared a
+// non-empty default namespace (xmlns="...") that is still in scope.
+func (w *Writer) hasDefaultNSInScope() bool {
+	for i := len(w.nsStack) - 1; i >= 0; i-- {
+		for _, ns := range w.nsStack[i].decls {
+			if ns.prefix == "" {
+				return ns.uri != ""
+			}
+		}
+	}
+	return false
+}
+
 // declareNS adds a namespace declaration to the current element scope
 // if the prefix is not already bound to the given URI.
 func (w *Writer) declareNS(prefix, uri string) {
@@ -466,6 +479,10 @@ func (w *Writer) StartElementNS(prefix, localName, namespaceURI string) error {
 	}
 	if namespaceURI != "" {
 		w.declareNS(prefix, namespaceURI)
+	} else if prefix == "" && w.hasDefaultNSInScope() {
+		// When an element has no namespace but a default namespace is
+		// in scope from an ancestor, emit xmlns="" to undeclare it.
+		w.declareNS("", "")
 	}
 	return w.err
 }
