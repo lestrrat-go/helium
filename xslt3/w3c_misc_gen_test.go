@@ -1877,7 +1877,7 @@ func TestW3C_error(t *testing.T) {
 </doc>`, ExpectError: true, ErrorCode: "FOAR0001"},
 		{Name: "error-FODC0002a", StylesheetPath: "tests/misc/error/error-FODC0002a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
-</doc>`, Assertions: []w3cAssertion{w3cAssertXML("<root/>")}, AcceptErrors: []string{"FODC0002"}},
+</doc>`, ExpectError: true, ErrorCode: "FODC0002"},
 		{Name: "error-FODC0002a-ignore", StylesheetPath: "tests/misc/error/error-FODC0002a.xsl", SourceContent: `<doc>
   <element attribute="3"/>
 </doc>`, Assertions: []w3cAssertion{w3cAssertXML("<root/>")}},
