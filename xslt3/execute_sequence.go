@@ -133,6 +133,26 @@ func filterZeroLengthTextNodes(seq xpath3.Sequence) xpath3.Sequence {
 	return result
 }
 
+// removeZeroLengthTextNodes removes text nodes with zero-length string
+// value from the sequence. Per XSLT 3.0 §5.7.2, zero-length text nodes
+// in the result sequence are removed before separator insertion.
+func removeZeroLengthTextNodes(seq xpath3.Sequence) xpath3.Sequence {
+	result := seq[:0:0]
+	changed := false
+	for _, item := range seq {
+		ni, ok := item.(xpath3.NodeItem)
+		if ok && ni.Node.Type() == helium.TextNode && len(ni.Node.Content()) == 0 {
+			changed = true
+			continue
+		}
+		result = append(result, item)
+	}
+	if !changed {
+		return seq
+	}
+	return result
+}
+
 // mergeAdjacentTextNodes merges consecutive text node items in a sequence
 // into single text nodes. Per XSLT spec §11.3, adjacent text nodes are
 // merged before separator insertion in xsl:value-of.

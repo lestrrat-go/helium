@@ -499,7 +499,16 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		if err != nil {
 			return err
 		}
-		value = stringifyResultWithSep(result, sep)
+		// Per XSLT 3.0 §5.7.2: check for function items (FOTY0013),
+		// remove zero-length text nodes, and merge adjacent text nodes
+		// before applying the separator.
+		seq := result.Sequence()
+		if fErr := checkAtomizable(seq); fErr != nil {
+			return fErr
+		}
+		seq = removeZeroLengthTextNodes(seq)
+		seq = mergeAdjacentTextNodes(seq)
+		value = stringifySequenceWithSep(seq, sep)
 	} else if len(inst.Body) > 0 {
 		sep := ""
 		if inst.Separator != nil {
@@ -521,8 +530,12 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 		if err != nil {
 			return err
 		}
-		// Per XSLT spec §5.7.2: adjacent text nodes in the result are merged
-		// before the separator is applied.
+		// Per XSLT 3.0 §5.7.2: check for function items, remove zero-length
+		// text nodes, and merge adjacent text nodes before the separator is applied.
+		if fErr := checkAtomizable(val); fErr != nil {
+			return fErr
+		}
+		val = removeZeroLengthTextNodes(val)
 		val = mergeAdjacentTextNodes(val)
 		value = stringifySequenceWithSep(val, sep)
 	}
