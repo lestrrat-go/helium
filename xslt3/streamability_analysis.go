@@ -1600,17 +1600,23 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst Instruction) error {
 	// stream.  Most of the checks below only apply to non-grounded selects.
 	selectGrounded := fg.Select != nil && exprEndsWithGrounding(fg.Select.AST())
 
-	// Check if sort is used with for-each-group in streaming (non-streamable)
-	if len(fg.Sort) > 0 {
+	// Check if sort is used with for-each-group in streaming (non-streamable).
+	// When the select is grounded (copy-of/snapshot), items are in memory and
+	// sorting is fine.
+	if len(fg.Sort) > 0 && !selectGrounded {
 		return staticError(errCodeXTSE3430,
 			"xsl:for-each-group with sort is not streamable")
 	}
 
 	// Check if group-starting-with / group-ending-with pattern has
 	// non-motionless predicates (e.g., record[foo = 'a'] where foo is
-	// a child element).  The pattern must be motionless for streaming.
-	// Skip when select is grounded — grounded items can be freely inspected.
-	if !selectGrounded {
+	// a child element).  The pattern must be motionless for streaming
+	// because the processor tests the pattern before consuming the element.
+	// Skip when select is grounded (items are in memory) or when select
+	// uses current-group() (items are already materialized from an outer
+	// for-each-group).
+	selectMaterialized := selectGrounded || (fg.Select != nil && exprUsesCurrentGroup(fg.Select))
+	if !selectMaterialized {
 		if fg.GroupStartingWith != nil && patternHasNonMotionlessPredicate(fg.GroupStartingWith) {
 			return staticError(errCodeXTSE3430,
 				"xsl:for-each-group group-starting-with pattern has a non-motionless predicate, which is not streamable")
@@ -1636,12 +1642,9 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst Instruction) error {
 		}
 	}
 
-	// Check if select uses descendant-or-self (crawling) for grouped streaming,
-	// but only when the select doesn't ground its result via copy-of/snapshot.
-	if fg.Select != nil && xpath3.ExprUsesDescendantOrSelf(fg.Select) && !selectGrounded {
-		return staticError(errCodeXTSE3430,
-			"xsl:for-each-group select expression %q is crawling, which is not streamable", fg.Select.String())
-	}
+	// Crawling selects (descendant-or-self axis) ARE allowed for
+	// xsl:for-each-group — the processor reads the entire stream and buffers
+	// the matching items for grouping.  No crawling check needed here.
 
 	// Check for nested for-each-group that consumes current-group(),
 	// but only when the outer for-each-group select doesn't ground its data.
@@ -1674,16 +1677,10 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst Instruction) error {
 		}
 	}
 
-	// Check for-each-group with group-starting-with: copy-of(current-group()) is not streamable
-	// because group-starting-with needs to buffer and the pattern-matching consumes nodes.
-	// Skip when select is grounded — grounded items can be freely copied.
-	if fg.GroupStartingWith != nil && !selectGrounded {
-		for _, bi := range fg.Body {
-			if err := checkGroupStartingWithBody(bi); err != nil {
-				return err
-			}
-		}
-	}
+	// group-starting-with naturally buffers the entire current group so that
+	// it can detect where a new group starts.  Because the group is already
+	// buffered, current-group() in the body is always available and does not
+	// represent an extra stream consumption — no additional check is needed.
 
 	return nil
 }
@@ -2110,6 +2107,20 @@ func countCurrentGroupConsumingRefs(body []Instruction) int {
 			}
 			if choose.Otherwise != nil {
 				branchCount := countCurrentGroupConsumingRefs(choose.Otherwise)
+				if branchCount > maxBranch {
+					maxBranch = branchCount
+				}
+			}
+			count += maxBranch
+			continue
+		}
+
+		// For fork instructions, each branch gets its own copy of the
+		// stream, so take the max across branches (like choose).
+		if fork, ok := inst.(*ForkInst); ok {
+			maxBranch := 0
+			for _, branch := range fork.Branches {
+				branchCount := countCurrentGroupConsumingRefs(branch)
 				if branchCount > maxBranch {
 					maxBranch = branchCount
 				}
