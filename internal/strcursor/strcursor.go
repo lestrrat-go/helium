@@ -276,13 +276,38 @@ func (c *RuneCursor) PeekString(n int) string {
 	if err := c.ensure(n); err != nil {
 		return ""
 	}
-	// Calculate total byte size first.
+	mask := c.ringMask
+	ring := c.ring
+	head := c.head
+
+	// Fast path: check if all runes are single-byte ASCII (width == 1).
+	// This avoids utf8.EncodeRune overhead for the common case of XML names.
+	allASCII := true
+	for i := 0; i < n; i++ {
+		if ring[(head+i)&mask].width != 1 {
+			allASCII = false
+			break
+		}
+	}
+	if allASCII {
+		var stackBuf [128]byte
+		var buf []byte
+		if n <= len(stackBuf) {
+			buf = stackBuf[:n]
+		} else {
+			buf = make([]byte, n)
+		}
+		for i := 0; i < n; i++ {
+			buf[i] = byte(ring[(head+i)&mask].val)
+		}
+		return string(buf)
+	}
+
+	// Slow path: multi-byte runes present.
 	totalBytes := 0
 	for i := 0; i < n; i++ {
-		idx := (c.head + i) % c.ringCap
-		totalBytes += c.ring[idx].width
+		totalBytes += ring[(head+i)&mask].width
 	}
-	// Use stack-allocated buffer for common case (names up to 128 bytes).
 	var stackBuf [128]byte
 	var buf []byte
 	if totalBytes <= len(stackBuf) {
@@ -292,8 +317,7 @@ func (c *RuneCursor) PeekString(n int) string {
 	}
 	pos := 0
 	for i := 0; i < n; i++ {
-		idx := (c.head + i) % c.ringCap
-		pos += utf8.EncodeRune(buf[pos:], c.ring[idx].val)
+		pos += utf8.EncodeRune(buf[pos:], ring[(head+i)&mask].val)
 	}
 	return string(buf)
 }
@@ -314,7 +338,11 @@ func (c *RuneCursor) Cur() rune {
 	} else {
 		c.column++
 	}
-	c.line.WriteRune(r)
+	if r < utf8.RuneSelf {
+		c.line.WriteByte(byte(r))
+	} else {
+		c.line.WriteRune(r)
+	}
 	c.head = (c.head + 1) & c.ringMask
 	c.count--
 	return r
@@ -328,8 +356,9 @@ func (c *RuneCursor) Advance(n int) error {
 	}
 	mask := c.ringMask
 	head := c.head
+	ring := c.ring
 	for i := 0; i < n; i++ {
-		e := c.ring[head]
+		e := ring[head]
 		c.nread += e.width
 		if e.val == '\n' {
 			c.lineno++
@@ -338,7 +367,11 @@ func (c *RuneCursor) Advance(n int) error {
 		} else {
 			c.column++
 		}
-		c.line.WriteRune(e.val)
+		if e.val < utf8.RuneSelf {
+			c.line.WriteByte(byte(e.val))
+		} else {
+			c.line.WriteRune(e.val)
+		}
 		head = (head + 1) & mask
 	}
 	c.head = head

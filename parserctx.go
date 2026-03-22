@@ -1503,13 +1503,32 @@ func (pctx *parserCtx) parseAttributeValue(ctx context.Context, normalize bool) 
 		defer g.IRelease("END parseAttributeValue")
 	}
 
-	_, err2 := pctx.parseQuotedText(func(qch rune) (string, error) {
-		value, entities, err = pctx.parseAttributeValueInternal(ctx, qch, normalize)
-		return "", nil
-	})
-	if err2 != nil {
-		return "", 0, err2
+	// Inline quote handling from parseQuotedText to avoid closure allocation.
+	cur := pctx.getCursor()
+	if cur == nil {
+		panic("did not get rune cursor")
 	}
+	qch := cur.Peek()
+	switch qch {
+	case '"', '\'':
+		if err = cur.Advance(1); err != nil {
+			return
+		}
+	default:
+		err = errors.New("string not started (got '" + string([]rune{qch}) + "')")
+		return
+	}
+
+	value, entities, err = pctx.parseAttributeValueInternal(ctx, qch, normalize)
+	if err != nil {
+		return
+	}
+
+	if cur.Peek() != qch {
+		err = errors.New("string not closed")
+		return
+	}
+	err = cur.Advance(1)
 	return
 }
 
@@ -4882,6 +4901,10 @@ func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ enum.At
 }
 
 func (ctx *parserCtx) lookupSpecialAttribute(elemName, attrName string) (enum.AttributeType, bool) {
+	// Fast path: most documents have no DTD attribute declarations.
+	if len(ctx.attsSpecial) == 0 {
+		return 0, false
+	}
 	key := elemName + ":" + attrName
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START lookupSpecialAttribute(%s)", key)
