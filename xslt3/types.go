@@ -641,6 +641,11 @@ func normalizeTypeName(name string, ec ...*execContext) string {
 	case "untypedAtomic":
 		return xpath3.TypeUntypedAtomic
 	}
+	// Unprefixed non-builtin type names: use Q{} annotation form to match
+	// xsdTypeNameFromDef which produces Q{}local for no-namespace types.
+	if !strings.ContainsAny(name, ":{") {
+		return "Q{}" + name
+	}
 	return name
 }
 

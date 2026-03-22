@@ -690,10 +690,7 @@ func matchesDeclDirect(child childElem, edecl *ElementDecl) bool {
 	if child.name != edecl.Name.Local {
 		return false
 	}
-	if edecl.Name.NS != "" {
-		return child.ns == edecl.Name.NS
-	}
-	return true
+	return child.ns == edecl.Name.NS
 }
 
 // elementDisplayForExpected formats an element declaration name for error messages.

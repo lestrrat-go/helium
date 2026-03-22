@@ -62,6 +62,9 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 				ec.currentNode = v.Node
 				ec.position = 1
 				ec.size = 1
+				out := ec.currentOutput()
+				lastBefore := out.current.LastChild()
+				pendingBefore := len(out.pendingItems)
 				err := ec.execCopyNode(ctx, v.Node, copyNodeOpts{
 					body:              inst.Body,
 					copyNamespaces:    copyNS,
@@ -73,6 +76,10 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 				ec.position = savedPos
 				ec.size = savedSize
 				if err != nil {
+					return err
+				}
+				// Apply schema validation to the copied node.
+				if err := ec.applyCopyValidation(ctx, inst, out, lastBefore, pendingBefore); err != nil {
 					return err
 				}
 			case xpath3.AtomicValue:
@@ -135,6 +142,9 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		}
 		return dynamicError(errCodeXTTE0945, "xsl:copy: no context item")
 	}
+	out := ec.currentOutput()
+	lastBefore := out.current.LastChild()
+	pendingBefore := len(out.pendingItems)
 	if err := ec.execCopyNode(ctx, contextNode, copyNodeOpts{
 		body:              inst.Body,
 		useAttrSets:       inst.UseAttrSets,
@@ -144,62 +154,41 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		return err
 	}
 
+	return ec.applyCopyValidation(ctx, inst, out, lastBefore, pendingBefore)
+}
+
+// applyCopyValidation applies type or validation-mode validation to the element
+// produced by xsl:copy. It handles elements in both the DOM tree and in
+// pendingItems (sequence/capture mode).
+func (ec *execContext) applyCopyValidation(ctx context.Context, inst *CopyInst, out *outputFrame, lastBefore helium.Node, pendingBefore int) error {
 	// Apply type validation if specified.
 	if inst.TypeName != "" {
-		// For xsl:copy, the type attribute is only applied to element/attribute
-		// context nodes. For text/comment/PI, it is silently ignored.
-		isElemOrAttr := contextNode != nil &&
-			(contextNode.Type() == helium.ElementNode || contextNode.Type() == helium.AttributeNode)
-		isDocument := contextNode != nil && contextNode.Type() == helium.DocumentNode
-		// XTTE1535: complex type on non-element, non-document node.
-		if !isElemOrAttr && !isDocument && ec.schemaRegistry != nil {
-			td, _, found := ec.schemaRegistry.LookupTypeDef(inst.TypeName)
-			if found && isComplexTypeDef(td) {
-				return dynamicError(errCodeXTTE1535,
-					"copy: complex type %s cannot be applied to %s node", inst.TypeName, contextNode.Type())
-			}
-		}
-		// For document nodes, apply the type to the root element.
-		if isDocument {
-			out := ec.currentOutput()
-			// Find the root element in the copied output.
-			for child := range helium.Children(out.current) {
-				if copiedElem, ok := child.(*helium.Element); ok {
-					if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
-						return err
-					}
-					ec.annotateNode(copiedElem, inst.TypeName)
-					ec.annotateAttributesFromType(copiedElem, inst.TypeName)
-					break
+		copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
+		if copiedElem != nil {
+			if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
+				if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+					return dynamicError(errCodeXTTE1540,
+						"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 				}
+				return err
 			}
+			ec.annotateNode(copiedElem, inst.TypeName)
+			ec.annotateAttributesFromType(copiedElem, inst.TypeName)
+			propagateAnnotationToPending(out, pendingBefore, copiedElem, inst.TypeName)
 		}
-		if isElemOrAttr {
-			out := ec.currentOutput()
-			if copied := out.current.LastChild(); copied != nil {
-				if copiedElem, ok := copied.(*helium.Element); ok {
-					if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
-						if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
-							return dynamicError(errCodeXTTE1540,
-								"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
-						}
-						return err
-					}
-					ec.annotateNode(copiedElem, inst.TypeName)
-					ec.annotateAttributesFromType(copiedElem, inst.TypeName)
-				}
-			}
-		}
+		return nil
 	}
-	// Apply validation if specified and context node is an element.
+	// Apply validation if specified and the copied node is an element.
 	if v := ec.effectiveValidation(inst.Validation); v != "" && v != validationPreserve {
-		out := ec.currentOutput()
-		// The most recently added child of the current output is the copy.
-		if copied := out.current.LastChild(); copied != nil {
-			if copiedElem, ok := copied.(*helium.Element); ok {
-				if err := ec.validateConstructedElement(ctx, copiedElem, v); err != nil {
-					return err
-				}
+		copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
+		if copiedElem != nil {
+			if err := ec.validateConstructedElement(ctx, copiedElem, v); err != nil {
+				return err
+			}
+			// After validation, propagate type annotations to pending items
+			// so that instance-of checks on variable references work correctly.
+			if out.sequenceMode && len(out.pendingItems) > pendingBefore {
+				ec.propagateValidationAnnotationsToPending(out, pendingBefore)
 			}
 		}
 	}
@@ -589,7 +578,7 @@ func findCopiedElement(out *outputFrame, lastBefore helium.Node, pendingBefore i
 			return elem
 		}
 	}
-	if out.sequenceMode && len(out.pendingItems) > pendingBefore {
+	if (out.sequenceMode || out.captureItems) && len(out.pendingItems) > pendingBefore {
 		ni, ok := out.pendingItems[len(out.pendingItems)-1].(xpath3.NodeItem)
 		if !ok {
 			return nil
