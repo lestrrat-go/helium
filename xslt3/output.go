@@ -357,10 +357,32 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 	if itemSep != nil {
 		sep = *itemSep
 	}
+	// Per XSLT 3.0 §20: when adaptive output contains a single document or
+	// element node, serialize it using the XML method (which includes the
+	// XML declaration by default). When there are multiple items, serialize
+	// each without a declaration.
+	singleNodeItem := len(items) == 1
 	for i, item := range items {
 		if i > 0 && sep != "" {
 			if _, err := io.WriteString(w, sep); err != nil {
 				return err
+			}
+		}
+		if singleNodeItem {
+			if ni, ok := item.(xpath3.NodeItem); ok {
+				if elem, ok := ni.Node.(*helium.Element); ok {
+					// Wrap in a temp document to get the XML declaration.
+					tmpDoc := helium.NewDefaultDocument()
+					clone, _ := helium.CopyNode(elem, tmpDoc)
+					if clone != nil {
+						_ = tmpDoc.AddChild(clone)
+					}
+					xmlOutDef := defaultOutputDef()
+					if err := serializeXML(w, tmpDoc, xmlOutDef, cm); err != nil {
+						return err
+					}
+					continue
+				}
 			}
 		}
 		s := serializeItemAdaptive(item, cm)
