@@ -55,8 +55,9 @@ type conditionalAction struct {
 }
 
 type conditionalScope struct {
-	hasOutput bool
-	actions   []conditionalAction
+	hasOutput      bool
+	actions        []conditionalAction
+	untrackedNodes []helium.Node // nodes added via addNodeUntracked; removed when on-empty fires
 }
 
 func (out *outputFrame) noteOutput() {
