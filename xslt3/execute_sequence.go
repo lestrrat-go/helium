@@ -51,6 +51,7 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 		// XSLT spec §11.3: zero-length text nodes in the result sequence
 		// are discarded before stringification.
 		filtered := filterZeroLengthTextNodes(seq)
+		filtered = mergeAdjacentTextNodes(filtered)
 		value = stringifySequenceWithSep(filtered, separator)
 	} else if len(inst.Body) > 0 {
 		// Default separator for body content is "" (zero-length string)
