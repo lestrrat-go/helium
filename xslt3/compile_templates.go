@@ -474,7 +474,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 	seen := make(map[string]struct{}, len(params))
 	for _, p := range params {
 		if _, dup := seen[p.Name]; dup {
-			return nil, nil, nil, staticError(errCodeXTSE0580_, "duplicate parameter name %q", p.Name)
+			return nil, nil, nil, staticError(errCodeXTSE0580, "duplicate parameter name %q", p.Name)
 		}
 		seen[p.Name] = struct{}{}
 	}

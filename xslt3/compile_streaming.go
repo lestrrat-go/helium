@@ -111,7 +111,7 @@ func (c *compiler) compileIterate(elem *helium.Element) (Instruction, error) {
 				}
 				// Check for duplicate param names (XTSE0580).
 				if _, dup := paramNames[p.Name]; dup {
-					return nil, staticError(errCodeXTSE0580_, "duplicate parameter name %q in xsl:iterate", p.Name)
+					return nil, staticError(errCodeXTSE0580, "duplicate parameter name %q in xsl:iterate", p.Name)
 				}
 				paramNames[p.Name] = struct{}{}
 				inst.Params = append(inst.Params, p)
