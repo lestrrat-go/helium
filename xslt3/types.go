@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -602,7 +603,7 @@ func normalizeTypeName(name string, ec ...*execContext) string {
 		local := name[idx+1:]
 		if len(ec) > 0 && ec[0] != nil {
 			if ns, ok := ec[0].stylesheet.namespaces[prefix]; ok {
-				if ns == "http://www.w3.org/2001/XMLSchema" {
+				if ns == lexicon.XSD {
 					return "xs:" + local
 				}
 				return xpath3.QAnnotation(ns, local)

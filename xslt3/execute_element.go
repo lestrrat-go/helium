@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -44,7 +45,7 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 			return err
 		}
 		// XTDE0835: namespace URI must not be the reserved xmlns namespace
-		if nsURI == "http://www.w3.org/2000/xmlns/" {
+		if nsURI == lexicon.XMLNS {
 			return dynamicError(errCodeXTDE0835,
 				"namespace URI %q is reserved and cannot be used", nsURI)
 		}
@@ -460,13 +461,12 @@ func (ec *execContext) annotateAttributesFromType(elem *helium.Element, typeName
 	if len(td.Attributes) == 0 {
 		return
 	}
-	const nsXSD = "http://www.w3.org/2001/XMLSchema"
 	for _, attr := range elem.Attributes() {
 		for _, au := range td.Attributes {
 			if au.Name.Local == attr.LocalName() && au.Name.NS == attr.URI() {
 				if au.TypeName.Local != "" {
 					var ann string
-					if au.TypeName.NS == nsXSD {
+					if au.TypeName.NS == lexicon.XSD {
 						ann = "xs:" + au.TypeName.Local
 					} else {
 						ann = xpath3.QAnnotation(au.TypeName.NS, au.TypeName.Local)
@@ -642,7 +642,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 			return err
 		}
 		// XTDE0865: the xmlns namespace URI is reserved
-		if nsURI == "http://www.w3.org/2000/xmlns/" {
+		if nsURI == lexicon.XMLNS {
 			return dynamicError(errCodeXTDE0865,
 				"namespace URI %q is reserved and cannot be used for attributes", nsURI)
 		}
@@ -1145,18 +1145,18 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 	}
 	// XTDE0925: xml prefix requires the XML namespace URI, and
 	// the XML namespace URI requires the xml prefix.
-	if name == "xml" && value != "http://www.w3.org/XML/1998/namespace" {
+	if name == "xml" && value != lexicon.XML {
 		return dynamicError(errCodeXTDE0925,
 			"namespace prefix %q must be bound to %q, got %q",
-			name, "http://www.w3.org/XML/1998/namespace", value)
+			name, lexicon.XML, value)
 	}
-	if value == "http://www.w3.org/XML/1998/namespace" && name != "xml" {
+	if value == lexicon.XML && name != "xml" {
 		return dynamicError(errCodeXTDE0925,
 			"namespace URI %q can only be bound to prefix %q, got %q",
 			value, "xml", name)
 	}
 	// XTDE0905: the xmlns namespace URI is reserved
-	if value == "http://www.w3.org/2000/xmlns/" {
+	if value == lexicon.XMLNS {
 		return dynamicError(errCodeXTDE0905,
 			"namespace URI %q is reserved and cannot be used", value)
 	}
@@ -1175,7 +1175,7 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 	// The xml namespace is always implicitly declared — skip it to
 	// avoid creating a redundant namespace declaration that some
 	// serializers might output as an element.
-	if name == "xml" && value == "http://www.w3.org/XML/1998/namespace" {
+	if name == "xml" && value == lexicon.XML {
 		return nil
 	}
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -450,7 +451,7 @@ func validateXMLNSAttr(localName, value string) (string, bool, error) {
 // ("", false, nil) when no matching global attribute declaration is found.
 func (r *schemaRegistry) ValidateAttribute(localName, nsURI, value string) (string, bool, error) {
 	// Check built-in XML namespace declarations.
-	if nsURI == "http://www.w3.org/XML/1998/namespace" {
+	if nsURI == lexicon.XML {
 		if r.hasXMLNSImport() {
 			return validateXMLNSAttr(localName, value)
 		}
@@ -548,7 +549,7 @@ func findDocumentElement(doc *helium.Document) *helium.Element {
 // compare against the declared type hierarchy.
 func xsdTypeNameFromDef(td *xsd.TypeDef) string {
 	for cur := td; cur != nil; cur = cur.BaseType {
-		if cur.Name.NS == "http://www.w3.org/2001/XMLSchema" && cur.Name.Local != "" {
+		if cur.Name.NS == lexicon.XSD && cur.Name.Local != "" {
 			return "xs:" + cur.Name.Local
 		}
 		if cur.Name.NS != "" && cur.Name.Local != "" {
@@ -628,7 +629,7 @@ func walkElementsForID(node helium.Node, ids map[string]struct{}) error {
 			continue
 		}
 		for _, attr := range elem.Attributes() {
-			if attr.URI() == "http://www.w3.org/XML/1998/namespace" && attr.LocalName() == "id" {
+			if attr.URI() == lexicon.XML && attr.LocalName() == "id" {
 				val := attr.Value()
 				if _, dup := ids[val]; dup {
 					return dynamicError(errCodeXTTE1555,
