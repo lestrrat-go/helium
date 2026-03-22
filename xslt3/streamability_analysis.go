@@ -1901,6 +1901,10 @@ func exprEndsWithGrounding(expr xpath3.Expr) bool {
 			return exprEndsWithGrounding(lp)
 		}
 		return isGroundingExpr(e.Filter)
+	case xpath3.FilterExpr:
+		// A predicate filter on a grounded expression is still grounded —
+		// it returns a subset of already-grounded nodes.
+		return exprEndsWithGrounding(e.Expr)
 	case xpath3.FunctionCall:
 		return isGroundingExpr(e)
 	case xpath3.LocationPath:
