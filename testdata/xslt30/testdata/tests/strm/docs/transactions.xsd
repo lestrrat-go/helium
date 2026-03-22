@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="account">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="account-number"/>
+        <xs:element maxOccurs="unbounded" ref="transaction"/>
+      </xs:sequence>
+      <xs:attribute name="nr" use="required" type="xs:integer"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="account-number" type="xs:integer"/>
+  <xs:element name="transaction">
+    <xs:complexType>
+      <xs:attribute name="date" use="required" type="xs:date"/>
+      <xs:attribute name="value" use="required" type="xs:decimal"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
