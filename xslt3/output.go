@@ -16,6 +16,7 @@ import (
 	"github.com/lestrrat-go/helium/stream"
 	"github.com/lestrrat-go/helium/xpath3"
 	"golang.org/x/text/encoding/htmlindex"
+	xtunicode "golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -188,9 +189,10 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		charMap = charMaps[0]
 	}
 
-	// Check if we need encoding conversion (non-UTF-8/UTF-16)
+	// Check if we need encoding conversion (non-UTF-8)
 	enc := strings.ToLower(outDef.Encoding)
-	needsEncodingConversion := enc != "" && enc != "utf-8" && enc != "utf8" && enc != "utf-16" && enc != "utf16"
+	isUTF16 := enc == "utf-16" || enc == "utf16"
+	needsEncodingConversion := enc != "" && enc != "utf-8" && enc != "utf8" && !isUTF16
 
 	// Check if we need Unicode normalization
 	needsNormalization := outDef.NormalizationForm != "" && outDef.NormalizationForm != "NONE"
@@ -209,7 +211,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 	}
 
 	// Buffer when post-processing is needed
-	needsBuffer := needsEncodingConversion || needsNormalization
+	needsBuffer := needsEncodingConversion || needsNormalization || isUTF16
 	var target io.Writer
 	var buf bytes.Buffer
 	if needsBuffer {
@@ -218,10 +220,18 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		target = w
 	}
 
-	// Emit UTF-8 BOM if requested.
-	if outDef.ByteOrderMark {
-		if _, werr := w.Write([]byte{0xEF, 0xBB, 0xBF}); werr != nil {
-			return werr
+	// Emit BOM if requested or if UTF-16 (UTF-16 always gets a BOM per spec).
+	if outDef.ByteOrderMark || isUTF16 {
+		if isUTF16 {
+			// UTF-16 BE BOM
+			if _, werr := w.Write([]byte{0xFE, 0xFF}); werr != nil {
+				return werr
+			}
+		} else {
+			// UTF-8 BOM
+			if _, werr := w.Write([]byte{0xEF, 0xBB, 0xBF}); werr != nil {
+				return werr
+			}
 		}
 	}
 
@@ -285,6 +295,9 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 			}
 		}
 
+		if isUTF16 {
+			return transcodeToUTF16(w, data)
+		}
 		if needsEncodingConversion {
 			return transcodeToEncoding(w, data, enc)
 		}
@@ -968,6 +981,19 @@ func normalizeTag(out *bytes.Buffer, data []byte, pos *int, nf norm.Form) {
 	*pos = i
 }
 
+// transcodeToUTF16 converts UTF-8 bytes to UTF-16 big-endian (without BOM;
+// the BOM is emitted separately by the caller).
+func transcodeToUTF16(w io.Writer, utf8Data []byte) error {
+	enc := xtunicode.UTF16(xtunicode.BigEndian, xtunicode.IgnoreBOM)
+	encoded, err := enc.NewEncoder().Bytes(utf8Data)
+	if err != nil {
+		_, werr := w.Write(utf8Data)
+		return werr
+	}
+	_, werr := w.Write(encoded)
+	return werr
+}
+
 // transcodeToEncoding converts UTF-8 bytes to the target encoding,
 // replacing characters that cannot be represented with XML character references.
 func transcodeToEncoding(w io.Writer, utf8Data []byte, encName string) error {
@@ -1233,7 +1259,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	// always outputs UTF-8. The encoding conversion is handled by
 	// serializeResult's transcoding layer.
 	targetEnc := strings.ToLower(outDef.Encoding)
-	isNonUTF8 := targetEnc != "" && targetEnc != "utf-8" && targetEnc != "utf8" && targetEnc != "utf-16" && targetEnc != "utf16"
+	isNonUTF8 := targetEnc != "" && targetEnc != "utf-8" && targetEnc != "utf8"
 	// When the document has no document element (e.g., result-document
 	// producing only comments and text), use the stream-based serializer
 	// which does not inject newlines between top-level children.

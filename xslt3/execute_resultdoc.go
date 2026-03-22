@@ -620,7 +620,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 		inst.OmitXMLDeclaration != nil || inst.DoctypeSystem != nil || inst.DoctypePublic != nil ||
 		inst.CDATASectionElements != nil || inst.Encoding != nil || inst.OutputVersion != nil ||
 		inst.ByteOrderMark != nil || inst.EscapeURIAttributes != nil ||
-		inst.JSONNodeOutputMethodAVT != nil ||
+		inst.JSONNodeOutputMethodAVT != nil || inst.NormalizationForm != nil ||
 		inst.ParameterDocOutputDef != nil ||
 		inst.ItemSeparatorSet || inst.BuildTree != nil
 	effectiveFormat, fmtErr := ec.resolveResultDocFormat(ctx, inst)
@@ -779,6 +779,13 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 			return nil, err
 		}
 		base.JSONNodeOutputMethod = strings.TrimSpace(v)
+	}
+	if inst.NormalizationForm != nil {
+		v, err := evalAVT(inst.NormalizationForm)
+		if err != nil {
+			return nil, err
+		}
+		base.NormalizationForm = strings.ToUpper(strings.TrimSpace(v))
 	}
 	if len(inst.SuppressIndentation) > 0 {
 		base.SuppressIndentation = inst.SuppressIndentation
