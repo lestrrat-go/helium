@@ -252,14 +252,14 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 	defer func() { c.defaultMode = savedDefaultMode }()
 
 	// XTSE0265: conflicting input-type-annotations across included modules.
-	if includedITA := getAttr(root, "input-type-annotations"); includedITA != "" && includedITA != "unspecified" {
+	if includedITA := getAttr(root, "input-type-annotations"); includedITA != "" && includedITA != validationUnspecified {
 		mainITA := c.stylesheet.inputTypeAnnotations
-		if mainITA != "" && mainITA != "unspecified" && mainITA != includedITA {
+		if mainITA != "" && mainITA != validationUnspecified && mainITA != includedITA {
 			return staticError(errCodeXTSE0265,
 				"conflicting input-type-annotations: main module has %q, included module has %q",
 				mainITA, includedITA)
 		}
-		if mainITA == "" || mainITA == "unspecified" {
+		if mainITA == "" || mainITA == validationUnspecified {
 			c.stylesheet.inputTypeAnnotations = includedITA
 		}
 	}
@@ -541,16 +541,16 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 	// XTSE0265: conflicting input-type-annotations across modules.
 	// Error only when one module says "preserve" and another says "strip".
 	// "unspecified" is compatible with either.
-	if importedITA := getAttr(importedRoot, "input-type-annotations"); importedITA != "" && importedITA != "unspecified" {
+	if importedITA := getAttr(importedRoot, "input-type-annotations"); importedITA != "" && importedITA != validationUnspecified {
 		mainITA := c.stylesheet.inputTypeAnnotations
-		if mainITA != "" && mainITA != "unspecified" && mainITA != importedITA {
+		if mainITA != "" && mainITA != validationUnspecified && mainITA != importedITA {
 			return staticError(errCodeXTSE0265,
 				"conflicting input-type-annotations: main module has %q, imported module has %q",
 				mainITA, importedITA)
 		}
 		// Propagate "strip" or "preserve" from imported module when the main
 		// module's effective value is still "unspecified" (or unset).
-		if mainITA == "" || mainITA == "unspecified" {
+		if mainITA == "" || mainITA == validationUnspecified {
 			c.stylesheet.inputTypeAnnotations = importedITA
 		}
 	}

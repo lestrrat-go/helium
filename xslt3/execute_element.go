@@ -201,7 +201,7 @@ func (ec *execContext) validateConstructedAttribute(localName, nsURI, value, val
 	typeName, valid, valErr := ec.schemaRegistry.ValidateAttribute(localName, nsURI, value)
 	if typeName == "" {
 		// No matching global attribute declaration found.
-		if validation == "strict" {
+		if validation == validationStrict {
 			return dynamicError(errCodeXTTE1555,
 				"no schema declaration found for attribute {%s}%s (validation=strict)", nsURI, localName)
 		}
@@ -305,13 +305,13 @@ func collectTextContent(node helium.Node, buf *strings.Builder) {
 // imported schemas and applies type annotations to the result tree.
 func (ec *execContext) validateConstructedElement(ctx context.Context, elem *helium.Element, validation string) error {
 	switch validation {
-	case "strip":
+	case validationStrip:
 		ec.stripAnnotations(elem)
 		return nil
-	case "preserve":
+	case validationPreserve:
 		// preserve: keep any existing type annotations unchanged; nothing to do here
 		return nil
-	case "strict", "lax":
+	case validationStrict, validationLax:
 		if ec.schemaRegistry == nil {
 			return nil
 		}
@@ -327,14 +327,14 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 		ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
 		if valErr != nil {
 			switch validation {
-			case "strict":
+			case validationStrict:
 				return dynamicError(errCodeXTTE1510, "validation of constructed element failed: %v", valErr)
-			case "lax":
+			case validationLax:
 				return dynamicError(errCodeXTTE1515, "lax validation of constructed element failed: %v", valErr)
 			}
 		} else if ann == nil {
 			// No matching schema found.
-			if validation == "strict" {
+			if validation == validationStrict {
 				// Strict validation: unknown validity = failure if element is in a
 				// schema-governed namespace but has no matching declaration.
 				elemNS := elem.URI()
@@ -356,11 +356,11 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 					content := strings.TrimSpace(string(elem.Content()))
 					if _, castErr := xpath3.CastFromString(content, typeName); castErr != nil {
 						switch validation {
-						case "strict":
+						case validationStrict:
 							return dynamicError(errCodeXTTE1510,
 								"element {%s}%s content %q is not valid for type %s: %v",
 								elemNS, elemLocal, content, typeName, castErr)
-						case "lax":
+						case validationLax:
 							return dynamicError(errCodeXTTE1515,
 								"element {%s}%s content %q is not valid for type %s: %v",
 								elemNS, elemLocal, content, typeName, castErr)
@@ -659,7 +659,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 				prefix = "ns0"
 			}
 			// Schema validation when validation attribute is set.
-			if inst.Validation == "strict" || inst.Validation == "lax" {
+			if inst.Validation == validationStrict || inst.Validation == validationLax {
 				if err := ec.validateConstructedAttribute(localName, nsURI, value, inst.Validation); err != nil {
 					return err
 				}
@@ -691,7 +691,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 			name = name[idx+1:]
 		}
 		// Schema validation for no-namespace attribute.
-		if inst.Validation == "strict" || inst.Validation == "lax" {
+		if inst.Validation == validationStrict || inst.Validation == validationLax {
 			if err := ec.validateConstructedAttribute(name, "", value, inst.Validation); err != nil {
 				return err
 			}
@@ -714,7 +714,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 				"undeclared namespace prefix %q in attribute name %q", prefix, name)
 		}
 		// Schema validation for prefixed attribute.
-		if inst.Validation == "strict" || inst.Validation == "lax" {
+		if inst.Validation == validationStrict || inst.Validation == validationLax {
 			if err := ec.validateConstructedAttribute(localName, uri, value, inst.Validation); err != nil {
 				return err
 			}
@@ -738,7 +738,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 	}
 
 	// Schema validation for simple unprefixed attribute.
-	if inst.Validation == "strict" || inst.Validation == "lax" {
+	if inst.Validation == validationStrict || inst.Validation == validationLax {
 		if err := ec.validateConstructedAttribute(name, "", value, inst.Validation); err != nil {
 			return err
 		}

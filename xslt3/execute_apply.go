@@ -315,7 +315,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 	savedContextItem := ec.contextItem
 	savedCurrentNode := ec.currentNode
 	savedCurrentTemplate := ec.currentTemplate
-	if tmpl.ContextItemUse == "absent" {
+	if tmpl.ContextItemUse == ctxItemAbsent {
 		ec.contextNode = nil
 		ec.contextItem = nil
 		ec.currentNode = nil
@@ -325,7 +325,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 		ec.cachedFnsNS = savedFnsNS
 		ec.currentPackage = savedPackage
 		ec.overridingTemplate = savedOverridingTemplate
-		if tmpl.ContextItemUse == "absent" {
+		if tmpl.ContextItemUse == ctxItemAbsent {
 			ec.contextNode = savedContextNode
 			ec.contextItem = savedContextItem
 			ec.currentNode = savedCurrentNode
@@ -663,14 +663,14 @@ func (ec *execContext) checkContextItemType(tmpl *Template) error {
 		// - match templates default to "required" (context always present)
 		// - named templates default to "optional" (may be called without context)
 		if tmpl.Match != nil {
-			use = "required"
+			use = ctxItemRequired
 		} else {
-			use = "optional"
+			use = ctxItemOptional
 		}
 	}
 
 	// XPDY0002: context item absent when use="required"
-	if len(contextSeq) == 0 && use == "required" {
+	if len(contextSeq) == 0 && use == ctxItemRequired {
 		return dynamicError(errCodeXPDY0002, "context item is absent but xsl:context-item use=\"required\"")
 	}
 

@@ -71,18 +71,18 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 	}
 
 	// Apply validation if requested (xsl:document validation="strict"|"lax").
-	if v := inst.Validation; v == "strict" || v == "lax" {
-		if v == "strict" {
+	if v := inst.Validation; v == validationStrict || v == validationLax {
+		if v == validationStrict {
 			if err := validateDocumentStructure(tmpDoc); err != nil {
 				return err
 			}
 		}
 		if ec.schemaRegistry != nil {
 			ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
-			if valErr != nil && v == "strict" {
+			if valErr != nil && v == validationStrict {
 				return dynamicError(errCodeXTTE1540, "validation of document node failed: %v", valErr)
 			}
-			if valErr == nil && v == "strict" {
+			if valErr == nil && v == validationStrict {
 				// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
 				if err := ValidateDocIDConstraints(tmpDoc, ann); err != nil {
 					return err
@@ -114,7 +114,7 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 		// Move children from tmpDoc to the parent output. When validation
 		// is "preserve", move nodes directly (unlink + addNode) so that
 		// type annotations keyed by node pointer are preserved.
-		preserveAnnotations := inst.Validation == "preserve"
+		preserveAnnotations := inst.Validation == validationPreserve
 		if preserveAnnotations {
 			var children []helium.Node
 			for child := range helium.Children(tmpDoc) {
@@ -376,7 +376,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 			}
 			return nil
 		}
-		if v == "strict" || v == "lax" {
+		if v == validationStrict || v == validationLax {
 			// When validation is requested for the primary output, build into a
 			// temporary document, validate it, then copy children to the primary
 			// output. This is the only way we can inspect the complete document
@@ -389,17 +389,17 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 			}
 			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 			// XTTE1550: validate document structure.
-			if v == "strict" {
+			if v == validationStrict {
 				if err := validateDocumentStructure(tmpDoc); err != nil {
 					return err
 				}
 			}
 			if ec.schemaRegistry != nil {
 				ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
-				if valErr != nil && v == "strict" {
+				if valErr != nil && v == validationStrict {
 					return dynamicError(errCodeXTTE1540, "validation of primary result document failed: %v", valErr)
 				}
-				if valErr == nil && v == "strict" {
+				if valErr == nil && v == validationStrict {
 					// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
 					if err := ValidateDocIDConstraints(tmpDoc, ann); err != nil {
 						return err
@@ -576,21 +576,21 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 	}
 
 	// Validate the result document if requested.
-	if v := inst.Validation; v == "strict" || v == "lax" {
+	if v := inst.Validation; v == validationStrict || v == validationLax {
 		// XTTE1550: when validating a document node, the children must comprise
 		// exactly one element node, no text nodes, and zero or more comment and
 		// processing instruction nodes, in any order.
-		if v == "strict" {
+		if v == validationStrict {
 			if err := validateDocumentStructure(tmpDoc); err != nil {
 				return err
 			}
 		}
 		if ec.schemaRegistry != nil {
 			ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
-			if valErr != nil && v == "strict" {
+			if valErr != nil && v == validationStrict {
 				return dynamicError(errCodeXTTE1540, "validation of result document failed: %v", valErr)
 			}
-			if valErr == nil && v == "strict" {
+			if valErr == nil && v == validationStrict {
 				// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
 				if err := ValidateDocIDConstraints(tmpDoc, ann); err != nil {
 					return err
@@ -600,7 +600,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 				ec.annotateNode(node, typeName)
 			}
 		}
-	} else if inst.Validation == "strip" {
+	} else if inst.Validation == validationStrip {
 		root := findDocumentElement(tmpDoc)
 		if root != nil {
 			ec.stripAnnotations(root)

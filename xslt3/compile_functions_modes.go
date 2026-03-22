@@ -23,9 +23,9 @@ func (c *compiler) compileGlobalContextItem(elem *helium.Element) error {
 		As:  asAttr,
 	}
 	if def.Use == "" {
-		def.Use = "optional"
+		def.Use = ctxItemOptional
 	}
-	if def.Use == "absent" && def.As != "" {
+	if def.Use == ctxItemAbsent && def.As != "" {
 		return staticError(errCodeXTSE3089, "xsl:global-context-item with use=\"absent\" must not specify @as")
 	}
 	moduleKey := c.moduleKey
@@ -324,7 +324,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 		// typed accepts "yes", "no", "true", "false", "1", "0",
 		// "strict", "lax", "unspecified"
 		switch v {
-		case "strict", "lax", "unspecified":
+		case validationStrict, validationLax, validationUnspecified:
 			// valid non-boolean values
 		default:
 			if _, ok := parseXSDBool(v); !ok {
@@ -342,7 +342,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	onMultipleMatch := strings.TrimSpace(getAttr(elem, "on-multiple-match"))
 	if onMultipleMatch != "" {
 		switch onMultipleMatch {
-		case "use-last", onNoMatchFail:
+		case onMultipleMatchUseLast, onNoMatchFail:
 			// valid
 		default:
 			return staticError(errCodeXTSE0020, "invalid value %q for on-multiple-match on xsl:mode", onMultipleMatch)

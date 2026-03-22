@@ -152,7 +152,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		}
 	}
 	// Apply validation if specified and context node is an element.
-	if v := ec.effectiveValidation(inst.Validation); v != "" && v != "preserve" {
+	if v := ec.effectiveValidation(inst.Validation); v != "" && v != validationPreserve {
 		out := ec.currentOutput()
 		// The most recently added child of the current output is the copy.
 		if copied := out.current.LastChild(); copied != nil {
@@ -400,7 +400,7 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 	}
 
 	effectiveVal := ec.effectiveValidation(inst.Validation)
-	preserve := effectiveVal == "preserve"
+	preserve := effectiveVal == validationPreserve
 
 	out := ec.currentOutput()
 	prevWasAtomic := out.prevWasAtomic
@@ -437,7 +437,7 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 				}
 			} else if preserve {
 				ec.transferAnnotationsForCopy(v.Node, out.current, lastBefore)
-			} else if effectiveVal == "strict" || effectiveVal == "lax" || effectiveVal == "strip" {
+			} else if effectiveVal == validationStrict || effectiveVal == validationLax || effectiveVal == validationStrip {
 				// Apply validation/strip to the most recently added node in output.
 				// In sequence mode the copied node lives in pendingItems, not
 				// as a child of out.current.

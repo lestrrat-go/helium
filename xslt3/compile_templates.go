@@ -509,13 +509,13 @@ func (c *compiler) validateContextItem(elem *helium.Element) error {
 	}
 
 	useAttr := strings.TrimSpace(getAttr(elem, "use"))
-	if useAttr != "" && useAttr != "required" && useAttr != "optional" && useAttr != "absent" {
+	if useAttr != "" && useAttr != ctxItemRequired && useAttr != ctxItemOptional && useAttr != ctxItemAbsent {
 		return staticError(errCodeXTSE0020,
 			"xsl:context-item/@use must be 'required', 'optional', or 'absent': %q", useAttr)
 	}
 
 	// XTSE0020: if use="absent", cannot also have as=
-	if useAttr == "absent" && asAttr != "" {
+	if useAttr == ctxItemAbsent && asAttr != "" {
 		return staticError(errCodeXTSE0020,
 			"xsl:context-item with use=\"absent\" must not have @as")
 	}

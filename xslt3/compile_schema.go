@@ -104,7 +104,7 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 // type checking. Per the XSLT 3.0 spec, "strict", "yes", "true", and "1"
 // all enable strict typing.
 func isTypedStrict(typed string) bool {
-	if typed == "strict" {
+	if typed == validationStrict {
 		return true
 	}
 	v, ok := parseXSDBool(typed)
