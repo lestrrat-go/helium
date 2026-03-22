@@ -328,6 +328,14 @@ func ExprHasNonMotionlessPredicate(expr *Expression) bool {
 // downward (uses child/descendant axes), uses last(), or uses position() in
 // a non-trivial way.
 func predicateIsNonMotionless(pred Expr) bool {
+	return predicateIsNonMotionlessWithStep(pred, nil)
+}
+
+// predicateIsNonMotionlessWithStep checks whether a predicate is non-motionless,
+// optionally taking into account the step the predicate is attached to. When the
+// step selects atomic-value nodes (text(), attribute, comment(), PI), "." in the
+// predicate is motionless because the value is available without child navigation.
+func predicateIsNonMotionlessWithStep(pred Expr, step *Step) bool {
 	nonMotionless := false
 	WalkExpr(pred, func(e Expr) bool {
 		if nonMotionless {
@@ -392,14 +400,42 @@ func predicateIsNonMotionless(pred Expr) bool {
 			// "." inside them is not flagged.
 			return false
 		case ContextItemExpr:
-			// "." in a predicate means the predicate accesses the context item,
-			// which for a streaming step is consuming
+			// "." in a predicate on a step that selects atomic-value nodes
+			// (text(), attribute, comment, PI) is motionless — the value is
+			// available without child navigation. On element/document steps,
+			// atomizing "." requires reading descendant text, which is consuming.
+			if step != nil && stepSelectsAtomicNodes(step) {
+				return false
+			}
 			nonMotionless = true
 			return false
 		}
 		return true
 	})
 	return nonMotionless
+}
+
+// stepSelectsAtomicNodes returns true if the step selects nodes whose string
+// value is available without descending into children: text(), attribute,
+// comment(), and processing-instruction() nodes.
+func stepSelectsAtomicNodes(step *Step) bool {
+	if step.Axis == AxisAttribute {
+		return true
+	}
+	switch v := step.NodeTest.(type) {
+	case TypeTest:
+		switch v.Kind {
+		case NodeKindText, NodeKindComment, NodeKindProcessingInstruction:
+			return true
+		}
+	case AttributeTest:
+		return true
+	case NamespaceNodeTest:
+		return true
+	case PITest:
+		return true
+	}
+	return false
 }
 
 // ExprTreeHasNonMotionlessPredicate walks an entire AST tree and returns true
@@ -413,9 +449,10 @@ func ExprTreeHasNonMotionlessPredicate(expr Expr) bool {
 		}
 		switch v := e.(type) {
 		case LocationPath:
-			for _, step := range v.Steps {
+			for i := range v.Steps {
+				step := &v.Steps[i]
 				for _, pred := range step.Predicates {
-					if predicateIsNonMotionless(pred) {
+					if predicateIsNonMotionlessWithStep(pred, step) {
 						found = true
 						return false
 					}

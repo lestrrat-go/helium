@@ -308,6 +308,35 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 		ec.overridingTemplate = tmpl
 	}
 
+	// Evaluate with-param values BEFORE clearing the context for use="absent",
+	// because the with-param select expressions need the caller's context item.
+	paramOverrides := make(map[string]xpath3.Sequence)
+	savedTunnel := ec.tunnelParams
+	hasTunnelOverrides := false
+	for _, wp := range inst.Params {
+		val, err := ec.evaluateWithParam(ctx, wp)
+		if err != nil {
+			return err
+		}
+		if wp.Tunnel {
+			if !hasTunnelOverrides {
+				merged := make(map[string]xpath3.Sequence)
+				for k, v := range ec.tunnelParams {
+					merged[k] = v
+				}
+				ec.tunnelParams = merged
+				hasTunnelOverrides = true
+			}
+			ec.tunnelParams[wp.Name] = val
+		} else {
+			if _, dup := paramOverrides[wp.Name]; dup {
+				return dynamicError(errCodeXTDE0410, "duplicate parameter %q in xsl:call-template", wp.Name)
+			}
+			paramOverrides[wp.Name] = val
+		}
+	}
+	defer func() { ec.tunnelParams = savedTunnel }()
+
 	// xsl:context-item use="absent": make the context item absent within the
 	// called template's body. This means xsl:next-match will fail with
 	// XTDE0560 because there is no context node to match against.
@@ -335,35 +364,6 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 
 	ec.pushVarScope()
 	defer ec.popVarScope()
-
-	// Separate tunnel from regular with-param values.
-	// call-template forwards tunnel params from the caller's context.
-	paramOverrides := make(map[string]xpath3.Sequence)
-	savedTunnel := ec.tunnelParams
-	hasTunnelOverrides := false
-	for _, wp := range inst.Params {
-		val, err := ec.evaluateWithParam(ctx, wp)
-		if err != nil {
-			return err
-		}
-		if wp.Tunnel {
-			if !hasTunnelOverrides {
-				merged := make(map[string]xpath3.Sequence)
-				for k, v := range ec.tunnelParams {
-					merged[k] = v
-				}
-				ec.tunnelParams = merged
-				hasTunnelOverrides = true
-			}
-			ec.tunnelParams[wp.Name] = val
-		} else {
-			if _, dup := paramOverrides[wp.Name]; dup {
-				return dynamicError(errCodeXTDE0410, "duplicate parameter %q in xsl:call-template", wp.Name)
-			}
-			paramOverrides[wp.Name] = val
-		}
-	}
-	defer func() { ec.tunnelParams = savedTunnel }()
 
 	// Set template params with defaults, overrides, or tunnel values
 	for _, p := range tmpl.Params {
