@@ -1086,6 +1086,7 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		panic("did not get rune cursor")
 	}
 
+	needsNormalize := false
 	i := 0
 	for c := cur.PeekN(i + 1); c != 0x0; c = cur.PeekN(i + 1) {
 		if c == '<' || c == '&' || !isChar(c) {
@@ -1096,6 +1097,9 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 			return pctx.error(ctx, ErrMisplacedCDATAEnd)
 		}
 
+		if c == '\r' {
+			needsNormalize = true
+		}
 		_, _ = buf.WriteRune(c)
 		i++
 	}
@@ -1108,20 +1112,23 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	if err := cur.Advance(i); err != nil {
 		return err
 	}
-	str := buf.String()
 
-	// XML §2.11 End-of-Line Handling: normalize \r\n to \n, then lone \r to \n.
-	str = strings.ReplaceAll(str, "\r\n", "\n")
-	str = strings.ReplaceAll(str, "\r", "\n")
-	if pctx.areBlanks(str, false) {
+	// Work with bytes directly to avoid buf.String() + []byte(str) allocations.
+	data := buf.Bytes()
+	if needsNormalize {
+		// XML §2.11 End-of-Line Handling: normalize \r\n to \n, then lone \r to \n.
+		data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+		data = bytes.ReplaceAll(data, []byte("\r"), []byte("\n"))
+	}
+	if pctx.areBlanksBytes(data, false) {
 		if s := pctx.sax; s != nil && !pctx.disableSAX {
-			if err := pctx.deliverCharacters(ctx, s.IgnorableWhitespace, []byte(str)); err != nil {
+			if err := pctx.deliverCharacters(ctx, s.IgnorableWhitespace, data); err != nil {
 				return err
 			}
 		}
 	} else {
 		if s := pctx.sax; s != nil && !pctx.disableSAX {
-			if err := pctx.deliverCharacters(ctx, s.Characters, []byte(str)); err != nil {
+			if err := pctx.deliverCharacters(ctx, s.Characters, data); err != nil {
 				return err
 			}
 		}
@@ -1204,7 +1211,9 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	pctx.spaceTab = append(pctx.spaceTab, -1)
 
 	nbNs := 0
-	attrs := []sax.Attribute{}
+	// Use stack-allocated backing array for small attribute counts (common case).
+	var attrsBuf [8]sax.Attribute
+	attrs := attrsBuf[:0]
 	for pctx.instate != psEOF {
 		pctx.skipBlanks(ctx)
 		if cur.Peek() == '>' {
@@ -2548,9 +2557,6 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 		panic("did not get rune cursor")
 	}
 
-	buf := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(buf)
-
 	// first letter
 	c := cur.Peek()
 	if c == utf8.RuneError {
@@ -2561,7 +2567,6 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 		err = pctx.error(ctx, fmt.Errorf("invalid first letter '%c'", c))
 		return
 	}
-	_, _ = buf.WriteRune(c)
 
 	i := 2
 	for c = cur.PeekN(i); c != 0x0; c = cur.PeekN(i) {
@@ -2577,7 +2582,6 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 			i--
 			break
 		}
-		_, _ = buf.WriteRune(c)
 
 		i++
 	}
@@ -2586,10 +2590,10 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 		return
 	}
 
+	name = cur.PeekString(i)
 	if err := cur.Advance(i); err != nil {
 		return "", err
 	}
-	name = buf.String()
 	if name == "" {
 		err = pctx.error(ctx, errors.New("internal error: parseName returned with empty name"))
 		return
@@ -2696,22 +2700,20 @@ func (ctx *parserCtx) parseNmtoken() (string, error) {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	buf := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(buf)
 
 	for c := cur.PeekN(i); c != 0x0; c = cur.PeekN(i) {
 		if !isNameChar(c) {
 			i--
 			break
 		}
-		_, _ = buf.WriteRune(c)
 		i++
 	}
+	name := cur.PeekString(i)
 	if err := cur.Advance(i); err != nil {
 		return "", err
 	}
 
-	return buf.String(), nil
+	return name, nil
 }
 
 /**
@@ -2741,8 +2743,6 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	buf := bufferPool.Get().(*bytes.Buffer)
-	defer releaseBuffer(buf)
 
 	var c rune
 	if c = cur.Peek(); c == utf8.RuneError {
@@ -2753,10 +2753,8 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 		err = pctx.error(ctx, fmt.Errorf("invalid name start char %q (U+%04X)", c, c))
 		return
 	}
-	_, _ = buf.WriteRune(c)
 
-	// at this point we have at least 1 character name.
-	// see how much more we got here
+	// Count the length of the name without writing to a buffer.
 	i := 2
 	for c = cur.PeekN(i); c != 0x0; c = cur.PeekN(i) {
 		if c == utf8.RuneError {
@@ -2767,17 +2765,17 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 			i--
 			break
 		}
-		_, _ = buf.WriteRune(c)
 		i++
 	}
 	if i > MaxNameLength && !pctx.options.IsSet(ParseHuge) {
 		err = pctx.error(ctx, ErrNameTooLong)
 		return
 	}
+	// Extract the name string directly from the cursor ring buffer.
+	ncname = cur.PeekString(i)
 	if err := cur.Advance(i); err != nil {
 		return "", err
 	}
-	ncname = buf.String()
 	return
 }
 
@@ -2811,6 +2809,43 @@ func (pctx *parserCtx) parsePITarget(ctx context.Context) (string, error) {
 
 // note: unlike libxml2, we can't differentiate between SAX handlers
 // that uses the same IgnorableWhitespace and Character handlers
+// areBlanksBytes is like areBlanks but operates on []byte to avoid string
+// allocation on the hot path.
+func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
+	// Check for xml:space value.
+	if ctx.spaceTab[len(ctx.spaceTab)-1] == 1 {
+		return false
+	}
+
+	// Check that the data is made of blanks
+	if !blankChars {
+		for _, b := range s {
+			if !isBlankCh(rune(b)) {
+				return false
+			}
+		}
+	}
+
+	// Look if the element is mixed content in the DTD if available
+	if ctx.peekNode() == nil {
+		return false
+	}
+	if ctx.doc != nil {
+		ok, _ := ctx.doc.IsMixedElement(ctx.peekNode().Name())
+		return !ok
+	}
+
+	cur := ctx.getCursor()
+	if cur == nil {
+		panic("did not get rune cursor")
+	}
+	if c := cur.Peek(); c != '<' && c != 0xD {
+		return false
+	}
+
+	return true
+}
+
 func (ctx *parserCtx) areBlanks(s string, blankChars bool) (ret bool) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START areBlanks (%v)", []byte(s))

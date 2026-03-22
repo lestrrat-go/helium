@@ -27,6 +27,8 @@ type Cursor interface {
 	LineNumber() int
 	Peek() rune
 	PeekN(int) rune
+	// PeekString returns the first n runes/bytes as a string without consuming.
+	PeekString(int) string
 	Unused() io.Reader
 }
 
@@ -268,6 +270,34 @@ func (c *RuneCursor) PeekN(n int) rune {
 	return c.ring[(c.head+n-1)&c.ringMask].val
 }
 
+// PeekString returns the first n runes as a string without consuming them.
+// More efficient than building the string via repeated PeekN + buffer writes.
+func (c *RuneCursor) PeekString(n int) string {
+	if err := c.ensure(n); err != nil {
+		return ""
+	}
+	// Calculate total byte size first.
+	totalBytes := 0
+	for i := 0; i < n; i++ {
+		idx := (c.head + i) % c.ringCap
+		totalBytes += c.ring[idx].width
+	}
+	// Use stack-allocated buffer for common case (names up to 128 bytes).
+	var stackBuf [128]byte
+	var buf []byte
+	if totalBytes <= len(stackBuf) {
+		buf = stackBuf[:totalBytes]
+	} else {
+		buf = make([]byte, totalBytes)
+	}
+	pos := 0
+	for i := 0; i < n; i++ {
+		idx := (c.head + i) % c.ringCap
+		pos += utf8.EncodeRune(buf[pos:], c.ring[idx].val)
+	}
+	return string(buf)
+}
+
 func (c *RuneCursor) Cur() rune {
 	if c.count < 1 {
 		if err := c.ensure(1); err != nil {
@@ -494,6 +524,14 @@ func (c *ByteCursor) PeekN(n int) rune {
 		return utf8.RuneError
 	}
 	return rune(c.buf[c.bufpos+n-1])
+}
+
+// PeekString returns the first n bytes as a string without consuming them.
+func (c *ByteCursor) PeekString(n int) string {
+	if err := c.fillBuffer(n); err != nil {
+		return ""
+	}
+	return string(c.buf[c.bufpos : c.bufpos+n])
 }
 
 func (c *ByteCursor) Cur() rune {

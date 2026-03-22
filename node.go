@@ -169,6 +169,11 @@ func (n docnode) Content() []byte {
 }
 
 func appendText(n Node, b []byte) error {
+	// Fast path: if last child is already a text node, append directly
+	// without allocating a new Text node.
+	if last := n.LastChild(); last != nil && last.Type() == TextNode {
+		return last.(*Text).AppendText(b)
+	}
 	t := newText(b)
 	return n.AddChild(t)
 }
