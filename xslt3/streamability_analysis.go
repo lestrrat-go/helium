@@ -827,7 +827,7 @@ func isGroundingFuncName(name string) bool {
 	switch name {
 	case "snapshot", "copy-of", "copy", "current-group",
 		"outermost", "innermost", "parse-xml", "parse-xml-fragment",
-		"doc", "document", "sort", "reverse":
+		"doc", "document", "sort", "reverse", "head":
 		return true
 	}
 	return false
