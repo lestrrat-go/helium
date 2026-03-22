@@ -648,9 +648,11 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 
 	streamable := false
 	if s := getAttr(elem, "streamable"); s != "" {
-		if v, ok := parseXSDBool(s); ok {
-			streamable = v
+		v, ok := parseXSDBool(s)
+		if !ok {
+			return staticError(errCodeXTSE0020, "invalid value %q for streamable attribute on xsl:attribute-set", s)
 		}
+		streamable = v
 	}
 
 	asd := &AttributeSetDef{
