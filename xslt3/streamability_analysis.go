@@ -330,6 +330,19 @@ func checkStreamableInstruction(ss *Stylesheet, inst Instruction) error {
 			return staticError(errCodeXTSE3430,
 				"xsl:apply-templates with crawling select expression %q is not streamable", v.Select.String())
 		}
+	case *NextMatchInst:
+		// xsl:next-match with xsl:with-param select="." passes the streaming
+		// context item to another template. The receiving template can navigate
+		// into it, creating a second consumption of the streaming node. This is
+		// not streamable.
+		for _, wp := range v.Params {
+			if wp.Select != nil {
+				if _, ok := derefXPathExpr(wp.Select.AST()).(xpath3.ContextItemExpr); ok {
+					return staticError(errCodeXTSE3430,
+						"xsl:next-match with xsl:with-param select=\".\" passes streaming context item, which is not streamable")
+				}
+			}
+		}
 	case *NumberInst:
 		// xsl:number without an explicit value computes numbering from node
 		// relationships, which is consuming and therefore not streamable.
@@ -871,6 +884,25 @@ func isGroundingExprSS(ss *Stylesheet, expr xpath3.Expr) bool {
 	return false
 }
 
+// exprProducesAtomicResult returns true if the outermost expression produces an
+// atomic result (string, number, boolean) rather than streaming nodes. This
+// includes function calls like string(), number(), count(), etc., as well as
+// arithmetic expressions, comparisons, and other operators that always produce
+// atomic values.
+func exprProducesAtomicResult(expr xpath3.Expr) bool {
+	expr = derefXPathExpr(expr)
+	switch e := expr.(type) {
+	case xpath3.FunctionCall:
+		return isAtomicResultExpr(e) || isGroundingExpr(e)
+	case xpath3.BinaryExpr:
+		// Arithmetic and comparison operators produce atomic results
+		return true
+	case xpath3.LiteralExpr:
+		return true
+	}
+	return false
+}
+
 // isAtomicResultExpr returns true if an expression produces an atomic result
 // (string, number, boolean). Operations AFTER such a function operate on atomic
 // data, but the function's ARGUMENTS are still streaming.
@@ -1236,6 +1268,35 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst Instruction) error {
 			}
 		}
 
+		// When a fork has multiple consuming branches and any branch
+		// returns raw streaming nodes via xsl:sequence select=<downward>,
+		// the fork would need to return streaming nodes from multiple
+		// stream copies, which is not streamable.
+		consumingBranches := 0
+		hasStreamingReturn := false
+		for _, branch := range v.Branches {
+			branchDown := countDownwardInInstructions(ss, branch)
+			if branchDown > 0 {
+				consumingBranches++
+			}
+			for _, bi := range branch {
+				if seq, ok := bi.(*XSLSequenceInst); ok && seq.Select != nil {
+					ast := seq.Select.AST()
+					// A branch returns streaming nodes if it selects
+					// downward without grounding or atomizing the result.
+					if xpath3.ExprHasDownwardStep(seq.Select) &&
+						!exprEndsWithGrounding(ast) &&
+						!exprProducesAtomicResult(ast) {
+						hasStreamingReturn = true
+					}
+				}
+			}
+		}
+		if consumingBranches > 1 && hasStreamingReturn {
+			return staticError(errCodeXTSE3430,
+				"xsl:fork with multiple consuming branches returns streamed nodes, which is not streamable")
+		}
+
 	case *IterateInst:
 		// Within xsl:iterate body, check for multiple downward selections.
 		bodyDown := countDownwardInInstructions(ss, v.Body)
@@ -1315,6 +1376,23 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst Instruction) error {
 					}
 					if exprUsesCurrentGroupConsumingly(expr) {
 						bodyUsesCurrentGroupConsuming = true
+					}
+				}
+				// Check LRE attribute AVTs.
+				if lre, ok := bi.(*LiteralResultElement); ok {
+					for _, attr := range lre.Attrs {
+						if attr.Value != nil {
+							for _, part := range attr.Value.parts {
+								if part.expr != nil {
+									if exprHasContextOnlyDownward(part.expr.AST()) {
+										bodyUsesContextDown = true
+									}
+									if exprUsesCurrentGroupConsumingly(part.expr) {
+										bodyUsesCurrentGroupConsuming = true
+									}
+								}
+							}
+						}
 					}
 				}
 				for _, children := range getChildInstructions(bi) {
@@ -1724,9 +1802,17 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst Instruction) error {
 		}
 	}
 
-	// Crawling selects (descendant-or-self axis) ARE allowed for
-	// xsl:for-each-group — the processor reads the entire stream and buffers
-	// the matching items for grouping.  No crawling check needed here.
+	// Crawling selects (descendant-or-self axis) with consuming use of
+	// current-group() in the body are not streamable — the processor would
+	// need to buffer unbounded amounts of data.  When the select is grounded,
+	// items are already in memory and crawling is fine.
+	if !selectGrounded && fg.Select != nil && xpath3.ExprUsesDescendantOrSelf(fg.Select) {
+		groupRefs := countCurrentGroupConsumingRefs(fg.Body)
+		if groupRefs > 0 {
+			return staticError(errCodeXTSE3430,
+				"xsl:for-each-group with crawling select and consuming use of current-group() is not streamable")
+		}
+	}
 
 	// Check for nested for-each-group that consumes current-group(),
 	// but only when the outer for-each-group select doesn't ground its data.
@@ -2260,6 +2346,17 @@ func exprReferencesContextItem(expr xpath3.Expr) bool {
 func countDownwardInInstructions(ss *Stylesheet, instructions []Instruction) int {
 	total := 0
 	for _, inst := range instructions {
+		// When a for-each-group select ends with a grounding function
+		// (e.g. copy-of), the group-by/group-adjacent/sort expressions
+		// operate on grounded (in-memory) items, not the streaming source.
+		// Only count the select expression itself as a streaming downward
+		// selection; skip the grouping key and sort expressions.
+		if fg, ok := inst.(*ForEachGroupInst); ok {
+			if fg.Select != nil && exprEndsWithGrounding(fg.Select.AST()) {
+				total += countStreamingDownwardSelections(ss, fg.Select.AST())
+				continue
+			}
+		}
 		for _, expr := range getInstructionExprs(inst) {
 			total += countStreamingDownwardSelections(ss, expr.AST())
 		}
@@ -2315,6 +2412,18 @@ func countCurrentGroupConsumingRefs(body []Instruction) int {
 			}
 			count += countCurrentGroupConsumingInExpr(expr.AST())
 		}
+		// Check LRE attribute AVTs for current-group() references.
+		if lre, ok := inst.(*LiteralResultElement); ok {
+			for _, attr := range lre.Attrs {
+				if attr.Value != nil {
+					for _, part := range attr.Value.parts {
+						if part.expr != nil {
+							count += countCurrentGroupConsumingInExpr(part.expr.AST())
+						}
+					}
+				}
+			}
+		}
 		// Check child instructions, but don't recurse into nested for-each-group
 		// bodies (their current-group() refers to their own group, not ours).
 		if _, ok := inst.(*ForEachGroupInst); !ok {
@@ -2335,9 +2444,12 @@ func countCurrentGroupConsumingInExpr(expr xpath3.Expr) int {
 	count := 0
 	switch e := expr.(type) {
 	case xpath3.PathStepExpr:
-		// current-group()/something — consuming
+		// current-group()/child — consuming (navigates into element content)
+		// current-group()/@attr — motionless (attributes are immediately available)
 		if isCurrentGroupCall(e.Left) {
-			count++
+			if pathStepRightHasDownward(e.Right) || e.DescOrSelf {
+				count++
+			}
 		} else {
 			count += countCurrentGroupConsumingInExpr(e.Left)
 		}
@@ -2373,6 +2485,23 @@ func countCurrentGroupConsumingInExpr(expr xpath3.Expr) int {
 	case xpath3.SimpleMapExpr:
 		count += countCurrentGroupConsumingInExpr(e.Left)
 		count += countCurrentGroupConsumingInExpr(e.Right)
+	case xpath3.PathExpr:
+		// current-group()/child → consuming (navigates into element content)
+		// current-group()/@attr → motionless (attributes are immediately available)
+		if isCurrentGroupCall(e.Filter) {
+			if e.Path != nil && pathHasDownwardStep(*e.Path) {
+				count++
+			}
+		} else {
+			count += countCurrentGroupConsumingInExpr(e.Filter)
+		}
+		if e.Path != nil {
+			for _, step := range e.Path.Steps {
+				for _, pred := range step.Predicates {
+					count += countCurrentGroupConsumingInExpr(pred)
+				}
+			}
+		}
 	case xpath3.SequenceExpr:
 		for _, item := range e.Items {
 			count += countCurrentGroupConsumingInExpr(item)
@@ -2394,6 +2523,31 @@ func countCurrentGroupConsumingInExpr(expr xpath3.Expr) int {
 func isCurrentGroupCall(expr xpath3.Expr) bool {
 	fc, ok := expr.(xpath3.FunctionCall)
 	return ok && fc.Prefix == "" && fc.Name == "current-group"
+}
+
+// pathHasDownwardStep returns true if a LocationPath has any child or
+// descendant axis steps (i.e., navigates into element content).
+func pathHasDownwardStep(lp xpath3.LocationPath) bool {
+	for _, step := range lp.Steps {
+		switch step.Axis {
+		case xpath3.AxisChild, xpath3.AxisDescendant, xpath3.AxisDescendantOrSelf:
+			return true
+		}
+	}
+	return false
+}
+
+// pathStepRightHasDownward returns true if the right side of a PathStepExpr
+// contains a downward step (child/descendant axis).
+func pathStepRightHasDownward(expr xpath3.Expr) bool {
+	expr = derefXPathExpr(expr)
+	switch e := expr.(type) {
+	case xpath3.LocationPath:
+		return pathHasDownwardStep(e)
+	case xpath3.PathStepExpr:
+		return pathStepRightHasDownward(e.Left) || pathStepRightHasDownward(e.Right) || e.DescOrSelf
+	}
+	return false
 }
 
 // exprEndsWithGrounding returns true if the outermost expression grounds its
@@ -2421,6 +2575,10 @@ func exprEndsWithGrounding(expr xpath3.Expr) bool {
 		// A LocationPath ending with a grounding step? Not typical.
 		// Check last step for function-like patterns.
 		return false
+	case xpath3.SimpleMapExpr:
+		// E1 ! E2: the result is grounded if E2 is grounding
+		// (e.g. items ! copy-of(.))
+		return exprEndsWithGrounding(e.Right)
 	case xpath3.RangeExpr:
 		// A range expression (X to Y) always produces integers.
 		// Even if its arguments access descendants (e.g., 1 to count(.//*)),
