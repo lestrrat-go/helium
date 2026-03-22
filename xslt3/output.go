@@ -81,10 +81,71 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 		}
 		return serializeJSONItems(w, items, doc, outDef)
 	case "adaptive":
-		return serializeAdaptiveItems(w, items, doc, outDef.ResolvedCharMap)
+		return serializeAdaptiveItems(w, items, doc, outDef.ItemSeparator, outDef.ResolvedCharMap)
 	default:
+		if len(items) > 0 {
+			return serializeItemsWithSeparator(w, items, doc, outDef)
+		}
 		return SerializeResult(w, doc, outDef)
 	}
+}
+
+// serializeItemsWithSeparator serializes a sequence of items using the specified
+// output method, joining them with the item-separator.
+func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, doc *helium.Document, outDef *OutputDef) error {
+	sep := "\n"
+	if outDef.ItemSeparator != nil {
+		sep = *outDef.ItemSeparator
+	} else if outDef.ItemSeparatorAbsent {
+		sep = ""
+	}
+	for i, item := range items {
+		if i > 0 && sep != "" {
+			if _, err := io.WriteString(w, sep); err != nil {
+				return err
+			}
+		}
+		switch v := item.(type) {
+		case xpath3.NodeItem:
+			var buf bytes.Buffer
+			switch n := v.Node.(type) {
+			case *helium.Element:
+				_ = n.XML(&buf, helium.WithNoDecl())
+			case *helium.Document:
+				_ = n.XML(&buf, helium.WithNoDecl())
+			default:
+				if v.Node.Type() == helium.CommentNode {
+					buf.WriteString("<!--")
+					buf.WriteString(string(v.Node.Content()))
+					buf.WriteString("-->")
+				} else if v.Node.Type() == helium.ProcessingInstructionNode {
+					buf.WriteString("<?")
+					buf.WriteString(v.Node.Name())
+					if c := string(v.Node.Content()); c != "" {
+						buf.WriteByte(' ')
+						buf.WriteString(c)
+					}
+					buf.WriteString("?>")
+				} else {
+					buf.WriteString(string(v.Node.Content()))
+				}
+			}
+			if _, err := w.Write(buf.Bytes()); err != nil {
+				return err
+			}
+		case xpath3.AtomicValue:
+			s, _ := xpath3.AtomicToString(v)
+			if _, err := io.WriteString(w, s); err != nil {
+				return err
+			}
+		default:
+			s := fmt.Sprintf("%v", item)
+			if _, err := io.WriteString(w, s); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // SerializeResult writes the result document to a writer according to the
@@ -202,7 +263,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 			err = serializeJSONItems(target, nil, doc, outDef)
 		}
 	case "adaptive":
-		err = serializeAdaptiveItems(target, nil, doc, serCharMap)
+		err = serializeAdaptiveItems(target, nil, doc, outDef.ItemSeparator, serCharMap)
 	default:
 		err = serializeXML(target, doc, outDef, serCharMap)
 	}
@@ -238,7 +299,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, outDef *OutputDef) error {
 	if len(items) == 0 && doc != nil {
 		// No captured items: serialize DOM content as text for JSON
-		return serializeAdaptiveItems(w, items, doc)
+		return serializeAdaptiveItems(w, items, doc, nil)
 	}
 	nodeMethod := ""
 	if outDef != nil {
@@ -267,9 +328,8 @@ func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document
 
 // serializeAdaptiveItems serializes a sequence of items using the adaptive
 // serialization method. Each item is serialized according to its type.
-func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, charMaps ...map[rune]string) error {
+func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, itemSep *string, charMaps ...map[rune]string) error {
 	if len(items) == 0 && doc != nil {
-		// Fallback: serialize DOM as XML
 		var cm map[rune]string
 		if len(charMaps) > 0 {
 			cm = charMaps[0]
@@ -280,9 +340,13 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 	if len(charMaps) > 0 {
 		cm = charMaps[0]
 	}
+	sep := "\n"
+	if itemSep != nil {
+		sep = *itemSep
+	}
 	for i, item := range items {
-		if i > 0 {
-			if _, err := io.WriteString(w, "\n"); err != nil {
+		if i > 0 && sep != "" {
+			if _, err := io.WriteString(w, sep); err != nil {
 				return err
 			}
 		}
@@ -585,6 +649,11 @@ func serializeItemAdaptive(item xpath3.Item, charMap map[rune]string) string {
 			_ = elem.XML(&buf, helium.WithNoDecl())
 		} else if doc, ok := v.Node.(*helium.Document); ok {
 			_ = doc.XML(&buf, helium.WithNoDecl())
+		} else if attr, ok := v.Node.(*helium.Attribute); ok {
+			buf.WriteString(attr.Name())
+			buf.WriteString("=\"")
+			buf.WriteString(string(attr.Content()))
+			buf.WriteString("\"")
 		} else {
 			buf.WriteString(string(v.Node.Content()))
 		}

@@ -410,13 +410,60 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 			}
 			return nil
 		}
+		effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
+		buildTreeNo := inst.BuildTree != nil && !*inst.BuildTree
+
+		// When build-tree="no", execute into a temporary document,
+		// then extract children and pending items as a raw sequence
+		// for serialization with item-separator.
+		if buildTreeNo && isItemSerializationMethod(effectiveMethod) {
+			tmpDoc := helium.NewDefaultDocument()
+			tmpRoot, tmpErr := tmpDoc.CreateElement("_tmp")
+			if tmpErr != nil {
+				return tmpErr
+			}
+			if err := tmpDoc.AddChild(tmpRoot); err != nil {
+				return err
+			}
+			savedMethod := ec.currentResultDocMethod
+			ec.currentResultDocMethod = effectiveMethod
+			// Use sequenceMode + captureItems to capture ALL items
+			// (elements, comments, maps, attributes) in order.
+			ec.outputStack = append(ec.outputStack, &outputFrame{
+				doc: tmpDoc, current: tmpRoot,
+				itemSeparator: itemSep,
+				captureItems:  true,
+				sequenceMode:  true,
+			})
+			ec.insideResultDocPrimary = true
+			if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
+				ec.insideResultDocPrimary = false
+				ec.currentResultDocMethod = savedMethod
+				ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+				return err
+			}
+			frame := ec.outputStack[len(ec.outputStack)-1]
+			ec.insideResultDocPrimary = false
+			ec.currentResultDocMethod = savedMethod
+			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+
+			out := ec.outputStack[0]
+			out.pendingItems = append(out.pendingItems, frame.pendingItems...)
+
+			if overrides, err := ec.evalResultDocOutputDef(ctx, inst); err != nil {
+				return err
+			} else if overrides != nil {
+				ec.primaryOutputOverrides = overrides
+			}
+			return nil
+		}
+
 		// Write directly to the primary output (base frame).
 		savedStack := ec.outputStack
 		ec.outputStack = ec.outputStack[:1] // keep only the base frame
 		ec.insideResultDocPrimary = true
 		savedSep := ec.outputStack[0].itemSeparator
 		ec.outputStack[0].itemSeparator = itemSep
-		effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
 		savedMethod := ec.currentResultDocMethod
 		ec.currentResultDocMethod = effectiveMethod
 		if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
@@ -566,7 +613,8 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 		inst.CDATASectionElements != nil || inst.Encoding != nil || inst.OutputVersion != nil ||
 		inst.ByteOrderMark != nil || inst.EscapeURIAttributes != nil ||
 		inst.JSONNodeOutputMethodAVT != nil ||
-		inst.ParameterDocOutputDef != nil
+		inst.ParameterDocOutputDef != nil ||
+		inst.ItemSeparatorSet || inst.BuildTree != nil
 	effectiveFormat, fmtErr := ec.resolveResultDocFormat(ctx, inst)
 	if fmtErr != nil {
 		return nil, fmtErr
@@ -726,6 +774,21 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 	}
 	if len(inst.SuppressIndentation) > 0 {
 		base.SuppressIndentation = inst.SuppressIndentation
+	}
+	if inst.ItemSeparatorSet {
+		if inst.ItemSeparator != nil {
+			sepVal, err := inst.ItemSeparator.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return nil, err
+			}
+			base.ItemSeparator = &sepVal
+		} else {
+			base.ItemSeparator = nil
+			base.ItemSeparatorAbsent = true
+		}
+	}
+	if inst.BuildTree != nil {
+		base.BuildTree = inst.BuildTree
 	}
 	return &base, nil
 }
