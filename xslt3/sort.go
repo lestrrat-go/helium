@@ -73,63 +73,29 @@ type resolvedSort struct {
 	levels []resolvedLevel
 }
 
-// --- Single-key entry types ---
-
-// keyedNode1 pairs a node with a single inline sort key and original index.
-type keyedNode1 struct {
-	item  helium.Node
+// keyed1 pairs a value with a single inline sort key and original index.
+type keyed1[T any] struct {
+	item  T
 	key   sortValue
 	index int
 }
 
-func (k keyedNode1) keyType() string { return k.key.typeName }
+func (k keyed1[T]) keyType() string { return k.key.typeName }
 
-// keyedItem1 pairs an item with a single inline sort key and original index.
-type keyedItem1 struct {
-	item  xpath3.Item
-	key   sortValue
-	index int
-}
-
-func (k keyedItem1) keyType() string { return k.key.typeName }
-
-// --- Multi-key entry types ---
-
-// keyedNode pairs a node with its pre-extracted typed sort keys and original index.
-type keyedNode struct {
-	item  helium.Node
+// keyedN pairs a value with pre-extracted typed sort keys and original index.
+type keyedN[T any] struct {
+	item  T
 	keys  []sortValue
 	index int
 }
 
-// keyedItem pairs an item with its pre-extracted typed sort keys and original index.
-type keyedItem struct {
-	item  xpath3.Item
-	keys  []sortValue
-	index int
-}
+// keyedSlice is a named slice type for keyedN so that convertAutoNumeric
+// can be defined once and passed to finalizeLevels.
+type keyedSlice[T any] []keyedN[T]
 
-// keyedGroup1 pairs a for-each-group group with a single inline sort key.
-type keyedGroup1 struct {
-	group fegGroup
-	key   sortValue
-	index int
-}
-
-func (k keyedGroup1) keyType() string { return k.key.typeName }
-
-// keyedGroup pairs a for-each-group group with its pre-extracted sort keys.
-type keyedGroup struct {
-	group fegGroup
-	keys  []sortValue
-	index int
-}
-
-type keyedGroups []keyedGroup
-
-func (kg keyedGroups) convertAutoNumeric(level int) {
-	for j := range kg {
-		sv := &kg[j].keys[level]
+func (ks keyedSlice[T]) convertAutoNumeric(level int) {
+	for j := range ks {
+		sv := &ks[j].keys[level]
 		if sv.kind == sortValueText {
 			*sv = parseToNumericSortValue(sv.str)
 		}
@@ -717,63 +683,14 @@ func finalizeLevels(rs *resolvedSort, dtModes []dataTypeMode, entries interface{
 	}
 }
 
-type keyedNodes []keyedNode
-
-func (kn keyedNodes) convertAutoNumeric(level int) {
-	for j := range kn {
-		sv := &kn[j].keys[level]
-		if sv.kind == sortValueText {
-			*sv = parseToNumericSortValue(sv.str)
-		}
-	}
-}
-
-type keyedItems []keyedItem
-
-func (ki keyedItems) convertAutoNumeric(level int) {
-	for j := range ki {
-		sv := &ki[j].keys[level]
-		if sv.kind == sortValueText {
-			*sv = parseToNumericSortValue(sv.str)
-		}
-	}
-}
-
-func finalizeLevel1Nodes(level *resolvedLevel, dtMode dataTypeMode, entries []keyedNode1) {
+func finalizeLevel1[T any](level *resolvedLevel, dtMode dataTypeMode, entries []keyed1[T]) {
 	switch dtMode {
 	case dataTypeNumber, dataTypeNumberAuto:
 		level.mode = sortModeNumber
 		for i := range entries {
-			if entries[i].key.kind == sortValueText {
-				entries[i].key = parseToNumericSortValue(entries[i].key.str)
-			}
-		}
-	default:
-		level.mode = sortModeText
-	}
-}
-
-func finalizeLevel1Items(level *resolvedLevel, dtMode dataTypeMode, entries []keyedItem1) {
-	switch dtMode {
-	case dataTypeNumber, dataTypeNumberAuto:
-		level.mode = sortModeNumber
-		for i := range entries {
-			if entries[i].key.kind == sortValueText {
-				entries[i].key = parseToNumericSortValue(entries[i].key.str)
-			}
-		}
-	default:
-		level.mode = sortModeText
-	}
-}
-
-func finalizeLevel1Groups(level *resolvedLevel, dtMode dataTypeMode, entries []keyedGroup1) {
-	switch dtMode {
-	case dataTypeNumber, dataTypeNumberAuto:
-		level.mode = sortModeNumber
-		for i := range entries {
-			if entries[i].key.kind == sortValueText {
-				entries[i].key = parseToNumericSortValue(entries[i].key.str)
+			k := &entries[i].key
+			if k.kind == sortValueText {
+				*k = parseToNumericSortValue(k.str)
 			}
 		}
 	default:
@@ -840,7 +757,7 @@ func sortNodes1(ctx context.Context, ec *execContext, nodes []helium.Node, sk *S
 	savedCurrent := ec.currentNode
 	defer func() { ec.currentNode = savedCurrent }()
 
-	entries := make([]keyedNode1, len(nodes))
+	entries := make([]keyed1[helium.Node], len(nodes))
 	for i, node := range nodes {
 		evalState.SetPosition(i + 1)
 		ec.currentNode = node
@@ -848,7 +765,7 @@ func sortNodes1(ctx context.Context, ec *execContext, nodes []helium.Node, sk *S
 		if err != nil {
 			return nil, err
 		}
-		entries[i] = keyedNode1{item: node, key: sv, index: i}
+		entries[i] = keyed1[helium.Node]{item: node, key: sv, index: i}
 	}
 
 	// XTDE1030: check for incompatible or non-orderable sort key types.
@@ -860,9 +777,9 @@ func sortNodes1(ctx context.Context, ec *execContext, nodes []helium.Node, sk *S
 	if err != nil {
 		return nil, err
 	}
-	finalizeLevel1Nodes(&level, dtMode, entries)
+	finalizeLevel1(&level, dtMode, entries)
 
-	slices.SortFunc(entries, func(a, b keyedNode1) int {
+	slices.SortFunc(entries, func(a, b keyed1[helium.Node]) int {
 		if c := compareSortValues(a.key, b.key, level); c != 0 {
 			return c
 		}
@@ -882,7 +799,7 @@ func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk 
 	}
 
 	evalState := ec.sortXPathEvalState()
-	entries := make([]keyedItem1, len(items))
+	entries := make([]keyed1[xpath3.Item], len(items))
 
 	savedItem := ec.contextItem
 	defer func() { ec.contextItem = savedItem }()
@@ -898,7 +815,7 @@ func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk 
 		if err != nil {
 			return nil, err
 		}
-		entries[i] = keyedItem1{item: item, key: sv, index: i}
+		entries[i] = keyed1[xpath3.Item]{item: item, key: sv, index: i}
 	}
 
 	// XTDE1030: check for heterogeneous sort key types that can't be compared.
@@ -910,9 +827,9 @@ func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk 
 	if err != nil {
 		return nil, err
 	}
-	finalizeLevel1Items(&level, dtMode, entries)
+	finalizeLevel1(&level, dtMode, entries)
 
-	slices.SortFunc(entries, func(a, b keyedItem1) int {
+	slices.SortFunc(entries, func(a, b keyed1[xpath3.Item]) int {
 		if c := compareSortValues(a.key, b.key, level); c != 0 {
 			return c
 		}
@@ -940,7 +857,7 @@ func sortNodesN(ctx context.Context, ec *execContext, nodes []helium.Node, sortK
 	savedCurrent := ec.currentNode
 	defer func() { ec.currentNode = savedCurrent }()
 
-	entries := make(keyedNodes, len(nodes))
+	entries := make(keyedSlice[helium.Node], len(nodes))
 	for i, node := range nodes {
 		evalState.SetPosition(i + 1)
 		ec.currentNode = node
@@ -948,7 +865,7 @@ func sortNodesN(ctx context.Context, ec *execContext, nodes []helium.Node, sortK
 		if err != nil {
 			return nil, err
 		}
-		entries[i] = keyedNode{item: node, keys: keys, index: i}
+		entries[i] = keyedN[helium.Node]{item: node, keys: keys, index: i}
 	}
 
 	rs, err := buildResolvedSort(ctx, ec, sortKeys)
@@ -957,7 +874,7 @@ func sortNodesN(ctx context.Context, ec *execContext, nodes []helium.Node, sortK
 	}
 	finalizeLevels(&rs, dtModes, entries)
 
-	slices.SortFunc(entries, func(a, b keyedNode) int {
+	slices.SortFunc(entries, func(a, b keyedN[helium.Node]) int {
 		return rs.compareKeys(a.keys, b.keys, a.index, b.index)
 	})
 
@@ -974,7 +891,7 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 	}
 
 	evalState := ec.sortXPathEvalState()
-	entries := make(keyedItems, len(items))
+	entries := make(keyedSlice[xpath3.Item], len(items))
 
 	savedItem := ec.contextItem
 	defer func() { ec.contextItem = savedItem }()
@@ -990,7 +907,7 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 		if err != nil {
 			return nil, err
 		}
-		entries[i] = keyedItem{item: item, keys: keys, index: i}
+		entries[i] = keyedN[xpath3.Item]{item: item, keys: keys, index: i}
 	}
 
 	rs, err := buildResolvedSort(ctx, ec, sortKeys)
@@ -999,7 +916,7 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 	}
 	finalizeLevels(&rs, dtModes, entries)
 
-	slices.SortFunc(entries, func(a, b keyedItem) int {
+	slices.SortFunc(entries, func(a, b keyedN[xpath3.Item]) int {
 		return rs.compareKeys(a.keys, b.keys, a.index, b.index)
 	})
 
@@ -1016,13 +933,13 @@ func sortGroups1(ctx context.Context, ec *execContext, groups []fegGroup, sk *So
 		return nil, err
 	}
 
-	entries := make([]keyedGroup1, len(groups))
+	entries := make([]keyed1[fegGroup], len(groups))
 	if err := ec.withSortGroupContext(groups, hasKey, func(i int, node helium.Node) error {
 		sv, err := evaluateSortKey(ctx, ec, sk, node, &dtMode, nil)
 		if err != nil {
 			return err
 		}
-		entries[i] = keyedGroup1{group: groups[i], key: sv, index: i}
+		entries[i] = keyed1[fegGroup]{item: groups[i], key: sv, index: i}
 		return nil
 	}); err != nil {
 		return nil, err
@@ -1036,9 +953,9 @@ func sortGroups1(ctx context.Context, ec *execContext, groups []fegGroup, sk *So
 	if err != nil {
 		return nil, err
 	}
-	finalizeLevel1Groups(&level, dtMode, entries)
+	finalizeLevel1(&level, dtMode, entries)
 
-	slices.SortFunc(entries, func(a, b keyedGroup1) int {
+	slices.SortFunc(entries, func(a, b keyed1[fegGroup]) int {
 		if c := compareSortValues(a.key, b.key, level); c != 0 {
 			return c
 		}
@@ -1046,7 +963,7 @@ func sortGroups1(ctx context.Context, ec *execContext, groups []fegGroup, sk *So
 	})
 
 	for i, e := range entries {
-		groups[i] = e.group
+		groups[i] = e.item
 	}
 	return groups, nil
 }
@@ -1057,13 +974,13 @@ func sortGroupsN(ctx context.Context, ec *execContext, groups []fegGroup, sortKe
 		return nil, err
 	}
 
-	entries := make(keyedGroups, len(groups))
+	entries := make(keyedSlice[fegGroup], len(groups))
 	if err := ec.withSortGroupContext(groups, hasKey, func(i int, node helium.Node) error {
 		keys, err := extractSortValues(ctx, ec, sortKeys, node, dtModes, nil)
 		if err != nil {
 			return err
 		}
-		entries[i] = keyedGroup{group: groups[i], keys: keys, index: i}
+		entries[i] = keyedN[fegGroup]{item: groups[i], keys: keys, index: i}
 		return nil
 	}); err != nil {
 		return nil, err
@@ -1075,12 +992,12 @@ func sortGroupsN(ctx context.Context, ec *execContext, groups []fegGroup, sortKe
 	}
 	finalizeLevels(&rs, dtModes, entries)
 
-	slices.SortFunc(entries, func(a, b keyedGroup) int {
+	slices.SortFunc(entries, func(a, b keyedN[fegGroup]) int {
 		return rs.compareKeys(a.keys, b.keys, a.index, b.index)
 	})
 
 	for i, e := range entries {
-		groups[i] = e.group
+		groups[i] = e.item
 	}
 	return groups, nil
 }
