@@ -353,28 +353,31 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	// across modules with different namespace prefixes.
 	rawUA := getAttr(elem, "use-accumulators")
 	_, hasUseAccumulators := elem.GetAttribute("use-accumulators")
-	var resolvedParts []string
-	for _, tok := range strings.Fields(rawUA) {
-		if tok == "#all" {
-			resolvedParts = append(resolvedParts, tok)
-		} else {
-			resolvedParts = append(resolvedParts, resolveQName(tok, c.nsBindings))
+	var useAccumulators *string
+	if hasUseAccumulators {
+		var resolvedParts []string
+		for _, tok := range strings.Fields(rawUA) {
+			if tok == "#all" {
+				resolvedParts = append(resolvedParts, tok)
+			} else {
+				resolvedParts = append(resolvedParts, resolveQName(tok, c.nsBindings))
+			}
 		}
+		s := strings.Join(resolvedParts, " ")
+		useAccumulators = &s
 	}
-	useAccumulators := strings.Join(resolvedParts, " ")
 
 	typed := getAttr(elem, "typed")
 
 	md := &ModeDef{
-		Name:               name,
-		OnNoMatch:          onNoMatch,
-		Typed:              typed,
-		Streamable:         streamable,
-		Visibility:         visibility,
-		OnMultipleMatch:    onMultipleMatch,
-		UseAccumulators:    useAccumulators,
-		HasUseAccumulators: hasUseAccumulators,
-		ImportPrec:         c.importPrec,
+		Name:            name,
+		OnNoMatch:       onNoMatch,
+		Typed:           typed,
+		Streamable:      streamable,
+		Visibility:      visibility,
+		OnMultipleMatch: onMultipleMatch,
+		UseAccumulators: useAccumulators,
+		ImportPrec:      c.importPrec,
 	}
 
 	if c.stylesheet.modeDefs == nil {
@@ -399,7 +402,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 			if existing.OnMultipleMatch != "" && md.OnMultipleMatch != "" && existing.OnMultipleMatch != md.OnMultipleMatch {
 				existing.conflictOnMultiple = true
 			}
-			if existing.UseAccumulators != "" && md.UseAccumulators != "" && !sameAccumulatorSet(existing.UseAccumulators, md.UseAccumulators) {
+			if existing.UseAccumulators != nil && md.UseAccumulators != nil && !sameAccumulatorSet(*existing.UseAccumulators, *md.UseAccumulators) {
 				existing.conflictAccumulator = true
 			}
 			// Non-conflicting: merge attributes (use non-empty values from new decl)
@@ -412,7 +415,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 			if md.OnMultipleMatch != "" {
 				existing.OnMultipleMatch = md.OnMultipleMatch
 			}
-			if md.UseAccumulators != "" {
+			if md.UseAccumulators != nil {
 				existing.UseAccumulators = md.UseAccumulators
 			}
 			return nil
@@ -426,7 +429,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 			md.conflictOnNoMatch = existing.conflictOnNoMatch && md.OnNoMatch == ""
 			md.conflictVisibility = existing.conflictVisibility && md.Visibility == ""
 			md.conflictOnMultiple = existing.conflictOnMultiple && md.OnMultipleMatch == ""
-			md.conflictAccumulator = existing.conflictAccumulator && md.UseAccumulators == ""
+			md.conflictAccumulator = existing.conflictAccumulator && md.UseAccumulators == nil
 			// Inherit attributes not explicitly set in higher-precedence decl
 			if md.OnNoMatch == "" {
 				md.OnNoMatch = existing.OnNoMatch
@@ -434,7 +437,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 			if md.OnMultipleMatch == "" {
 				md.OnMultipleMatch = existing.OnMultipleMatch
 			}
-			if md.UseAccumulators == "" {
+			if md.UseAccumulators == nil {
 				md.UseAccumulators = existing.UseAccumulators
 			}
 			if md.Visibility == "" {
@@ -449,7 +452,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 			if existing.OnMultipleMatch == "" && md.OnMultipleMatch != "" {
 				existing.OnMultipleMatch = md.OnMultipleMatch
 			}
-			if existing.UseAccumulators == "" && md.UseAccumulators != "" {
+			if existing.UseAccumulators == nil && md.UseAccumulators != nil {
 				existing.UseAccumulators = md.UseAccumulators
 			}
 			if existing.Visibility == "" && md.Visibility != "" {
