@@ -112,6 +112,7 @@ type parserCtx struct {
 	maxAmpl     int   // max amplification factor (default 5, 0 = disabled via ParseHuge)
 	// nbentities int
 	inputTab     inputStack
+	cachedCursor strcursor.Cursor // cached result of getCursor(); invalidated on push/pop
 	stopped      bool
 	disableSAX   bool  // suppress SAX callbacks after fatal error in recover mode
 	recoverErr   error // first fatal error saved during recovery
@@ -320,6 +321,7 @@ func (ctx *parserCtx) pushInput(in any) {
 		pdebug.Printf("pushInput (n = %d -> %d)", ctx.inputTab.Len(), ctx.inputTab.Len()+1)
 	}
 	ctx.inputTab.Push(in)
+	ctx.cachedCursor = nil // invalidate cache
 }
 
 func (ctx *parserCtx) getByteCursor() *strcursor.ByteCursor {
@@ -331,6 +333,14 @@ func (ctx *parserCtx) getByteCursor() *strcursor.ByteCursor {
 }
 
 func (ctx *parserCtx) getCursor() strcursor.Cursor {
+	// Fast path: return cached cursor if still valid (not done or only input).
+	if cc := ctx.cachedCursor; cc != nil {
+		if !cc.Done() || ctx.inputTab.Len() <= 1 {
+			return cc
+		}
+		// Cached cursor is exhausted and there are more inputs — fall through.
+		ctx.cachedCursor = nil
+	}
 	// Pop exhausted input streams and return the next available cursor
 	for ctx.inputTab.Len() > 0 {
 		cur, ok := ctx.inputTab.PeekOne().(strcursor.Cursor)
@@ -346,12 +356,14 @@ func (ctx *parserCtx) getCursor() strcursor.Cursor {
 			ctx.popInput()
 			continue
 		}
+		ctx.cachedCursor = cur
 		return cur
 	}
 	return nil
 }
 
 func (ctx *parserCtx) popInput() any {
+	ctx.cachedCursor = nil // invalidate cache
 	return ctx.inputTab.Pop()
 }
 

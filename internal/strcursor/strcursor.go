@@ -58,6 +58,22 @@ type runeEntry struct {
 	width int
 }
 
+// roundUpPow2 rounds n up to the next power of 2 (or n itself if already a power of 2).
+func roundUpPow2(n int) int {
+	if n <= 0 {
+		return 1
+	}
+	n--
+	n |= n >> 1
+	n |= n >> 2
+	n |= n >> 4
+	n |= n >> 8
+	n |= n >> 16
+	n |= n >> 32
+	n++
+	return n
+}
+
 // RuneCursor reads runes from an io.Reader using a circular buffer so that
 // PeekN is O(1).
 type RuneCursor struct {
@@ -65,7 +81,8 @@ type RuneCursor struct {
 	ring    []runeEntry
 	head    int // index of first valid rune
 	count   int // number of valid runes in ring
-	ringCap int // len(ring)
+	ringCap int // len(ring), always a power of 2
+	ringMask int // ringCap - 1, used for fast modulo
 
 	// byte-level read buffer for decoding
 	raw    []byte
@@ -87,15 +104,17 @@ func NewRuneCursor(r io.Reader, bufsize ...int) *RuneCursor {
 	if len(bufsize) > 0 && bufsize[0] > 0 {
 		n = bufsize[0]
 	}
+	n = roundUpPow2(n)
 	return &RuneCursor{
-		ring:    make([]runeEntry, n),
-		ringCap: n,
-		raw:     make([]byte, 4096),
-		rawLen:  0,
-		rawPos:  0,
-		in:      r,
-		lineno:  1,
-		column:  1,
+		ring:     make([]runeEntry, n),
+		ringCap:  n,
+		ringMask: n - 1,
+		raw:      make([]byte, 4096),
+		rawLen:   0,
+		rawPos:   0,
+		in:       r,
+		lineno:   1,
+		column:   1,
 	}
 }
 
@@ -150,11 +169,36 @@ func (c *RuneCursor) fillRaw() error {
 // appends them to the ring buffer.  Returns the number decoded.
 func (c *RuneCursor) decodeRaw() int {
 	decoded := 0
-	for c.rawPos < c.rawLen {
-		r, w := utf8.DecodeRune(c.raw[c.rawPos:c.rawLen])
+	mask := c.ringMask
+	rawPos := c.rawPos
+	rawLen := c.rawLen
+	raw := c.raw
+	count := c.count
+
+	for rawPos < rawLen {
+		// ASCII fast path: bytes < 0x80 are single-byte runes.
+		b := raw[rawPos]
+		if b < 0x80 {
+			// Grow ring if needed.
+			if count == c.ringCap {
+				c.rawPos = rawPos
+				c.count = count
+				c.growRing()
+				mask = c.ringMask
+			}
+			idx := (c.head + count) & mask
+			c.ring[idx] = runeEntry{val: rune(b), width: 1}
+			rawPos++
+			count++
+			decoded++
+			continue
+		}
+
+		// Multi-byte UTF-8.
+		r, w := utf8.DecodeRune(raw[rawPos:rawLen])
 		if r == utf8.RuneError && w <= 1 {
 			// Possibly incomplete rune at end of buffer.
-			if c.rawLen-c.rawPos < utf8.UTFMax && !c.eof {
+			if rawLen-rawPos < utf8.UTFMax && !c.eof {
 				break // wait for more bytes
 			}
 			// Genuinely invalid — skip 1 byte.
@@ -162,16 +206,22 @@ func (c *RuneCursor) decodeRaw() int {
 				break
 			}
 		}
-		c.rawPos += w
+		rawPos += w
 		// Grow ring if needed.
-		if c.count == c.ringCap {
+		if count == c.ringCap {
+			c.rawPos = rawPos
+			c.count = count
 			c.growRing()
+			mask = c.ringMask
 		}
-		idx := (c.head + c.count) % c.ringCap
+		idx := (c.head + count) & mask
 		c.ring[idx] = runeEntry{val: r, width: w}
-		c.count++
+		count++
 		decoded++
 	}
+
+	c.rawPos = rawPos
+	c.count = count
 	return decoded
 }
 
@@ -179,36 +229,64 @@ func (c *RuneCursor) growRing() {
 	newCap := c.ringCap * 2
 	newRing := make([]runeEntry, newCap)
 	for i := 0; i < c.count; i++ {
-		newRing[i] = c.ring[(c.head+i)%c.ringCap]
+		newRing[i] = c.ring[(c.head+i)&c.ringMask]
 	}
 	c.ring = newRing
 	c.head = 0
 	c.ringCap = newCap
+	c.ringMask = newCap - 1
 }
 
 func (c *RuneCursor) Done() bool {
+	if c.count > 0 {
+		return false
+	}
 	return c.ensure(1) != nil
 }
 
+// Peek returns the first buffered rune without consuming it.
 func (c *RuneCursor) Peek() rune {
-	return c.PeekN(1)
+	// Fast path: data already buffered.
+	if c.count >= 1 {
+		return c.ring[c.head].val
+	}
+	if err := c.ensure(1); err != nil {
+		return utf8.RuneError
+	}
+	return c.ring[c.head].val
 }
 
 // PeekN returns the n-th rune (1-indexed) without consuming. O(1).
 func (c *RuneCursor) PeekN(n int) rune {
+	// Fast path: data already buffered (common case).
+	if c.count >= n {
+		return c.ring[(c.head+n-1)&c.ringMask].val
+	}
 	if err := c.ensure(n); err != nil {
 		return utf8.RuneError
 	}
-	idx := (c.head + n - 1) % c.ringCap
-	return c.ring[idx].val
+	return c.ring[(c.head+n-1)&c.ringMask].val
 }
 
 func (c *RuneCursor) Cur() rune {
-	if err := c.ensure(1); err != nil {
-		return utf8.RuneError
+	if c.count < 1 {
+		if err := c.ensure(1); err != nil {
+			return utf8.RuneError
+		}
 	}
 	r := c.ring[c.head].val
-	c.Advance(1)
+	// Inline advance(1) for speed.
+	c.nread += c.ring[c.head].width
+	if r == '\n' {
+		c.lineno++
+		c.line.Reset()
+		c.column = 1
+	} else {
+		c.column++
+	}
+	c.line.WriteRune(r)
+	c.head = (c.head + 1) & c.ringMask
+	c.count--
 	return r
 }
 
@@ -218,8 +296,10 @@ func (c *RuneCursor) Advance(n int) error {
 			return err
 		}
 	}
+	mask := c.ringMask
+	head := c.head
 	for i := 0; i < n; i++ {
-		e := c.ring[c.head]
+		e := c.ring[head]
 		c.nread += e.width
 		if e.val == '\n' {
 			c.lineno++
@@ -229,23 +309,27 @@ func (c *RuneCursor) Advance(n int) error {
 			c.column++
 		}
 		c.line.WriteRune(e.val)
-		c.head = (c.head + 1) % c.ringCap
-		c.count--
+		head = (head + 1) & mask
 	}
+	c.head = head
+	c.count -= n
 	return nil
 }
 
 func (c *RuneCursor) hasPrefix(s string, n int, consume bool) bool {
-	if err := c.ensure(n); err != nil {
-		return false
+	if c.count < n {
+		if err := c.ensure(n); err != nil {
+			return false
+		}
 	}
+	mask := c.ringMask
 	pos := 0
 	for i := 0; i < n; i++ {
 		r, w := utf8.DecodeRuneInString(s[pos:])
 		if r == utf8.RuneError {
 			return false
 		}
-		idx := (c.head + i) % c.ringCap
+		idx := (c.head + i) & mask
 		if c.ring[idx].val != r {
 			return false
 		}
@@ -291,8 +375,9 @@ func (c *RuneCursor) Unused() io.Reader {
 	ret := &Unused{rdr: c.in}
 	// Reconstruct unconsumed bytes from ring buffer + raw buffer.
 	var buf bytes.Buffer
+	mask := c.ringMask
 	for i := 0; i < c.count; i++ {
-		idx := (c.head + i) % c.ringCap
+		idx := (c.head + i) & mask
 		buf.WriteRune(c.ring[idx].val)
 	}
 	if c.rawPos < c.rawLen {
@@ -307,6 +392,7 @@ func (c *RuneCursor) Unused() io.Reader {
 func (c *RuneCursor) Read(buf []byte) (int, error) {
 	// Drain any buffered runes first.
 	nread := 0
+	mask := c.ringMask
 	for c.count > 0 && nread < len(buf) {
 		e := c.ring[c.head]
 		w := utf8.EncodeRune(buf[nread:], e.val)
@@ -314,7 +400,7 @@ func (c *RuneCursor) Read(buf []byte) (int, error) {
 			break
 		}
 		nread += w
-		c.head = (c.head + 1) % c.ringCap
+		c.head = (c.head + 1) & mask
 		c.count--
 	}
 	if nread > 0 {
