@@ -3,11 +3,13 @@
 // DTD validation, and serialization (libxml2: libxml2 core).
 package helium
 
+import "github.com/lestrrat-go/helium/internal/lexicon"
+
 const Version = `0.0.1`
 
 const (
-	XMLNamespace = "http://www.w3.org/XML/1998/namespace"
-	XMLNsPrefix  = "xmlns"
-	XMLPrefix    = "xml"
+	XMLNamespace = lexicon.NamespaceXML
+	XMLNsPrefix  = lexicon.PrefixXMLNS
+	XMLPrefix    = lexicon.PrefixXML
 	XMLTextNoEnc = "textnoenc"
 )

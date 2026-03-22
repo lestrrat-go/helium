@@ -16,7 +16,7 @@ func resolveWhiteSpace(td *TypeDef) string {
 			return *cur.Facets.WhiteSpace
 		}
 		// Check if we've reached a built-in type with known whitespace behavior.
-		if cur.Name.NS == "http://www.w3.org/2001/XMLSchema" {
+		if cur.Name.NS == lexicon.XSD {
 			switch cur.Name.Local {
 			case "string":
 				return "preserve"

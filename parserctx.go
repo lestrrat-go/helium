@@ -1251,7 +1251,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 				return pctx.namespaceError(ctx, errors.New("redefinition of the xmlns prefix forbidden"))
 			}
 
-			if attvalue == "http://www.w3.org/2000/xmlns/" {
+			if attvalue == lexicon.NamespaceXMLNS {
 				return pctx.namespaceError(ctx, errors.New("reuse of the xmlns namespace name if forbidden"))
 			}
 
