@@ -324,11 +324,26 @@ func ExprHasNonMotionlessPredicate(expr *Expression) bool {
 	return false
 }
 
+// PredicateIsNonMotionless returns true if a predicate expression navigates
+// downward (uses child/descendant axes), uses last(), or uses position() in
+// a non-trivial way.
+func PredicateIsNonMotionless(pred Expr) bool {
+	return predicateIsNonMotionlessWithStep(pred, nil)
+}
+
 // predicateIsNonMotionless returns true if a predicate expression navigates
 // downward (uses child/descendant axes), uses last(), or uses position() in
 // a non-trivial way.
 func predicateIsNonMotionless(pred Expr) bool {
 	return predicateIsNonMotionlessWithStep(pred, nil)
+}
+
+// PredicateIsNonMotionlessWithStep checks whether a predicate is non-motionless,
+// taking into account the step the predicate is attached to. When the step
+// selects atomic-value nodes (text(), attribute, comment(), PI), "." in the
+// predicate is motionless because the value is available without child navigation.
+func PredicateIsNonMotionlessWithStep(pred Expr, step *Step) bool {
+	return predicateIsNonMotionlessWithStep(pred, step)
 }
 
 // predicateIsNonMotionlessWithStep checks whether a predicate is non-motionless,

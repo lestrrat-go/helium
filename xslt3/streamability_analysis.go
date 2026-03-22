@@ -857,6 +857,17 @@ func isGroundingExprSS(ss *Stylesheet, expr xpath3.Expr) bool {
 			return true
 		}
 	}
+	// A FilterExpr wrapping a grounding expression is still grounding.
+	// E.g. current-group()[1] is a predicate on grounded data.
+	// Only unwrap if the inner expression is a FunctionCall to avoid
+	// treating arbitrary filtered expressions as grounded.
+	if fe, ok := expr.(xpath3.FilterExpr); ok {
+		if fc, ok2 := derefXPathExpr(fe.Expr).(xpath3.FunctionCall); ok2 {
+			if fc.Prefix == "" {
+				return isGroundingFuncName(fc.Name)
+			}
+		}
+	}
 	return false
 }
 
@@ -1076,59 +1087,135 @@ func stepContextIsAtomic(axis xpath3.AxisType, nt xpath3.NodeTest) bool {
 
 func predicateIsNonMotionlessSS(ss *Stylesheet, pred xpath3.Expr, step *xpath3.Step) bool {
 	nonMotionless := false
-	xpath3.WalkExpr(pred, func(e xpath3.Expr) bool {
-		if nonMotionless {
-			return false
+	var walkPred func(e xpath3.Expr, underNonContext bool)
+	walkPred = func(e xpath3.Expr, underNonContext bool) {
+		if nonMotionless || e == nil {
+			return
 		}
+		e = derefXPathExpr(e)
 		switch v := e.(type) {
 		case xpath3.LocationPath:
-			for _, step := range v.Steps {
-				switch step.Axis {
-				case xpath3.AxisChild, xpath3.AxisDescendant, xpath3.AxisDescendantOrSelf:
-					nonMotionless = true
-					return false
+			if !underNonContext {
+				for _, s := range v.Steps {
+					switch s.Axis {
+					case xpath3.AxisChild, xpath3.AxisDescendant, xpath3.AxisDescendantOrSelf:
+						nonMotionless = true
+						return
+					}
+				}
+			}
+			// Walk predicates within steps.
+			for _, s := range v.Steps {
+				for _, p := range s.Predicates {
+					walkPred(p, underNonContext)
 				}
 			}
 		case xpath3.PathStepExpr:
-			if v.DescOrSelf {
+			if v.DescOrSelf && !underNonContext {
 				nonMotionless = true
-				return false
+				return
+			}
+			leftIsNonContext := isNonContextRoot(v.Left)
+			walkPred(v.Left, underNonContext)
+			walkPred(v.Right, underNonContext || leftIsNonContext)
+		case xpath3.PathExpr:
+			filterIsNonContext := isNonContextRoot(v.Filter)
+			walkPred(v.Filter, underNonContext)
+			if v.Path != nil {
+				lp := *v.Path
+				walkPred(lp, underNonContext || filterIsNonContext)
 			}
 		case xpath3.FunctionCall:
 			if v.Prefix == "" && v.Name == "last" {
 				nonMotionless = true
-				return false
+				return
 			}
-			// Property-access functions (name, local-name, etc.) are motionless
-			// even when they access the context item. Don't recurse into their args.
+			// current-group() and current-grouping-key() always return
+			// materialized (grounded) data.  Navigation into them (e.g.
+			// current-group()[1]/Date) is motionless w.r.t. the stream.
+			if v.Prefix == "" && (v.Name == "current-group" || v.Name == "current-grouping-key") {
+				return // skip children — result is grounded
+			}
+			// Property-access functions are motionless.
 			if v.Prefix == "" {
 				switch v.Name {
 				case "name", "local-name", "namespace-uri", "node-name",
 					"self", "generate-id", "base-uri", "document-uri",
 					"nilled", "has-children", "string-length":
-					return false // skip children — this whole call is motionless
+					return // skip children
 				}
 			}
-			// User-defined functions with motionless streamability annotations
-			// (inspection, ascent, filter) are motionless in predicates.
+			// User-defined functions with motionless streamability annotations.
 			if v.Prefix != "" {
 				cat := lookupFuncStreamability(ss, v.Name, len(v.Args))
 				if cat == "inspection" || cat == "ascent" || cat == "filter" {
-					return false // skip children — the function is motionless
+					return // skip children
 				}
 			}
+			for _, arg := range v.Args {
+				walkPred(arg, underNonContext)
+			}
 		case xpath3.ContextItemExpr:
-			// "." in a predicate on a step that selects atomic-value nodes
-			// (text(), attribute, comment, PI) is motionless — the value is
-			// available without child navigation. On element/document steps,
-			// atomizing "." requires reading descendant text, which is consuming.
 			if step == nil || !stepContextIsAtomic(step.Axis, step.NodeTest) {
 				nonMotionless = true
-				return false
+				return
 			}
+		case xpath3.FilterExpr:
+			walkPred(v.Expr, underNonContext)
+			for _, p := range v.Predicates {
+				walkPred(p, underNonContext)
+			}
+		case xpath3.BinaryExpr:
+			walkPred(v.Left, underNonContext)
+			walkPred(v.Right, underNonContext)
+		case xpath3.UnaryExpr:
+			walkPred(v.Operand, underNonContext)
+		case xpath3.ConcatExpr:
+			walkPred(v.Left, underNonContext)
+			walkPred(v.Right, underNonContext)
+		case xpath3.UnionExpr:
+			walkPred(v.Left, underNonContext)
+			walkPred(v.Right, underNonContext)
+		case xpath3.IfExpr:
+			walkPred(v.Cond, underNonContext)
+			walkPred(v.Then, underNonContext)
+			walkPred(v.Else, underNonContext)
+		case xpath3.SequenceExpr:
+			for _, item := range v.Items {
+				walkPred(item, underNonContext)
+			}
+		case xpath3.LiteralExpr, xpath3.VariableExpr, xpath3.RootExpr, xpath3.PlaceholderExpr:
+			// leaf nodes — nothing to walk
+		case xpath3.RangeExpr:
+			walkPred(v.Start, underNonContext)
+			walkPred(v.End, underNonContext)
+		case xpath3.SimpleMapExpr:
+			walkPred(v.Left, underNonContext)
+			walkPred(v.Right, underNonContext)
+		case xpath3.IntersectExceptExpr:
+			walkPred(v.Left, underNonContext)
+			walkPred(v.Right, underNonContext)
+		default:
+			// VM-internal types (vmLocationPathExpr, vmPathExpr) can't be
+			// matched in xslt3.  Use the old WalkExpr-based approach for
+			// the CHILDREN only (not the node itself) to avoid infinite
+			// recursion.
+			first := true
+			xpath3.WalkExpr(e, func(child xpath3.Expr) bool {
+				if nonMotionless {
+					return false
+				}
+				// Skip the first call (WalkExpr calls fn with the root node first).
+				if first {
+					first = false
+					return true // continue to walk children
+				}
+				walkPred(child, underNonContext)
+				return false // we handle recursion ourselves
+			})
 		}
-		return true
-	})
+	}
+	walkPred(pred, false)
 	return nonMotionless
 }
 
@@ -1169,76 +1256,95 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst Instruction) error {
 		}
 
 	case *ForEachGroupInst:
-		// for-each-group in streaming: multiple consuming uses of current-group()
-		groupRefs := countCurrentGroupConsumingRefs(v.Body)
-		if groupRefs > 1 {
-			return staticError(errCodeXTSE3430,
-				"xsl:for-each-group body has multiple consuming references to current-group(), which is not streamable")
-		}
+		// When the select is grounded (copy-of/snapshot), the group items are
+		// in-memory copies.  current-group() and context item both refer to
+		// grounded data, so multiple-consumption checks don't apply.
+		fegSelectGrounded := v.Select != nil && exprEndsWithGrounding(v.Select.AST())
 
-		// Also check if a single current-group() usage has multiple downward
-		// selections (e.g. current-group()/(AUTHOR||TITLE)).
-		for _, bi := range v.Body {
-			for _, expr := range getInstructionExprs(bi) {
-				if expr == nil {
-					continue
-				}
-				if countDownwardFromCurrentGroup(expr.AST()) > 1 {
-					return staticError(errCodeXTSE3430,
-						"xsl:for-each-group body has multiple downward selections from current-group(), which is not streamable")
-				}
+		if !fegSelectGrounded {
+			// for-each-group in streaming: multiple consuming uses of current-group()
+			groupRefs := countCurrentGroupConsumingRefs(v.Body)
+			if groupRefs > 1 {
+				return staticError(errCodeXTSE3430,
+					"xsl:for-each-group body has multiple consuming references to current-group(), which is not streamable")
 			}
-			for _, children := range getChildInstructions(bi) {
-				for _, ci := range children {
-					for _, expr := range getInstructionExprs(ci) {
-						if expr == nil {
-							continue
-						}
-						if countDownwardFromCurrentGroup(expr.AST()) > 1 {
-							return staticError(errCodeXTSE3430,
-								"xsl:for-each-group body has multiple downward selections from current-group(), which is not streamable")
+
+			// Also check if a single current-group() usage has multiple downward
+			// selections (e.g. current-group()/(AUTHOR||TITLE)).
+			for _, bi := range v.Body {
+				for _, expr := range getInstructionExprs(bi) {
+					if expr == nil {
+						continue
+					}
+					if countDownwardFromCurrentGroup(expr.AST()) > 1 {
+						return staticError(errCodeXTSE3430,
+							"xsl:for-each-group body has multiple downward selections from current-group(), which is not streamable")
+					}
+				}
+				for _, children := range getChildInstructions(bi) {
+					for _, ci := range children {
+						for _, expr := range getInstructionExprs(ci) {
+							if expr == nil {
+								continue
+							}
+							if countDownwardFromCurrentGroup(expr.AST()) > 1 {
+								return staticError(errCodeXTSE3430,
+									"xsl:for-each-group body has multiple downward selections from current-group(), which is not streamable")
+							}
 						}
 					}
 				}
 			}
-		}
 
-		// Check if context item "." is used consumingly in for-each-group body.
-		// In for-each-group, "." refers to the first item of the current group,
-		// and using both "." (downward) and current-group() is multiple consumption.
-		bodyUsesContextDown := false
-		bodyUsesCurrentGroup := false
-		for _, bi := range v.Body {
-			for _, expr := range getInstructionExprs(bi) {
-				if expr == nil {
-					continue
+			// Check if context item "." is used consumingly in for-each-group body.
+			// In for-each-group, "." refers to the first item of the current group,
+			// and using both "." (downward) and current-group() is multiple consumption.
+			// Only flag when current-group() is used consumingly AND the context
+			// item is used with downward navigation from a DIFFERENT expression.
+			// Downward steps reached via current-group()/... are navigation into
+			// group items, not from the context item.
+			bodyUsesContextDown := false
+			bodyUsesCurrentGroupConsuming := false
+			for _, bi := range v.Body {
+				for _, expr := range getInstructionExprs(bi) {
+					if expr == nil {
+						continue
+					}
+					if exprHasContextOnlyDownward(expr.AST()) {
+						bodyUsesContextDown = true
+					}
+					if exprUsesCurrentGroupConsumingly(expr) {
+						bodyUsesCurrentGroupConsuming = true
+					}
 				}
-				if exprHasContextDownward(expr.AST()) {
-					bodyUsesContextDown = true
-				}
-				if xpath3.ExprUsesFunction(expr, "current-group") {
-					bodyUsesCurrentGroup = true
-				}
-			}
-			for _, children := range getChildInstructions(bi) {
-				for _, ci := range children {
-					for _, expr := range getInstructionExprs(ci) {
-						if expr == nil {
-							continue
-						}
-						if exprHasContextDownward(expr.AST()) {
-							bodyUsesContextDown = true
-						}
-						if xpath3.ExprUsesFunction(expr, "current-group") {
-							bodyUsesCurrentGroup = true
+				for _, children := range getChildInstructions(bi) {
+					for _, ci := range children {
+						for _, expr := range getInstructionExprs(ci) {
+							if expr == nil {
+								continue
+							}
+							if exprHasContextOnlyDownward(expr.AST()) {
+								bodyUsesContextDown = true
+							}
+							if exprUsesCurrentGroupConsumingly(expr) {
+								bodyUsesCurrentGroupConsuming = true
+							}
 						}
 					}
 				}
 			}
-		}
-		if bodyUsesContextDown && bodyUsesCurrentGroup {
-			return staticError(errCodeXTSE3430,
-				"xsl:for-each-group body uses both context item (downward) and current-group(), which is not streamable")
+			if bodyUsesContextDown && bodyUsesCurrentGroupConsuming {
+				return staticError(errCodeXTSE3430,
+					"xsl:for-each-group body uses both context item (downward) and current-group(), which is not streamable")
+			}
+
+			// Check for focus-changing instructions (xsl:copy select=...,
+			// xsl:for-each) whose body uses current-group().  Per bug 29482,
+			// current-group() inside a focus-changing instruction is a
+			// higher-order consumption that is not streamable.
+			if err := checkFocusChangingCurrentGroup(v.Body); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -1488,13 +1594,11 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst Instruction) error {
 		return nil
 	}
 
-	// Check if group-adjacent with position() in grouping key
-	if fg.GroupAdjacent != nil {
-		if xpath3.ExprUsesFunction(fg.GroupAdjacent, "position") {
-			return staticError(errCodeXTSE3430,
-				"xsl:for-each-group group-adjacent uses position(), which is not streamable")
-		}
-	}
+	// When select ends with a grounding function (copy-of, snapshot), the
+	// selected items are in-memory copies.  Grouping keys can navigate freely
+	// into them, current-group() is grounded, and the body does not consume the
+	// stream.  Most of the checks below only apply to non-grounded selects.
+	selectGrounded := fg.Select != nil && exprEndsWithGrounding(fg.Select.AST())
 
 	// Check if sort is used with for-each-group in streaming (non-streamable)
 	if len(fg.Sort) > 0 {
@@ -1502,28 +1606,46 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst Instruction) error {
 			"xsl:for-each-group with sort is not streamable")
 	}
 
-	// Check if grouping key navigates downward (e.g., PRICE/text())
-	if fg.GroupBy != nil && xpath3.ExprHasDownwardStep(fg.GroupBy) {
-		return staticError(errCodeXTSE3430,
-			"xsl:for-each-group group-by expression %q navigates downward, which is not streamable",
-			fg.GroupBy.String())
+	// Check if group-starting-with / group-ending-with pattern has
+	// non-motionless predicates (e.g., record[foo = 'a'] where foo is
+	// a child element).  The pattern must be motionless for streaming.
+	// Skip when select is grounded — grounded items can be freely inspected.
+	if !selectGrounded {
+		if fg.GroupStartingWith != nil && patternHasNonMotionlessPredicate(fg.GroupStartingWith) {
+			return staticError(errCodeXTSE3430,
+				"xsl:for-each-group group-starting-with pattern has a non-motionless predicate, which is not streamable")
+		}
+		if fg.GroupEndingWith != nil && patternHasNonMotionlessPredicate(fg.GroupEndingWith) {
+			return staticError(errCodeXTSE3430,
+				"xsl:for-each-group group-ending-with pattern has a non-motionless predicate, which is not streamable")
+		}
 	}
-	if fg.GroupAdjacent != nil && xpath3.ExprHasDownwardStep(fg.GroupAdjacent) {
-		return staticError(errCodeXTSE3430,
-			"xsl:for-each-group group-adjacent expression %q navigates downward, which is not streamable",
-			fg.GroupAdjacent.String())
+
+	// Check if grouping key navigates downward (e.g., PRICE/text()) — only
+	// when the select is NOT grounded, because grounded items can be navigated.
+	if !selectGrounded {
+		if fg.GroupBy != nil && xpath3.ExprHasDownwardStep(fg.GroupBy) {
+			return staticError(errCodeXTSE3430,
+				"xsl:for-each-group group-by expression %q navigates downward, which is not streamable",
+				fg.GroupBy.String())
+		}
+		if fg.GroupAdjacent != nil && xpath3.ExprHasDownwardStep(fg.GroupAdjacent) {
+			return staticError(errCodeXTSE3430,
+				"xsl:for-each-group group-adjacent expression %q navigates downward, which is not streamable",
+				fg.GroupAdjacent.String())
+		}
 	}
 
 	// Check if select uses descendant-or-self (crawling) for grouped streaming,
 	// but only when the select doesn't ground its result via copy-of/snapshot.
-	if fg.Select != nil && xpath3.ExprUsesDescendantOrSelf(fg.Select) && !exprEndsWithGrounding(fg.Select.AST()) {
+	if fg.Select != nil && xpath3.ExprUsesDescendantOrSelf(fg.Select) && !selectGrounded {
 		return staticError(errCodeXTSE3430,
 			"xsl:for-each-group select expression %q is crawling, which is not streamable", fg.Select.String())
 	}
 
 	// Check for nested for-each-group that consumes current-group(),
 	// but only when the outer for-each-group select doesn't ground its data.
-	if fg.Select == nil || !exprEndsWithGrounding(fg.Select.AST()) {
+	if !selectGrounded {
 		for _, bi := range fg.Body {
 			if innerFg, ok := bi.(*ForEachGroupInst); ok {
 				if innerFg.Select != nil {
@@ -1540,23 +1662,22 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst Instruction) error {
 		}
 	}
 
-	// Check if for-each-group body has source-document with streaming that uses current-group()
-	for _, bi := range fg.Body {
-		if sd, ok := bi.(*SourceDocumentInst); ok && sd.Streamable {
-			for _, sdi := range sd.Body {
-				for _, expr := range getInstructionExprs(sdi) {
-					if exprUsesCurrentGroup(expr) {
-						return staticError(errCodeXTSE3430,
-							"xsl:source-document streamable body uses current-group() from outer for-each-group, which is not streamable")
-					}
-				}
-			}
+	// Check if for-each-group body has source-document with streaming that uses
+	// current-group() consumingly.  When the outer select is grounded,
+	// current-group() returns in-memory nodes that can be navigated freely, so
+	// only flag uses that truly consume (copy-of, apply-templates with
+	// downward select, etc.) — not simple attribute/property access.
+	// Recurse into nested instructions (LREs, etc.) to find source-documents.
+	if !selectGrounded {
+		if err := checkSourceDocCurrentGroup(fg.Body); err != nil {
+			return err
 		}
 	}
 
 	// Check for-each-group with group-starting-with: copy-of(current-group()) is not streamable
-	// because group-starting-with needs to buffer and the pattern-matching consumes nodes
-	if fg.GroupStartingWith != nil {
+	// because group-starting-with needs to buffer and the pattern-matching consumes nodes.
+	// Skip when select is grounded — grounded items can be freely copied.
+	if fg.GroupStartingWith != nil && !selectGrounded {
 		for _, bi := range fg.Body {
 			if err := checkGroupStartingWithBody(bi); err != nil {
 				return err
@@ -1565,6 +1686,83 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst Instruction) error {
 	}
 
 	return nil
+}
+
+// checkSourceDocCurrentGroup recursively checks if any source-document
+// instruction with streaming uses current-group() in its body.
+func checkSourceDocCurrentGroup(body []Instruction) error {
+	for _, bi := range body {
+		if sd, ok := bi.(*SourceDocumentInst); ok && sd.Streamable {
+			if sourceDocBodyUsesCurrentGroup(sd.Body) {
+				return staticError(errCodeXTSE3430,
+					"xsl:source-document streamable body uses current-group() from outer for-each-group, which is not streamable")
+			}
+		}
+		// Recurse into child instructions to find nested source-documents.
+		for _, children := range getChildInstructions(bi) {
+			if err := checkSourceDocCurrentGroup(children); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// sourceDocBodyUsesCurrentGroup checks if any expression in the source-document
+// body uses current-group().
+func sourceDocBodyUsesCurrentGroup(body []Instruction) bool {
+	for _, inst := range body {
+		for _, expr := range getInstructionExprs(inst) {
+			if exprUsesCurrentGroup(expr) {
+				return true
+			}
+		}
+		for _, children := range getChildInstructions(inst) {
+			if sourceDocBodyUsesCurrentGroup(children) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// patternHasNonMotionlessPredicate returns true if any alternative in the
+// pattern has a predicate that navigates downward (child/descendant steps).
+func patternHasNonMotionlessPredicate(pat *Pattern) bool {
+	for _, alt := range pat.Alternatives {
+		if alt.expr == nil {
+			continue
+		}
+		nonMotionless := false
+		xpath3.WalkExpr(alt.expr, func(e xpath3.Expr) bool {
+			if nonMotionless {
+				return false
+			}
+			switch v := e.(type) {
+			case xpath3.LocationPath:
+				for _, step := range v.Steps {
+					for _, pred := range step.Predicates {
+						if xpath3.PredicateIsNonMotionlessWithStep(pred, &step) {
+							nonMotionless = true
+							return false
+						}
+					}
+				}
+			case xpath3.FilterExpr:
+				for _, pred := range v.Predicates {
+					if xpath3.PredicateIsNonMotionless(pred) {
+						nonMotionless = true
+						return false
+					}
+				}
+			}
+			return true
+		})
+		if nonMotionless {
+			return true
+		}
+	}
+	return false
 }
 
 // checkGroupStartingWithBody checks if a for-each-group group-starting-with body
@@ -1589,36 +1787,157 @@ func checkGroupStartingWithBody(inst Instruction) error {
 	return nil
 }
 
+// checkFocusChangingCurrentGroup checks if a focus-changing instruction
+// (xsl:copy with select, xsl:for-each) in the for-each-group body uses
+// current-group() in its own body.  Per W3C bug 29482, this is a
+// higher-order consumption that is not streamable.
+func checkFocusChangingCurrentGroup(body []Instruction) error {
+	for _, bi := range body {
+		if err := checkFocusChangingCurrentGroupInst(bi); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkFocusChangingCurrentGroupInst(inst Instruction) error {
+	switch v := inst.(type) {
+	case *CopyInst:
+		// xsl:copy with an explicit select changes focus. If its body
+		// uses current-group(), that's a higher-order consumption.
+		// xsl:copy without select (nil) or with select="." copies the
+		// context item, which is the normal streaming case.
+		if v.Select != nil && !exprIsContextItem(v.Select) {
+			if bodyUsesCurrentGroup(v.Body) {
+				return staticError(errCodeXTSE3430,
+					"xsl:for-each-group body has current-group() inside focus-changing xsl:copy, which is not streamable")
+			}
+		}
+	}
+	// Recurse into child instructions (e.g., result-document wrapping copy).
+	for _, children := range getChildInstructions(inst) {
+		for _, child := range children {
+			if err := checkFocusChangingCurrentGroupInst(child); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// exprIsContextItem returns true if the expression is just "." (context item).
+func exprIsContextItem(expr *xpath3.Expression) bool {
+	if expr == nil {
+		return false
+	}
+	ast := expr.AST()
+	if ast == nil {
+		return false
+	}
+	_, ok := derefXPathExpr(ast).(xpath3.ContextItemExpr)
+	return ok
+}
+
+// bodyUsesCurrentGroup returns true if any instruction in the body
+// uses current-group() in any expression.
+func bodyUsesCurrentGroup(body []Instruction) bool {
+	for _, bi := range body {
+		for _, expr := range getInstructionExprs(bi) {
+			if expr == nil {
+				continue
+			}
+			if xpath3.ExprUsesFunction(expr, "current-group") {
+				return true
+			}
+		}
+		for _, children := range getChildInstructions(bi) {
+			if bodyUsesCurrentGroup(children) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // exprUsesCurrentGroupConsumingly checks if an expression uses current-group()
-// in a consuming way (copy-of, downward navigation, apply-templates, etc.).
+// in a consuming way.  The only non-consuming use is when current-group() is
+// wrapped in snapshot() which produces grounded copies.  All other uses —
+// bare current-group(), copy-of(current-group()), current-group()/path — are
+// consuming because they iterate over the streamed group items.
 func exprUsesCurrentGroupConsumingly(expr *xpath3.Expression) bool {
 	found := false
-	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
-		if found {
-			return false
+	var walk func(e xpath3.Expr, insideSnapshot bool)
+	walk = func(e xpath3.Expr, insideSnapshot bool) {
+		if found || e == nil {
+			return
 		}
-		// copy-of(current-group()) is consuming
-		if fc, ok := e.(xpath3.FunctionCall); ok {
-			if fc.Prefix == "" && (fc.Name == "copy-of" || fc.Name == "snapshot") {
-				for _, arg := range fc.Args {
-					if isCurrentGroupCall(arg) {
-						found = true
-						return false
-					}
+		e = derefXPathExpr(e)
+		switch v := e.(type) {
+		case xpath3.FunctionCall:
+			if v.Prefix == "" && v.Name == "current-group" {
+				if !insideSnapshot {
+					found = true
+				}
+				return
+			}
+			// snapshot() grounds its arguments — current-group() inside is not consuming.
+			if v.Prefix == "" && v.Name == "snapshot" {
+				for _, arg := range v.Args {
+					walk(arg, true)
+				}
+				return
+			}
+			for _, arg := range v.Args {
+				walk(arg, insideSnapshot)
+			}
+		case xpath3.PathStepExpr:
+			walk(v.Left, insideSnapshot)
+			walk(v.Right, insideSnapshot)
+		case xpath3.PathExpr:
+			walk(v.Filter, insideSnapshot)
+			if v.Path != nil {
+				lp := *v.Path
+				walk(lp, insideSnapshot)
+			}
+		case xpath3.FilterExpr:
+			walk(v.Expr, insideSnapshot)
+			for _, p := range v.Predicates {
+				walk(p, insideSnapshot)
+			}
+		case xpath3.BinaryExpr:
+			walk(v.Left, insideSnapshot)
+			walk(v.Right, insideSnapshot)
+		case xpath3.UnaryExpr:
+			walk(v.Operand, insideSnapshot)
+		case xpath3.ConcatExpr:
+			walk(v.Left, insideSnapshot)
+			walk(v.Right, insideSnapshot)
+		case xpath3.UnionExpr:
+			walk(v.Left, insideSnapshot)
+			walk(v.Right, insideSnapshot)
+		case xpath3.IfExpr:
+			walk(v.Cond, insideSnapshot)
+			walk(v.Then, insideSnapshot)
+			walk(v.Else, insideSnapshot)
+		case xpath3.SequenceExpr:
+			for _, item := range v.Items {
+				walk(item, insideSnapshot)
+			}
+		case xpath3.LocationPath:
+			for _, step := range v.Steps {
+				for _, pred := range step.Predicates {
+					walk(pred, insideSnapshot)
 				}
 			}
+		case xpath3.SimpleMapExpr:
+			walk(v.Left, insideSnapshot)
+			walk(v.Right, insideSnapshot)
+		case xpath3.LiteralExpr, xpath3.VariableExpr, xpath3.RootExpr,
+			xpath3.ContextItemExpr, xpath3.PlaceholderExpr:
+			// leaf nodes — nothing to walk
 		}
-		// current-group()/something is consuming
-		if ps, ok := e.(xpath3.PathStepExpr); ok {
-			if isCurrentGroupCall(ps.Left) {
-				found = true
-				return false
-			}
-		}
-		// apply-templates select="current-group()" is consuming (can't check from XPath,
-		// but current-group() passed to apply-templates will appear in instruction exprs)
-		return true
-	})
+	}
+	walk(expr.AST(), false)
 	return found
 }
 
@@ -2020,6 +2339,90 @@ func exprHasContextDownward(expr xpath3.Expr) bool {
 		return true
 	})
 	return found
+}
+
+// exprHasContextOnlyDownward is like exprHasContextDownward but skips downward
+// steps that are reached via a path from a function call or variable reference.
+// For example, current-group()/node() has a child step (node()), but it
+// navigates from current-group(), not from the context item.  Similarly,
+// $var/* navigates from a variable, not from context.
+func exprHasContextOnlyDownward(expr xpath3.Expr) bool {
+	found := false
+	var walk func(e xpath3.Expr, underNonContext bool)
+	walk = func(e xpath3.Expr, underNonContext bool) {
+		if found {
+			return
+		}
+		e = derefXPathExpr(e)
+		switch v := e.(type) {
+		case xpath3.PathStepExpr:
+			// Check if the left side is a function call or variable — if so,
+			// the right side's downward steps are NOT from context.
+			leftIsNonContext := isNonContextRoot(v.Left)
+			walk(v.Left, underNonContext)
+			walk(v.Right, underNonContext || leftIsNonContext)
+			return
+		case xpath3.PathExpr:
+			// PathExpr: Filter/Path — if Filter is non-context, Path steps
+			// are from the filter result, not the context item.
+			filterIsNonContext := isNonContextRoot(v.Filter)
+			walk(v.Filter, underNonContext)
+			if v.Path != nil {
+				lp := *v.Path
+				walk(lp, underNonContext || filterIsNonContext)
+			}
+			return
+		case xpath3.LocationPath:
+			if underNonContext {
+				return // skip — this is a step from a non-context root
+			}
+			for _, step := range v.Steps {
+				switch step.Axis {
+				case xpath3.AxisChild, xpath3.AxisDescendant, xpath3.AxisDescendantOrSelf:
+					found = true
+					return
+				}
+			}
+			return
+		}
+		// For other node types, walk children normally.
+		xpath3.WalkExpr(e, func(child xpath3.Expr) bool {
+			if found {
+				return false
+			}
+			child = derefXPathExpr(child)
+			// Don't recurse here; handle via our custom walker for path types.
+			switch child.(type) {
+			case xpath3.PathStepExpr, xpath3.PathExpr:
+				walk(child, underNonContext)
+				return false
+			case xpath3.LocationPath:
+				walk(child, underNonContext)
+				return false
+			}
+			return true
+		})
+	}
+	walk(expr, false)
+	return found
+}
+
+// isNonContextRoot returns true if the expression is a function call or
+// variable reference (i.e. not the implicit context item).
+func isNonContextRoot(expr xpath3.Expr) bool {
+	expr = derefXPathExpr(expr)
+	switch expr.(type) {
+	case xpath3.FunctionCall:
+		return true
+	case xpath3.VariableExpr:
+		return true
+	case xpath3.FilterExpr:
+		// FilterExpr wraps a primary expression with predicates.
+		// If the inner expression is a function call or variable, it's non-context.
+		fe := expr.(xpath3.FilterExpr)
+		return isNonContextRoot(fe.Expr)
+	}
+	return false
 }
 
 // checkStreamableFunctionBody checks a function declared with streamability
