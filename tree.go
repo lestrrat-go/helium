@@ -14,7 +14,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
-	"github.com/lestrrat-go/strcursor"
+	"github.com/lestrrat-go/helium/internal/strcursor"
 )
 
 // BuildURI resolves a relative system ID against a base URI.
