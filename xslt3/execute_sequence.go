@@ -28,15 +28,11 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 	if inst.Select != nil {
 		// Default separator for select is " "
 		separator := " "
-		if inst.HasSeparator {
-			if inst.Separator != nil {
-				var err error
-				separator, err = inst.Separator.evaluate(ctx, ec.contextNode)
-				if err != nil {
-					return err
-				}
-			} else {
-				separator = ""
+		if inst.Separator != nil {
+			var err error
+			separator, err = inst.Separator.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return err
 			}
 		}
 		xpathCtx := ec.newXPathContext(ec.contextNode)
@@ -59,7 +55,7 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 	} else if len(inst.Body) > 0 {
 		// Default separator for body content is "" (zero-length string)
 		separator := ""
-		if inst.HasSeparator && inst.Separator != nil {
+		if inst.Separator != nil {
 			var err error
 			separator, err = inst.Separator.evaluate(ctx, ec.contextNode)
 			if err != nil {

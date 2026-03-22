@@ -26,7 +26,6 @@ func (c *compiler) compileValueOf(elem *helium.Element) (*ValueOfInst, error) {
 			return nil, err
 		}
 		inst.Separator = avt
-		inst.HasSeparator = true
 	}
 
 	// XTSE0350: xsl:value-of with select must not have non-whitespace content

@@ -1033,7 +1033,6 @@ func (c *compiler) compileEvaluate(elem *helium.Element) (Instruction, error) {
 			return nil, err
 		}
 		inst.SchemaAwareAVT = saAVT
-		inst.HasSchemaAware = true
 	}
 
 	// Compile child xsl:with-param elements

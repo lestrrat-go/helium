@@ -757,7 +757,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 	}
 
 	// 4b. Evaluate schema-aware AVT if present
-	if inst.HasSchemaAware && inst.SchemaAwareAVT != nil {
+	if inst.SchemaAwareAVT != nil {
 		saStr, saErr := inst.SchemaAwareAVT.evaluate(ctx, ec.contextNode)
 		if saErr != nil {
 			return saErr
