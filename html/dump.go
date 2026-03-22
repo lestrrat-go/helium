@@ -81,6 +81,14 @@ type htmlDumper struct {
 	format                bool
 	preserveCase          bool
 	noEscapeURIAttributes bool
+	// nsEmitted tracks namespace prefix→URI bindings that were actually
+	// emitted (serialized) by ancestor elements. Used to suppress
+	// redundant declarations.
+	nsEmitted map[string]string
+	// nsAvailable tracks ALL namespace prefix→URI bindings from ancestor
+	// elements, including those suppressed on non-root HTML elements.
+	// Used to find URIs for attribute namespace prefixes.
+	nsAvailable map[string]string
 }
 
 // WriteNode serializes an HTML node to the writer
@@ -278,19 +286,36 @@ func (d *htmlDumper) dumpElement(out io.Writer, e *helium.Element) error {
 	_, _ = io.WriteString(out, "<")
 	_, _ = io.WriteString(out, name)
 
-	// Namespace declarations (for non-HTML-namespace elements in HTML output)
+	// Namespace declarations for HTML output with preserveCase (XSLT HTML5).
+	//
+	// Rules:
+	// 1. Non-root HTML elements suppress prefixed namespace declarations
+	//    (HTML parsers don't process them). The bindings are still tracked
+	//    in nsAvailable so descendant non-HTML elements can pick them up.
+	// 2. The root element and non-HTML elements emit namespace declarations
+	//    that aren't already in scope (emitted by an ancestor).
+	// 3. Non-HTML elements also emit namespace declarations for any
+	//    prefixes used by their attributes that aren't already covered.
 	if d.preserveCase {
-		for _, ns := range e.Namespaces() {
-			if ns.Prefix() == "" {
-				_, _ = io.WriteString(out, " xmlns=\"")
-				_, _ = io.WriteString(out, ns.URI())
-				_, _ = io.WriteString(out, "\"")
-			} else {
-				_, _ = io.WriteString(out, " xmlns:")
-				_, _ = io.WriteString(out, ns.Prefix())
-				_, _ = io.WriteString(out, "=\"")
-				_, _ = io.WriteString(out, ns.URI())
-				_, _ = io.WriteString(out, "\"")
+		isRootElem := e.Parent() != nil && e.Parent().Type() != helium.ElementNode
+		isHTMLElem := info != nil
+		emitDecls := isRootElem || !isHTMLElem
+
+		if emitDecls {
+			// Emit declarations from this element's Namespaces() that
+			// aren't already emitted by an ancestor.
+			for _, ns := range e.Namespaces() {
+				prefix := ns.Prefix()
+				uri := ns.URI()
+				if d.nsEmitted != nil && d.nsEmitted[prefix] == uri {
+					continue
+				}
+				d.writeNSDecl(out, prefix, uri)
+			}
+			// For non-HTML elements, also emit namespace declarations
+			// for attribute prefixes not already declared or emitted.
+			if !isHTMLElem {
+				d.emitAttrNSDecls(out, e)
 			}
 		}
 	}
@@ -315,11 +340,47 @@ func (d *htmlDumper) dumpElement(out io.Writer, e *helium.Element) error {
 		_, _ = io.WriteString(out, "\n")
 	}
 
+	// Update namespace scope for children.
+	var savedEmitted, savedAvailable map[string]string
+	if d.preserveCase {
+		isRootElem := e.Parent() != nil && e.Parent().Type() != helium.ElementNode
+		isHTMLElem := info != nil
+		emitDecls := isRootElem || !isHTMLElem
+
+		savedEmitted = d.nsEmitted
+		savedAvailable = d.nsAvailable
+		newEmitted := copyMap(d.nsEmitted)
+		newAvailable := copyMap(d.nsAvailable)
+		for _, ns := range e.Namespaces() {
+			newAvailable[ns.Prefix()] = ns.URI()
+			if emitDecls {
+				newEmitted[ns.Prefix()] = ns.URI()
+			}
+		}
+		// Also track attribute namespace declarations that were emitted
+		if emitDecls && !isHTMLElem {
+			for _, attr := range e.Attributes() {
+				if p := attr.Prefix(); p != "" && attr.URI() != "" {
+					newEmitted[p] = attr.URI()
+					newAvailable[p] = attr.URI()
+				}
+			}
+		}
+		d.nsEmitted = newEmitted
+		d.nsAvailable = newAvailable
+	}
+
 	// Children
 	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
 		if err := d.dumpNode(out, child); err != nil {
 			return err
 		}
+	}
+
+	// Restore namespace scope
+	if d.preserveCase {
+		d.nsEmitted = savedEmitted
+		d.nsAvailable = savedAvailable
 	}
 
 	if d.format && shouldNewlineBeforeClose(e, info) {
@@ -399,6 +460,64 @@ func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 		_, _ = io.WriteString(out, "\"")
 	}
 	return nil
+}
+
+// writeNSDecl writes a single namespace declaration attribute.
+func (d *htmlDumper) writeNSDecl(out io.Writer, prefix, uri string) {
+	if prefix == "" {
+		_, _ = io.WriteString(out, " xmlns=\"")
+		_, _ = io.WriteString(out, uri)
+		_, _ = io.WriteString(out, "\"")
+	} else {
+		_, _ = io.WriteString(out, " xmlns:")
+		_, _ = io.WriteString(out, prefix)
+		_, _ = io.WriteString(out, "=\"")
+		_, _ = io.WriteString(out, uri)
+		_, _ = io.WriteString(out, "\"")
+	}
+}
+
+// emitAttrNSDecls emits namespace declarations for attribute prefixes
+// that aren't already declared on the element or emitted by an ancestor.
+func (d *htmlDumper) emitAttrNSDecls(out io.Writer, e *helium.Element) {
+	// Build set of prefixes already declared on this element
+	declared := make(map[string]struct{})
+	for _, ns := range e.Namespaces() {
+		declared[ns.Prefix()] = struct{}{}
+	}
+	// Check each attribute's prefix
+	seen := make(map[string]struct{})
+	for _, attr := range e.Attributes() {
+		prefix := attr.Prefix()
+		if prefix == "" {
+			continue
+		}
+		if _, ok := declared[prefix]; ok {
+			continue
+		}
+		if _, ok := seen[prefix]; ok {
+			continue
+		}
+		uri := attr.URI()
+		if uri == "" {
+			continue
+		}
+		if d.nsEmitted != nil && d.nsEmitted[prefix] == uri {
+			continue
+		}
+		seen[prefix] = struct{}{}
+		d.writeNSDecl(out, prefix, uri)
+	}
+}
+
+// copyMap returns a shallow copy of a string map. If src is nil, returns
+// an empty map.
+func copyMap(src map[string]string) map[string]string {
+	m := make(map[string]string, len(src))
+	for k, v := range src {
+		m[k] = v
+	}
+	return m
 }
 
 // uriEscapeStr percent-encodes characters that are not URI-safe.
