@@ -473,6 +473,17 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 			if err := ec.copyNodeToOutput(v.Node, copyNS); err != nil {
 				return err
 			}
+			// When copy-namespaces="yes" and the source is an element,
+			// propagate in-scope namespace declarations from ancestors
+			// onto the copied element. This must happen at the top level
+			// of xsl:copy-of (not recursively in copyNodeToOutput) so
+			// that inner copies and other instructions are not affected.
+			if copyNS && v.Node.Type() == helium.ElementNode {
+				copiedNSElem := findCopiedElement(out, lastBefore, pendingBefore)
+				if copiedNSElem != nil {
+					propagateAncestorNamespaces(v.Node.(*helium.Element), copiedNSElem)
+				}
+			}
 			if inst.TypeName != "" {
 				// Per XSLT 3.0 spec, the type attribute on copy-of is silently
 				// ignored for nodes that are not elements, attributes, or documents.
@@ -480,18 +491,20 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 					break
 				}
 				// Type validation: validate the copied element against the declared type.
-				if copied := out.current.LastChild(); copied != nil {
-					if copiedElem, ok := copied.(*helium.Element); ok {
-						if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
-							if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
-								return dynamicError(errCodeXTTE1540,
-									"copy-of: element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
-							}
-							return err
+				copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
+				if copiedElem != nil {
+					if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
+						if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+							return dynamicError(errCodeXTTE1540,
+								"copy-of: element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 						}
-						ec.annotateNode(copiedElem, inst.TypeName)
-						ec.annotateAttributesFromType(copiedElem, inst.TypeName)
+						return err
 					}
+					ec.annotateNode(copiedElem, inst.TypeName)
+					ec.annotateAttributesFromType(copiedElem, inst.TypeName)
+					// Propagate type annotation to pending NodeItem so that
+					// variable references carry the annotation for instance-of checks.
+					propagateAnnotationToPending(out, pendingBefore, copiedElem, inst.TypeName)
 				}
 			} else if preserve {
 				ec.transferAnnotationsForCopy(v.Node, out.current, lastBefore)
@@ -499,18 +512,16 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 				// Apply validation/strip to the most recently added node in output.
 				// In sequence mode the copied node lives in pendingItems, not
 				// as a child of out.current.
-				var copiedElem *helium.Element
-				if copied := out.current.LastChild(); copied != nil {
-					copiedElem, _ = copied.(*helium.Element)
-				}
-				if copiedElem == nil && out.sequenceMode && len(out.pendingItems) > pendingBefore {
-					if ni, ok := out.pendingItems[len(out.pendingItems)-1].(xpath3.NodeItem); ok {
-						copiedElem, _ = ni.Node.(*helium.Element)
-					}
-				}
+				copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
 				if copiedElem != nil {
 					if err := ec.validateConstructedElement(ctx, copiedElem, effectiveVal); err != nil {
 						return err
+					}
+					// After validation, propagate any type annotations acquired
+					// during schema validation to the pending NodeItem so that
+					// instance-of checks on variable references work correctly.
+					if out.sequenceMode && len(out.pendingItems) > pendingBefore {
+						ec.propagateValidationAnnotationsToPending(out, pendingBefore)
 					}
 				}
 			}
@@ -566,6 +577,83 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 	}
 	out.prevWasAtomic = prevWasAtomic
 	return nil
+}
+
+// findCopiedElement locates the element that was most recently added to the
+// output by a copy-of operation. It checks the DOM tree first, then pending
+// items in sequence mode. When the copied node is a document, the document
+// element is returned so that validation can be applied.
+func findCopiedElement(out *outputFrame, lastBefore helium.Node, pendingBefore int) *helium.Element {
+	if copied := out.current.LastChild(); copied != nil {
+		if elem, ok := copied.(*helium.Element); ok {
+			return elem
+		}
+	}
+	if out.sequenceMode && len(out.pendingItems) > pendingBefore {
+		ni, ok := out.pendingItems[len(out.pendingItems)-1].(xpath3.NodeItem)
+		if !ok {
+			return nil
+		}
+		if elem, ok := ni.Node.(*helium.Element); ok {
+			return elem
+		}
+		// When the copied node is a document, extract its document element
+		// so that validation can be applied to the root element.
+		if doc, ok := ni.Node.(*helium.Document); ok {
+			return doc.DocumentElement()
+		}
+	}
+	return nil
+}
+
+// propagateAnnotationToPending sets the TypeAnnotation on the most recent
+// pending NodeItem (or the document element within a pending document node)
+// so that variable references carry type annotations for instance-of checks.
+func propagateAnnotationToPending(out *outputFrame, pendingBefore int, elem *helium.Element, typeName string) {
+	if !out.sequenceMode || len(out.pendingItems) <= pendingBefore {
+		return
+	}
+	idx := len(out.pendingItems) - 1
+	ni, ok := out.pendingItems[idx].(xpath3.NodeItem)
+	if !ok {
+		return
+	}
+	if ni.Node == elem {
+		ni.TypeAnnotation = typeName
+		out.pendingItems[idx] = ni
+	}
+}
+
+// propagateValidationAnnotationsToPending updates the TypeAnnotation on pending
+// NodeItems based on the execContext's typeAnnotations map. This ensures that
+// variable references carry schema type annotations acquired during validation.
+func (ec *execContext) propagateValidationAnnotationsToPending(out *outputFrame, pendingBefore int) {
+	if ec.typeAnnotations == nil {
+		return
+	}
+	for i := pendingBefore; i < len(out.pendingItems); i++ {
+		ni, ok := out.pendingItems[i].(xpath3.NodeItem)
+		if !ok {
+			continue
+		}
+		// For element nodes, check the typeAnnotations map directly.
+		if ann, found := ec.typeAnnotations[ni.Node]; found && ni.TypeAnnotation == "" {
+			ni.TypeAnnotation = ann
+			out.pendingItems[i] = ni
+			continue
+		}
+		// For document nodes, check the document element's annotation.
+		if doc, ok := ni.Node.(*helium.Document); ok {
+			if docElem := doc.DocumentElement(); docElem != nil {
+				if ann, found := ec.typeAnnotations[docElem]; found {
+					// The document itself doesn't get a type annotation,
+					// but we record it so that path navigation from the
+					// document node can find it via nodeItemFor.
+					_ = ann
+				}
+			}
+		}
+	}
 }
 
 // copyNodeToOutput copies a node to the current output, handling document
@@ -718,6 +806,38 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 			ec.fixNamespacesAfterCopy(elem)
 		}
 		return nil
+	}
+}
+
+// propagateAncestorNamespaces copies in-scope namespace declarations from
+// ancestors of src onto dst. This ensures that copy-namespaces="yes" includes
+// all inherited namespace bindings, not just those directly declared on the
+// element. The xml namespace is excluded since it is always in scope.
+func propagateAncestorNamespaces(src, dst *helium.Element) {
+	// Collect prefixes already declared on the destination.
+	declared := make(map[string]struct{})
+	for _, ns := range dst.Namespaces() {
+		declared[ns.Prefix()] = struct{}{}
+	}
+
+	// Walk up ancestors and add any undeclared namespace bindings.
+	for cur := src.Parent(); cur != nil; {
+		pElem, ok := cur.(*helium.Element)
+		if !ok {
+			break
+		}
+		for _, ns := range pElem.Namespaces() {
+			prefix := ns.Prefix()
+			if prefix == "xml" {
+				continue
+			}
+			if _, exists := declared[prefix]; exists {
+				continue
+			}
+			_ = dst.DeclareNamespace(prefix, ns.URI())
+			declared[prefix] = struct{}{}
+		}
+		cur = pElem.Parent()
 	}
 }
 

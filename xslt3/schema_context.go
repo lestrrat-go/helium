@@ -26,10 +26,29 @@ func (r *schemaRegistry) LookupElement(local, ns string) (typeName string, ok bo
 			return xsdTypeNameFromDef(edecl.Type), true
 		}
 		if found {
+			// The element declaration's type may be nil when the XSD compiler
+			// could not resolve a type attribute that matches the element's own
+			// name (e.g., <xs:element name="foo" type="foo"/>). In this case,
+			// check for a type definition with the same QName.
+			if td, tdFound := s.LookupType(local, ns); tdFound {
+				return xsdTypeNameFromDef(td), true
+			}
 			return "xs:untyped", true
 		}
 	}
 	return "", false
+}
+
+// HasNamespace returns true if any schema in the registry has the given
+// target namespace. Used to detect whether an element's namespace is
+// governed by any imported schema.
+func (r *schemaRegistry) HasNamespace(ns string) bool {
+	for _, s := range r.schemas {
+		if s.TargetNamespace() == ns {
+			return true
+		}
+	}
+	return false
 }
 
 // LookupType returns the base type name for a schema type definition.

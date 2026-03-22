@@ -332,11 +332,10 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 			case validationLax:
 				return dynamicError(errCodeXTTE1515, "lax validation of constructed element failed: %v", valErr)
 			}
-		} else if ann == nil {
-			// No matching schema found.
+		} else if ann == nil || (len(ann) == 0 && elem.URI() != "" && !ec.schemaRegistry.HasNamespace(elem.URI())) {
+			// No matching schema found, or the element's namespace is not
+			// covered by any imported schema.
 			if validation == validationStrict {
-				// Strict validation: unknown validity = failure if element is in a
-				// schema-governed namespace but has no matching declaration.
 				elemNS := elem.URI()
 				elemLocal := elem.LocalName()
 				if _, found := ec.schemaRegistry.LookupElement(elemLocal, elemNS); !found {
@@ -373,6 +372,16 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 		// the temp tree and live tree in parallel.
 		if len(ann) > 0 {
 			ec.mapAnnotationsFromValidation(ann, copied, elem)
+		}
+		// When the XSD validator returns empty annotations (e.g., because the
+		// element declaration's type was not resolved due to a name collision
+		// with a global element), look up the element's type directly from the
+		// schema registry and annotate the element so that instance-of checks
+		// work correctly.
+		if ec.typeAnnotations[elem] == "" && valErr == nil {
+			if typeName, found := ec.schemaRegistry.LookupElement(elem.LocalName(), elem.URI()); found && typeName != "" {
+				ec.annotateNode(elem, typeName)
+			}
 		}
 		return nil
 	}
