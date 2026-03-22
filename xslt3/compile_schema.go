@@ -126,13 +126,13 @@ func checkTypedModePatterns(ss *Stylesheet) error {
 		}
 		// Map modeDefs key to modeTemplates key: "#default" → ""
 		templateKey := modeName
-		if templateKey == "#default" {
+		if templateKey == modeDefault {
 			templateKey = ""
 		}
 		templates := ss.modeTemplates[templateKey]
 		// Also include #all templates
-		if templateKey != "#all" {
-			templates = append(templates, ss.modeTemplates["#all"]...)
+		if templateKey != modeAll {
+			templates = append(templates, ss.modeTemplates[modeAll]...)
 		}
 		for _, tmpl := range templates {
 			if tmpl.Match == nil {

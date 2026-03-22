@@ -137,7 +137,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 					return staticError(errCodeXTSE0280, "undeclared namespace prefix %q in mode name %q", prefix, m)
 				}
 			}
-			if m == "#all" {
+			if m == modeAll {
 				hasAll = true
 			}
 			if _, dup := seenModes[m]; dup {
@@ -307,15 +307,15 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 
 // registerTemplateInModes adds a template to the appropriate mode template lists.
 func (c *compiler) registerTemplateInModes(tmpl *Template, mode string) {
-	if mode == "#all" {
+	if mode == modeAll {
 		// Register in all existing modes plus default
 		for m := range c.stylesheet.modeTemplates {
 			c.stylesheet.modeTemplates[m] = append(c.stylesheet.modeTemplates[m], tmpl)
 		}
 		c.stylesheet.modeTemplates[""] = append(c.stylesheet.modeTemplates[""], tmpl)
-		// Also store under the "#all" key so findBestTemplate's fallback
+		// Also store under the modeAll key so findBestTemplate's fallback
 		// can find these templates for modes that don't exist yet.
-		c.stylesheet.modeTemplates["#all"] = append(c.stylesheet.modeTemplates["#all"], tmpl)
+		c.stylesheet.modeTemplates[modeAll] = append(c.stylesheet.modeTemplates[modeAll], tmpl)
 		return
 	}
 	// XSLT 2.0+: mode can be a whitespace-separated list of mode names.
@@ -323,17 +323,17 @@ func (c *compiler) registerTemplateInModes(tmpl *Template, mode string) {
 	modes := strings.Fields(mode)
 	if len(modes) <= 1 {
 		// Single mode (or empty = default mode)
-		if mode == "#default" || mode == "#unnamed" {
+		if mode == modeDefault || mode == modeUnnamed {
 			mode = ""
 		}
 		c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
 	} else {
 		for _, m := range modes {
-			if m == "#default" || m == "#unnamed" {
+			if m == modeDefault || m == modeUnnamed {
 				m = ""
-			} else if m == "#all" {
+			} else if m == modeAll {
 				// In a mode list, #all means register in all modes
-				c.stylesheet.modeTemplates["#all"] = append(c.stylesheet.modeTemplates["#all"], tmpl)
+				c.stylesheet.modeTemplates[modeAll] = append(c.stylesheet.modeTemplates[modeAll], tmpl)
 				continue
 			}
 			c.stylesheet.modeTemplates[m] = append(c.stylesheet.modeTemplates[m], tmpl)

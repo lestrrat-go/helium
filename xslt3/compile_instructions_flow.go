@@ -35,7 +35,7 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 	// Resolve mode QName to Clark notation (namespace-aware)
 	mode = c.resolveMode(mode)
 	// Record mode usage for XTSE3085 checking
-	if mode != "#current" {
+	if mode != modeCurrent {
 		c.recordModeUsage(mode)
 	}
 	inst := &ApplyTemplatesInst{

@@ -37,7 +37,7 @@ func analyzeStreamability(ss *Stylesheet) error {
 	// Check templates in streamable modes for non-streamable constructs.
 	for _, tmpl := range ss.templates {
 		modeName, ok := streamabilityModeNameForTemplate(tmpl)
-		if !ok || modeName == "#all" {
+		if !ok || modeName == modeAll {
 			continue
 		}
 		md := ss.modeDefs[modeName]
@@ -141,7 +141,7 @@ func streamabilityModeNameForTemplate(tmpl *Template) (string, bool) {
 		return "", false
 	}
 	if tmpl.Mode == "" {
-		return "#default", true
+		return modeDefault, true
 	}
 	return tmpl.Mode, true
 }

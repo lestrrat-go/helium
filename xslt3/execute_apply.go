@@ -52,7 +52,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 	}
 
 	mode := inst.Mode
-	if mode == "#current" {
+	if mode == modeCurrent {
 		mode = ec.currentMode
 	}
 	// When mode is absent (empty), use the stylesheet's default-mode
@@ -170,8 +170,8 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 		// Check mode's on-no-match: for "deep-skip" and "shallow-skip",
 		// unmatched atomic items are silently skipped.
 		modeKey := mode
-		if modeKey == "" || modeKey == "#unnamed" {
-			modeKey = "#default"
+		if modeKey == "" || modeKey == modeUnnamed {
+			modeKey = modeDefault
 		}
 		modeDef := ec.stylesheet.modeDefs[modeKey]
 		if modeDef != nil && (modeDef.OnNoMatch == "deep-skip" || modeDef.OnNoMatch == "shallow-skip") {

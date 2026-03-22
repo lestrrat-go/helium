@@ -277,7 +277,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 
 	name := strings.TrimSpace(getAttr(elem, "name"))
 	if name == "" {
-		name = "#default"
+		name = modeDefault
 	} else if name[0] != '#' {
 		// Resolve QName to Clark notation so mode declarations and mode
 		// references (on xsl:template/@mode, xsl:apply-templates/@mode)
@@ -335,7 +335,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 
 	visibility := strings.TrimSpace(getAttr(elem, "visibility"))
 	// XTSE0020: unnamed mode cannot have visibility="public" or "final"
-	if name == "#default" && (visibility == visPublic || visibility == visFinal) {
+	if name == modeDefault && (visibility == visPublic || visibility == visFinal) {
 		return staticError(errCodeXTSE0020, "unnamed mode cannot have visibility %q", visibility)
 	}
 
