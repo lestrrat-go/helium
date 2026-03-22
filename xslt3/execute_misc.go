@@ -207,7 +207,7 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopula
 	}
 
 	hasSignificantChild := false
-	for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(tmpRoot) {
 		if isPopulated(child) {
 			hasSignificantChild = true
 			break
@@ -235,13 +235,13 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopula
 	}
 
 	// Copy significant child nodes to real output.
-	for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(tmpRoot) {
 		if !isPopulated(child) {
 			continue
 		}
 		if child.Type() == helium.DocumentNode {
 			doc := child.(*helium.Document)
-			for dc := doc.FirstChild(); dc != nil; dc = dc.NextSibling() {
+			for dc := range helium.Children(doc) {
 				copied, copyErr := helium.CopyNode(dc, ec.resultDoc)
 				if copyErr != nil {
 					return copyErr
@@ -291,7 +291,7 @@ func (ec *execContext) execWherePopulatedSequence(ctx context.Context, inst *Whe
 func isPopulated(node helium.Node) bool {
 	switch node.Type() {
 	case helium.ElementNode, helium.DocumentNode:
-		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(node) {
 			switch child.Type() {
 			case helium.ElementNode:
 				return true

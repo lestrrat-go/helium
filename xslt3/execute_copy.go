@@ -123,7 +123,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		if isDocument {
 			out := ec.currentOutput()
 			// Find the root element in the copied output.
-			for child := out.current.FirstChild(); child != nil; child = child.NextSibling() {
+			for child := range helium.Children(out.current) {
 				if copiedElem, ok := child.(*helium.Element); ok {
 					if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
 						return err
@@ -351,7 +351,7 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 			return err
 		}
 		// Copy children from the temporary document to the current output.
-		for child := newDoc.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(newDoc) {
 			if addErr := ec.copyNodeToOutput(child); addErr != nil {
 				return addErr
 			}
@@ -532,7 +532,7 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 				helium.CopyDTDInfo(srcDoc, newDoc)
 				newDoc.SetURL(srcDoc.URL())
 			}
-			for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			for child := range helium.Children(node) {
 				copied, err := helium.CopyNode(child, newDoc)
 				if err != nil {
 					return err
@@ -554,7 +554,7 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 				helium.CopyDTDInfo(srcDoc, targetDoc)
 			}
 		}
-		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(node) {
 			if err := ec.copyNodeToOutput(child, copyNS); err != nil {
 				return err
 			}
@@ -708,7 +708,7 @@ func (ec *execContext) copyElementNoNamespaces(src *helium.Element) error {
 	savedSeqMode := out.sequenceMode
 	out.current = elem
 	out.sequenceMode = false
-	for child := src.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(src) {
 		if err := ec.copyNodeToOutput(child, false); err != nil {
 			out.current = savedCurrent
 			out.sequenceMode = savedSeqMode

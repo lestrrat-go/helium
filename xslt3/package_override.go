@@ -31,7 +31,7 @@ func (c *compiler) processOverrides(usePackageElem *helium.Element, pkg *Stylesh
 		attributeSets:  make(map[string]*AttributeSetDef),
 	}
 
-	for child := usePackageElem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(usePackageElem) {
 		elem, ok := child.(*helium.Element)
 		if !ok || elem.URI() != lexicon.NamespaceXSLT || elem.LocalName() != xslElemOverride {
 			continue
@@ -50,7 +50,7 @@ func (c *compiler) compileOverrideChildren(overrideElem *helium.Element, pkg *St
 	// Push namespace bindings from override element
 	c.collectNamespaces(overrideElem)
 
-	for child := overrideElem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(overrideElem) {
 		elem, ok := child.(*helium.Element)
 		if !ok {
 			// Check for non-whitespace text nodes
@@ -492,7 +492,7 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 		}
 	}
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue

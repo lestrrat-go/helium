@@ -1082,7 +1082,7 @@ func (ec *execContext) walkAccumulatorTree(ctx context.Context, node helium.Node
 
 	ec.storeAccumulatorSnapshot(ec.accumulatorBeforeByNode, ec.accumulatorBeforeErrorByNode, node, ec.accumulatorState, ec.accumulatorStateError)
 
-	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(node) {
 		if err := ec.walkAccumulatorTree(ctx, child, names); err != nil {
 			return err
 		}

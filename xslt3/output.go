@@ -1172,7 +1172,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 // countRootElements counts the number of element children of the document root.
 func countRootElements(doc *helium.Document) int {
 	count := 0
-	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(doc) {
 		if child.Type() == helium.ElementNode {
 			count++
 		}
@@ -1478,14 +1478,14 @@ func elemMatchesSuppressSet(elem *helium.Element, suppressSet map[string]struct{
 
 func collectChildren(n helium.Node) []helium.Node {
 	var children []helium.Node
-	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(n) {
 		children = append(children, child)
 	}
 	return children
 }
 
 func elemHasChildElements(elem *helium.Element) bool {
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() == helium.ElementNode {
 			return true
 		}
@@ -1749,7 +1749,7 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 			nodeOpts = append(nodeOpts, htmlpkg.WithNoEscapeURIAttributes())
 		}
 		doctypeEmitted := false
-		for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(doc) {
 			if child.Type() == helium.DTDNode {
 				continue
 			}
@@ -2481,7 +2481,7 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 	}
 	// Find the <head> element (case-insensitive, using local name for namespace support).
 	var head *helium.Element
-	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(root) {
 		if e, ok := child.(*helium.Element); ok && strings.EqualFold(string(e.LocalName()), "head") {
 			head = e
 			break
@@ -2502,7 +2502,7 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 
 	// Check if a <meta http-equiv="Content-Type"> already exists.
 	// If so, update its content attribute to match the output encoding.
-	for child := head.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(head) {
 		if e, ok := child.(*helium.Element); ok && strings.EqualFold(string(e.LocalName()), "meta") {
 			for _, attr := range e.Attributes() {
 				if strings.EqualFold(attr.Name(), "http-equiv") && strings.EqualFold(attr.Value(), "Content-Type") {

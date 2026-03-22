@@ -210,7 +210,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	// If one occurred inside the try body, copy the buffered output (produced
 	// before the signal) to the real output and propagate the signal.
 	if tryErr != nil && (errors.Is(tryErr, errBreak) || errors.Is(tryErr, errNextIter)) {
-		for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(tmpRoot) {
 			copied, copyErr := helium.CopyNode(child, ec.resultDoc)
 			if copyErr != nil {
 				return copyErr
@@ -224,7 +224,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 
 	if tryErr == nil {
 		// Success — copy buffered output to real output
-		for child := tmpRoot.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(tmpRoot) {
 			copied, copyErr := helium.CopyNode(child, ec.resultDoc)
 			if copyErr != nil {
 				return copyErr

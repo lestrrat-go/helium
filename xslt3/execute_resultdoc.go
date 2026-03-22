@@ -15,7 +15,7 @@ import (
 // Returns XTTE1550 on violation.
 func validateDocumentStructure(doc *helium.Document) error {
 	elemCount := 0
-	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(doc) {
 		switch child.Type() {
 		case helium.ElementNode:
 			elemCount++
@@ -117,7 +117,7 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 		preserveAnnotations := inst.Validation == "preserve"
 		if preserveAnnotations {
 			var children []helium.Node
-			for child := tmpDoc.FirstChild(); child != nil; child = child.NextSibling() {
+			for child := range helium.Children(tmpDoc) {
 				children = append(children, child)
 			}
 			for _, child := range children {
@@ -127,7 +127,7 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 				}
 			}
 		} else {
-			for child := tmpDoc.FirstChild(); child != nil; child = child.NextSibling() {
+			for child := range helium.Children(tmpDoc) {
 				if err := ec.copyNodeToOutput(child); err != nil {
 					return err
 				}

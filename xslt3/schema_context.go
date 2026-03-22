@@ -535,7 +535,7 @@ func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) 
 
 // findDocumentElement returns the root element of a document, or nil.
 func findDocumentElement(doc *helium.Document) *helium.Element {
-	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(doc) {
 		if child.Type() == helium.ElementNode {
 			return child.(*helium.Element)
 		}

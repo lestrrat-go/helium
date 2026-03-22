@@ -440,7 +440,7 @@ func (ec *execContext) stripAnnotations(node helium.Node) {
 			delete(ec.typeAnnotations, attr)
 		}
 	}
-	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(node) {
 		ec.stripAnnotations(child)
 	}
 }
@@ -868,7 +868,7 @@ func undeclareInheritedNamespaces(parent *helium.Element) {
 	if len(inScope) == 0 {
 		return
 	}
-	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(parent) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
@@ -936,7 +936,7 @@ func removeRedundantDescendantUndecls(elem *helium.Element) {
 	for _, ns := range elem.Namespaces() {
 		bindings[ns.Prefix()] = ns.URI()
 	}
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			continue
