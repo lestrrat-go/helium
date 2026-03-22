@@ -1345,10 +1345,92 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst Instruction) error {
 			if err := checkFocusChangingCurrentGroup(v.Body); err != nil {
 				return err
 			}
+
+			// Check if apply-templates selects current-group() and the target
+			// streaming mode templates use current-group().  current-group() is
+			// not available in applied templates, so this is a static error.
+			if err := checkApplyTemplatesCurrentGroup(ss, v.Body); err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
+}
+
+// checkApplyTemplatesCurrentGroup checks if any apply-templates instruction
+// in a for-each-group body selects current-group() and applies to a streaming
+// mode whose templates use current-group() outside of their own for-each-group.
+// current-group() is not available in applied templates, so using it there is
+// a static streamability error.
+func checkApplyTemplatesCurrentGroup(ss *Stylesheet, body []Instruction) error {
+	for _, inst := range body {
+		if at, ok := inst.(*ApplyTemplatesInst); ok {
+			if at.Select != nil && exprUsesCurrentGroup(at.Select) {
+				modeName := at.Mode
+				if modeName == "" || modeName == "#current" {
+					modeName = "#default"
+				}
+				md := ss.modeDefs[modeName]
+				if md != nil && md.Streamable {
+					// Check if any template in this mode uses current-group()
+					// at the top level (not inside a nested for-each-group).
+					for _, tmpl := range ss.templates {
+						tmplMode, ok := streamabilityModeNameForTemplate(tmpl)
+						if !ok || tmplMode != modeName {
+							continue
+						}
+						if bodyUsesCurrentGroupOutsideFEG(tmpl.Body) {
+							return staticError(errCodeXTSE3430,
+								"xsl:apply-templates select=\"current-group()\" targets streaming mode %q whose templates use current-group(), which is not streamable",
+								modeName)
+						}
+					}
+				}
+			}
+		}
+		// Recurse into child instructions (e.g., LREs wrapping apply-templates).
+		for _, children := range getChildInstructions(inst) {
+			if err := checkApplyTemplatesCurrentGroup(ss, children); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// bodyUsesCurrentGroupOutsideFEG checks if any instruction in the body uses
+// current-group() outside of a for-each-group instruction.  Usage inside a
+// nested for-each-group refers to that inner group, not the outer one.
+func bodyUsesCurrentGroupOutsideFEG(body []Instruction) bool {
+	for _, bi := range body {
+		// Skip for-each-group — its body establishes a new group context.
+		if _, ok := bi.(*ForEachGroupInst); ok {
+			continue
+		}
+		for _, expr := range getInstructionExprs(bi) {
+			if expr == nil {
+				continue
+			}
+			if xpath3.ExprUsesFunction(expr, "current-group") {
+				return true
+			}
+		}
+		// Check LRE attribute AVTs (not covered by getInstructionExprs).
+		if lre, ok := bi.(*LiteralResultElement); ok {
+			for _, attr := range lre.Attrs {
+				if attr.Value.hasFunction("current-group") {
+					return true
+				}
+			}
+		}
+		for _, children := range getChildInstructions(bi) {
+			if bodyUsesCurrentGroupOutsideFEG(children) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // checkUseAttributeSetsStreamable checks that attribute sets used in a streaming
@@ -2382,6 +2464,14 @@ func exprHasContextOnlyDownward(expr xpath3.Expr) bool {
 				lp := *v.Path
 				walk(lp, underNonContext || filterIsNonContext)
 			}
+			return
+		case xpath3.SimpleMapExpr:
+			// SimpleMapExpr (E1 ! E2): if the left side is a non-context root
+			// (e.g., current-group()), the right side's steps navigate from the
+			// map result, not from the context item.
+			leftIsNonContext := isNonContextRoot(v.Left)
+			walk(v.Left, underNonContext)
+			walk(v.Right, underNonContext || leftIsNonContext)
 			return
 		case xpath3.LocationPath:
 			if underNonContext {

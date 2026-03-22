@@ -340,15 +340,26 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 	// xsl:context-item use="absent": make the context item absent within the
 	// called template's body. This means xsl:next-match will fail with
 	// XTDE0560 because there is no context node to match against.
+	// Also clear current-group/current-grouping-key because the template
+	// has declared it does not use the context, so group functions should
+	// raise XTDE1061/XTDE1071.
 	savedContextNode := ec.contextNode
 	savedContextItem := ec.contextItem
 	savedCurrentNode := ec.currentNode
 	savedCurrentTemplate := ec.currentTemplate
+	savedGroup := ec.currentGroup
+	savedGroupKey := ec.currentGroupKey
+	savedInGroupCtx := ec.inGroupContext
+	savedGroupHasKey := ec.groupHasKey
 	if tmpl.ContextItemUse == ctxItemAbsent {
 		ec.contextNode = nil
 		ec.contextItem = nil
 		ec.currentNode = nil
 		ec.setCurrentTemplate(nil)
+		ec.currentGroup = nil
+		ec.currentGroupKey = nil
+		ec.inGroupContext = false
+		ec.groupHasKey = false
 	}
 	defer func() {
 		ec.cachedFnsNS = savedFnsNS
@@ -359,6 +370,10 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 			ec.contextItem = savedContextItem
 			ec.currentNode = savedCurrentNode
 			ec.setCurrentTemplate(savedCurrentTemplate)
+			ec.currentGroup = savedGroup
+			ec.currentGroupKey = savedGroupKey
+			ec.inGroupContext = savedInGroupCtx
+			ec.groupHasKey = savedGroupHasKey
 		}
 	}()
 
