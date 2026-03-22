@@ -20,7 +20,10 @@ func (c *compiler) resolveRefs() {
 				continue
 			}
 			// First check if this is a reference to a global element.
-			if ge, ok := c.schema.elements[qn]; ok {
+			// Skip self-referencing elements (where the element name matches
+			// the type name, e.g., <xs:element name="X" type="X"/>); these
+			// should resolve against the type map instead.
+			if ge, ok := c.schema.elements[qn]; ok && ge != edecl {
 				edecl.Type = ge.Type
 				if edecl.Default == nil {
 					edecl.Default = ge.Default

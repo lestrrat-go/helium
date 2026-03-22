@@ -66,6 +66,9 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 					}
 					return err
 				}
+				// Annotate the root element with the validated type so that
+				// subsequent instance-of checks can see it.
+				ec.annotateNode(root, inst.TypeName)
 			}
 		}
 	}
@@ -80,9 +83,20 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 		if ec.schemaRegistry != nil {
 			ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
 			if valErr != nil && v == validationStrict {
-				return dynamicError(errCodeXTTE1540, "validation of document node failed: %v", valErr)
+				return dynamicError(errCodeXTTE1510, "validation of document node failed: %v", valErr)
 			}
 			if valErr == nil && v == validationStrict {
+				// XTTE1510: strict validation requires a matching schema.
+				// If no annotations were produced, no schema matched.
+				if len(ann) == 0 {
+					root := findDocumentElement(tmpDoc)
+					rootNS := ""
+					if root != nil {
+						rootNS = root.URI()
+					}
+					return dynamicError(errCodeXTTE1510,
+						"no matching schema declaration for document element in namespace %q", rootNS)
+				}
 				// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
 				if err := ValidateDocIDConstraints(tmpDoc, ann); err != nil {
 					return err
@@ -112,9 +126,10 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 		}
 	} else {
 		// Move children from tmpDoc to the parent output. When validation
-		// is "preserve", move nodes directly (unlink + addNode) so that
-		// type annotations keyed by node pointer are preserved.
-		preserveAnnotations := inst.Validation == validationPreserve
+		// produced type annotations (strict, lax, preserve, or type="..."),
+		// move nodes directly (unlink + addNode) so that annotations keyed
+		// by node pointer are preserved.
+		preserveAnnotations := inst.Validation == validationPreserve || inst.Validation == validationStrict || inst.Validation == validationLax || inst.TypeName != ""
 		if preserveAnnotations {
 			var children []helium.Node
 			for child := range helium.Children(tmpDoc) {

@@ -536,15 +536,19 @@ func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) 
 		}
 	}
 
-	// No namespace match — try schemas with empty target namespace.
-	for _, s := range r.schemas {
-		if s.TargetNamespace() == "" {
-			var ann xsd.TypeAnnotations
-			err := xsd.Validate(ctx, doc, s, xsd.WithAnnotations(&ann))
-			if err != nil {
-				return ann, err
+	// No namespace match — try schemas with empty target namespace, but only
+	// when the document root is also in no namespace. A no-namespace schema
+	// should not validate elements in a different namespace.
+	if rootNS == "" {
+		for _, s := range r.schemas {
+			if s.TargetNamespace() == "" {
+				var ann xsd.TypeAnnotations
+				err := xsd.Validate(ctx, doc, s, xsd.WithAnnotations(&ann))
+				if err != nil {
+					return ann, err
+				}
+				return ann, nil
 			}
-			return ann, nil
 		}
 	}
 

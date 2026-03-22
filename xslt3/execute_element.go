@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -179,6 +180,11 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 	// failure.
 	if inst.TypeName != "" {
 		if err := ec.validateAndNormalizeElementContent(elem, inst.TypeName); err != nil {
+			// XTTE1540: content does not match the declared type.
+			if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+				return dynamicError(errCodeXTTE1540,
+					"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
+			}
 			return err
 		}
 		ec.annotateAttributesFromType(elem, inst.TypeName)
@@ -339,7 +345,7 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 				elemNS := elem.URI()
 				elemLocal := elem.LocalName()
 				if _, found := ec.schemaRegistry.LookupElement(elemLocal, elemNS); !found {
-					return dynamicError(errCodeXTTE1510,
+					return dynamicError(errCodeXTTE1512,
 						"no schema declaration found for element {%s}%s (validation=strict)", elemNS, elemLocal)
 				}
 			}
