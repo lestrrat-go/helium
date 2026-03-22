@@ -110,7 +110,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ec *evalContext, e DynamicFun
 		if v.Arity >= 0 && len(args) != v.Arity {
 			return nil, fmt.Errorf("%w: expected %d arguments, got %d", ErrArityMismatch, v.Arity, len(args))
 		}
-		return v.Invoke(withFnContext(ec.goCtx, ec), args)
+		return v.Invoke(withDynamicCall(withFnContext(ec.goCtx, ec)), args)
 	case MapItem:
 		// Maps are functions: $map($key) → value
 		if len(args) != 1 || len(args[0]) != 1 {

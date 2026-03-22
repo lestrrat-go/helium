@@ -18,6 +18,21 @@ type contextKey struct{}
 // exposed to external callers.
 type fnContextKey struct{}
 
+// dynamicCallKey marks a function call as originating from a dynamic
+// function reference (e.g. $f(args) where $f holds a named function ref).
+type dynamicCallKey struct{}
+
+func withDynamicCall(ctx context.Context) context.Context {
+	return context.WithValue(ctx, dynamicCallKey{}, true)
+}
+
+// IsDynamicCall returns true if the current function call was dispatched
+// through a dynamic function reference (NamedFunctionRef → FunctionItem).
+func IsDynamicCall(ctx context.Context) bool {
+	v, _ := ctx.Value(dynamicCallKey{}).(bool)
+	return v
+}
+
 // QualifiedName identifies a function in a specific namespace.
 type QualifiedName struct {
 	URI  string
