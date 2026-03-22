@@ -242,13 +242,13 @@ func (ec *execContext) resolveResultDocMethod(ctx context.Context, inst *ResultD
 	if outDef, ok := ec.stylesheet.outputs[""]; ok {
 		return outDef.Method
 	}
-	return "xml"
+	return methodXML
 }
 
 // isItemSerializationMethod returns true when the output method supports
 // non-node items (maps, arrays, function items) without XTDE0450.
 func isItemSerializationMethod(method string) bool {
-	return method == "json" || method == "adaptive"
+	return method == methodJSON || method == methodAdaptive
 }
 
 func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocumentInst) error {
@@ -482,7 +482,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 			return err
 		}
 		// Validate JSON duplicate keys (SERE0022) when allow-duplicate-names is not "yes".
-		if effectiveMethod == "json" {
+		if effectiveMethod == methodJSON {
 			allowDupes := false // default: allow-duplicate-names=no per XSLT 3.0 §20
 			if inst.AllowDuplicateNames != nil {
 				adnVal, adnErr := inst.AllowDuplicateNames.evaluate(ctx, ec.contextNode)

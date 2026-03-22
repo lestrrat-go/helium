@@ -196,7 +196,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 		if !strings.Contains(methodStr, ":") {
 			// No-prefix: must be a known method
 			switch methodStr {
-			case "xml", "html", "xhtml", "text", "json", "adaptive":
+			case methodXML, methodHTML, methodXHTML, methodText, methodJSON, methodAdaptive:
 				// valid
 			default:
 				return staticError("XTSE1570", "invalid output method %q", methodStr)
@@ -218,7 +218,7 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 	}
 
 	if outDef.Method == "" {
-		outDef.Method = "xml"
+		outDef.Method = methodXML
 	}
 	if outDef.Encoding == "" {
 		outDef.Encoding = "UTF-8"

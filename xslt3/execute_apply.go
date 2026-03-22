@@ -174,7 +174,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 			modeKey = modeDefault
 		}
 		modeDef := ec.stylesheet.modeDefs[modeKey]
-		if modeDef != nil && (modeDef.OnNoMatch == "deep-skip" || modeDef.OnNoMatch == "shallow-skip") {
+		if modeDef != nil && (modeDef.OnNoMatch == onNoMatchDeepSkip || modeDef.OnNoMatch == onNoMatchShallowSkip) {
 			continue
 		}
 		av, err := xpath3.AtomizeItem(item)

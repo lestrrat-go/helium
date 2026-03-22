@@ -300,7 +300,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	onNoMatch := strings.TrimSpace(getAttr(elem, "on-no-match"))
 	if onNoMatch != "" {
 		switch onNoMatch {
-		case "text-only-copy", "shallow-copy", "deep-copy", "shallow-skip", "deep-skip", "fail":
+		case onNoMatchTextOnlyCopy, onNoMatchShallowCopy, onNoMatchDeepCopy, onNoMatchShallowSkip, onNoMatchDeepSkip, onNoMatchFail:
 			// valid
 		default:
 			return staticError(errCodeXTSE0020, "invalid value %q for on-no-match on xsl:mode", onNoMatch)
@@ -342,7 +342,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	onMultipleMatch := strings.TrimSpace(getAttr(elem, "on-multiple-match"))
 	if onMultipleMatch != "" {
 		switch onMultipleMatch {
-		case "use-last", "fail":
+		case "use-last", onNoMatchFail:
 			// valid
 		default:
 			return staticError(errCodeXTSE0020, "invalid value %q for on-multiple-match on xsl:mode", onMultipleMatch)

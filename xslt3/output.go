@@ -71,7 +71,7 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 		outDef = defaultOutputDef()
 	}
 	switch outDef.Method {
-	case "json":
+	case methodJSON:
 		if len(outDef.ResolvedCharMap) > 0 {
 			var buf strings.Builder
 			if err := serializeJSONItems(&buf, items, doc, outDef); err != nil {
@@ -81,7 +81,7 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 			return err
 		}
 		return serializeJSONItems(w, items, doc, outDef)
-	case "adaptive":
+	case methodAdaptive:
 		return serializeAdaptiveItems(w, items, doc, outDef.ItemSeparator, outDef.ResolvedCharMap)
 	default:
 		if len(items) > 0 {
@@ -166,15 +166,15 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 
 	// XSLT 3.0 §20: When no output method is explicitly specified, auto-detect
 	// based on the document element.
-	if !outDef.MethodExplicit && outDef.Method == "xml" {
+	if !outDef.MethodExplicit && outDef.Method == methodXML {
 		if root := doc.DocumentElement(); root != nil {
 			if strings.EqualFold(root.Name(), "html") && root.URI() == "" {
 				// Root is "html" in no namespace → HTML output method.
-				outDef.Method = "html"
+				outDef.Method = methodHTML
 				outDef.OmitDeclaration = true
 			} else if strings.EqualFold(string(root.LocalName()), "html") && string(root.URI()) == lexicon.NamespaceXHTML {
 				// Root is "html" in XHTML namespace → XHTML output method.
-				outDef.Method = "xhtml"
+				outDef.Method = methodXHTML
 			}
 		}
 	}
@@ -237,9 +237,9 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 
 	var err error
 	switch outDef.Method {
-	case "text":
+	case methodText:
 		err = serializeText(target, doc, serCharMap)
-	case "html":
+	case methodHTML:
 		var htmlBuf bytes.Buffer
 		err = serializeHTML(&htmlBuf, doc, outDef)
 		if err != nil {
@@ -250,9 +250,9 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 			result = applyCharMapToHTMLText(result, serCharMap)
 		}
 		_, err = io.WriteString(target, escapeC1ControlsInString(result))
-	case "xhtml":
+	case methodXHTML:
 		err = serializeXHTML(target, doc, outDef, serCharMap)
-	case "json":
+	case methodJSON:
 		if len(serCharMap) == 0 {
 			err = serializeJSONItems(target, nil, doc, outDef)
 			break
@@ -263,7 +263,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 			break
 		}
 		_, err = io.WriteString(target, applyCharMapJSON(jsonBuf.String(), serCharMap))
-	case "adaptive":
+	case methodAdaptive:
 		err = serializeAdaptiveItems(target, nil, doc, outDef.ItemSeparator, serCharMap)
 	default:
 		err = serializeXML(target, doc, outDef, serCharMap)
@@ -389,10 +389,10 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 func serializeNodeWithMethod(node helium.Node, method string) string {
 	var buf bytes.Buffer
 	switch method {
-	case "html":
+	case methodHTML:
 		doc := wrapNodeInHTMLDoc(node)
 		outDef := defaultOutputDef()
-		outDef.Method = "html"
+		outDef.Method = methodHTML
 		outDef.OmitDeclaration = true
 		_ = serializeHTML(&buf, doc, outDef)
 		s := buf.String()
@@ -402,13 +402,13 @@ func serializeNodeWithMethod(node helium.Node, method string) string {
 			s = strings.TrimSuffix(s, "</html>")
 		}
 		return s
-	case "xhtml":
+	case methodXHTML:
 		doc := wrapNodeInDoc(node)
 		outDef := defaultOutputDef()
-		outDef.Method = "xhtml"
+		outDef.Method = methodXHTML
 		_ = serializeXHTML(&buf, doc, outDef, nil)
 		return buf.String()
-	case "text":
+	case methodText:
 		return nodeStringValue(node)
 	default: // "xml" or empty
 		if elem, ok := node.(*helium.Element); ok {
@@ -503,7 +503,7 @@ func serializeItemJSON(item xpath3.Item, nodeMethod string) (string, error) {
 	case xpath3.ArrayItem:
 		return serializeArrayJSON(v, nodeMethod)
 	case xpath3.NodeItem:
-		if nodeMethod != "" && nodeMethod != "text" {
+		if nodeMethod != "" && nodeMethod != methodText {
 			return jsonEscapeString(serializeNodeWithMethod(v.Node, nodeMethod)), nil
 		}
 		return jsonEscapeString(nodeStringValue(v.Node)), nil
@@ -1050,7 +1050,7 @@ func transcodeToEncoding(w io.Writer, utf8Data []byte, encName string) error {
 
 func defaultOutputDef() *OutputDef {
 	return &OutputDef{
-		Method:   "xml",
+		Method:   methodXML,
 		Encoding: "UTF-8",
 		Version:  "1.0",
 	}
@@ -1063,7 +1063,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 
 	// SEPM0004: standalone != "omit" with multiple element children of root
 	if outDef.Standalone == lexicon.ValueYes || outDef.Standalone == lexicon.ValueNo {
-		if method == "xml" || method == "xhtml" {
+		if method == methodXML || method == methodXHTML {
 			elemCount := countRootElements(doc)
 			if elemCount > 1 {
 				return dynamicError(errCodeSEPM0004,
@@ -1074,7 +1074,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 
 	// SEPM0004: doctype-system with multiple element children of root
 	if outDef.DoctypeSystem != "" {
-		if method == "xml" || method == "xhtml" {
+		if method == methodXML || method == methodXHTML {
 			elemCount := countRootElements(doc)
 			if elemCount > 1 {
 				return dynamicError(errCodeSEPM0004,
@@ -1085,7 +1085,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 
 	// SEPM0009: omit-xml-declaration="yes" conflicts with standalone or doctype-system
 	// Only applicable for xml/xhtml methods — text/html/json don't have XML declarations.
-	if outDef.OmitDeclaration && (method == "xml" || method == "xhtml") {
+	if outDef.OmitDeclaration && (method == methodXML || method == methodXHTML) {
 		if outDef.Standalone == lexicon.ValueYes || outDef.Standalone == lexicon.ValueNo {
 			return dynamicError(errCodeSEPM0009,
 				"omit-xml-declaration=\"yes\" conflicts with standalone=%q", outDef.Standalone)
@@ -1123,7 +1123,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 	}
 
 	// SESU0007: unsupported version for html output (only when method explicitly set)
-	if method == "html" && outDef.MethodExplicit && outDef.Version != "" {
+	if method == methodHTML && outDef.MethodExplicit && outDef.Version != "" {
 		v, err := strconv.ParseFloat(outDef.Version, 64)
 		if err == nil && v != 4.0 && v != 4.01 && v != 5.0 {
 			return dynamicError(errCodeSESU0007,
@@ -1153,14 +1153,14 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 	// HTML5 allows these characters as character references, so skip for version >= 5.
 	// For HTML 4.x, raise the error as required by the spec.
 	// XSLT 3.0 §20: the default value of html-version is 5.
-	if method == "html" && !effectiveHTMLVersion5(outDef) {
+	if method == methodHTML && !effectiveHTMLVersion5(outDef) {
 		if err := checkHTMLInvalidChars(doc); err != nil {
 			return err
 		}
 	}
 
 	// SERE0015: ">" in PI content for HTML output
-	if method == "html" {
+	if method == methodHTML {
 		if err := checkHTMLPIContent(doc); err != nil {
 			return err
 		}
