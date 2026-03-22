@@ -126,16 +126,18 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 	defer func() { ec.staticBaseURIOverride = savedBaseOverride }()
 
 	// Push new output context for children.
-	// Temporarily disable sequenceMode so that children are added to this
-	// element normally (not captured as separate items in the sequence).
+	// Temporarily disable sequenceMode and captureItems so that children
+	// are added to this element normally (not captured as separate items).
 	out := ec.currentOutput()
 	savedCurrent := out.current
 	savedPrevAtomic := out.prevWasAtomic
 	savedSeqMode := out.sequenceMode
+	savedCapture := out.captureItems
 	savedWherePop := out.wherePopulated
 	out.current = elem
 	out.prevWasAtomic = false
 	out.sequenceMode = false
+	out.captureItems = false
 	// Clear wherePopulated inside the element body so that xsl:document
 	// unwraps its children normally (same rationale as LRE — see
 	// execLiteralResultElement).
@@ -144,6 +146,7 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 		out.current = savedCurrent
 		out.prevWasAtomic = savedPrevAtomic
 		out.sequenceMode = savedSeqMode
+		out.captureItems = savedCapture
 		out.wherePopulated = savedWherePop
 	}()
 
