@@ -2278,12 +2278,18 @@ func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, gro
 		count += countStreamingDownwardSelectionsInner(ss, e.Left, false)
 		count += countStreamingDownwardSelectionsInner(ss, e.Right, false)
 	case xpath3.SimpleMapExpr:
-		count += countStreamingDownwardSelectionsInner(ss, e.Left, false)
-		// The RHS of ! receives individual items from the LHS.
-		// If the LHS is a grounding expression, the RHS operates on
-		// grounded data and doesn't consume the stream.
+		// The ! operator processes items sequentially — the RHS operates
+		// on each item from the LHS. Like a path expression, left and right
+		// form a single combined downward selection, not two separate ones.
 		leftGrounding := isGroundingExprSS(ss, e.Left)
-		count += countStreamingDownwardSelectionsInner(ss, e.Right, leftGrounding)
+		leftCount := countStreamingDownwardSelectionsInner(ss, e.Left, false)
+		rightCount := countStreamingDownwardSelectionsInner(ss, e.Right, leftGrounding)
+		if leftCount > 0 && rightCount > 0 {
+			// Left and right form a single combined path.
+			count += rightCount
+		} else {
+			count += leftCount + rightCount
+		}
 	case xpath3.UnionExpr:
 		// A union of two downward selections is a single combined streaming
 		// selection (the result is one merged node sequence), so count at
