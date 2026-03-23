@@ -10,6 +10,19 @@ import (
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
+// EvaluatorOption controls Evaluator construction behavior.
+type EvaluatorOption uint32
+
+const (
+	// EvalBorrowing makes all setters skip map/slice cloning.
+	// The caller must not mutate borrowed data for the lifetime of
+	// derived evaluators, contexts, and eval states.
+	EvalBorrowing EvaluatorOption = 1 << iota
+)
+
+// DefaultEvaluatorOptions is the zero value — all setters clone by default.
+const DefaultEvaluatorOptions EvaluatorOption = 0
+
 // Evaluator configures XPath 3.1 expression evaluation.
 // It is a value-style wrapper: fluent methods return updated copies
 // and the original is never mutated. The terminal method Evaluate
@@ -20,6 +33,7 @@ type Evaluator struct {
 }
 
 type evaluatorCfg struct {
+	options            EvaluatorOption
 	namespaces         map[string]string
 	variables          *Variables
 	functions          *FunctionLibrary
@@ -46,9 +60,15 @@ type evaluatorCfg struct {
 	docOrder           *DocOrderCache
 }
 
-// NewEvaluator creates a new Evaluator with default settings.
-func NewEvaluator() Evaluator {
-	return Evaluator{cfg: &evaluatorCfg{}}
+// NewEvaluator creates a new Evaluator with the given options.
+// Use DefaultEvaluatorOptions for safe cloning behavior.
+// Use EvalBorrowing for internal callers that own their data.
+func NewEvaluator(flags EvaluatorOption) Evaluator {
+	return Evaluator{cfg: &evaluatorCfg{options: flags}}
+}
+
+func (e Evaluator) borrowing() bool {
+	return e.cfg.options&EvalBorrowing != 0
 }
 
 func (e Evaluator) clone() Evaluator {
@@ -57,26 +77,38 @@ func (e Evaluator) clone() Evaluator {
 }
 
 // Namespaces binds namespace prefixes to URIs for the evaluation.
-// The map is cloned.
+// The map is cloned unless EvalBorrowing is set.
 func (e Evaluator) Namespaces(ns map[string]string) Evaluator {
 	e = e.clone()
-	e.cfg.namespaces = maps.Clone(ns)
+	if e.borrowing() {
+		e.cfg.namespaces = ns
+	} else {
+		e.cfg.namespaces = maps.Clone(ns)
+	}
 	return e
 }
 
 // Variables sets the variable bindings for the evaluation.
-// The Variables collection is cloned.
+// The Variables collection is cloned unless EvalBorrowing is set.
 func (e Evaluator) Variables(v *Variables) Evaluator {
 	e = e.clone()
-	e.cfg.variables = v.Clone()
+	if e.borrowing() {
+		e.cfg.variables = v
+	} else {
+		e.cfg.variables = v.Clone()
+	}
 	return e
 }
 
 // Functions sets the user-defined function library for the evaluation.
-// The FunctionLibrary is cloned.
+// The FunctionLibrary is cloned unless EvalBorrowing is set.
 func (e Evaluator) Functions(f *FunctionLibrary) Evaluator {
 	e = e.clone()
-	e.cfg.functions = f.Clone()
+	if e.borrowing() {
+		e.cfg.functions = f
+	} else {
+		e.cfg.functions = f.Clone()
+	}
 	return e
 }
 
@@ -138,10 +170,15 @@ func (e Evaluator) DefaultDecimalFormat(df DecimalFormat) Evaluator {
 	return e
 }
 
-// NamedDecimalFormats sets named decimal formats. The map is cloned.
+// NamedDecimalFormats sets named decimal formats.
+// The map is cloned unless EvalBorrowing is set.
 func (e Evaluator) NamedDecimalFormats(dfs map[QualifiedName]DecimalFormat) Evaluator {
 	e = e.clone()
-	e.cfg.decimalFormats = maps.Clone(dfs)
+	if e.borrowing() {
+		e.cfg.decimalFormats = dfs
+	} else {
+		e.cfg.decimalFormats = maps.Clone(dfs)
+	}
 	return e
 }
 
@@ -195,10 +232,14 @@ func (e Evaluator) ContextItem(item Item) Evaluator {
 }
 
 // TypeAnnotations sets the type annotation map for schema-aware evaluation.
-// The map is cloned.
+// The map is cloned unless EvalBorrowing is set.
 func (e Evaluator) TypeAnnotations(annotations map[helium.Node]string) Evaluator {
 	e = e.clone()
-	e.cfg.typeAnnotations = maps.Clone(annotations)
+	if e.borrowing() {
+		e.cfg.typeAnnotations = annotations
+	} else {
+		e.cfg.typeAnnotations = maps.Clone(annotations)
+	}
 	return e
 }
 
@@ -312,6 +353,7 @@ func (e Evaluator) newEvalCtx(ctx context.Context, node helium.Node) *evalContex
 	ec.typeAnnotations = cfg.typeAnnotations
 	ec.schemaDeclarations = cfg.schemaDeclarations
 	ec.strictPrefixes = cfg.strictPrefixes
+	ec.allowXML11Chars = cfg.allowXML11Chars
 
 	// dynamic focus overrides
 	if cfg.position > 0 {

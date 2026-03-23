@@ -52,6 +52,7 @@ type evalContext struct {
 	functionResolver   FunctionResolver       // lazy resolver for functions (not visible to function-lookup)
 	strictPrefixes     bool                   // skip defaultPrefixNS fallback in prefix validation
 	schemaDeclarations SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
+	allowXML11Chars    bool                   // when true, codepoints-to-string allows XML 1.1 restricted characters (0x01-0x1F)
 }
 
 type variableScope struct {

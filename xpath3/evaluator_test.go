@@ -18,7 +18,7 @@ func TestEvaluator(t *testing.T) {
 		expr, err := compiler.Compile("//a/text()")
 		require.NoError(t, err)
 
-		result, err := xpath3.NewEvaluator().
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 			Evaluate(t.Context(), expr, doc)
 		require.NoError(t, err)
 
@@ -35,7 +35,7 @@ func TestEvaluator(t *testing.T) {
 		vars := xpath3.NewVariables()
 		vars.Set("x", xpath3.SingleString("test-value"))
 
-		result, err := xpath3.NewEvaluator().
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 			Variables(vars).
 			Evaluate(t.Context(), expr, doc)
 		require.NoError(t, err)
@@ -52,7 +52,7 @@ func TestEvaluator(t *testing.T) {
 		expr, err := compiler.Compile("//ns:item/text()")
 		require.NoError(t, err)
 
-		result, err := xpath3.NewEvaluator().
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 			Namespaces(map[string]string{"ns": "http://example.com"}).
 			Evaluate(t.Context(), expr, nsDoc)
 		require.NoError(t, err)
@@ -67,7 +67,7 @@ func TestEvaluator(t *testing.T) {
 		expr, err := compiler.Compile("$x")
 		require.NoError(t, err)
 
-		base := xpath3.NewEvaluator()
+		base := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 
 		vars1 := xpath3.NewVariables()
 		vars1.Set("x", xpath3.SingleString("one"))
@@ -93,7 +93,7 @@ func TestEvaluator(t *testing.T) {
 
 	t.Run("MustCompile", func(t *testing.T) {
 		expr := compiler.MustCompile("1 + 2")
-		result, err := xpath3.NewEvaluator().
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 			Evaluate(t.Context(), expr, doc)
 		require.NoError(t, err)
 

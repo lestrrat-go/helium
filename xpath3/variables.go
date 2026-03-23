@@ -14,6 +14,14 @@ func NewVariables() *Variables {
 	return &Variables{}
 }
 
+// VariablesFromMap wraps a raw variable map without cloning.
+// The caller retains ownership of the map. Typically used with
+// NewEvaluator(EvalBorrowing) by internal callers that already own
+// the data.
+func VariablesFromMap(vars map[string]Sequence) *Variables {
+	return &Variables{values: vars}
+}
+
 // Set binds a variable name to a Sequence value.
 func (v *Variables) Set(name string, value Sequence) {
 	if v.values == nil {

@@ -15,6 +15,14 @@ func NewFunctionLibrary() *FunctionLibrary {
 	return &FunctionLibrary{}
 }
 
+// FunctionLibraryFromMaps wraps raw function maps without cloning.
+// The caller retains ownership of the maps. Typically used with
+// NewEvaluator(EvalBorrowing) by internal callers that already own
+// the data.
+func FunctionLibraryFromMaps(byLocal map[string]Function, byQName map[QualifiedName]Function) *FunctionLibrary {
+	return &FunctionLibrary{byLocal: byLocal, byQName: byQName}
+}
+
 // Set registers a function by local name (for unqualified function calls).
 func (f *FunctionLibrary) Set(name string, fn Function) {
 	if f.byLocal == nil {
