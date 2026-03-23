@@ -497,12 +497,25 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 			return false
 		}
 		if test.Inner != nil {
+			// document-node(E) matches when the document has exactly one element
+			// child, no text node children, and that element matches E.
+			var elemCount int
+			var matchedInner bool
 			for c := range helium.Children(n) {
-				if matchNodeTest(test.Inner, c, AxisChild, ec) {
-					return true
+				switch c.Type() {
+				case helium.ElementNode:
+					elemCount++
+					if elemCount > 1 {
+						return false
+					}
+					if matchNodeTest(test.Inner, c, AxisChild, ec) {
+						matchedInner = true
+					}
+				case helium.TextNode:
+					return false
 				}
 			}
-			return false
+			return elemCount == 1 && matchedInner
 		}
 		return true
 	case SchemaElementTest:
