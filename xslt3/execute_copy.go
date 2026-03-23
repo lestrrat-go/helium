@@ -3,6 +3,7 @@ package xslt3
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/sequence"
@@ -608,6 +609,12 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 			}
 			// Transfer accumulator state when copy-accumulators="yes"
 			if inst.CopyAccumulators && len(ec.stylesheet.accumulators) > 0 {
+				// XTDE3362: check that accumulators are applicable
+				// to the source document. This requires explicit
+				// use-accumulators on the processing mode.
+				if err := ec.checkCopyAccumulators(v.Node); err != nil {
+					return err
+				}
 				_ = ec.ensureAccumulatorStates(ctx, v.Node)
 				// Identify the copied node: check DOM tree first, then pendingItems (sequence mode)
 				var copiedNode helium.Node
@@ -1065,8 +1072,138 @@ func (ec *execContext) copyElementNoNamespaces(src *helium.Element) error {
 	out.current = savedCurrent
 	out.sequenceMode = savedSeqMode
 
+	// copy-namespaces="no": children within the copy subtree must not
+	// inherit namespace declarations that were added to this element for
+	// its own well-formedness (element name / attribute names). Undeclare
+	// such bindings on each direct child element that does not itself
+	// require them.
+	undeclareParentCopyNS(elem)
+
 	if err := ec.addNode(elem); err != nil {
 		return err
+	}
+	// After inserting the element into the result tree, fix namespace
+	// declarations relative to the new parent (e.g. add xmlns=""
+	// undeclarations to prevent inheriting the parent's default namespace
+	// when the element is not in that namespace).
+	ec.fixNamespacesAfterCopy(elem)
+	return nil
+}
+
+// undeclareParentCopyNS adds namespace undeclarations on each direct child
+// element of parent for every namespace declared on parent that the child
+// does not itself require. This prevents copy-internal namespace leakage:
+// when copy-namespaces="no", a parent element may need a namespace for its
+// name/attributes, but children should not inherit those bindings.
+func undeclareParentCopyNS(parent *helium.Element) {
+	// Collect namespaces declared on the parent.
+	parentNS := parent.Namespaces()
+	if len(parentNS) == 0 {
+		return
+	}
+
+	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		// Collect prefixes that the child needs.
+		childNeeded := make(map[string]struct{})
+		if childElem.URI() != "" {
+			childNeeded[childElem.Prefix()] = struct{}{}
+		}
+		for _, a := range childElem.Attributes() {
+			if a.URI() != "" {
+				childNeeded[a.Prefix()] = struct{}{}
+			}
+		}
+		// Collect prefixes already declared on the child.
+		childDeclared := make(map[string]struct{})
+		for _, ns := range childElem.Namespaces() {
+			childDeclared[ns.Prefix()] = struct{}{}
+		}
+
+		for _, ns := range parentNS {
+			prefix := ns.Prefix()
+			if prefix == "xml" {
+				continue
+			}
+			// Skip if the child already declares this prefix.
+			if _, ok := childDeclared[prefix]; ok {
+				continue
+			}
+			// Skip if the child needs this prefix.
+			if _, ok := childNeeded[prefix]; ok {
+				continue
+			}
+			// Undeclare: the child doesn't need this binding.
+			_ = childElem.DeclareNamespace(prefix, "")
+			childDeclared[prefix] = struct{}{}
+		}
+	}
+}
+
+// checkCopyAccumulators verifies that all accumulators declared in the
+// stylesheet are applicable to the tree containing node. This implements
+// the XTDE3362 check for xsl:copy-of/@copy-accumulators="yes".
+// An accumulator is applicable to a source document only if the initial
+// mode explicitly lists it via use-accumulators.
+func (ec *execContext) checkCopyAccumulators(node helium.Node) error {
+	if len(ec.stylesheet.accumulators) == 0 {
+		return nil
+	}
+
+	// When there is an activeAccumulators set (e.g. from xsl:source-document),
+	// the document-level applicability already restricts access.
+	if ec.activeAccumulators != nil {
+		for name := range ec.stylesheet.accumulators {
+			if _, ok := ec.activeAccumulators[name]; !ok {
+				return dynamicError(errCodeXTDE3362,
+					"accumulator %q is not applicable to the source document (copy-accumulators)", name)
+			}
+		}
+		return nil
+	}
+
+	// Only check mode-level use-accumulators for nodes from the initial
+	// source document. Variable/RTF trees have accumulators computed
+	// lazily and are always accessible.
+	root := documentRoot(node)
+	if root != ec.sourceDoc {
+		return nil
+	}
+
+	// Determine the mode definition for the initial mode.
+	md := ec.stylesheet.modeDefs[ec.currentMode]
+	if md == nil {
+		md = ec.stylesheet.modeDefs[modeDefault]
+	}
+
+	// When no explicit xsl:mode declaration exists, the mode has no
+	// use-accumulators attribute. For the initial source document,
+	// accumulators are only applicable if the mode declares them.
+	if md == nil {
+		return dynamicError(errCodeXTDE3362,
+			"copy-accumulators requires use-accumulators on the processing mode")
+	}
+	// When use-accumulators attribute is absent (nil), the default is
+	// "#all" per XSLT 3.0 spec — all accumulators are applicable.
+	if md.UseAccumulators == nil {
+		return nil
+	}
+	ua := *md.UseAccumulators
+	if ua == "#all" {
+		return nil
+	}
+	allowed := make(map[string]struct{})
+	for _, n := range strings.Fields(ua) {
+		allowed[n] = struct{}{}
+	}
+	for name := range ec.stylesheet.accumulators {
+		if _, ok := allowed[name]; !ok {
+			return dynamicError(errCodeXTDE3362,
+				"accumulator %q is not applicable to the source document (copy-accumulators)", name)
+		}
 	}
 	return nil
 }
