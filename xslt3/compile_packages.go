@@ -1,7 +1,6 @@
 package xslt3
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -14,6 +13,9 @@ import (
 // referenced package, then merging its public components into the current
 // stylesheet.
 func (c *compiler) compileUsePackage(elem *helium.Element) error {
+	if err := c.ctx.Err(); err != nil {
+		return err
+	}
 	pkgName := getAttr(elem, "name")
 	if pkgName == "" {
 		return staticError(errCodeXTSE0010, "xsl:use-package requires name attribute")
@@ -38,8 +40,7 @@ func (c *compiler) compileUsePackage(elem *helium.Element) error {
 		return fmt.Errorf("xsl:use-package: cannot read package %q: %w", pkgName, err)
 	}
 
-	ctx := context.Background()
-	doc, err := helium.Parse(ctx, data)
+	doc, err := helium.Parse(c.ctx, data)
 	if err != nil {
 		return fmt.Errorf("xsl:use-package: cannot parse package %q: %w", pkgName, err)
 	}
@@ -50,7 +51,7 @@ func (c *compiler) compileUsePackage(elem *helium.Element) error {
 		resolver:        c.resolver,
 		packageResolver: c.packageResolver,
 	}
-	pkgSS, err := compile(doc, pkgCfg)
+	pkgSS, err := compile(c.ctx, doc, pkgCfg)
 	if err != nil {
 		return fmt.Errorf("xsl:use-package: cannot compile package %q: %w", pkgName, err)
 	}

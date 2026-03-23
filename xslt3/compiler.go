@@ -89,7 +89,7 @@ func (c Compiler) ClearStaticParameters() Compiler {
 // Compile compiles a parsed XSLT stylesheet document into a reusable
 // Stylesheet. ctx is used for cancellation/deadlines.
 func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Stylesheet, error) {
-	return compile(doc, c.toCompileConfig())
+	return compile(ctx, doc, c.toCompileConfig())
 }
 
 // MustCompile is like Compile but panics on error.

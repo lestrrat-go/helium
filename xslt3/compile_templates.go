@@ -15,6 +15,9 @@ var templateAllowedAttrs = map[string]struct{}{
 }
 
 func (c *compiler) compileTemplate(elem *helium.Element) error {
+	if err := c.ctx.Err(); err != nil {
+		return err
+	}
 	if err := c.validateXSLTAttrs(elem, templateAllowedAttrs); err != nil {
 		return err
 	}

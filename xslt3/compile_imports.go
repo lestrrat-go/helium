@@ -138,7 +138,10 @@ func (c *compiler) loadAndCacheInclude(uri, importKey string) (*helium.Element, 
 		return root, nil
 	}
 
-	ctx := context.Background()
+	if err := c.ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	var data []byte
 	var err error
 
@@ -159,7 +162,7 @@ func (c *compiler) loadAndCacheInclude(uri, importKey string) (*helium.Element, 
 		}
 	}
 
-	doc, err := parseStylesheetDocument(ctx, data, uri)
+	doc, err := parseStylesheetDocument(c.ctx, data, uri)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse %q: %w", uri, err)
 	}
@@ -222,6 +225,9 @@ func (c *compiler) loadAndCacheInclude(uri, importKey string) (*helium.Element, 
 // It compiles all non-import declarations from the cached included document
 // in document order, interleaving with nested includes' templates.
 func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
+	if err := c.ctx.Err(); err != nil {
+		return err
+	}
 	uri, importKey, err := c.resolveIncludeURI(elem)
 	if err != nil {
 		return err
@@ -284,7 +290,7 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 					if len(c.staticVars) > 0 {
 						eval = eval.Variables(xpath3.VariablesFromMap(c.staticVars))
 					}
-					result, err := eval.Evaluate(context.Background(), compiled, nil)
+					result, err := eval.Evaluate(c.ctx, compiled, nil)
 					if err == nil {
 						if setErr := c.setStaticVarWithKind(name, ln, result.Sequence()); setErr != nil {
 							return setErr
@@ -411,6 +417,10 @@ func stylesheetBaseURI(n helium.Node, fallback string) string {
 }
 
 func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) error {
+	if err := c.ctx.Err(); err != nil {
+		return err
+	}
+
 	// Extract fragment identifier (e.g. "file.xml#embedded" → fragment="embedded").
 	// The fragment selects an embedded stylesheet element by ID within the document.
 	var fragment string
@@ -438,7 +448,6 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 	defer delete(c.importStack, importKey)
 
 	// Load the document
-	ctx := context.Background()
 	var data []byte
 	var err error
 
@@ -460,7 +469,7 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 		}
 	}
 
-	doc, err := parseStylesheetDocument(ctx, data, uri)
+	doc, err := parseStylesheetDocument(c.ctx, data, uri)
 	if err != nil {
 		return fmt.Errorf("cannot parse %q: %w", uri, err)
 	}
@@ -496,7 +505,7 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 	if importedRoot.URI() != lexicon.NamespaceXSLT {
 		if _, ok := importedRoot.GetAttributeNS("version", lexicon.NamespaceXSLT); ok {
 			// Simplified stylesheet — compile as a single template matching "/"
-			simplified, err := compileSimplified(doc, importedRoot, &compileConfig{baseURI: uri})
+			simplified, err := compileSimplified(c.ctx, doc, importedRoot, &compileConfig{baseURI: uri})
 			if err != nil {
 				return err
 			}
@@ -590,13 +599,18 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 
 // compileSimplified compiles a simplified stylesheet (literal result element
 // as root).
-func compileSimplified(doc *helium.Document, root *helium.Element, cfg *compileConfig) (*Stylesheet, error) {
+func compileSimplified(ctx context.Context, doc *helium.Document, root *helium.Element, cfg *compileConfig) (*Stylesheet, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	// XTSE0150: simplified stylesheet must have xsl:version attribute
 	if _, ok := root.GetAttributeNS("version", lexicon.NamespaceXSLT); !ok {
 		return nil, staticError(errCodeXTSE0150,
 			"simplified stylesheet (literal result element) must have an xsl:version attribute")
 	}
 	c := &compiler{
+		ctx: ctx,
 		stylesheet: &Stylesheet{
 			version:          "3.0",
 			namedTemplates:   make(map[string]*Template),

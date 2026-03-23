@@ -1,7 +1,6 @@
 package xslt3
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -34,8 +33,7 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 			uri = filepath.Join(baseDir, schemaLoc)
 		}
 
-		ctx := context.Background()
-		schema, err := xsd.CompileFile(ctx, uri)
+		schema, err := xsd.CompileFile(c.ctx, uri)
 		if err != nil {
 			return fmt.Errorf("xsl:import-schema: cannot compile %q: %w", uri, err)
 		}
@@ -82,12 +80,11 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 			if err := inlineDoc.AddChild(copied); err != nil {
 				return fmt.Errorf("xsl:import-schema: cannot build inline schema doc: %w", err)
 			}
-			ctx := context.Background()
 			var inlineOpts []xsd.CompileOption
 			if c.baseURI != "" {
 				inlineOpts = append(inlineOpts, xsd.WithBaseDir(filepath.Dir(c.baseURI)))
 			}
-			schema, err := xsd.Compile(ctx, inlineDoc, inlineOpts...)
+			schema, err := xsd.Compile(c.ctx, inlineDoc, inlineOpts...)
 			if err != nil {
 				return fmt.Errorf("xsl:import-schema: cannot compile inline schema: %w", err)
 			}
