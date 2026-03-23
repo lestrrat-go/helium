@@ -522,13 +522,12 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 				}
 			}
 			if inst.TypeName != "" {
-				// XTTE1535: type attribute on copy-of with a complex type requires
-				// element or document nodes. Simple types may annotate attributes too.
+				// Per XSLT 3.0 spec Section 11.9.4, the type attribute on copy-of
+				// is silently ignored for nodes that are not elements, attributes,
+				// or document nodes.
 				nt := v.Node.Type()
-				if nt != helium.ElementNode && nt != helium.DocumentNode && ec.isComplexType(inst.TypeName) {
-					return dynamicError(errCodeXTTE1535,
-						"xsl:copy-of type=%q: copied node is %s, not an element or document node",
-						inst.TypeName, nt)
+				if nt != helium.ElementNode && nt != helium.AttributeNode && nt != helium.DocumentNode {
+					break
 				}
 				// Attribute type validation: check the attribute value against the declared type.
 				if v.Node.Type() == helium.AttributeNode {
