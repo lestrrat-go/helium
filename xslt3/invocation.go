@@ -57,6 +57,11 @@ type Invocation struct {
 	cfg *invocationCfg
 }
 
+// invocationCfg holds the configuration for an Invocation.
+// ss is always non-nil: all Invocation constructors are methods on
+// *Stylesheet (see stylesheet_entry.go), so a nil stylesheet can only
+// arise from a nil-pointer method call, which is a caller bug.
+// validate() intentionally does not check for nil ss.
 type invocationCfg struct {
 	ss *Stylesheet
 
