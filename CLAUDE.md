@@ -24,7 +24,6 @@ Read the linked doc BEFORE working in that area. No exceptions.
 | Cross-package imports | `.claude/docs/dependencies.md` |
 | Working with `context.Context`, package `Context` payloads, carrier/accessor patterns | `.claude/docs/context.md` |
 | Feature status, test counts, known gaps, ParseOption support | `.claude/docs/libxml2-parity.md` |
-| Maintainability review, legacy-code triage, exhaustive review requests | `.claude/docs/maintainability-review.md` |
 | Writing/running tests, golden files, test data, helpers | `.claude/docs/testing.md` |
 | Error types, format strings, ErrorHandler, ValidateError | `.claude/docs/error-formatting.md` |
 | Parse pipeline, encoding, entities, SAX→DOM, push parser | `.claude/docs/parser-internals.md` |
@@ -38,7 +37,6 @@ Read the linked doc BEFORE working in that area. No exceptions.
 | XPath 3.1 lexer, parser, AST nodes | `.claude/docs/xpath3-parser.md` |
 | XPath 3.1 evaluator, comparison, casting | `.claude/docs/xpath3-eval.md` |
 | XPath 3.1 function system, built-in categories | `.claude/docs/xpath3-functions.md` |
-| XPath 3.1 phased tasks, dependencies, risks | `.claude/docs/xpath3-tasks.md` |
 | Saxon-HE source layout (reference) | `.claude/docs/saxon-layout.md` |
 
 ## Cache Maintenance
@@ -54,7 +52,6 @@ These docs cache repository state. Still read source before modifying code.
 | `dependencies.md` | Inter-package import changes |
 | `context.md` | `context.Context` conventions, package `Context` payload pattern, `NewContext`/`GetContext` guidance changes |
 | `libxml2-parity.md` | Test count, parser limitation, feature, or ParseOption changes |
-| `maintainability-review.md` | Maintainability review workflow, coverage rules, or reporting guidance changes |
 | `testing.md` | Test data layout, helper, env var, or test pattern changes |
 | `error-formatting.md` | Error format, error type, or ErrorHandler changes |
 | `parser-internals.md` | Parse pipeline, encoding, entity, SAX, or parserCtx changes |
@@ -68,5 +65,4 @@ These docs cache repository state. Still read source before modifying code.
 | `xpath3-parser.md` | Lexer, parser, AST node, token type changes |
 | `xpath3-eval.md` | Evaluator, comparison, casting logic changes |
 | `xpath3-functions.md` | Function registry, built-in function additions/changes |
-| `xpath3-tasks.md` | Task completion, dependency, or risk changes |
 | `saxon-layout.md` | Reference layout updates |

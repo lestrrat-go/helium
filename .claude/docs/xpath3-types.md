@@ -51,8 +51,8 @@ type AtomicValue struct {
 | Constant | XSD Type | Go type |
 |----------|----------|---------|
 | `TypeString` | xs:string | `string` |
-| `TypeInteger` | xs:integer | `int64` |
-| `TypeDecimal` | xs:decimal | `string` (v1; float64 for arithmetic) |
+| `TypeInteger` | xs:integer | `*big.Int` |
+| `TypeDecimal` | xs:decimal | `*big.Rat` |
 | `TypeDouble` | xs:double | `float64` |
 | `TypeFloat` | xs:float | `float64` |
 | `TypeBoolean` | xs:boolean | `bool` |

@@ -11,7 +11,7 @@ xpath1/              → XPath 1.0 (unchanged public API, refactored to use inte
 ## Import Graph
 
 ```
-xpath3 → internal/xpath → helium
+xpath3 → internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence → helium
 xpath1 → internal/xpath → helium
 ```
 
@@ -66,28 +66,52 @@ func NodePrefix(n helium.Node) string
 |------|----------|
 | `xpath3.go` | Public API: `Compile`, `Evaluate`, `Find`, `Expression`, `Result`, `Context`, errors |
 | `types.go` | `Item`, `AtomicValue`, `NodeItem`, `FunctionItem`, `MapItem`, `ArrayItem`, atomic type consts |
+| `float_value.go` | Float/double special value handling |
 | `sequence.go` | `Sequence`, helpers: `SingleNode`, `SingleString`, `EBV`, `AtomizeSequence` |
 | `expr.go` | All AST node types, `NodeTest` variants, `SequenceType` |
 | `token.go` | `TokenType` constants (60+) |
 | `lexer.go` | One-pass tokenizer |
 | `parser.go` | Recursive descent parser |
 | `compile_direct.go` | `Compile()` fast path for simple path-like expressions and simple predicate comparisons, with shared parser fallback |
+| `compiler.go` | AST lowering to VM instructions |
 | `eval.go` | `evalContext`, raw AST eval trampoline |
 | `eval_dispatch.go` | Shared dispatch used by raw eval + VM |
-| `vm.go` | AST lowering to indexed instruction graph + VM executor |
-| `vm_dump.go` | Text disassembly for compiled VM instructions |
 | `eval_path.go` | Location paths, node tests, predicates, literal/variable/sequence eval |
 | `eval_operators.go` | Binary/unary logic ops, concat, simple map, range, union, intersect/except, filter, path steps |
 | `eval_arithmetic.go` | Integer/decimal/float arithmetic, unary negation, type promotion helpers |
 | `eval_control.go` | FLWOR, quantified, if/else, try/catch, lookup expressions |
 | `eval_types.go` | instanceof, cast, castable, treat-as, sequence type matching |
 | `eval_funcall.go` | Function calls, dynamic calls, inline functions, partial application, map/array constructors |
+| `eval_reuse.go` | Shared eval helpers reused by VM |
+| `eval_state.go` | Eval context state management |
+| `evaluator.go` | Expression evaluator interface |
+| `vm.go` | AST lowering to indexed instruction graph + VM executor |
+| `vm_dump.go` | Text disassembly for compiled VM instructions |
 | `compare.go` | `GeneralCompare`, `ValueCompare`, `NodeCompare`, type promotion |
 | `cast.go` | `CastAtomic`, `CastFromString` |
+| `cast_numeric.go` | Numeric-specific casting |
+| `cast_string.go` | String-specific casting |
+| `cast_datetime.go` | Date/time casting |
+| `context.go` | Context configuration (evalConfig) |
+| `variables.go` | Variable binding management |
+| `collation.go` | Collation support |
+| `regex.go` | XPath regex→Go regex translation |
+| `regex_public.go` | Public regex API |
+| `static_check.go` | Static expression checks |
+| `streamability.go` | XPath AST inspection for XSLT streamability analysis |
+| `node_identity.go` | Node identity comparison |
+| `uri_resolution.go` | URI resolution for fn:doc, fn:unparsed-text |
+| `arithmetic_datetime.go` | Date/time arithmetic |
+| `parse_ietf_date.go` | IETF date format parsing |
+| `format_datetime.go` | format-date/dateTime/time |
+| `format_integer.go` | format-integer |
+| `format_number.go` | format-number |
+| `function_library.go` | Function library management |
+| `function_signatures.go` | Function signature declarations |
 | `functions.go` | `Function` interface, `FunctionContext`, registry, `builtinFunc`, `registerFn`/`registerNS` helpers |
 | `functions_node.go` | node-name, local-name, namespace-uri, name, root, path, id, lang, etc. |
 | `functions_string.go` | string ops, regex (matches, replace, tokenize), upper/lower-case |
-| `functions_numeric.go` | abs, ceiling, floor, round, round-half-to-even, format-integer, format-number |
+| `functions_numeric.go` | abs, ceiling, floor, round, round-half-to-even |
 | `functions_boolean.go` | boolean, not, true, false |
 | `functions_aggregate.go` | count, sum, avg, min, max, distinct-values |
 | `functions_sequence.go` | empty, exists, head, tail, subsequence, insert-before, remove, reverse, etc. |
@@ -98,9 +122,13 @@ func NodePrefix(n helium.Node) string
 | `functions_map.go` | map:merge, map:size, map:keys, map:contains, map:get, map:put, etc. |
 | `functions_array.go` | array:size, array:get, array:put, array:append, array:subarray, etc. |
 | `functions_math.go` | math:pi, math:exp, math:log, math:sqrt, math:sin, math:cos, etc. |
+| `functions_json.go` | parse-json, json-doc, json-to-xml, xml-to-json, serialize |
 | `functions_error.go` | error, trace |
 | `functions_misc.go` | static-base-uri, default-collation, environment-variable, current-dateTime, generate-id |
+| `functions_constructors.go` | XSD typed atomic constructors |
+| `functions_unparsed_text.go` | unparsed-text, unparsed-text-lines, unparsed-text-available |
 | `errors.go` | `XPathError` (structured error with code), standard error constructors |
+| `doc.go` | Package documentation |
 
 ## Runtime Model
 

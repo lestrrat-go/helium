@@ -122,6 +122,3 @@ Primary file: `internal/cli/heliumcmd/schematron_validate.go`
 - Each XML input parsed with `helium.NewParser()` + validated with `schematron.Validate()`
 - Validation passes `schematron.WithFilename(input.name)` so error output names the current XML source
 
-## Planned Commands
-
-- `helium xslt`

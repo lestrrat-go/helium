@@ -46,6 +46,8 @@ These affect multiple packages (especially C14N test skips):
 | Catalog | OASIS XML Catalog, public/system ID resolution, URI resolution, catalog chaining, URN support |
 | XML Writer | Streaming output, namespace scopes, indentation, DTD internal subsets, self-close optimization |
 | Serialization | WriteDoc, WriteNode, formatted output, encoding handling |
+| XPath 3.1 | Full expression eval, FLWOR, maps, arrays, inline functions, HOFs, 100+ built-in functions, VM compiler |
+| XSLT 3.0 | Templates, apply/call, include/import, functions, keys, sort, number, for-each-group, streaming instructions, schema awareness, accumulator, merge |
 
 ### Partial / Limited
 
@@ -61,7 +63,6 @@ These affect multiple packages (especially C14N test skips):
 
 | Feature | libxml2 Equivalent | Notes |
 |---------|-------------------|-------|
-| XSLT | libxslt | Out of scope for v1 |
 | Reader API | xmlTextReader | No pull-parser equivalent |
 | Pattern API | xmlPattern | No compiled pattern matching |
 | SAX/streaming validation | xmlSchemaSAXPlug | XSD/RELAX NG are DOM-only |

@@ -72,8 +72,8 @@ XPath 3.1 expression parsing and evaluation.
 - Structured errors: XPathError with W3C error codes (XPTY0004, FOER0000, etc.)
 - Limits: recursion 5000, node-set 10M, configurable op limit
 - Runtime: `Compile()` first tries a direct fast path for simple path-like expressions and simple predicate comparisons, otherwise lowers AST to a VM instruction graph while collecting the prefix-validation plan, keeping trivial leaves inline in parent payloads and reusing parsed slices on the owned compile path; `Evaluate()` executes compiled refs by opcode and reuses shared eval helpers for semantics; AST/streamability access reparses from `Expression.source` on demand
-- Files: `xpath3.go` (API), `parser.go`, `lexer.go`, `expr.go`, `token.go`, `eval.go`, `eval_dispatch.go`, `vm.go`, `vm_dump.go`, `compare.go`, `cast.go`, `types.go`, `sequence.go`, `context.go`, `errors.go`, `functions*.go` (15 files)
-- Imports: helium, internal/xpath, internal/lexicon
+- Files: `xpath3.go` (API), `parser.go`, `lexer.go`, `expr.go`, `token.go`, `eval.go`, `eval_dispatch.go`, `eval_path.go`, `eval_operators.go`, `eval_arithmetic.go`, `eval_control.go`, `eval_types.go`, `eval_funcall.go`, `eval_reuse.go`, `eval_state.go`, `evaluator.go`, `vm.go`, `vm_dump.go`, `compile_direct.go`, `compiler.go`, `compare.go`, `cast.go`, `cast_numeric.go`, `cast_string.go`, `cast_datetime.go`, `types.go`, `float_value.go`, `sequence.go`, `context.go`, `variables.go`, `collation.go`, `regex.go`, `regex_public.go`, `static_check.go`, `streamability.go`, `node_identity.go`, `uri_resolution.go`, `doc.go`, `errors.go`, `arithmetic_datetime.go`, `parse_ietf_date.go`, `format_datetime.go`, `format_integer.go`, `format_number.go`, `function_library.go`, `function_signatures.go`, `functions.go`, `functions_node.go`, `functions_string.go`, `functions_numeric.go`, `functions_boolean.go`, `functions_aggregate.go`, `functions_sequence.go`, `functions_datetime.go`, `functions_uri.go`, `functions_qname.go`, `functions_hof.go`, `functions_map.go`, `functions_array.go`, `functions_math.go`, `functions_error.go`, `functions_misc.go`, `functions_json.go`, `functions_constructors.go`, `functions_unparsed_text.go`
+- Imports: helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence
 
 ## xslt3/
 
@@ -85,12 +85,13 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
 - Compile context options: `WithCompileBaseURI(ctx, uri)`, `WithCompileURIResolver(ctx, resolver)`
 - Transform context options: `WithParameter(ctx, name, value)`, `WithInitialTemplate(ctx, name)`, `WithMessageHandler(ctx, fn)`
 - Key types: `Stylesheet`, `Template`, `Variable`, `Param`, `KeyDef`, `OutputDef`, `URIResolver`
-- Supports: `xsl:template`, `xsl:apply-templates`, `xsl:call-template`, `xsl:param`/`xsl:variable`, `xsl:include`/`xsl:import`, `xsl:sort`, `xsl:number`, `xsl:message`, `xsl:key`, `xsl:output`, `xsl:import-schema`, literal result elements, AVTs, `xsl:function`
+- Supports: `xsl:template`, `xsl:apply-templates`, `xsl:call-template`, `xsl:param`/`xsl:variable`, `xsl:include`/`xsl:import`, `xsl:sort`, `xsl:number`, `xsl:message`, `xsl:key`, `xsl:output`, `xsl:import-schema`, `xsl:function`, literal result elements, AVTs, `xsl:attribute-set`, `xsl:map`/`xsl:map-entry`, `xsl:source-document`, `xsl:iterate`, `xsl:fork`, `xsl:accumulator`, `xsl:merge`, `xsl:where-populated`, `xsl:try`/`xsl:catch`, `xsl:for-each-group`, `xsl:result-document`, `xsl:next-match`, `xsl:apply-imports`
 - Schema awareness: `xsl:import-schema` compiles XSD schemas, `type=` on `xsl:element`/`xsl:attribute` annotates result nodes, `validation=` on `xsl:copy`/`xsl:copy-of`, `default-validation` stylesheet attribute, `type-available()` function, type annotations flow to xpath3 via `WithTypeAnnotations`
-- Runtime helpers: `current()`, `document()`, `key()`, `generate-id()`, `system-property()`, `unparsed-entity-uri()`, `type-available()`
+- Streaming: `xsl:source-document` (DOM-materialization), `xsl:iterate`/`xsl:break`/`xsl:next-iteration`/`xsl:on-completion`, `xsl:fork`, `xsl:accumulator`/`xsl:accumulator-rule`, `xsl:merge`/`xsl:merge-source`/`xsl:merge-key`/`xsl:merge-action`; streamability analysis (XTSE3430) post-compilation pass
+- Runtime helpers: `current()`, `document()`, `key()`, `generate-id()`, `system-property()`, `unparsed-entity-uri()`, `unparsed-entity-public-id()`, `type-available()`, `snapshot()`, `copy-of()`, `accumulator-before()`/`accumulator-after()`, `current-merge-group()`/`current-merge-key()`
 - Output methods: `xml`, `html`, `text`
-- Files: `xslt3.go` (API), `options.go` (context config), `compile.go` (orchestration + shared helpers), `compile_imports.go`, `compile_packages.go`, `compile_schema.go`, `compile_templates.go`, `compile_functions_modes.go`, `compile_formats.go`, `compile_instructions.go` (dispatch + static context helpers), `compile_instructions_flow.go`, `compile_instructions_nodes.go`, `compile_instructions_vars.go`, `compile_patterns.go`, `execute.go`, `execute_instructions.go`, `output.go`, `functions.go`, `keys.go`, `avt.go`, `stylesheet.go`, `instruction.go`, `sort.go`, `errors.go`
-- Imports: helium, xpath3, xsd, internal/lexicon
+- Files: `xslt3.go` (API), `options.go` (context config), `compile.go` (orchestration + shared helpers), `compiler.go`, `compile_imports.go`, `compile_packages.go`, `compile_schema.go`, `compile_templates.go`, `compile_functions_modes.go`, `compile_formats.go`, `compile_instructions.go` (dispatch + static context helpers), `compile_instructions_flow.go`, `compile_instructions_nodes.go`, `compile_instructions_vars.go`, `compile_patterns.go`, `compile_streaming.go`, `execute.go`, `execute_apply.go`, `execute_control.go`, `execute_copy.go`, `execute_element.go`, `execute_instructions.go`, `execute_lre.go`, `execute_misc.go`, `execute_number.go`, `execute_resultdoc.go`, `execute_sequence.go`, `execute_sort.go`, `execute_streaming.go`, `execute_trycatch.go`, `execute_variable.go`, `output.go`, `functions.go`, `keys.go`, `avt.go`, `stylesheet.go`, `stylesheet_entry.go`, `instruction.go`, `invocation.go`, `sort.go`, `types.go`, `parameters.go`, `receiver.go`, `number_words.go`, `source_schema.go`, `schema_constructors.go`, `schema_context.go`, `package_override.go`, `package_version.go`, `package_visibility.go`, `streamability_analysis.go`, `elements.go`, `errors.go`
+- Imports: helium, xpath3, xsd, html, internal/lexicon, internal/sequence
 - Tests: `xslt3_test.go` runs phase-1 W3C XSLT 3.0 test sets from `testdata/xslt30/source/` when fetched
 
 ## xslt3/internal/elements/
@@ -289,6 +290,34 @@ Catalog internals: URN decoding (RFC 3151), normalization.
 - **UnwrapURN(string) → string** — decode urn:publicid: to public ID
 - Files: `urn.go`, `normalize.go`
 
+## internal/icu/
+
+ICU-style number format pattern parsing for `fn:format-number`.
+
+- Files: `format_number.go`
+- Imports: none
+
+## internal/sequence/
+
+Generic typed sequence utilities.
+
+- Files: `sequence.go`
+- Imports: none
+
+## internal/strcursor/
+
+String cursor for character-by-character parsing.
+
+- Files: `strcursor.go`
+- Imports: none
+
+## internal/unparsedtext/
+
+Shared `fn:unparsed-text` / `fn:unparsed-text-lines` resource loading.
+
+- Files: `unparsedtext.go`
+- Imports: none
+
 ## internal/bitset/
 
 Generic bitset operations for bitmask types.
@@ -315,7 +344,6 @@ Importable implementation behind `helium` CLI. Used by `cmd/helium` wrapper and 
 
 - Entry points: `Execute(ctx, args)`, context mutators `WithIO(ctx, stdin, stdout, stderr)`, `WithStdinTTY(ctx, bool)`
 - Subcommands: `lint`, `xpath`, `xsd validate`, `relaxng validate`, `schematron validate`
-- Planned subcommands listed in usage: `xslt`
 - Context behavior: when stdio carriers are absent, defaults to `os.Stdin`, `os.Stdout`, `os.Stderr`, and TTY detection from `os.Stdin`
 - Lint behavior: parse args, detect stdin/TTY, process XML, run XInclude/XSD/XPath/C14N, emit xmllint-style exit codes
 - XPath behavior: mandatory positional expr, default engine `3`, `--engine 1|3`, XML from file args or stdin, type-aware result output for xpath1/xpath3

@@ -14,7 +14,6 @@ Read ONLY the file relevant to your current task.
 | Lexer tokens, parser grammar, AST nodes | `xpath3-parser.md` |
 | Evaluator, comparison, casting, eval rules | `xpath3-eval.md` |
 | Built-in function system, all function categories | `xpath3-functions.md` |
-| Phased task breakdown with dependencies | `xpath3-tasks.md` |
 
 ## Constraints
 
@@ -31,8 +30,7 @@ Read ONLY the file relevant to your current task.
 - Static type checking / type inference
 - Lazy/streaming sequences
 - FLWOR `group by`, `count`, `window`
-- `fn:doc()`, `fn:collection()`, `fn:transform()`, `fn:serialize()`
+- `fn:transform()`
 - XQuery
 - Saxon-style optimization / elaboration
-- XML Schema import for user-defined types
 - Unicode collation beyond codepoint order
