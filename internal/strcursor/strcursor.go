@@ -532,12 +532,13 @@ func (c *ByteCursor) fillBuffer(n int) error {
 	}
 
 	nread, err := c.in.Read(c.buf[remaining:])
+	c.buflen = nread + remaining
 	if nread == 0 && err != nil {
-		c.buf = c.buf[:0]
-		c.buflen = 0
+		if remaining >= n {
+			return nil
+		}
 		return err
 	}
-	c.buflen = nread + remaining
 	if c.buflen < n {
 		return errors.New("fillBuffer request exceeds available data")
 	}

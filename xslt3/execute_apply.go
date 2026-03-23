@@ -172,6 +172,28 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 			}
 			continue
 		}
+		// Built-in template rule for arrays: apply-templates to each member.
+		if arr, ok := item.(xpath3.ArrayItem); ok {
+			for j := 1; j <= arr.Size(); j++ {
+				member, err := arr.Get(j)
+				if err != nil {
+					return err
+				}
+				if err := ec.applyTemplatesToSequence(ctx, member, inst, mode); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		// Built-in template rule for maps: apply-templates to each value.
+		if m, ok := item.(xpath3.MapItem); ok {
+			if err := m.ForEach(func(_ xpath3.AtomicValue, val xpath3.Sequence) error {
+				return ec.applyTemplatesToSequence(ctx, val, inst, mode)
+			}); err != nil {
+				return err
+			}
+			continue
+		}
 		// Check mode's on-no-match: for "deep-skip" and "shallow-skip",
 		// unmatched atomic items are silently skipped.
 		modeKey := mode
@@ -199,6 +221,65 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 		}
 	}
 
+	return nil
+}
+
+// applyTemplatesToSequence applies templates to each item in a sequence,
+// implementing the built-in template rules for arrays and maps (XSLT 3.0).
+func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.Sequence, inst *ApplyTemplatesInst, mode string) error {
+	for _, item := range seq {
+		if ni, ok := item.(xpath3.NodeItem); ok {
+			if err := ec.applyTemplates(ctx, ni.Node, mode, nil); err != nil {
+				return err
+			}
+			continue
+		}
+		tmpl, err := ec.findAtomicTemplate(item, mode)
+		if err != nil {
+			return err
+		}
+		if tmpl != nil {
+			if err := ec.executeAtomicTemplate(ctx, tmpl, item, mode); err != nil {
+				return err
+			}
+			continue
+		}
+		if arr, ok := item.(xpath3.ArrayItem); ok {
+			for j := 1; j <= arr.Size(); j++ {
+				member, err := arr.Get(j)
+				if err != nil {
+					return err
+				}
+				if err := ec.applyTemplatesToSequence(ctx, member, inst, mode); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if m, ok := item.(xpath3.MapItem); ok {
+			if err := m.ForEach(func(_ xpath3.AtomicValue, val xpath3.Sequence) error {
+				return ec.applyTemplatesToSequence(ctx, val, inst, mode)
+			}); err != nil {
+				return err
+			}
+			continue
+		}
+		av, err := xpath3.AtomizeItem(item)
+		if err != nil {
+			continue
+		}
+		s, err := xpath3.AtomicToString(av)
+		if err != nil {
+			continue
+		}
+		text, err := ec.resultDoc.CreateText([]byte(s))
+		if err != nil {
+			return err
+		}
+		if err := ec.addNode(text); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

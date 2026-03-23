@@ -2908,6 +2908,50 @@ func countDownwardSelectionsInPathRHS(expr xpath3.Expr) int {
 	return 0
 }
 
+// returnNavigatesFromVars checks whether an expression contains a path
+// that navigates from one of the given variable names (e.g., $x/child::*).
+// This is used to detect FLWOR patterns like "for $x in .//foo return $x/bar"
+// where the return clause requires buffering the bound node.
+func returnNavigatesFromVars(expr xpath3.Expr, vars map[string]struct{}) bool {
+	found := false
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		var root xpath3.Expr
+		switch t := e.(type) {
+		case xpath3.PathStepExpr:
+			root = pathRoot(t)
+		case xpath3.PathExpr:
+			root = t.Filter
+		default:
+			return true
+		}
+		if ve, ok := root.(xpath3.VariableExpr); ok {
+			if _, match := vars[ve.Name]; match {
+				found = true
+				return false
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// pathRoot returns the leftmost expression in a PathStepExpr/PathExpr chain.
+func pathRoot(expr xpath3.Expr) xpath3.Expr {
+	for {
+		switch e := expr.(type) {
+		case xpath3.PathStepExpr:
+			expr = e.Left
+		case xpath3.PathExpr:
+			return e.Filter
+		default:
+			return expr
+		}
+	}
+}
+
 // exprHasContextOnlyDownward is like exprHasContextDownward but skips downward
 // steps that are reached via a path from a function call or variable reference.
 // For example, current-group()/node() has a child step (node()), but it
@@ -3329,13 +3373,27 @@ func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, gro
 			count += elseCount
 		}
 	case xpath3.FLWORExpr:
+		// Collect for-clause variables whose binding expressions consume the stream.
+		consumingForVars := map[string]struct{}{}
 		for _, clause := range e.Clauses {
 			switch c := clause.(type) {
 			case xpath3.ForClause:
-				count += countStreamingDownwardSelectionsInner(ss, c.Expr, false)
+				forCount := countStreamingDownwardSelectionsInner(ss, c.Expr, false)
+				count += forCount
+				// Only mark the variable as consuming if its binding expression
+				// actually streams (not grounded by snapshot/copy-of).
+				if forCount > 0 && !exprEndsWithGrounding(c.Expr) {
+					consumingForVars[c.Var] = struct{}{}
+				}
 			case xpath3.LetClause:
 				count += countStreamingDownwardSelectionsInner(ss, c.Expr, false)
 			}
+		}
+		// If any for-clause consumes the stream and the return expression
+		// navigates from the bound variable, that navigation also consumes
+		// from the stream (the node must be buffered).
+		if len(consumingForVars) > 0 && returnNavigatesFromVars(e.Return, consumingForVars) {
+			count++
 		}
 		count += countStreamingDownwardSelectionsInner(ss, e.Return, false)
 	case xpath3.InstanceOfExpr:
