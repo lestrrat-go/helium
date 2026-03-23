@@ -399,7 +399,7 @@ func (c *RuneCursor) hasPrefix(s string, n int, consume bool) bool {
 		pos += w
 	}
 	if consume {
-		c.Advance(n)
+		_ = c.Advance(n)
 	}
 	return true
 }
@@ -569,7 +569,7 @@ func (c *ByteCursor) PeekString(n int) string {
 
 func (c *ByteCursor) Cur() rune {
 	b := c.Peek()
-	c.Advance(1)
+	_ = c.Advance(1)
 	return b
 }
 

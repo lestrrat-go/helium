@@ -6,7 +6,6 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
-	"github.com/lestrrat-go/helium/xsd"
 )
 
 func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
@@ -195,18 +194,6 @@ func (ec *execContext) applyCopyValidation(ctx context.Context, inst *CopyInst, 
 	return nil
 }
 
-// isComplexTypeDef returns true if the TypeDef represents a complex type (has
-// attributes, element content, mixed content, or simpleContent with attributes).
-func isComplexTypeDef(td *xsd.TypeDef) bool {
-	if len(td.Attributes) > 0 || td.AnyAttribute != nil {
-		return true
-	}
-	switch td.ContentType {
-	case xsd.ContentTypeElementOnly, xsd.ContentTypeMixed, xsd.ContentTypeEmpty:
-		return true
-	}
-	return td.ContentModel != nil
-}
 
 // effectiveValidation returns the validation mode for a copy/copy-of instruction,
 // falling back to the stylesheet default when the instruction has none.

@@ -278,7 +278,7 @@ func addChild(n Node, cur Node) error {
 
 	// Fast path: when lastChild has no next sibling (the normal case),
 	// link directly without virtual dispatch through AddSibling.
-	if l.NextSibling() == nil && !(cur.Type() == TextNode && l.Type() == TextNode) {
+	if l.NextSibling() == nil && (cur.Type() != TextNode || l.Type() != TextNode) {
 		l.SetNextSibling(cur)
 		cur.SetPrevSibling(l)
 		cur.SetParent(n)

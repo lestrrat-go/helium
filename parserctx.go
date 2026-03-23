@@ -2865,59 +2865,6 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 	return true
 }
 
-func (ctx *parserCtx) areBlanks(s string, blankChars bool) (ret bool) {
-	if pdebug.Enabled {
-		g := pdebug.IPrintf("START areBlanks (%v)", []byte(s))
-		defer g.IRelease("END areBlanks")
-		defer func() { pdebug.Printf("ret = '%t'", ret) }()
-	}
-
-	// Check for xml:space value.
-	if ctx.spaceTab[len(ctx.spaceTab)-1] == 1 {
-		ret = false
-		return
-	}
-
-	// Check that the string is made of blanks
-	if !blankChars {
-		for _, r := range s {
-			if !isBlankCh(r) {
-				ret = false
-				return
-			}
-		}
-	}
-
-	// Look if the element is mixed content in the DTD if available
-	if ctx.peekNode() == nil {
-		ret = false
-		return
-	}
-	if ctx.doc != nil {
-		ok, _ := ctx.doc.IsMixedElement(ctx.peekNode().Name())
-		ret = !ok
-		return
-	}
-
-	cur := ctx.getCursor()
-	if cur == nil {
-		panic("did not get rune cursor")
-	}
-	if c := cur.Peek(); c != '<' && c != 0xD {
-		ret = false
-		return
-	}
-
-	// libxml2's areBlanks has additional heuristic checks here (children-empty +
-	// </close check, lastChild text node check). These are not applicable in helium
-	// because peekNode() returns parser-stack elements that don't have children
-	// (children are added to tree builder elements via ctx.elem, which is separate).
-	// When ctx.doc != nil, IsMixedElement above handles the classification.
-	// When ctx.doc == nil (SAX-only mode), there is no tree to inspect.
-	ret = true
-	return
-}
-
 func isChar(r rune) bool {
 	if r == utf8.RuneError {
 		return false

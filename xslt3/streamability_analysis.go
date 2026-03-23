@@ -2192,28 +2192,6 @@ func patternHasNonMotionlessPredicate(pat *Pattern) bool {
 	return false
 }
 
-// checkGroupStartingWithBody checks if a for-each-group group-starting-with body
-// uses current-group() in a consuming way that requires buffering.
-func checkGroupStartingWithBody(inst Instruction) error {
-	for _, expr := range getInstructionExprs(inst) {
-		if expr == nil {
-			continue
-		}
-		if exprUsesCurrentGroupConsumingly(expr) {
-			return staticError(errCodeXTSE3430,
-				"xsl:for-each-group group-starting-with body consumes current-group(), which is not streamable")
-		}
-	}
-	for _, children := range getChildInstructions(inst) {
-		for _, child := range children {
-			if err := checkGroupStartingWithBody(child); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 // checkFocusChangingCurrentGroup checks if a focus-changing instruction
 // (xsl:copy with select, xsl:for-each) in the for-each-group body uses
 // current-group() in its own body.  Per W3C bug 29482, this is a
@@ -2930,28 +2908,6 @@ func countDownwardSelectionsInPathRHS(expr xpath3.Expr) int {
 	return 0
 }
 
-// exprHasContextDownward returns true if the expression accesses child/descendant
-// steps from the context item (not from a variable or function call).
-func exprHasContextDownward(expr xpath3.Expr) bool {
-	found := false
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
-		if found {
-			return false
-		}
-		if lp, ok := e.(xpath3.LocationPath); ok {
-			for _, step := range lp.Steps {
-				switch step.Axis {
-				case xpath3.AxisChild, xpath3.AxisDescendant, xpath3.AxisDescendantOrSelf:
-					found = true
-					return false
-				}
-			}
-		}
-		return true
-	})
-	return found
-}
-
 // exprHasContextOnlyDownward is like exprHasContextDownward but skips downward
 // steps that are reached via a path from a function call or variable reference.
 // For example, current-group()/node() has a child step (node()), but it
@@ -3030,7 +2986,7 @@ func exprHasContextOnlyDownward(expr xpath3.Expr) bool {
 // variable reference (i.e. not the implicit context item).
 func isNonContextRoot(expr xpath3.Expr) bool {
 	expr = derefXPathExpr(expr)
-	switch expr.(type) {
+	switch expr := expr.(type) {
 	case xpath3.FunctionCall:
 		return true
 	case xpath3.VariableExpr:
@@ -3038,8 +2994,7 @@ func isNonContextRoot(expr xpath3.Expr) bool {
 	case xpath3.FilterExpr:
 		// FilterExpr wraps a primary expression with predicates.
 		// If the inner expression is a function call or variable, it's non-context.
-		fe := expr.(xpath3.FilterExpr)
-		return isNonContextRoot(fe.Expr)
+		return isNonContextRoot(expr.Expr)
 	}
 	return false
 }

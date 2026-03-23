@@ -221,10 +221,6 @@ func stringifyResult(r *xpath3.Result) string {
 	return stringifySequenceWithSep(r.Sequence(), " ")
 }
 
-func stringifyResultWithSep(r *xpath3.Result, sep string) string {
-	return stringifySequenceWithSep(r.Sequence(), sep)
-}
-
 // stringifySequence converts a Sequence to its string representation
 // by atomizing each item and joining with spaces.
 func stringifySequence(seq xpath3.Sequence) string {
