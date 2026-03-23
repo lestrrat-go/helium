@@ -513,6 +513,24 @@ func (r *schemaRegistry) hasXMLNSImport() bool {
 	return true // registry is only created for schema-aware stylesheets
 }
 
+// IsComplexType returns true if the given annotation-format type name refers
+// to a complex type in the imported schemas. Built-in xs:* types are always
+// simple, so they return false.
+func (r *schemaRegistry) IsComplexType(typeName string) bool {
+	td, _, found := r.LookupTypeDef(typeName)
+	if !found {
+		return false
+	}
+	// A complex type has attributes, a content model, or element-only/mixed content.
+	if len(td.Attributes) > 0 || td.AnyAttribute != nil || td.ContentModel != nil {
+		return true
+	}
+	if td.ContentType == xsd.ContentTypeElementOnly || td.ContentType == xsd.ContentTypeMixed {
+		return true
+	}
+	return false
+}
+
 // ValidateDoc validates a document against the imported schemas and returns
 // per-node type annotations. If no schema matches the document's root element,
 // empty annotations are returned (lax behavior).

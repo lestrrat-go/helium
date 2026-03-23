@@ -141,6 +141,25 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		}
 		return dynamicError(errCodeXTTE0945, "xsl:copy: no context item")
 	}
+	// XTTE1535: if type or validation attribute is specified on xsl:copy and the
+	// context item is not an element or document node, signal a type error.
+	// For type=, only complex types trigger this error; simple types can annotate attributes.
+	if inst.TypeName != "" || inst.Validation == validationStrict || inst.Validation == validationLax {
+		nt := contextNode.Type()
+		if nt != helium.ElementNode && nt != helium.DocumentNode {
+			if inst.Validation == validationStrict || inst.Validation == validationLax {
+				return dynamicError(errCodeXTTE1535,
+					"xsl:copy validation=%q: context node is %s, not an element or document node",
+					inst.Validation, nt)
+			}
+			if inst.TypeName != "" && ec.isComplexType(inst.TypeName) {
+				return dynamicError(errCodeXTTE1535,
+					"xsl:copy type=%q: context node is %s, not an element or document node",
+					inst.TypeName, nt)
+			}
+		}
+	}
+
 	out := ec.currentOutput()
 	lastBefore := out.current.LastChild()
 	pendingBefore := len(out.pendingItems)
@@ -210,6 +229,15 @@ func (ec *execContext) effectiveValidation(instValidation string) string {
 		return instValidation
 	}
 	return ec.stylesheet.defaultValidation
+}
+
+// isComplexType returns true if typeName refers to a complex type in the
+// imported schemas. Returns false for built-in types and unknown types.
+func (ec *execContext) isComplexType(typeName string) bool {
+	if ec.schemaRegistry == nil {
+		return false
+	}
+	return ec.schemaRegistry.IsComplexType(typeName)
 }
 
 type copyNodeOpts struct {
@@ -482,10 +510,13 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 				}
 			}
 			if inst.TypeName != "" {
-				// Per XSLT 3.0 spec, the type attribute on copy-of is silently
-				// ignored for nodes that are not elements, attributes, or documents.
-				if v.Node.Type() != helium.ElementNode && v.Node.Type() != helium.AttributeNode && v.Node.Type() != helium.DocumentNode {
-					break
+				// XTTE1535: type attribute on copy-of with a complex type requires
+				// element or document nodes. Simple types may annotate attributes too.
+				nt := v.Node.Type()
+				if nt != helium.ElementNode && nt != helium.DocumentNode && ec.isComplexType(inst.TypeName) {
+					return dynamicError(errCodeXTTE1535,
+						"xsl:copy-of type=%q: copied node is %s, not an element or document node",
+						inst.TypeName, nt)
 				}
 				// Type validation: validate the copied element against the declared type.
 				copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
