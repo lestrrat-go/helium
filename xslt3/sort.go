@@ -376,8 +376,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 			}
 			result, err = sk.Select.EvaluateReuse(evalState, node)
 		} else {
-			xpathCtx := ec.newXPathContext(node)
-			r, e := sk.Select.Evaluate(xpathCtx, node)
+			r, e := ec.evalXPath(nil, sk.Select, node)
 			if e != nil {
 				return sortValue{}, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", e)
 			}

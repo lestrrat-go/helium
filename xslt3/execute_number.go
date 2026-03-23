@@ -20,8 +20,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 	// XSLT 3.0: select attribute specifies which node to number.
 	// Evaluate select before the nil-node check so it works inside xsl:function.
 	if inst.Select != nil && inst.Value == nil {
-		xpathCtx := ec.newXPathContext(node)
-		result, err := inst.Select.Evaluate(xpathCtx, node)
+		result, err := ec.evalXPath(nil, inst.Select, node)
 		if err != nil {
 			return err
 		}
@@ -59,8 +58,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 
 	if inst.Value != nil {
 		// value attribute: evaluate expression and use result directly
-		xpathCtx := ec.newXPathContext(node)
-		result, err := inst.Value.Evaluate(xpathCtx, node)
+		result, err := ec.evalXPath(nil, inst.Value, node)
 		if err != nil {
 			return err
 		}

@@ -516,8 +516,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 				return err
 			}
 		}
-		xpathCtx := ec.newXPathContext(ec.contextNode)
-		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -1025,8 +1024,7 @@ func prefixBoundTo(elem *helium.Element, prefix string) string {
 func (ec *execContext) execComment(ctx context.Context, inst *CommentInst) error {
 	var value string
 	if inst.Select != nil {
-		xpathCtx := ec.newXPathContext(ec.contextNode)
-		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -1093,8 +1091,7 @@ func (ec *execContext) execPI(ctx context.Context, inst *PIInst) error {
 
 	var value string
 	if inst.Select != nil {
-		xpathCtx := ec.newXPathContext(ec.contextNode)
-		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -1145,8 +1142,7 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 
 	var value string
 	if inst.Select != nil {
-		xpathCtx := ec.newXPathContext(ec.contextNode)
-		result, evalErr := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		result, evalErr := ec.evalXPath(nil, inst.Select, ec.contextNode)
 		if evalErr != nil {
 			return evalErr
 		}

@@ -11,8 +11,7 @@ import (
 
 func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStringInst) error {
 	// Evaluate the select expression
-	xpathCtx := ec.newXPathContext(ec.contextNode)
-	result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+	result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
 	if err != nil {
 		return err
 	}
@@ -370,8 +369,7 @@ func isItemSignificant(item xpath3.Item) bool {
 
 func (ec *execContext) evaluateConditionalInstruction(ctx context.Context, selectExpr *xpath3.Expression, body []Instruction) (xpath3.Sequence, error) {
 	if selectExpr != nil {
-		xpathCtx := ec.newXPathContext(ec.contextNode)
-		result, err := selectExpr.Evaluate(xpathCtx, ec.contextNode)
+		result, err := ec.evalXPath(nil, selectExpr, ec.contextNode)
 		if err != nil {
 			return nil, err
 		}
@@ -503,8 +501,7 @@ func (ec *execContext) execMap(ctx context.Context, inst *MapInst) error {
 func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) error {
 	out := ec.currentOutput()
 	if out.captureItems && out.mapConstructor {
-		xpathCtx := ec.newXPathContext(ec.contextNode)
-		keyResult, err := inst.Key.Evaluate(xpathCtx, ec.contextNode)
+		keyResult, err := ec.evalXPath(nil, inst.Key, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -519,7 +516,7 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 
 		var valSeq xpath3.Sequence
 		if inst.Select != nil {
-			valResult, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+			valResult, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
 			if err != nil {
 				return err
 			}
@@ -541,8 +538,7 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 
 	// When called standalone (outside xsl:map), produce a single-entry map.
 	// Per XSLT 3.0 §11.9.4, xsl:map-entry always produces a map item.
-	xpathCtx := ec.newXPathContext(ec.contextNode)
-	keyResult, err := inst.Key.Evaluate(xpathCtx, ec.contextNode)
+	keyResult, err := ec.evalXPath(nil, inst.Key, ec.contextNode)
 	if err != nil {
 		return err
 	}
@@ -557,7 +553,7 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 
 	var valSeq xpath3.Sequence
 	if inst.Select != nil {
-		valResult, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+		valResult, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -598,8 +594,7 @@ func (ec *execContext) execAssert(ctx context.Context, inst *AssertInst) error {
 	if inst.Test == nil {
 		return nil
 	}
-	xpathCtx := ec.newXPathContext(ec.contextNode)
-	result, err := inst.Test.Evaluate(xpathCtx, ec.contextNode)
+	result, err := ec.evalXPath(nil, inst.Test, ec.contextNode)
 	if err != nil {
 		return err
 	}
@@ -615,7 +610,7 @@ func (ec *execContext) execAssert(ctx context.Context, inst *AssertInst) error {
 		// Build error message from body or select
 		msg := "assertion failed"
 		if inst.Select != nil {
-			sel, selErr := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+			sel, selErr := ec.evalXPath(nil, inst.Select, ec.contextNode)
 			if selErr == nil {
 				msg = stringifySequence(sel.Sequence())
 			}
@@ -634,8 +629,7 @@ func (ec *execContext) execAssert(ctx context.Context, inst *AssertInst) error {
 // an XPath expression string at runtime.
 func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) error {
 	// 1. Evaluate the xpath attribute expression to get the XPath string.
-	xpathCtx := ec.newXPathContext(ec.contextNode)
-	xpathResult, err := inst.XPath.Evaluate(xpathCtx, ec.contextNode)
+	xpathResult, err := ec.evalXPath(nil, inst.XPath, ec.contextNode)
 	if err != nil {
 		return err
 	}
@@ -666,7 +660,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 	var dynContextItem xpath3.Item
 	hasContextItem := true
 	if inst.ContextItem != nil {
-		ciResult, ciErr := inst.ContextItem.Evaluate(xpathCtx, ec.contextNode)
+		ciResult, ciErr := ec.evalXPath(nil, inst.ContextItem, ec.contextNode)
 		if ciErr != nil {
 			return ciErr
 		}
@@ -707,7 +701,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 
 	// If namespace-context is specified, collect namespaces from that node
 	if inst.NamespaceContext != nil {
-		ncResult, ncErr := inst.NamespaceContext.Evaluate(xpathCtx, ec.contextNode)
+		ncResult, ncErr := ec.evalXPath(nil, inst.NamespaceContext, ec.contextNode)
 		if ncErr != nil {
 			return ncErr
 		}
@@ -820,7 +814,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 
 	// Add with-params map variables (higher priority, overrides xsl:with-param)
 	if inst.WithParamsExpr != nil {
-		wpResult, wpErr := inst.WithParamsExpr.Evaluate(xpathCtx, ec.contextNode)
+		wpResult, wpErr := ec.evalXPath(nil, inst.WithParamsExpr, ec.contextNode)
 		if wpErr != nil {
 			return wpErr
 		}

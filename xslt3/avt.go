@@ -196,16 +196,19 @@ func (a *AVT) evaluate(ctx context.Context, node helium.Node) (string, error) {
 		return "", nil
 	}
 
-	// If the context carries an execContext, use its xpath context for variables/functions
-	xpathCtx := ctx
-	if ec := getExecContext(ctx); ec != nil {
-		xpathCtx = ec.newXPathContext(node)
-	}
+	// If the context carries an execContext, use the Evaluator-based path
+	ec := getExecContext(ctx)
 
 	var sb strings.Builder
 	for _, p := range a.parts {
 		if p.expr != nil {
-			result, err := p.expr.Evaluate(xpathCtx, node)
+			var result *xpath3.Result
+			var err error
+			if ec != nil {
+				result, err = ec.evalXPath(nil, p.expr, node)
+			} else {
+				result, err = p.expr.Evaluate(ctx, node)
+			}
 			if err != nil {
 				return "", &XSLTError{Code: errCodeXTDE0045, Message: "AVT evaluation error: " + err.Error(), Cause: err}
 			}

@@ -11,8 +11,7 @@ import (
 )
 
 func (ec *execContext) execIf(ctx context.Context, inst *IfInst) error {
-	xpathCtx := ec.newXPathContext(ec.contextNode)
-	result, err := inst.Test.Evaluate(xpathCtx, ec.contextNode)
+	result, err := ec.evalXPath(nil, inst.Test, ec.contextNode)
 	if err != nil {
 		return err
 	}
@@ -49,13 +48,15 @@ func (ec *execContext) execChoose(ctx context.Context, inst *ChooseInst) error {
 		if when.DefaultCollation != "" {
 			ec.defaultCollation = when.DefaultCollation
 		}
-		xpathCtx := ec.newXPathContext(ec.contextNode)
+		var result *xpath3.Result
+		var err error
 		// Override namespace bindings with per-clause bindings when present
 		if when.Namespaces != nil {
-			xpathCtx = xpath3.WithNamespaces(xpathCtx, when.Namespaces)
-			xpathCtx = xpath3.WithStrictPrefixes(xpathCtx)
+			eval := ec.xpathEvaluator().Namespaces(when.Namespaces).StrictPrefixes()
+			result, err = eval.Evaluate(ec.xpathContext(nil), when.Test, ec.contextNode)
+		} else {
+			result, err = ec.evalXPath(nil, when.Test, ec.contextNode)
 		}
-		result, err := when.Test.Evaluate(xpathCtx, ec.contextNode)
 		if err != nil {
 			ec.xpathDefaultNS = savedNS
 			ec.hasXPathDefaultNS = savedHas
@@ -103,8 +104,7 @@ func (ec *execContext) execChoose(ctx context.Context, inst *ChooseInst) error {
 }
 
 func (ec *execContext) execForEach(ctx context.Context, inst *ForEachInst) error {
-	xpathCtx := ec.newXPathContext(ec.contextNode)
-	result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+	result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
 	if err != nil {
 		return err
 	}
@@ -186,8 +186,7 @@ func (ec *execContext) execForEach(ctx context.Context, inst *ForEachInst) error
 }
 
 func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupInst) error {
-	xpathCtx := ec.newXPathContext(ec.contextNode)
-	result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
+	result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
 	if err != nil {
 		return err
 	}
@@ -412,8 +411,7 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 			ec.contextNode = nil
 			ec.currentNode = nil
 		}
-		xpathCtx := ec.newXPathContext(node)
-		result, err := groupByExpr.Evaluate(xpathCtx, node)
+		result, err := ec.evalXPath(nil, groupByExpr, node)
 		if err != nil {
 			return nil, err
 		}
@@ -539,8 +537,7 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 			ec.contextNode = nil
 			ec.currentNode = nil
 		}
-		xpathCtx := ec.newXPathContext(node)
-		result, err := adjExpr.Evaluate(xpathCtx, node)
+		result, err := ec.evalXPath(nil, adjExpr, node)
 		if err != nil {
 			return nil, err
 		}
