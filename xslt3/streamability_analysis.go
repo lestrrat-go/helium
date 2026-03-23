@@ -1217,6 +1217,14 @@ func walkExprCheckPredicates(ss *Stylesheet, expr xpath3.Expr, grounded bool, fo
 		walkExprCheckPredicates(ss, e.Right, grounded, found)
 	case xpath3.UnaryExpr:
 		walkExprCheckPredicates(ss, e.Operand, grounded, found)
+	case xpath3.InstanceOfExpr:
+		walkExprCheckPredicates(ss, e.Expr, grounded, found)
+	case xpath3.CastExpr:
+		walkExprCheckPredicates(ss, e.Expr, grounded, found)
+	case xpath3.CastableExpr:
+		walkExprCheckPredicates(ss, e.Expr, grounded, found)
+	case xpath3.TreatAsExpr:
+		walkExprCheckPredicates(ss, e.Expr, grounded, found)
 	case xpath3.ConcatExpr:
 		walkExprCheckPredicates(ss, e.Left, grounded, found)
 		walkExprCheckPredicates(ss, e.Right, grounded, found)
@@ -3287,6 +3295,14 @@ func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, gro
 			}
 		}
 		count += countStreamingDownwardSelectionsInner(ss, e.Return, false)
+	case xpath3.InstanceOfExpr:
+		count += countStreamingDownwardSelectionsInner(ss, e.Expr, false)
+	case xpath3.CastExpr:
+		count += countStreamingDownwardSelectionsInner(ss, e.Expr, false)
+	case xpath3.CastableExpr:
+		count += countStreamingDownwardSelectionsInner(ss, e.Expr, false)
+	case xpath3.TreatAsExpr:
+		count += countStreamingDownwardSelectionsInner(ss, e.Expr, false)
 	}
 	return count
 }
