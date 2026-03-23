@@ -216,6 +216,28 @@ func validateListValue(value string, td *TypeDef, elemName, filename string, lin
 		return facetErr
 	}
 
+	// Validate each list item against the item type.
+	itemType := resolveItemType(td)
+	if itemType != nil {
+		for _, item := range items {
+			if err := validateValue(item, nil, itemType, elemName, filename, line, out); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// resolveItemType walks the type chain to find the item type for a list type.
+func resolveItemType(td *TypeDef) *TypeDef {
+	cur := td
+	for cur != nil {
+		if cur.ItemType != nil {
+			return cur.ItemType
+		}
+		cur = cur.BaseType
+	}
 	return nil
 }
 
