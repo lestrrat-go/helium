@@ -489,7 +489,7 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 				// as a child of out.current.
 				copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
 				if copiedElem != nil {
-					if err := ec.validateConstructedElement(ctx, copiedElem, effectiveVal); err != nil {
+					if err := ec.validateConstructedElementWithIDCheck(ctx, copiedElem, effectiveVal); err != nil {
 						return err
 					}
 					// After validation, propagate any type annotations acquired

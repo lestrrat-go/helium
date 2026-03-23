@@ -401,6 +401,86 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 	return nil
 }
 
+// validateConstructedElementWithIDCheck validates a constructed element and
+// also checks xs:ID uniqueness and xs:IDREF resolution constraints. This is
+// used by xsl:copy-of where the copied subtree must be validated as a whole,
+// including document-level ID constraints.
+func (ec *execContext) validateConstructedElementWithIDCheck(ctx context.Context, elem *helium.Element, validation string) error {
+	switch validation {
+	case validationStrip:
+		ec.stripAnnotations(elem)
+		return nil
+	case validationPreserve:
+		return nil
+	case validationStrict, validationLax:
+		if ec.schemaRegistry == nil {
+			return nil
+		}
+		if validation == validationLax {
+			if _, found := ec.schemaRegistry.LookupElement(elem.LocalName(), elem.URI()); !found {
+				return nil
+			}
+		}
+		tmpDoc := helium.NewDefaultDocument()
+		copied, err := helium.CopyNode(elem, tmpDoc)
+		if err != nil {
+			return err
+		}
+		if err := tmpDoc.AddChild(copied); err != nil {
+			return err
+		}
+		ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+		if valErr != nil {
+			switch validation {
+			case validationStrict:
+				return dynamicError(errCodeXTTE1510, "validation of constructed element failed: %v", valErr)
+			case validationLax:
+				return dynamicError(errCodeXTTE1515, "lax validation of constructed element failed: %v", valErr)
+			}
+		} else if ann == nil || (len(ann) == 0 && elem.URI() != "" && !ec.schemaRegistry.HasNamespace(elem.URI())) {
+			if validation == validationStrict {
+				if _, found := ec.schemaRegistry.LookupElement(elem.LocalName(), elem.URI()); !found {
+					return dynamicError(errCodeXTTE1512,
+						"no schema declaration found for element {%s}%s (validation=strict)", elem.URI(), elem.LocalName())
+				}
+			}
+		} else {
+			if isBuiltinSimpleType(ann[copied]) {
+				content := strings.TrimSpace(string(elem.Content()))
+				if _, castErr := xpath3.CastFromString(content, ann[copied]); castErr != nil {
+					switch validation {
+					case validationStrict:
+						return dynamicError(errCodeXTTE1510,
+							"element {%s}%s content %q is not valid for type %s: %v",
+							elem.URI(), elem.LocalName(), content, ann[copied], castErr)
+					case validationLax:
+						return dynamicError(errCodeXTTE1515,
+							"element {%s}%s content %q is not valid for type %s: %v",
+							elem.URI(), elem.LocalName(), content, ann[copied], castErr)
+					}
+				}
+			}
+		}
+		// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
+		if len(ann) > 0 {
+			if err := ValidateDocIDConstraints(tmpDoc, ann); err != nil {
+				return err
+			}
+		}
+		// Merge type annotations back to the live element.
+		if len(ann) > 0 {
+			ec.mapAnnotationsFromValidation(ann, copied, elem)
+		}
+		if ec.typeAnnotations[elem] == "" && valErr == nil {
+			if typeName, found := ec.schemaRegistry.LookupElement(elem.LocalName(), elem.URI()); found && typeName != "" {
+				ec.annotateNode(elem, typeName)
+			}
+		}
+		return nil
+	}
+	return nil
+}
+
 // mapAnnotationsFromValidation maps type annotations from a validated copy
 // tree back to the corresponding live tree nodes.
 func (ec *execContext) mapAnnotationsFromValidation(ann xsd.TypeAnnotations, src, dst helium.Node) {

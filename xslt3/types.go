@@ -62,6 +62,21 @@ func checkSequenceType(seq xpath3.Sequence, st SequenceType, errCode string, con
 	if len(ec) > 0 {
 		execCtx = ec[0]
 	}
+
+	// When the target type is atomic, pre-atomize the sequence so that
+	// list-type nodes (e.g. xs:list of xs:decimal) expand into multiple
+	// atomic items before cardinality and type checks.
+	if isAtomicTargetType(st.ItemType) && seq != nil {
+		atomized, err := xpath3.AtomizeSequence(seq)
+		if err == nil && len(atomized) > 0 {
+			items := make(xpath3.ItemSlice, len(atomized))
+			for i, av := range atomized {
+				items[i] = av
+			}
+			seq = items
+		}
+	}
+
 	// Check cardinality
 	count := 0
 	if seq != nil {
@@ -103,6 +118,32 @@ func checkSequenceType(seq xpath3.Sequence, st SequenceType, errCode string, con
 	}
 	return result, nil
 }
+
+// isAtomicTargetType returns true when the item type string names an atomic
+// type (e.g. "xs:decimal", "xs:string") rather than a node/function/map test.
+func isAtomicTargetType(itemType string) bool {
+	if itemType == "" || itemType == "item()" {
+		return false
+	}
+	// Node tests, function tests, map/array tests are not atomic.
+	if strings.HasPrefix(itemType, "node(") ||
+		strings.HasPrefix(itemType, "element(") ||
+		strings.HasPrefix(itemType, "attribute(") ||
+		strings.HasPrefix(itemType, "document-node(") ||
+		strings.HasPrefix(itemType, "text(") ||
+		strings.HasPrefix(itemType, "comment(") ||
+		strings.HasPrefix(itemType, "processing-instruction(") ||
+		strings.HasPrefix(itemType, "namespace-node(") ||
+		strings.HasPrefix(itemType, "schema-element(") ||
+		strings.HasPrefix(itemType, "schema-attribute(") ||
+		strings.HasPrefix(itemType, "function(") ||
+		strings.HasPrefix(itemType, "map(") ||
+		strings.HasPrefix(itemType, "array(") {
+		return false
+	}
+	return true
+}
+
 
 // coerceItem checks that a single item matches the expected type, applying
 // atomization and casting as needed per the XSLT function conversion rules.
