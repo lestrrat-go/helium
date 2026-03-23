@@ -83,8 +83,8 @@ func fnCodepointsToString(ctx context.Context, args []Sequence) (Sequence, error
 
 	// Check whether XML 1.1 characters are allowed (e.g. XSLT 3.0 context).
 	xml11 := false
-	if cfg := getEvalConfig(ctx); cfg != nil {
-		xml11 = cfg.allowXML11Chars
+	if ec := getFnContext(ctx); ec != nil {
+		xml11 = ec.allowXML11Chars
 	}
 	isValid := isValidXMLCodepoint
 	if xml11 {

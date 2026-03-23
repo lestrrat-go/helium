@@ -99,8 +99,8 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 			return SingleString(base), nil
 		}
 		// 1-arg with empty relative: return static base URI
-		if cfg := getEvalConfig(ctx); cfg != nil && cfg.baseURI != "" {
-			return SingleString(cfg.baseURI), nil
+		if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
+			return SingleString(ec.baseURI), nil
 		}
 		return SingleString(""), nil
 	}
@@ -114,8 +114,8 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	// 1-arg form: use static base URI from context
 	if base == "" {
-		if cfg := getEvalConfig(ctx); cfg != nil {
-			base = cfg.baseURI
+		if ec := getFnContext(ctx); ec != nil {
+			base = ec.baseURI
 			baseFromContext = true
 		}
 	}
