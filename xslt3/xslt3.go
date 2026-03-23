@@ -22,14 +22,16 @@ func parseStylesheetDocument(ctx context.Context, data []byte, baseURI string) (
 // CompileStylesheet compiles a parsed XSLT stylesheet document into a
 // reusable Stylesheet. Use WithCompileBaseURI and WithCompileURIResolver
 // to configure compilation via ctx.
+//
+// Deprecated: use NewCompiler().Compile(ctx, doc) instead.
 func CompileStylesheet(ctx context.Context, doc *helium.Document) (*Stylesheet, error) {
 	cfg := deriveCompileConfig(ctx)
 	return compile(doc, cfg)
 }
 
 // CompileFile parses and compiles an XSLT stylesheet from a file path.
-// Use WithCompileBaseURI and WithCompileURIResolver to configure
-// compilation via ctx.
+// This is a convenience function that parses the file and delegates to
+// NewCompiler().Compile.
 func CompileFile(ctx context.Context, path string) (*Stylesheet, error) {
 	absPath, absErr := filepath.Abs(path)
 	if absErr != nil {
@@ -53,6 +55,8 @@ func CompileFile(ctx context.Context, path string) (*Stylesheet, error) {
 // Transform applies the compiled stylesheet to the source document and
 // returns the result document. Use WithParameter, WithInitialTemplate,
 // and WithMessageHandler to configure the transformation via ctx.
+//
+// Deprecated: use ss.Transform(source).Do(ctx) instead.
 func Transform(ctx context.Context, source *helium.Document, ss *Stylesheet) (*helium.Document, error) {
 	cfg := getTransformConfig(ctx)
 	return executeTransform(ctx, source, ss, cfg)
@@ -60,6 +64,8 @@ func Transform(ctx context.Context, source *helium.Document, ss *Stylesheet) (*h
 
 // TransformToWriter applies the compiled stylesheet to the source document
 // and writes the serialized result to w.
+//
+// Deprecated: use ss.Transform(source).WriteTo(ctx, w) instead.
 func TransformToWriter(ctx context.Context, source *helium.Document, ss *Stylesheet, w io.Writer) error {
 	cfg := getTransformConfig(ctx)
 	resultDoc, err := executeTransform(ctx, source, ss, cfg)
@@ -74,6 +80,8 @@ func TransformToWriter(ctx context.Context, source *helium.Document, ss *Stylesh
 
 // TransformString applies the compiled stylesheet to the source document
 // and returns the serialized result as a string.
+//
+// Deprecated: use ss.Transform(source).Serialize(ctx) instead.
 func TransformString(ctx context.Context, source *helium.Document, ss *Stylesheet) (string, error) {
 	var buf bytes.Buffer
 	if err := TransformToWriter(ctx, source, ss, &buf); err != nil {

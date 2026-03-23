@@ -37,6 +37,11 @@ var (
 
 var cloneSequence = sequence.Clone[Item]
 
+// CloneSequence returns a deep copy of the Sequence.
+func CloneSequence(seq Sequence) Sequence {
+	return cloneSequence(seq)
+}
+
 func cloneSequences(seqs []Sequence) []Sequence {
 	if seqs == nil {
 		return nil
