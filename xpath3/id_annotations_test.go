@@ -33,6 +33,10 @@ func (idSubtypeDecls) ValidateCast(value, typeName string) error {
 	return nil
 }
 
+func (idSubtypeDecls) ValidateCastWithNS(value, typeName string, nsMap map[string]string) error {
+	return nil
+}
+
 func (idSubtypeDecls) ListItemType(typeName string) (string, bool) {
 	return "", false
 }

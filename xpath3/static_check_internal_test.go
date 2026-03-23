@@ -26,8 +26,11 @@ func (noNamespaceSchemaDecls) LookupSchemaType(local, ns string) (string, bool) 
 }
 func (noNamespaceSchemaDecls) IsSubtypeOf(typeName, baseTypeName string) bool { return false }
 func (noNamespaceSchemaDecls) ValidateCast(value, typeName string) error      { return nil }
-func (noNamespaceSchemaDecls) ListItemType(typeName string) (string, bool)    { return "", false }
-func (noNamespaceSchemaDecls) UnionMemberTypes(typeName string) []string      { return nil }
+func (noNamespaceSchemaDecls) ValidateCastWithNS(value, typeName string, nsMap map[string]string) error {
+	return nil
+}
+func (noNamespaceSchemaDecls) ListItemType(typeName string) (string, bool) { return "", false }
+func (noNamespaceSchemaDecls) UnionMemberTypes(typeName string) []string   { return nil }
 
 func TestPrefixValidationAllowsImportedNoNamespaceSchemaType(t *testing.T) {
 	expr, err := Compile(`$v instance of nota`)
