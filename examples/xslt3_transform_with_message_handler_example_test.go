@@ -23,8 +23,9 @@ func Example_xslt3_transform_with_message_handler() {
 	ctx := context.Background()
 
 	// Compile the stylesheet once, then reuse the returned *xslt3.Stylesheet
-	// across multiple calls to xslt3.Transform. The handler itself is not stored
-	// on the stylesheet; it is supplied per transformation through the context.
+	// across multiple calls to xslt3.Transform. The receiver itself is not stored
+	// on the stylesheet; it is supplied per transformation through the fluent
+	// invocation API (see the .Receiver() call below).
 	stylesheet, err := compileExampleStylesheet(ctx, stylesheetSrc)
 	if err != nil {
 		fmt.Printf("failed to compile stylesheet: %s\n", err)
