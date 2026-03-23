@@ -155,6 +155,32 @@ func (r *schemaRegistry) LookupSchemaAttribute(local, ns string) (typeName strin
 	return r.LookupAttribute(local, ns)
 }
 
+// LookupSchemaAttributeType returns the type name of an attribute declared
+// within an element's type definition. This looks up the element declaration,
+// finds its complex type, and returns the attribute's type.
+func (r *schemaRegistry) LookupSchemaAttributeType(elemLocal, elemNS, attrLocal, attrNS string) string {
+	for _, s := range r.schemas {
+		elemDecl, found := s.LookupElement(elemLocal, elemNS)
+		if !found {
+			continue
+		}
+		if elemDecl.Type == nil {
+			continue
+		}
+		for _, attrUse := range elemDecl.Type.Attributes {
+			if attrUse.Name.Local == attrLocal && attrUse.Name.NS == attrNS {
+				if attrUse.TypeName != (xsd.QName{}) {
+					if attrUse.TypeName.NS == lexicon.NamespaceXSD {
+						return "xs:" + attrUse.TypeName.Local
+					}
+					return xpath3.QAnnotation(attrUse.TypeName.NS, attrUse.TypeName.Local)
+				}
+			}
+		}
+	}
+	return ""
+}
+
 // LookupSchemaType implements xpath3.SchemaDeclarations.
 func (r *schemaRegistry) LookupSchemaType(local, ns string) (baseType string, ok bool) {
 	return r.LookupType(local, ns)

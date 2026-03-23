@@ -188,6 +188,18 @@ func (ec *execContext) applyCopyValidation(ctx context.Context, inst *CopyInst, 
 				return dynamicError(errCodeXTTE1535,
 					"xsl:copy type=%q refers to a complex type, but copied item is an attribute node", inst.TypeName)
 			}
+			// For simple types on attribute nodes, validate the attribute value
+			// against the declared type.
+			attr, ok := sourceNode.(*helium.Attribute)
+			if ok {
+				typeName := normalizeTypeName(inst.TypeName, ec)
+				content := string(attr.Content())
+				if _, castErr := xpath3.CastFromString(content, typeName); castErr != nil {
+					return dynamicError(errCodeXTTE1510,
+						"xsl:copy: attribute value %q does not match type %s: %v", content, inst.TypeName, castErr)
+				}
+			}
+			return nil
 		}
 		copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
 		if copiedElem != nil {

@@ -591,6 +591,21 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		ec.resultDocOutputDefs[href] = effOutDef
 	}
 
+	// Apply type validation for secondary result documents (type="...").
+	if inst.TypeName != "" && inst.Validation == "" {
+		root := findDocumentElement(tmpDoc)
+		if root != nil && ec.schemaRegistry != nil {
+			if err := ec.validateAndNormalizeElementContent(root, inst.TypeName); err != nil {
+				if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+					return dynamicError(errCodeXTTE1540,
+						"result document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
+				}
+				return err
+			}
+			ec.annotateNode(root, inst.TypeName)
+		}
+	}
+
 	// Validate the result document if requested.
 	if v := inst.Validation; v == validationStrict || v == validationLax {
 		// XTTE1550: when validating a document node, the children must comprise

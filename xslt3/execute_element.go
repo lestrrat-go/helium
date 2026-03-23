@@ -413,6 +413,15 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 				ec.annotateNode(elem, typeName)
 			}
 		}
+		// XTTE1510: check QName-typed attribute values can be resolved
+		// using the element's in-scope namespace declarations. Two attributes
+		// of type xs:QName using the same prefix but different namespace URIs
+		// create a conflict: only one xmlns:prefix can exist on the element.
+		if validation == validationStrict && valErr == nil {
+			if err := ec.checkQNameAttrConflicts(elem); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 	return nil
@@ -1375,5 +1384,84 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) e
 	}
 	out.noteOutput()
 	return nil
+}
+
+// checkQNameAttrConflicts checks for namespace-sensitive attribute value
+// conflicts on a validated element. When two attributes are typed as xs:QName
+// and use the same prefix bound to different namespace URIs, only one binding
+// can exist on the element. This makes at least one QName value unresolvable,
+// which is a strict validation error (XTTE1510).
+func (ec *execContext) checkQNameAttrConflicts(elem *helium.Element) error {
+	if ec.schemaRegistry == nil {
+		return nil
+	}
+	// Collect QName-typed attribute values with their expected namespace bindings.
+	type qnameAttr struct {
+		prefix string
+		uri    string
+		name   string
+	}
+	var qnames []qnameAttr
+	elemLocal := elem.LocalName()
+	elemNS := elem.URI()
+
+	for _, attr := range elem.Attributes() {
+		attrLocal := attr.LocalName()
+		attrNS := attr.URI()
+		// Check both the schema declaration and runtime type annotation.
+		attrTypeName := ec.schemaRegistry.LookupSchemaAttributeType(elemLocal, elemNS, attrLocal, attrNS)
+		if attrTypeName == "" {
+			// Fall back to runtime type annotation.
+			if ec.typeAnnotations != nil {
+				attrTypeName = ec.typeAnnotations[attr]
+			}
+		}
+		if attrTypeName == "" {
+			continue
+		}
+		if !isQNameType(attrTypeName) {
+			continue
+		}
+		val := string(attr.Content())
+		if idx := strings.IndexByte(val, ':'); idx > 0 {
+			prefix := val[:idx]
+			// Resolve the prefix using the element's namespace declarations.
+			resolved := ""
+			for _, ns := range elem.Namespaces() {
+				if ns.Prefix() == prefix {
+					resolved = ns.URI()
+					break
+				}
+			}
+			qnames = append(qnames, qnameAttr{prefix: prefix, uri: resolved, name: attrLocal})
+		}
+	}
+
+	// Check for unresolvable prefixes or conflicts.
+	for i := 0; i < len(qnames); i++ {
+		// If the prefix can't be resolved at all, that's an error.
+		if qnames[i].uri == "" {
+			return dynamicError(errCodeXTTE1510,
+				"QName attribute @%s has value with prefix %q that is not declared on the element",
+				qnames[i].name, qnames[i].prefix)
+		}
+		for j := i + 1; j < len(qnames); j++ {
+			if qnames[i].prefix == qnames[j].prefix && qnames[i].uri != qnames[j].uri {
+				return dynamicError(errCodeXTTE1510,
+					"QName attributes @%s and @%s use prefix %q bound to different namespaces (%q vs %q)",
+					qnames[i].name, qnames[j].name, qnames[i].prefix, qnames[i].uri, qnames[j].uri)
+			}
+		}
+	}
+	return nil
+}
+
+// isQNameType returns true if the given type name is xs:QName or derived.
+func isQNameType(typeName string) bool {
+	switch typeName {
+	case "xs:QName", "Q{http://www.w3.org/2001/XMLSchema}QName":
+		return true
+	}
+	return false
 }
 
