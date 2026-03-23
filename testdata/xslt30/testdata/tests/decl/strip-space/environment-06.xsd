@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+			targetNamespace="http://www.whitespace.example.com/ns/various"
+			xmlns:my="http://www.whitespace.example.com/ns/various">
+
+	<xsd:annotation>
+		<xsd:documentation>
+      		Schema for various types for node tests 
+		</xsd:documentation>
+	</xsd:annotation>
+
+<!-- Begin definitions -->
+	<xsd:element name="userNode" type="my:userType" nillable="true" />
+	
+	<xsd:element name="simpleBuiltin" type="xsd:Name" />
+	<xsd:element name="simpleUserElem" type="my:partNumberType" />
+	<xsd:element name="simpleUserList" type="my:myListType" />
+	<xsd:element name="simpleUserUnion" type="my:partIntegerUnion" />
+	<xsd:element name="complexMixedUserElem" type="my:mixedPersonType" />
+	<xsd:element name="complexUserElem" type="my:personType" />
+	<xsd:element name="complexSimpleContentElem" type="my:complexSimpleContent" />
+	<xsd:element name="onlyAttributes" type="my:onlyAttributesType" />
+	
+	<xsd:attribute name="specialPart" type="my:partNumberType"/>
+	<xsd:attribute name="colors" type="xsd:NMTOKENS"/>
+	<xsd:attribute name="union" type="my:partIntegerUnion"/>
+	<xsd:attribute name="count" type="xsd:string"/>
+
+	
+	<xsd:simpleType name="partNumberType">
+    <xsd:restriction base="xsd:string">
+      <xsd:pattern value="\d{3}-[A-Z]{2}"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="derivedURI">
+    <xsd:restriction base="xsd:anyURI">
+      <xsd:enumeration value="http://test1.org"/>
+      <xsd:enumeration value="http://test2.org"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  
+  <xsd:complexType name="personType">
+    <xsd:sequence>
+      <xsd:element name="firstName"  type="xsd:string"/>
+      <xsd:element name="familyName">
+        <xsd:complexType>
+          <xsd:simpleContent>
+            <xsd:extension base="xsd:string">
+              <xsd:anyAttribute/>
+            </xsd:extension>
+          </xsd:simpleContent>
+        </xsd:complexType>
+      </xsd:element>  
+    </xsd:sequence>
+    <xsd:attribute name="age" type="xsd:integer"/>
+  </xsd:complexType>
+  
+  <xsd:complexType name="mixedPersonType">
+    <xsd:sequence>
+      <xsd:element name="description" type="my:DescriptionType" />
+      <xsd:element name="company" type="my:CompanyType" />
+    </xsd:sequence>
+    <xsd:attribute name="age" type="xsd:integer"/>
+  </xsd:complexType>
+  
+  <xsd:complexType name="DescriptionType" mixed="true">
+     <xsd:sequence>
+       <xsd:element name="name" type="xsd:string"/>
+     </xsd:sequence>
+  </xsd:complexType>
+        
+  <xsd:complexType name="CompanyType" mixed="true">
+     <xsd:sequence>
+        <xsd:element name="name" type="xsd:string"/>
+     </xsd:sequence>
+  </xsd:complexType>
+  
+  <xsd:simpleType name="myListType">
+  	<xsd:list itemType="xsd:Name"/>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="restrictionListType">
+  	<xsd:list itemType="xsd:double"/>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="sixDoubles">
+  <xsd:restriction base="my:restrictionListType">
+     <xsd:minLength value="3"/>
+     <xsd:maxLength value="6"/>
+    
+  </xsd:restriction>
+  </xsd:simpleType>
+
+  <xsd:simpleType name="partIntegerUnion">
+  	<xsd:union memberTypes="my:partNumberType xsd:integer"/>
+  </xsd:simpleType>
+  
+  <xsd:simpleType name="listUnionType">
+  	<xsd:union memberTypes="my:sixDoubles my:myListType"/>
+  </xsd:simpleType>
+  
+  <xsd:complexType name="complexSimpleContent">
+    <xsd:simpleContent>
+      <xsd:extension base="xsd:decimal">
+        <xsd:attribute ref="my:count"/>
+      </xsd:extension>
+    </xsd:simpleContent>
+  </xsd:complexType>
+  
+  <xsd:complexType name="onlyAttributesType">
+    <xsd:attribute ref="my:colors" />
+    <xsd:attribute name="specialPart" type="my:partNumberType"/>
+    <xsd:attribute ref="my:union" use="optional"/>
+  </xsd:complexType>
+  
+  <xsd:complexType name="userType">
+		<xsd:sequence>
+			<xsd:element ref="my:simpleBuiltin" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:simpleUserElem" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:simpleUserList" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:simpleUserUnion" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:complexMixedUserElem" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:complexUserElem" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:complexSimpleContentElem" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element ref="my:onlyAttributes" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="listOfDoubles" type="my:restrictionListType" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="listOfSixDoubles" type="my:sixDoubles" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="listUnion" type="my:listUnionType" minOccurs="0" maxOccurs="unbounded"/>
+		</xsd:sequence>
+			<xsd:attribute ref="my:specialPart" />
+  </xsd:complexType>
+</xsd:schema>
