@@ -78,6 +78,7 @@ type invocationCfg struct {
 	initialModeParams     *Parameters
 
 	receiver           any
+	receiverErr        error
 	collectionResolver xpath3.CollectionResolver
 	baseOutputURI      string
 	sourceSchemas      []*xsd.Schema
@@ -188,6 +189,9 @@ func (inv Invocation) SetInitialModeParameter(name string, value xpath3.Sequence
 func (inv Invocation) Receiver(r any) Invocation {
 	inv = inv.clone()
 	inv.cfg.receiver = r
+	if r != nil && extractReceivers(r) == (receiverSet{}) {
+		inv.cfg.receiverErr = fmt.Errorf("xslt3: Receiver value of type %T does not implement any known receiver interface", r)
+	}
 	return inv
 }
 
@@ -257,6 +261,9 @@ func (inv Invocation) WriteTo(ctx context.Context, w io.Writer) error {
 // validate checks that the invocation config is valid for the entry kind.
 func (inv Invocation) validate() error {
 	c := inv.cfg
+	if c.receiverErr != nil {
+		return c.receiverErr
+	}
 	switch c.kind {
 	case InvocationTransform:
 		// nil source is allowed: the stylesheet may use xsl:source-document,
