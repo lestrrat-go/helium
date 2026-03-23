@@ -491,12 +491,46 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 			"expression %q uses accumulator-after on an ancestor, which is not streamable", expr.String())
 	}
 
+	// 9. Calls to shallow-descent functions with a climbing (non-striding) first argument
+	// are not streamable. The argument must be in striding posture (., child, etc.),
+	// not climbing posture (.., parent::, ancestor::).
+	if exprHasShallowDescentCallWithClimbingArg(ss, expr) {
+		return staticError(errCodeXTSE3430,
+			"expression %q calls a shallow-descent function with a climbing argument, which is not streamable", expr.String())
+	}
+
 	return nil
 }
 
 // exprHasCrawlingGroundingArg returns true if the expression contains a call to
 // reverse(), innermost(), or outermost() whose argument has a crawling expression
 // on streaming (non-grounded) data.
+// exprHasShallowDescentCallWithClimbingArg returns true if the expression
+// contains a call to a shallow-descent function where the first argument
+// uses upward navigation (parent/ancestor), which is not streamable.
+func exprHasShallowDescentCallWithClimbingArg(ss *Stylesheet, expr *xpath3.Expression) bool {
+	if expr == nil || ss == nil {
+		return false
+	}
+	found := false
+	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		if fc, ok := e.(xpath3.FunctionCall); ok && fc.Prefix != "" && len(fc.Args) > 0 {
+			cat := lookupFuncStreamability(ss, fc.Name, len(fc.Args))
+			if cat == "shallow-descent" {
+				if exprHasUpwardAxis(fc.Args[0]) {
+					found = true
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return found
+}
+
 func exprHasCrawlingGroundingArg(expr *xpath3.Expression) bool {
 	if expr == nil {
 		return false
@@ -2856,6 +2890,11 @@ func checkAbsorbingFunction(fn *XSLFunction) error {
 			"absorbing function %q has a consuming reference in a loop, which is not streamable", fn.Name.Name)
 	}
 
+	// Check that additional params don't receive streaming nodes.
+	if err := checkAdditionalParamsNotStreaming(fn, "absorbing"); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -2881,6 +2920,12 @@ func checkInspectionFunction(fn *XSLFunction) error {
 			}
 		}
 	}
+
+	// Check that additional params don't receive streaming nodes.
+	if err := checkAdditionalParamsNotStreaming(fn, "inspection"); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -2906,6 +2951,12 @@ func checkFilterFunction(fn *XSLFunction) error {
 			}
 		}
 	}
+
+	// Check that additional params don't receive streaming nodes.
+	if err := checkAdditionalParamsNotStreaming(fn, "filter"); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -2942,21 +2993,16 @@ func checkShallowDescentFunction(fn *XSLFunction) error {
 	}
 
 	// Check that additional params don't receive streaming nodes.
-	// For shallow-descent, additional parameters that could receive nodes
-	// are not allowed because the caller might pass streaming nodes.
-	for i := 1; i < len(fn.Params); i++ {
-		p := fn.Params[i]
-		as := strings.TrimSpace(p.As)
-		// If param type is explicitly a non-node type (xs:string, xs:integer, etc.),
-		// it can't receive streaming nodes, so it's fine.
-		if isAtomicTypeConstraint(as) {
-			continue
-		}
-		// Additional parameter with no type or node type is not allowed
-		// for shallow-descent because the caller could pass streaming nodes.
+	if err := checkAdditionalParamsNotStreaming(fn, "shallow-descent"); err != nil {
+		return err
+	}
+
+	// Check that the parameter is not used in a simple mapping expression,
+	// which would cause multiple consumption. E.g., (1 to 5) ! $n
+	if functionHasParamInSimpleMap(fn) {
 		return staticError(errCodeXTSE3430,
-			"shallow-descent function %q additional parameter %q could receive streaming nodes, violating its declared streamability",
-			fn.Name.Name, p.Name)
+			"shallow-descent function %q uses streaming parameter in simple mapping expression, violating its declared streamability",
+			fn.Name.Name)
 	}
 
 	return nil
@@ -3190,10 +3236,13 @@ func checkAscentFunction(fn *XSLFunction) error {
 		return err
 	}
 
-	// Ascent must not return the streaming parameter itself.
-	if functionReturnsStreamingParam(fn) {
+	// Ascent functions may return the streaming parameter only if
+	// the function body navigates upward from it (ancestor/parent).
+	// If the body just returns the param without upward navigation,
+	// it returns a raw streaming node, which is invalid.
+	if functionReturnsStreamingParam(fn) && !functionUsesUpwardFromParam(fn) {
 		return staticError(errCodeXTSE3430,
-			"ascent function %q returns a streaming parameter, violating its declared streamability", fn.Name.Name)
+			"ascent function %q returns a streaming parameter without upward navigation, violating its declared streamability", fn.Name.Name)
 	}
 
 	for _, inst := range fn.Body {
@@ -3204,6 +3253,12 @@ func checkAscentFunction(fn *XSLFunction) error {
 			}
 		}
 	}
+
+	// Check that additional params don't receive streaming nodes.
+	if err := checkAdditionalParamsNotStreaming(fn, "ascent"); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -3226,6 +3281,23 @@ func checkStreamingParamIsSingleton(fn *XSLFunction, category string) error {
 				"%s function %q first parameter type %q accepts a sequence, violating its declared streamability",
 				category, fn.Name.Name, firstParam.As)
 		}
+	}
+	return nil
+}
+
+// checkAdditionalParamsNotStreaming checks that additional parameters (2nd, 3rd, ...)
+// of a streamable function have atomic type constraints, so they cannot receive
+// streaming nodes from the caller.
+func checkAdditionalParamsNotStreaming(fn *XSLFunction, category string) error {
+	for i := 1; i < len(fn.Params); i++ {
+		p := fn.Params[i]
+		as := strings.TrimSpace(p.As)
+		if isAtomicTypeConstraint(as) {
+			continue
+		}
+		return staticError(errCodeXTSE3430,
+			"%s function %q additional parameter %q could receive streaming nodes, violating its declared streamability",
+			category, fn.Name.Name, p.Name)
 	}
 	return nil
 }
@@ -3291,17 +3363,22 @@ func functionUsesUpwardFromParam(fn *XSLFunction) bool {
 						}
 					}
 				}
-				// $param/.. (PathExpr form: FilterExpr($param) / LocationPath(..))
-				if pe, ok := e.(xpath3.PathExpr); ok {
-					if fe, ok := pe.Filter.(xpath3.FilterExpr); ok {
+				// $param/.. (PathExpr form)
+				if pe, ok := e.(xpath3.PathExpr); ok && pe.Path != nil {
+					var varName string
+					// Filter may be a bare VariableExpr or wrapped in FilterExpr.
+					if ve, ok := pe.Filter.(xpath3.VariableExpr); ok {
+						varName = ve.Name
+					} else if fe, ok := pe.Filter.(xpath3.FilterExpr); ok {
 						if ve, ok := fe.Expr.(xpath3.VariableExpr); ok {
-							if paramNames[ve.Name] && pe.Path != nil {
-								lp := *pe.Path
-								if exprHasUpwardAxis(lp) {
-									found = true
-									return false
-								}
-							}
+							varName = ve.Name
+						}
+					}
+					if varName != "" && paramNames[varName] {
+						lp := *pe.Path
+						if exprHasUpwardAxis(lp) {
+							found = true
+							return false
 						}
 					}
 				}
@@ -3384,17 +3461,103 @@ func functionHasMultipleConsumingRefs(fn *XSLFunction) bool {
 
 	for _, p := range fn.Params {
 		refs := 0
-		for _, inst := range fn.Body {
-			for _, expr := range getInstructionExprs(inst) {
-				refs += countParamDownwardRefs(expr, p.Name)
-			}
-		}
+		collectAllInstructionExprs(fn.Body, func(expr *xpath3.Expression) {
+			refs += countParamDownwardRefs(expr, p.Name)
+		})
 		if refs > 1 {
 			return true
 		}
 	}
 
 	return false
+}
+
+// collectAllInstructionExprs recursively walks an instruction tree and calls
+// fn for every XPath expression found, including expressions in nested bodies.
+func collectAllInstructionExprs(insts []Instruction, fn func(*xpath3.Expression)) {
+	for _, inst := range insts {
+		for _, expr := range getInstructionExprs(inst) {
+			fn(expr)
+		}
+		// Recurse into instruction bodies
+		for _, body := range getInstructionBodies(inst) {
+			collectAllInstructionExprs(body, fn)
+		}
+	}
+}
+
+// getInstructionBodies returns all child instruction bodies from an instruction.
+func getInstructionBodies(inst Instruction) [][]Instruction {
+	switch v := inst.(type) {
+	case *CopyInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *IfInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *ChooseInst:
+		var bodies [][]Instruction
+		for _, w := range v.When {
+			if w.Body != nil {
+				bodies = append(bodies, w.Body)
+			}
+		}
+		if v.Otherwise != nil {
+			bodies = append(bodies, v.Otherwise)
+		}
+		return bodies
+	case *ForEachInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *ElementInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *LiteralResultElement:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *VariableInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *SequenceInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *ValueOfInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *AttributeInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *MessageInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *ResultDocumentInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *MapInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *MapEntryInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *DocumentInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	}
+	return nil
 }
 
 // functionHasConsumingRefInLoop checks if a parameter is used with a positional
@@ -3451,6 +3614,52 @@ func exprHasParamInLoop(expr xpath3.Expr, paramNames map[string]bool) bool {
 	return false
 }
 
+// functionHasParamInSimpleMap returns true if the streaming parameter (first param)
+// is referenced on the right-hand side of a simple mapping expression (! operator),
+// which causes the parameter to be consumed multiple times.
+// E.g., (1 to 5) ! $n — $n is accessed for each item in the range.
+func functionHasParamInSimpleMap(fn *XSLFunction) bool {
+	if len(fn.Params) == 0 {
+		return false
+	}
+	// Only the first param is the streaming param for shallow-descent.
+	streamingParamName := fn.Params[0].Name
+
+	for _, inst := range fn.Body {
+		for _, expr := range getInstructionExprs(inst) {
+			if expr == nil {
+				continue
+			}
+			found := false
+			xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+				if found {
+					return false
+				}
+				if sme, ok := e.(xpath3.SimpleMapExpr); ok {
+					// Check if the RHS references the streaming parameter
+					xpath3.WalkExpr(sme.Right, func(inner xpath3.Expr) bool {
+						if found {
+							return false
+						}
+						if ve, ok := inner.(xpath3.VariableExpr); ok {
+							if ve.Name == streamingParamName {
+								found = true
+								return false
+							}
+						}
+						return true
+					})
+				}
+				return !found
+			})
+			if found {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // countParamDownwardRefs counts how many times a parameter variable is used
 // in a consuming way (downward navigation, function arguments, etc.).
 func countParamDownwardRefs(expr *xpath3.Expression, paramName string) int {
@@ -3466,14 +3675,18 @@ func countParamDownwardRefs(expr *xpath3.Expression, paramName string) int {
 			}
 		}
 		// $param/child or $param/* (PathExpr)
-		if pe, ok := e.(xpath3.PathExpr); ok {
-			if fe, ok := pe.Filter.(xpath3.FilterExpr); ok {
+		if pe, ok := e.(xpath3.PathExpr); ok && pe.Path != nil {
+			var matched bool
+			if ve, ok := pe.Filter.(xpath3.VariableExpr); ok {
+				matched = ve.Name == paramName
+			} else if fe, ok := pe.Filter.(xpath3.FilterExpr); ok {
 				if ve, ok := fe.Expr.(xpath3.VariableExpr); ok {
-					if ve.Name == paramName && pe.Path != nil {
-						count++
-						return false
-					}
+					matched = ve.Name == paramName
 				}
+			}
+			if matched {
+				count++
+				return false
 			}
 		}
 		// $param[pred] — filtering
@@ -3490,7 +3703,9 @@ func countParamDownwardRefs(expr *xpath3.Expression, paramName string) int {
 			if fc.Prefix == "" {
 				switch fc.Name {
 				case "head", "tail", "copy-of", "snapshot", "string-join",
-					"serialize", "deep-equal", "sort", "reverse":
+					"serialize", "deep-equal", "sort", "reverse",
+					"empty", "exists", "count", "sum", "avg", "min", "max",
+					"string", "data", "boolean":
 					for _, arg := range fc.Args {
 						if ve, ok := arg.(xpath3.VariableExpr); ok {
 							if ve.Name == paramName {
