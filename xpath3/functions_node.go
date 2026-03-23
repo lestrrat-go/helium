@@ -80,7 +80,8 @@ func fnNilled(ctx context.Context, args []Sequence) (Sequence, error) {
 	if n == nil {
 		return nil, nil
 	}
-	// Helium doesn't support schema-validated nilled; always false for elements.
+	// Schema-validated nilled checking is handled by the XSLT engine
+	// override. This default implementation returns false for elements.
 	if n.Type() == helium.ElementNode {
 		return SingleBoolean(false), nil
 	}

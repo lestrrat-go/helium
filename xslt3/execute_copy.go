@@ -518,6 +518,15 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 						"xsl:copy-of type=%q: copied node is %s, not an element or document node",
 						inst.TypeName, nt)
 				}
+				// Attribute type validation: check the attribute value against the declared type.
+				if v.Node.Type() == helium.AttributeNode {
+					if attr, ok := v.Node.(*helium.Attribute); ok {
+						if _, castErr := xpath3.CastFromString(attr.Value(), inst.TypeName); castErr != nil {
+							return dynamicError(errCodeXTTE1510,
+								"copy-of: attribute value %q is not valid for type %s: %v", attr.Value(), inst.TypeName, castErr)
+						}
+					}
+				}
 				// Type validation: validate the copied element against the declared type.
 				copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
 				if copiedElem != nil {

@@ -264,6 +264,13 @@ func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, 
 		}
 	}
 
+	// Built-in simple types (xs:string, xs:integer, xs:untypedAtomic, etc.)
+	// require that the element have simple content — no child elements.
+	if elementHasChildElements(elem) {
+		return dynamicError(errCodeXTTE1510,
+			"element has child elements but type %s requires simple content", typeName)
+	}
+
 	// Built-in XSD type: validate by attempting to cast.
 	// Use text-only string value (skip comments/PIs) per XPath data model.
 	content := strings.TrimSpace(elementTextContent(elem))
@@ -305,6 +312,16 @@ func collectTextContent(node helium.Node, buf *strings.Builder) {
 			}
 		}
 	}
+}
+
+// elementHasChildElements returns true if elem has any direct child elements.
+func elementHasChildElements(elem *helium.Element) bool {
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() == helium.ElementNode {
+			return true
+		}
+	}
+	return false
 }
 
 // validateConstructedElement validates a constructed element node against the
