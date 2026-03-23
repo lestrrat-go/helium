@@ -682,7 +682,11 @@ func (c *compiler) compileSequence(elem *helium.Element) (Instruction, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &SequenceInst{Body: body}, nil
+	inst := &SequenceInst{Body: body}
+	if dvAttr := getAttr(elem, "default-validation"); dvAttr != "" {
+		inst.DefaultValidation = dvAttr
+	}
+	return inst, nil
 }
 
 func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralResultElement, error) {
@@ -965,6 +969,11 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 			return nil, err
 		}
 		lre.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
+	}
+
+	// Handle xsl:default-validation on LRE (XSLT 3.0 §3.6)
+	if dvAttr, ok := elem.GetAttributeNS("default-validation", lexicon.NamespaceXSLT); ok {
+		lre.DefaultValidation = dvAttr
 	}
 
 	// Compute effective static base URI: if any ancestor stylesheet element
