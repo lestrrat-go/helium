@@ -194,7 +194,7 @@ func (ec *execContext) applyCopyValidation(ctx context.Context, inst *CopyInst, 
 			if ok {
 				typeName := normalizeTypeName(inst.TypeName, ec)
 				content := string(attr.Content())
-				if _, castErr := xpath3.CastFromString(content, typeName); castErr != nil {
+				if castErr := ec.validateAttributeValueForType(content, typeName); castErr != nil {
 					return dynamicError(errCodeXTTE1510,
 						"xsl:copy: attribute value %q does not match type %s: %v", content, inst.TypeName, castErr)
 				}
@@ -531,8 +531,14 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 				}
 				// Attribute type validation: check the attribute value against the declared type.
 				if v.Node.Type() == helium.AttributeNode {
+					// XTTE1535: complex type on an attribute node is an error.
+					if ec.isComplexTypeName(inst.TypeName) {
+						return dynamicError(errCodeXTTE1535,
+							"copy-of type=%q refers to a complex type, but copied item is an attribute node", inst.TypeName)
+					}
 					if attr, ok := v.Node.(*helium.Attribute); ok {
-						if _, castErr := xpath3.CastFromString(attr.Value(), inst.TypeName); castErr != nil {
+						typeName := normalizeTypeName(inst.TypeName, ec)
+						if castErr := ec.validateAttributeValueForType(attr.Value(), typeName); castErr != nil {
 							return dynamicError(errCodeXTTE1510,
 								"copy-of: attribute value %q is not valid for type %s: %v", attr.Value(), inst.TypeName, castErr)
 						}
@@ -1031,4 +1037,21 @@ func (ec *execContext) isComplexTypeName(typeName string) bool {
 	}
 	// A complex type has a content model, attributes, or non-simple content type.
 	return td.ContentModel != nil || len(td.Attributes) > 0 || td.AnyAttribute != nil
+}
+
+// validateAttributeValueForType validates an attribute string value against
+// a type name. For built-in XSD types it uses xpath3.CastFromString; for
+// user-defined types (list, union, restriction) it falls back to the schema
+// registry's ValidateCast. Returns nil when the value is valid.
+func (ec *execContext) validateAttributeValueForType(value, typeName string) error {
+	_, castErr := xpath3.CastFromString(value, typeName)
+	if castErr == nil {
+		return nil
+	}
+	// CastFromString only knows built-in types. For user-defined simple types
+	// (lists, unions, restrictions), delegate to the schema registry.
+	if ec.schemaRegistry == nil {
+		return castErr
+	}
+	return ec.schemaRegistry.ValidateCast(value, typeName)
 }

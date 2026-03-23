@@ -159,7 +159,7 @@ func validateDate(value string) error {
 	if !dateRegex.MatchString(value) {
 		return fmt.Errorf("invalid date")
 	}
-	return nil
+	return validateDateComponents(value)
 }
 
 // languageRegex matches the lexical space of xs:language (RFC 3066).
@@ -197,7 +197,7 @@ func validateDateTime(value string) error {
 	if !dateTimeRegex.MatchString(value) {
 		return fmt.Errorf("invalid dateTime")
 	}
-	return nil
+	return validateDateComponents(value)
 }
 
 // timeRegex matches xs:time.
@@ -206,6 +206,55 @@ var timeRegex = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}(\.\d+)?` + tzSuffix + `$`
 func validateTime(value string) error {
 	if !timeRegex.MatchString(value) {
 		return fmt.Errorf("invalid time")
+	}
+	return nil
+}
+
+// validateDateComponents parses YYYY-MM-DD from a date/dateTime string and
+// checks month (1-12) and day (1-maxDay) ranges. The value must already have
+// passed the regex check.
+func validateDateComponents(value string) error {
+	s := value
+	// Skip optional leading '-' for negative years.
+	if len(s) > 0 && s[0] == '-' {
+		s = s[1:]
+	}
+	// Find year-month-day fields: YYYY-MM-DD...
+	// Year is variable-length (4+ digits), so find second '-' after first.
+	firstDash := strings.IndexByte(s, '-')
+	if firstDash < 0 {
+		return fmt.Errorf("invalid date")
+	}
+	rest := s[firstDash+1:] // "MM-DD..."
+	secondDash := strings.IndexByte(rest, '-')
+	if secondDash < 0 {
+		return fmt.Errorf("invalid date")
+	}
+	monthStr := rest[:secondDash]
+	dayStr := rest[secondDash+1:]
+	// dayStr may have trailing 'T...' or timezone; take first 2 chars.
+	if len(dayStr) < 2 {
+		return fmt.Errorf("invalid date")
+	}
+	dayStr = dayStr[:2]
+
+	var month, day int
+	if _, err := fmt.Sscanf(monthStr, "%d", &month); err != nil {
+		return fmt.Errorf("invalid date")
+	}
+	if _, err := fmt.Sscanf(dayStr, "%d", &day); err != nil {
+		return fmt.Errorf("invalid date")
+	}
+
+	if month < 1 || month > 12 {
+		return fmt.Errorf("invalid date: month %d out of range", month)
+	}
+	// Maximum days per month (February gets 29 for simplicity; the XML Schema
+	// spec allows Feb 29 in every year, or rather doesn't restrict by year for
+	// the xs:date datatype — but it does require valid Gregorian days).
+	maxDays := [13]int{0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+	if day < 1 || day > maxDays[month] {
+		return fmt.Errorf("invalid date: day %d out of range for month %d", day, month)
 	}
 	return nil
 }

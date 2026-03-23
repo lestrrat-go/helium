@@ -332,7 +332,6 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 		ec.stripAnnotations(elem)
 		return nil
 	case validationPreserve:
-		// preserve: keep any existing type annotations unchanged; nothing to do here
 		return nil
 	case validationStrict, validationLax:
 		if ec.schemaRegistry == nil {
@@ -487,12 +486,12 @@ func (ec *execContext) validateConstructedElementWithIDCheck(ctx context.Context
 				}
 			}
 		}
-		// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
-		if len(ann) > 0 {
-			if err := ValidateDocIDConstraints(tmpDoc, ann); err != nil {
-				return err
-			}
-		}
+		// NOTE: xs:ID uniqueness and xs:IDREF resolution (XTTE1555) are NOT
+		// checked here. Partial validation of a subtree (e.g., copy-of of a
+		// single element) cannot resolve IDREFs that reference IDs elsewhere
+		// in the source document. XTTE1555 is enforced at the result-document
+		// level instead (see execute_resultdoc.go).
+
 		// Merge type annotations back to the live element.
 		if len(ann) > 0 {
 			ec.mapAnnotationsFromValidation(ann, copied, elem)
