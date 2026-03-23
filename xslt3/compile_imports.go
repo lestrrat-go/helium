@@ -280,11 +280,11 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 			if name != "" && sel != "" {
 				compiled, err := xpath3.Compile(sel)
 				if err == nil {
-					ctx := context.Background()
+					eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 					if len(c.staticVars) > 0 {
-						ctx = xpath3.WithVariables(ctx, c.staticVars)
+						eval = eval.Variables(xpath3.VariablesFromMap(c.staticVars))
 					}
-					result, err := compiled.Evaluate(ctx, nil)
+					result, err := eval.Evaluate(context.Background(), compiled, nil)
 					if err == nil {
 						if setErr := c.setStaticVarWithKind(name, ln, result.Sequence()); setErr != nil {
 							return setErr

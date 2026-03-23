@@ -790,15 +790,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 	}
 
 	// 6. Build evaluation context with variables from xsl:with-param.
-	dynCtx := ec.transformCtx
-	if dynCtx == nil {
-		dynCtx = context.Background()
-	}
-	dynCtx = withExecContext(dynCtx, ec)
-
-	if len(nsBindings) > 0 {
-		dynCtx = xpath3.WithNamespaces(dynCtx, nsBindings)
-	}
+	dynCtx := ec.xpathContext(nil)
 
 	// Collect variables: start with current XSLT variables plus xsl:with-param
 	vars := ec.collectAllVars()
@@ -837,24 +829,24 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 		}
 	}
 
-	dynCtx = xpath3.WithVariablesBorrowed(dynCtx, vars)
-
 	// Per XSLT 3.0 section 20.3: the available functions include all
 	// functions from the static context of the xsl:evaluate instruction
 	// EXCEPT current(), user-defined stylesheet functions (xsl:function),
 	// and functions in the XSLT namespace.
 	evalFns := ec.xsltEvaluateFunctions()
-	dynCtx = xpath3.WithFunctionsBorrowed(dynCtx, evalFns)
+	eval := xpath3.NewEvaluator(xpath3.EvalBorrowing).
+		Variables(xpath3.VariablesFromMap(vars)).
+		Functions(xpath3.FunctionLibraryFromMaps(evalFns, ec.xsltEvaluateFunctionsNS()))
 
-	if fnsNS := ec.xsltEvaluateFunctionsNS(); len(fnsNS) > 0 {
-		dynCtx = xpath3.WithFunctionsNSBorrowed(dynCtx, fnsNS)
+	if len(nsBindings) > 0 {
+		eval = eval.Namespaces(nsBindings)
 	}
 
 	if ec.typeAnnotations != nil {
-		dynCtx = xpath3.WithTypeAnnotations(dynCtx, ec.typeAnnotations)
+		eval = eval.TypeAnnotations(ec.typeAnnotations)
 	}
 	if ec.schemaRegistry != nil {
-		dynCtx = xpath3.WithSchemaDeclarations(dynCtx, ec.schemaRegistry)
+		eval = eval.SchemaDeclarations(ec.schemaRegistry)
 	}
 
 	// Handle base-uri
@@ -864,35 +856,34 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 			return buErr
 		}
 		if baseURI != "" {
-			dynCtx = xpath3.WithBaseURI(dynCtx, ensureFileURI(baseURI))
+			eval = eval.BaseURI(ensureFileURI(baseURI))
 		}
 	} else if ec.stylesheet.baseURI != "" {
-		dynCtx = xpath3.WithBaseURI(dynCtx, ensureFileURI(ec.stylesheet.baseURI))
+		eval = eval.BaseURI(ensureFileURI(ec.stylesheet.baseURI))
 	}
 
 	// Default collation
 	if ec.defaultCollation != "" {
-		dynCtx = xpath3.WithDefaultCollation(dynCtx, ec.defaultCollation)
+		eval = eval.DefaultCollation(ec.defaultCollation)
 	}
 
 	// Decimal formats
 	if len(ec.stylesheet.decimalFormats) > 0 {
 		for qn, df := range ec.stylesheet.decimalFormats {
 			if qn == (xpath3.QualifiedName{}) {
-				dynCtx = xpath3.WithDefaultDecimalFormat(dynCtx, df)
+				eval = eval.DefaultDecimalFormat(df)
 			}
 		}
-		dynCtx = xpath3.WithNamedDecimalFormats(dynCtx, ec.stylesheet.decimalFormats)
+		eval = eval.NamedDecimalFormats(ec.stylesheet.decimalFormats)
 	}
 
 	// Set context item if it's an atomic value
 	if dynContextItem != nil {
-		dynCtx = xpath3.WithContextItem(dynCtx, dynContextItem)
+		eval = eval.ContextItem(dynContextItem)
 	}
 
 	if hasContextItem {
-		dynCtx = xpath3.WithPosition(dynCtx, 1)
-		dynCtx = xpath3.WithSize(dynCtx, 1)
+		eval = eval.Position(1).Size(1)
 	}
 
 	// 7. Evaluate the dynamic expression.
@@ -903,7 +894,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 		evalNode = ec.contextNode
 	}
 
-	result, evalErr := dynExpr.Evaluate(dynCtx, evalNode)
+	result, evalErr := eval.Evaluate(dynCtx, dynExpr, evalNode)
 	if evalErr != nil {
 		return evalErr
 	}

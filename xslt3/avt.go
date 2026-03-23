@@ -220,6 +220,27 @@ func (a *AVT) evaluate(ctx context.Context, node helium.Node) (string, error) {
 	return sb.String(), nil
 }
 
+// evaluateStatic evaluates the AVT at compile time using the given Evaluator.
+// This avoids the deprecated Expression.Evaluate(ctx, node) path.
+func (a *AVT) evaluateStatic(eval xpath3.Evaluator, node helium.Node) (string, error) {
+	if a == nil {
+		return "", nil
+	}
+	var sb strings.Builder
+	for _, p := range a.parts {
+		if p.expr != nil {
+			result, err := eval.Evaluate(context.Background(), p.expr, node)
+			if err != nil {
+				return "", &XSLTError{Code: errCodeXTDE0045, Message: "AVT evaluation error: " + err.Error(), Cause: err}
+			}
+			sb.WriteString(stringifyResult(result))
+		} else {
+			sb.WriteString(p.literal)
+		}
+	}
+	return sb.String(), nil
+}
+
 // stringifyResult converts an xpath3.Result to its string representation.
 func stringifyResult(r *xpath3.Result) string {
 	return stringifySequenceWithSep(r.Sequence(), " ")
