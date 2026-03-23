@@ -217,16 +217,19 @@ func (ec *execContext) applyCopyValidation(ctx context.Context, inst *CopyInst, 
 		return nil
 	}
 	// Apply validation if specified and the copied node is an element.
-	if v := ec.effectiveValidation(inst.Validation); v != "" && v != validationPreserve {
-		copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
-		if copiedElem != nil {
-			if err := ec.validateConstructedElement(ctx, copiedElem, v); err != nil {
-				return err
-			}
-			// After validation, propagate type annotations to pending items
-			// so that instance-of checks on variable references work correctly.
-			if out.sequenceMode && len(out.pendingItems) > pendingBefore {
-				ec.propagateValidationAnnotationsToPending(out, pendingBefore)
+	// Per XSLT spec, type and validation are mutually exclusive.
+	if inst.TypeName == "" {
+		if v := ec.effectiveValidation(inst.Validation); v != "" {
+			copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
+			if copiedElem != nil {
+				if err := ec.validateConstructedElement(ctx, copiedElem, v); err != nil {
+					return err
+				}
+				// After validation, propagate type annotations to pending items
+				// so that instance-of checks on variable references work correctly.
+				if out.sequenceMode && len(out.pendingItems) > pendingBefore {
+					ec.propagateValidationAnnotationsToPending(out, pendingBefore)
+				}
 			}
 		}
 	}

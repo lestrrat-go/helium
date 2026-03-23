@@ -332,6 +332,10 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 		ec.stripAnnotations(elem)
 		return nil
 	case validationPreserve:
+		// Per XSLT 3.0 §19.2: validation="preserve" assigns type
+		// annotation xs:anyType to the constructed element node,
+		// while preserving existing annotations on child nodes.
+		ec.annotateNode(elem, "xs:anyType")
 		return nil
 	case validationStrict, validationLax:
 		if ec.schemaRegistry == nil {
@@ -436,6 +440,10 @@ func (ec *execContext) validateConstructedElementWithIDCheck(ctx context.Context
 		ec.stripAnnotations(elem)
 		return nil
 	case validationPreserve:
+		// Per XSLT 3.0 §19.2: validation="preserve" assigns type
+		// annotation xs:anyType to the constructed element node,
+		// while preserving existing annotations on child nodes.
+		ec.annotateNode(elem, "xs:anyType")
 		return nil
 	case validationStrict, validationLax:
 		if ec.schemaRegistry == nil {
