@@ -83,6 +83,7 @@ type invocationCfg struct {
 	baseOutputURI      string
 	sourceSchemas      []*xsd.Schema
 	onMultipleMatch    OnMultipleMatchMode
+	traceWriter        io.Writer
 }
 
 func newInvocation(ss *Stylesheet, kind InvocationKind) Invocation {
@@ -224,6 +225,14 @@ func (inv Invocation) OnMultipleMatch(mode OnMultipleMatchMode) Invocation {
 	return inv
 }
 
+// TraceWriter sets the destination for fn:trace output during the
+// transformation. When nil, fn:trace writes to os.Stderr.
+func (inv Invocation) TraceWriter(w io.Writer) Invocation {
+	inv = inv.clone()
+	inv.cfg.traceWriter = w
+	return inv
+}
+
 // Do executes the transformation and returns the principal result document.
 func (inv Invocation) Do(ctx context.Context) (*helium.Document, error) {
 	if err := inv.validate(); err != nil {
@@ -308,6 +317,7 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 		baseOutputURI:      c.baseOutputURI,
 		sourceSchemas:      c.sourceSchemas,
 		onMultipleMatch:    c.onMultipleMatch.String(),
+		traceWriter:        c.traceWriter,
 	}
 
 	// Entry mode

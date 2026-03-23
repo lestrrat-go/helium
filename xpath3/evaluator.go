@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"io"
 	"maps"
 	"net/http"
 	"time"
@@ -58,6 +59,7 @@ type evaluatorCfg struct {
 	schemaDeclarations SchemaDeclarations
 	allowXML11Chars    bool
 	docOrder           *DocOrderCache
+	traceWriter        io.Writer
 }
 
 // NewEvaluator creates a new Evaluator with the given options.
@@ -271,6 +273,14 @@ func (e Evaluator) DocOrderCache(cache *DocOrderCache) Evaluator {
 	return e
 }
 
+// TraceWriter sets the destination for fn:trace output.
+// When nil, fn:trace writes to os.Stderr.
+func (e Evaluator) TraceWriter(w io.Writer) Evaluator {
+	e = e.clone()
+	e.cfg.traceWriter = w
+	return e
+}
+
 // Evaluate evaluates the compiled expression against the given context node.
 // ctx is used for cancellation/deadlines only, not for configuration.
 func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.Node) (*Result, error) {
@@ -369,6 +379,8 @@ func (e Evaluator) newEvalCtx(ctx context.Context, node helium.Node) *evalContex
 	if cfg.docOrder != nil {
 		ec.docOrder = cfg.docOrder
 	}
+
+	ec.traceWriter = cfg.traceWriter
 
 	return ec
 }

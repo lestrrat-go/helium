@@ -65,6 +65,9 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	if cfg != nil && cfg.msgReceiver != nil {
 		ec.msgReceiver = cfg.msgReceiver
 	}
+	if cfg != nil && cfg.traceWriter != nil {
+		ec.traceWriter = cfg.traceWriter
+	}
 	if cfg != nil && cfg.baseOutputURI != "" {
 		ec.currentOutputURI = cfg.baseOutputURI
 	}
