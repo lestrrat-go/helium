@@ -20,7 +20,11 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 		if err != nil {
 			return err
 		}
-		seq := flattenArraysInSequence(result.Sequence())
+		// Do NOT flatten arrays here: XSLT 3.0 allows arrays (and maps) as
+		// items in apply-templates, matched via pattern rules (e.g.,
+		// match=".[. instance of array(*)]"). Flattening would destroy the
+		// array before template matching can see it.
+		seq := result.Sequence()
 		ns, ok := xpath3.NodesFrom(seq)
 		if ok {
 			nodes = ns

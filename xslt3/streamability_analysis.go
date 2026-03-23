@@ -499,13 +499,30 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 			"expression %q calls a shallow-descent function with a climbing argument, which is not streamable", expr.String())
 	}
 
-	// 10. Mixed-posture sequence expressions: a SequenceExpr used as the LHS
-	// of a path step where some items access the streaming source (crawling/
-	// striding) and others are grounded (variable refs, literals) has mixed
-	// posture and is not streamable.
+	// 10. Mixed-posture sequence expressions: a SequenceExpr, UnionExpr, or
+	// ArrayConstructorExpr used as the LHS of a path step where some items
+	// access the streaming source (crawling/striding) and others are grounded
+	// (variable refs, literals) has mixed posture and is not streamable.
 	if exprHasMixedPostureSequenceInPath(expr) {
 		return staticError(errCodeXTSE3430,
 			"expression %q has a mixed-posture sequence expression in a path, which is not streamable", expr.String())
+	}
+
+	// 11. Union expressions used as the LHS of a path step: a union of two
+	// streaming (non-grounded) expressions is crawling per XSLT 3.0 spec
+	// (section 19.8.8.2). Stepping from a crawling expression is not
+	// streamable.
+	if exprHasUnionInPathStep(expr) {
+		return staticError(errCodeXTSE3430,
+			"expression %q has a union used as the input of a path step, which is not streamable (union of streaming expressions is crawling)", expr.String())
+	}
+
+	// 12. treat as document-node(element(X)) in a path: the type check
+	// requires inspecting the document element (consuming), and subsequent
+	// path steps also consume, giving multiple consuming operations.
+	if exprHasConsumingTreatAsInPath(expr) {
+		return staticError(errCodeXTSE3430,
+			"expression %q uses treat as document-node(element(...)) in a path, which is not streamable", expr.String())
 	}
 
 	return nil
@@ -541,10 +558,10 @@ func exprHasShallowDescentCallWithClimbingArg(ss *Stylesheet, expr *xpath3.Expre
 }
 
 // exprHasMixedPostureSequenceInPath returns true if the expression contains a
-// PathExpr or PathStepExpr whose LHS/filter is a SequenceExpr that mixes
-// items accessing the streaming source (crawling/striding) with grounded items
-// (variable references, literals). Such mixed-posture sequences are not
-// streamable per XSLT 3.0 spec.
+// PathExpr or PathStepExpr whose LHS/filter is a SequenceExpr, UnionExpr, or
+// ArrayConstructorExpr that mixes items accessing the streaming source
+// (crawling/striding) with grounded items (variable references, literals).
+// Such mixed-posture expressions are not streamable per XSLT 3.0 spec.
 func exprHasMixedPostureSequenceInPath(expr *xpath3.Expression) bool {
 	if expr == nil {
 		return false
@@ -557,15 +574,67 @@ func exprHasMixedPostureSequenceInPath(expr *xpath3.Expression) bool {
 		e = derefXPathExpr(e)
 		switch v := e.(type) {
 		case xpath3.PathExpr:
-			if seq, ok := derefXPathExpr(v.Filter).(xpath3.SequenceExpr); ok && v.Path != nil {
-				if seqHasMixedPosture(seq) {
-					found = true
-					return false
+			if v.Path != nil && filterHasMixedPosture(v.Filter) {
+				found = true
+				return false
+			}
+		case xpath3.PathStepExpr:
+			if filterHasMixedPosture(v.Left) {
+				found = true
+				return false
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// filterHasMixedPosture checks whether a filter expression (LHS of a path)
+// is a SequenceExpr, UnionExpr, or ArrayConstructorExpr with mixed postures
+// (some items grounded, some crawling).
+func filterHasMixedPosture(expr xpath3.Expr) bool {
+	expr = derefXPathExpr(expr)
+	switch v := expr.(type) {
+	case xpath3.SequenceExpr:
+		return seqHasMixedPosture(v)
+	case xpath3.UnionExpr:
+		return itemsHaveMixedPosture([]xpath3.Expr{v.Left, v.Right})
+	case xpath3.ArrayConstructorExpr:
+		return itemsHaveMixedPosture(v.Items)
+	case xpath3.LookupExpr:
+		// Array lookup like [$a, //B]?* — check the base expression.
+		return filterHasMixedPosture(v.Expr)
+	}
+	return false
+}
+
+// exprHasUnionInPathStep returns true if a UnionExpr where both operands
+// access the streaming source (non-grounded) is used as the LHS of a path
+// step. Per XSLT 3.0, a union of two streaming expressions is crawling, and
+// stepping from a crawling expression is not streamable.
+func exprHasUnionInPathStep(expr *xpath3.Expression) bool {
+	if expr == nil {
+		return false
+	}
+	found := false
+	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		e = derefXPathExpr(e)
+		switch v := e.(type) {
+		case xpath3.PathExpr:
+			if v.Path != nil {
+				if u, ok := derefXPathExpr(v.Filter).(xpath3.UnionExpr); ok {
+					if !exprIsGrounded(u.Left) && !exprIsGrounded(u.Right) {
+						found = true
+						return false
+					}
 				}
 			}
 		case xpath3.PathStepExpr:
-			if seq, ok := derefXPathExpr(v.Left).(xpath3.SequenceExpr); ok {
-				if seqHasMixedPosture(seq) {
+			if u, ok := derefXPathExpr(v.Left).(xpath3.UnionExpr); ok {
+				if !exprIsGrounded(u.Left) && !exprIsGrounded(u.Right) {
 					found = true
 					return false
 				}
@@ -576,18 +645,37 @@ func exprHasMixedPostureSequenceInPath(expr *xpath3.Expression) bool {
 	return found
 }
 
+// exprIsGrounded returns true if an expression is grounded — it accesses
+// only in-memory data (variable references, literals) and does not navigate
+// the streaming source.
+func exprIsGrounded(expr xpath3.Expr) bool {
+	expr = derefXPathExpr(expr)
+	switch expr.(type) {
+	case xpath3.VariableExpr, xpath3.LiteralExpr:
+		return true
+	}
+	return false
+}
+
 // seqHasMixedPosture returns true if a SequenceExpr has items with different
 // postures — specifically, some items are crawling (use descendant or
 // descendant-or-self axes) while others are non-crawling (grounded variable
 // refs, striding paths, etc.). Grounded + striding is fine; crawling mixed
 // with non-crawling is not streamable.
 func seqHasMixedPosture(seq xpath3.SequenceExpr) bool {
-	if len(seq.Items) < 2 {
+	return itemsHaveMixedPosture(seq.Items)
+}
+
+// itemsHaveMixedPosture returns true if a list of expressions has mixed
+// postures — some crawling (descendant/descendant-or-self axes on the stream)
+// and some non-crawling (grounded variables, striding paths).
+func itemsHaveMixedPosture(items []xpath3.Expr) bool {
+	if len(items) < 2 {
 		return false
 	}
 	hasCrawling := false
 	hasNonCrawling := false
-	for _, item := range seq.Items {
+	for _, item := range items {
 		if seqItemIsCrawling(item) {
 			hasCrawling = true
 		} else {
@@ -3303,8 +3391,62 @@ func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, gro
 		count += countStreamingDownwardSelectionsInner(ss, e.Expr, false)
 	case xpath3.TreatAsExpr:
 		count += countStreamingDownwardSelectionsInner(ss, e.Expr, false)
+		// treat as document-node(element(X)) requires inspecting the
+		// document element to verify the type, which is a consuming
+		// operation on the streaming document.
+		if treatAsIsConsuming(e) {
+			count++
+		}
 	}
 	return count
+}
+
+// treatAsIsConsuming returns true if a treat-as expression has a type test
+// that requires consuming the streaming document. Specifically,
+// document-node(element(X)) requires inspecting the document element.
+func treatAsIsConsuming(e xpath3.TreatAsExpr) bool {
+	if dt, ok := e.Type.ItemTest.(xpath3.DocumentTest); ok && dt.Inner != nil {
+		return true
+	}
+	return false
+}
+
+// exprHasConsumingTreatAsInPath returns true if the expression contains a
+// TreatAsExpr with a consuming type test (e.g., document-node(element(X)))
+// used as the LHS/filter of a path expression that navigates downward.
+// The type check consumes the document, and the path also consumes, giving
+// two consuming operations which is not streamable.
+func exprHasConsumingTreatAsInPath(expr *xpath3.Expression) bool {
+	if expr == nil {
+		return false
+	}
+	found := false
+	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		e = derefXPathExpr(e)
+		switch v := e.(type) {
+		case xpath3.PathExpr:
+			if v.Path != nil {
+				if ta, ok := derefXPathExpr(v.Filter).(xpath3.TreatAsExpr); ok {
+					if treatAsIsConsuming(ta) {
+						found = true
+						return false
+					}
+				}
+			}
+		case xpath3.PathStepExpr:
+			if ta, ok := derefXPathExpr(v.Left).(xpath3.TreatAsExpr); ok {
+				if treatAsIsConsuming(ta) {
+					found = true
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return found
 }
 
 // derefXPathExpr converts pointer Expr types to their value equivalents
