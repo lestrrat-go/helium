@@ -114,10 +114,11 @@ type parserCtx struct {
 	inputTab     inputStack
 	cachedCursor strcursor.Cursor // cached result of getCursor(); invalidated on push/pop
 	stopped      bool
-	disableSAX   bool  // suppress SAX callbacks after fatal error in recover mode
-	recoverErr   error // first fatal error saved during recovery
-	elemDepth    int   // current element nesting depth
-	maxElemDepth int   // max allowed element nesting depth (0 = unlimited)
+	disableSAX       bool   // suppress SAX callbacks after fatal error in recover mode
+	recoverErr       error  // first fatal error saved during recovery
+	elemDepth        int    // current element nesting depth
+	maxElemDepth     int    // max allowed element nesting depth (0 = unlimited)
+	currentEntityURI string // URI of the external entity currently being replayed (for base-uri tracking)
 }
 
 type parserCtxKey struct{}
@@ -5379,10 +5380,17 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 			for e := grandchild; e != nil; e = e.NextSibling() {
 				e.SetTreeDoc(pctx.doc)
 				e.SetParent(nil)
-				if uri != "" && !pctx.options.IsSet(ParseNoBaseFix) {
-					if elem, ok := e.(*Element); ok {
-						if _, exists := elem.GetAttributeNS("base", XMLNamespace); !exists {
-							_ = elem.SetAttributeNS("base", uri, newNamespace("xml", XMLNamespace))
+				if uri != "" {
+					// Track the entity base URI on each top-level node
+					// from the external entity so that base-uri() can
+					// resolve it even when ParseNoBaseFix suppresses
+					// synthetic xml:base attributes.
+					e.baseDocNode().entityBaseURI = uri
+					if !pctx.options.IsSet(ParseNoBaseFix) {
+						if elem, ok := e.(*Element); ok {
+							if _, exists := elem.GetAttributeNS("base", XMLNamespace); !exists {
+								_ = elem.SetAttributeNS("base", uri, newNamespace("xml", XMLNamespace))
+							}
 						}
 					}
 				}
@@ -5678,11 +5686,19 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 	}
 
 	if pctx.replaceEntities {
+		// Track the entity URI so the TreeBuilder can set entityBaseURI
+		// on nodes created from this external entity.
+		savedEntityURI := pctx.currentEntityURI
+		if ent.EntityType() == enum.ExternalGeneralParsedEntity && ent.uri != "" {
+			pctx.currentEntityURI = ent.uri
+		}
 		for n := ent.firstChild; n != nil; n = n.NextSibling() {
 			if err := pctx.replayEntityNode(ctx, n); err != nil {
+				pctx.currentEntityURI = savedEntityURI
 				return err
 			}
 		}
+		pctx.currentEntityURI = savedEntityURI
 	}
 
 	return nil

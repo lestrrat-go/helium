@@ -37,15 +37,16 @@ type Node interface {
 
 // docnode is responsible for handling the basic tree-ish operations
 type docnode struct {
-	name       string
-	etype      ElementType
-	firstChild Node
-	lastChild  Node
-	parent     Node
-	next       Node
-	prev       Node
-	doc        *Document
-	line       int
+	name          string
+	etype         ElementType
+	firstChild    Node
+	lastChild     Node
+	parent        Node
+	next          Node
+	prev          Node
+	doc           *Document
+	line          int
+	entityBaseURI string // non-empty when this node originates from an external parsed entity
 }
 
 // node represents a node in a XML tree.

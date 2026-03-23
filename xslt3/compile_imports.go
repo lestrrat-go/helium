@@ -403,10 +403,6 @@ func stylesheetBaseURI(n helium.Node, fallback string) string {
 		}
 	}
 	for i := len(bases) - 1; i >= 0; i-- {
-		if filepath.IsAbs(bases[i]) || strings.Contains(bases[i], "://") {
-			base = bases[i]
-			continue
-		}
 		if base == "" {
 			base = bases[i]
 			continue

@@ -7,6 +7,13 @@ func NodeGetBase(doc *Document, n Node) string {
 		return ""
 	}
 
+	// If the node itself has an entity base URI (i.e. it was parsed from an
+	// external entity), that is the effective base URI. The entity URI is
+	// already fully resolved, so return it directly.
+	if ebu := n.baseDocNode().entityBaseURI; ebu != "" {
+		return ebu
+	}
+
 	// Collect xml:base values from the node up to the root.
 	var bases []string
 	for cur := n; cur != nil; cur = cur.Parent() {
@@ -15,6 +22,17 @@ func NodeGetBase(doc *Document, n Node) string {
 			if val, ok := elem.GetAttributeNS("base", XMLNamespace); ok && val != "" {
 				bases = append(bases, val)
 			}
+		}
+		// If an ancestor has an entity base URI, use it as the base
+		// instead of continuing up to the document.
+		if ebu := cur.baseDocNode().entityBaseURI; ebu != "" {
+			// Resolve from outermost to innermost, starting from the
+			// entity base URI instead of the document URL.
+			base := ebu
+			for i := len(bases) - 1; i >= 0; i-- {
+				base = BuildURI(bases[i], base)
+			}
+			return base
 		}
 	}
 

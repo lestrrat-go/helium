@@ -29,32 +29,41 @@ func BuildURI(systemID, base string) string {
 		return systemID
 	}
 
+	// When the systemID is an absolute file path (starts with /) and
+	// the base has a scheme (e.g. http://), resolve via URL reference
+	// so that /path replaces only the path component of the base.
+	// Without this, filepath.Join would concatenate incorrectly.
 	baseURL, err := url.Parse(base)
 	if err != nil {
 		return ""
 	}
-	if baseURL.Scheme == "" || baseURL.Scheme == "file" {
-		basePath := baseURL.Path
-		if basePath == "" {
-			basePath = base
-		}
-		// When the base ends with "/" it represents a directory;
-		// use it directly instead of calling filepath.Dir which
-		// would strip the last component.
-		dir := filepath.Dir(basePath)
-		if strings.HasSuffix(basePath, "/") {
-			dir = strings.TrimRight(basePath, "/")
-		}
-		result := filepath.Join(dir, systemID)
-		// Preserve trailing slash from systemID (indicates a directory
-		// base for xml:base chaining).
-		if strings.HasSuffix(systemID, "/") && !strings.HasSuffix(result, "/") {
-			result += "/"
-		}
-		return result
+
+	if baseURL.Scheme != "" && baseURL.Scheme != "file" {
+		return baseURL.ResolveReference(u).String()
 	}
 
-	return baseURL.ResolveReference(u).String()
+	// File path resolution
+	if filepath.IsAbs(systemID) {
+		return systemID
+	}
+	basePath := baseURL.Path
+	if basePath == "" {
+		basePath = base
+	}
+	// When the base ends with "/" it represents a directory;
+	// use it directly instead of calling filepath.Dir which
+	// would strip the last component.
+	dir := filepath.Dir(basePath)
+	if strings.HasSuffix(basePath, "/") {
+		dir = strings.TrimRight(basePath, "/")
+	}
+	result := filepath.Join(dir, systemID)
+	// Preserve trailing slash from systemID (indicates a directory
+	// base for xml:base chaining).
+	if strings.HasSuffix(systemID, "/") && !strings.HasSuffix(result, "/") {
+		result += "/"
+	}
+	return result
 }
 
 // fileParseInput wraps an os.File as a sax.ParseInput.
@@ -123,6 +132,11 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif context.Context, target, data 
 	pi, err := doc.CreatePI(target, data)
 	if err != nil {
 		return err
+	}
+
+	// Track external entity base URI for base-uri() resolution.
+	if ctx.currentEntityURI != "" {
+		pi.entityBaseURI = ctx.currentEntityURI
 	}
 
 	switch ctx.inSubset {
@@ -240,6 +254,13 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 	}
 
 	e.SetLine(ctx.LineNumber())
+
+	// When this element is being created as part of external entity
+	// expansion, record the entity's URI so base-uri() returns the
+	// correct value without needing a synthetic xml:base attribute.
+	if ctx.currentEntityURI != "" {
+		e.entityBaseURI = ctx.currentEntityURI
+	}
 
 	if uri != "" {
 		if err := e.SetActiveNamespace(prefix, uri); err != nil {

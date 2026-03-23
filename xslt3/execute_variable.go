@@ -11,6 +11,13 @@ import (
 )
 
 func (ec *execContext) execVariable(ctx context.Context, inst *VariableInst) error {
+	// Override static base URI when the variable carries xml:base
+	savedBaseOverride := ec.staticBaseURIOverride
+	if inst.StaticBaseURI != "" {
+		ec.staticBaseURIOverride = inst.StaticBaseURI
+	}
+	defer func() { ec.staticBaseURIOverride = savedBaseOverride }()
+
 	var val xpath3.Sequence
 	var evalErr error
 

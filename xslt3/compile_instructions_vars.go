@@ -21,6 +21,12 @@ func (c *compiler) compileLocalVariable(elem *helium.Element) (*VariableInst, er
 		As:   asAttr,
 	}
 
+	// Capture xml:base for static base URI override during body/select evaluation.
+	effectiveBase := stylesheetBaseURI(elem, c.baseURI)
+	if effectiveBase != c.baseURI {
+		inst.StaticBaseURI = effectiveBase
+	}
+
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		// XTSE0620: select and non-empty content are mutually exclusive.
