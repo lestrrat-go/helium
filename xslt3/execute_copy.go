@@ -78,7 +78,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 					return err
 				}
 				// Apply schema validation to the copied node.
-				if err := ec.applyCopyValidation(ctx, inst, out, lastBefore, pendingBefore); err != nil {
+				if err := ec.applyCopyValidation(ctx, inst, out, lastBefore, pendingBefore, v.Node); err != nil {
 					return err
 				}
 			case xpath3.AtomicValue:
@@ -153,15 +153,23 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 		return err
 	}
 
-	return ec.applyCopyValidation(ctx, inst, out, lastBefore, pendingBefore)
+	return ec.applyCopyValidation(ctx, inst, out, lastBefore, pendingBefore, contextNode)
 }
 
 // applyCopyValidation applies type or validation-mode validation to the element
 // produced by xsl:copy. It handles elements in both the DOM tree and in
-// pendingItems (sequence/capture mode).
-func (ec *execContext) applyCopyValidation(ctx context.Context, inst *CopyInst, out *outputFrame, lastBefore helium.Node, pendingBefore int) error {
+// pendingItems (sequence/capture mode). sourceNode is the original node being copied.
+func (ec *execContext) applyCopyValidation(ctx context.Context, inst *CopyInst, out *outputFrame, lastBefore helium.Node, pendingBefore int, sourceNode helium.Node) error {
 	// Apply type validation if specified.
 	if inst.TypeName != "" {
+		// XTTE1535: if the type attribute refers to a complex type and
+		// the item being copied is an attribute node, that is a type error.
+		if sourceNode != nil && sourceNode.Type() == helium.AttributeNode {
+			if ec.isComplexTypeName(inst.TypeName) {
+				return dynamicError(errCodeXTTE1535,
+					"xsl:copy type=%q refers to a complex type, but copied item is an attribute node", inst.TypeName)
+			}
+		}
 		copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
 		if copiedElem != nil {
 			if err := ec.validateAndNormalizeElementContent(copiedElem, inst.TypeName); err != nil {
@@ -442,6 +450,20 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
 			prevWasAtomic = false
+			// XTTE0950: copying namespace-sensitive content with
+			// copy-namespaces="no" and validation="preserve", or copying
+			// a standalone attribute with namespace-sensitive content and
+			// validation="preserve" (without parent element).
+			if preserve {
+				if !copyNS && ec.nodeHasNamespaceSensitiveContent(v.Node) {
+					return dynamicError(errCodeXTTE0950,
+						"copy-of: cannot copy namespace-sensitive content with copy-namespaces=\"no\" and validation=\"preserve\"")
+				}
+				if v.Node.Type() == helium.AttributeNode && ec.nodeHasNamespaceSensitiveContent(v.Node) {
+					return dynamicError(errCodeXTTE0950,
+						"copy-of: cannot copy attribute with namespace-sensitive content without parent element (validation=\"preserve\")")
+				}
+			}
 			// Remember the last child before copying so we can identify new nodes.
 			lastBefore := out.current.LastChild()
 			pendingBefore := len(out.pendingItems)
@@ -875,4 +897,74 @@ func (ec *execContext) copyElementNoNamespaces(src *helium.Element) error {
 		return err
 	}
 	return nil
+}
+
+// nodeHasNamespaceSensitiveContent checks if a node (or any of its
+// descendants/attributes) has a type annotation that is namespace-sensitive
+// (xs:QName, xs:NOTATION, or a type derived from them). This is used for
+// XTTE0950 checking.
+func (ec *execContext) nodeHasNamespaceSensitiveContent(node helium.Node) bool {
+	if ec.typeAnnotations == nil {
+		return false
+	}
+	return ec.checkNodeNSSensitive(node)
+}
+
+func (ec *execContext) checkNodeNSSensitive(node helium.Node) bool {
+	ann := ec.typeAnnotations[node]
+	if isNamespaceSensitiveType(ann) {
+		return true
+	}
+	if ec.schemaRegistry != nil && ann != "" {
+		if ec.schemaRegistry.IsSubtypeOf(ann, "xs:QName") || ec.schemaRegistry.IsSubtypeOf(ann, "xs:NOTATION") {
+			return true
+		}
+	}
+	// Check attributes
+	if elem, ok := node.(*helium.Element); ok {
+		for _, attr := range elem.Attributes() {
+			attrAnn := ec.typeAnnotations[attr]
+			if isNamespaceSensitiveType(attrAnn) {
+				return true
+			}
+			if ec.schemaRegistry != nil && attrAnn != "" {
+				if ec.schemaRegistry.IsSubtypeOf(attrAnn, "xs:QName") || ec.schemaRegistry.IsSubtypeOf(attrAnn, "xs:NOTATION") {
+					return true
+				}
+			}
+		}
+		// Check child elements recursively
+		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			if ec.checkNodeNSSensitive(child) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isNamespaceSensitiveType returns true if the given type name is xs:QName,
+// xs:NOTATION, or common derived forms.
+func isNamespaceSensitiveType(typeName string) bool {
+	switch typeName {
+	case "xs:QName", "xs:NOTATION",
+		"Q{http://www.w3.org/2001/XMLSchema}QName",
+		"Q{http://www.w3.org/2001/XMLSchema}NOTATION":
+		return true
+	}
+	return false
+}
+
+// isComplexTypeName returns true if the given type name refers to a complex
+// type definition in the imported schemas.
+func (ec *execContext) isComplexTypeName(typeName string) bool {
+	if ec.schemaRegistry == nil {
+		return false
+	}
+	td, _, found := ec.schemaRegistry.LookupTypeDef(typeName)
+	if !found {
+		return false
+	}
+	// A complex type has a content model, attributes, or non-simple content type.
+	return td.ContentModel != nil || len(td.Attributes) > 0 || td.AnyAttribute != nil
 }

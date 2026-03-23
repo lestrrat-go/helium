@@ -604,9 +604,21 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		if ec.schemaRegistry != nil {
 			ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
 			if valErr != nil && v == validationStrict {
-				return dynamicError(errCodeXTTE1540, "validation of result document failed: %v", valErr)
+				return dynamicError(errCodeXTTE1510, "validation of result document failed: %v", valErr)
 			}
 			if valErr == nil && v == validationStrict {
+				// Check that the root element has a matching schema declaration.
+				if len(ann) == 0 {
+					root := findDocumentElement(tmpDoc)
+					if root != nil {
+						rootLocal := root.LocalName()
+						rootNS := root.URI()
+						if _, found := ec.schemaRegistry.LookupElement(rootLocal, rootNS); !found {
+							return dynamicError(errCodeXTTE1510,
+								"no matching schema declaration for element {%s}%s in result document (validation=strict)", rootNS, rootLocal)
+						}
+					}
+				}
 				// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
 				if err := ValidateDocIDConstraints(tmpDoc, ann); err != nil {
 					return err

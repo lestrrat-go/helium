@@ -30,13 +30,14 @@ func (c *compiler) parseGlobalElement(elem *helium.Element) error {
 		return err
 	}
 
-	// Check for duplicate global element declarations (e.g., from includes).
-	if _, exists := c.schema.elements[decl.Name]; exists && c.includeFile != "" {
+	// Check for duplicate global element declarations.
+	if _, exists := c.schema.elements[decl.Name]; exists {
 		qnDisplay := "'" + decl.Name.NS + "'" + decl.Name.Local
 		if decl.Name.NS != "" {
 			qnDisplay = "'{" + decl.Name.NS + "}" + decl.Name.Local + "'"
 		}
-		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(c.includeFile, elem.Line(),
+		source := c.includeFile
+		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserError(source, elem.Line(),
 			elem.LocalName(), "element",
 			"A global element declaration "+qnDisplay+" does already exist."), helium.ErrorLevelFatal))
 		c.errorCount++

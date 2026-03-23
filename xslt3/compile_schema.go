@@ -1,16 +1,29 @@
 package xslt3
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
+
+// fatalErrorCounter is an error handler that counts fatal errors during schema compilation.
+type fatalErrorCounter struct {
+	count atomic.Int32
+}
+
+func (f *fatalErrorCounter) Handle(_ context.Context, err error) {
+	if le, ok := err.(helium.ErrorLeveler); ok && le.ErrorLevel() == helium.ErrorLevelFatal {
+		f.count.Add(1)
+	}
+}
 
 func (c *compiler) compileImportSchema(elem *helium.Element) error {
 	// Mark stylesheet as schema-aware whenever any xsl:import-schema is seen,
@@ -25,6 +38,26 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 	declaredNS := getAttr(elem, "namespace")
 
 	schemaLoc := getAttr(elem, "schema-location")
+	// Detect whether an inline xs:schema child is present.
+	hasInlineSchema := false
+	for child := range helium.Children(elem) {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if childElem.LocalName() == "schema" && childElem.URI() == lexicon.NamespaceXSD {
+			hasInlineSchema = true
+			break
+		}
+	}
+
+	// XTSE0215: it is a static error if an xsl:import-schema element that
+	// contains an xs:schema element has a schema-location attribute.
+	if schemaLoc != "" && hasInlineSchema {
+		return staticError(errCodeXTSE0215,
+			"xsl:import-schema has both schema-location attribute and inline xs:schema child")
+	}
+
 	if schemaLoc != "" {
 		// File-backed schema
 		uri := schemaLoc
@@ -84,9 +117,24 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 			if c.baseURI != "" {
 				inlineOpts = append(inlineOpts, xsd.WithBaseDir(filepath.Dir(c.baseURI)))
 			}
+			errCounter := &fatalErrorCounter{}
+			inlineOpts = append(inlineOpts, xsd.WithCompileErrorHandler(errCounter))
 			schema, err := xsd.Compile(c.ctx, inlineDoc, inlineOpts...)
 			if err != nil {
 				return fmt.Errorf("xsl:import-schema: cannot compile inline schema: %w", err)
+			}
+			// XTSE0220: the synthetic schema document does not satisfy XSD constraints
+			// (e.g., duplicate global declarations).
+			if errCounter.count.Load() > 0 {
+				return staticError(errCodeXTSE0220,
+					"xsl:import-schema: inline schema has %d schema construction error(s)", errCounter.count.Load())
+			}
+			// XTSE0215: namespace attribute must not conflict with the
+			// targetNamespace of the contained inline schema.
+			if declaredNS != "" && schema.TargetNamespace() != declaredNS {
+				return staticError(errCodeXTSE0215,
+					"xsl:import-schema namespace %q conflicts with inline schema targetNamespace %q",
+					declaredNS, schema.TargetNamespace())
 			}
 			c.stylesheet.schemas = append(c.stylesheet.schemas, schema)
 			return nil
