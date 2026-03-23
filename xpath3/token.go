@@ -202,8 +202,9 @@ func (t TokenType) String() string {
 
 // Token is a single lexical token from an XPath 3.1 expression.
 type Token struct {
-	Type  TokenType
-	Value string
+	Type        TokenType
+	Value       string
+	SpaceBefore bool // true when whitespace preceded this token
 }
 
 func (t Token) String() string {

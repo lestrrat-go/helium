@@ -427,7 +427,7 @@ func (p *parser) parseArrowTarget() (Expr, string, string, error) {
 		p.lexer.Next()
 		prefix := ""
 		name := tok.Value
-		if p.lexer.Peek().Type == TokenColon {
+		if colonTok := p.lexer.Peek(); colonTok.Type == TokenColon && !colonTok.SpaceBefore {
 			p.lexer.Next() // consume ':'
 			localTok := p.lexer.Next()
 			if !isNameLikeToken(localTok.Type) {
@@ -762,11 +762,11 @@ func (p *parser) parseNamePrimary() (Expr, error) {
 	prefix := ""
 	name := tok.Value
 
-	// Check for QName: prefix:name
-	if p.lexer.Peek().Type == TokenColon {
+	// Check for QName: prefix:name (no whitespace around colon per XPath 3.1 A.2.1)
+	if colonTok := p.lexer.Peek(); colonTok.Type == TokenColon && !colonTok.SpaceBefore {
 		p.lexer.Next() // consume ':'
 		localTok := p.lexer.Peek()
-		if isNameLikeToken(localTok.Type) {
+		if isNameLikeToken(localTok.Type) && !localTok.SpaceBefore {
 			p.lexer.Next()
 			prefix = name
 			name = localTok.Value
@@ -1201,7 +1201,10 @@ func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 	}
 
 	// Check for QName: prefix:local or prefix:*
-	if p.lexer.Peek().Type == TokenColon {
+	// Per XPath 3.1 A.2.1: a QName has no whitespace around the colon.
+	// If whitespace precedes ':', this name stands alone (the ':' is a
+	// map-entry separator or similar context-dependent delimiter).
+	if colonTok := p.lexer.Peek(); colonTok.Type == TokenColon && !colonTok.SpaceBefore {
 		return p.parseQNameTest(tok.Value)
 	}
 
@@ -1640,7 +1643,7 @@ func (p *parser) parseCatchCode() (string, error) {
 	if tok.Type == TokenName {
 		p.lexer.Next()
 		name := tok.Value
-		if p.lexer.Peek().Type == TokenColon {
+		if colonTok := p.lexer.Peek(); colonTok.Type == TokenColon && !colonTok.SpaceBefore {
 			p.lexer.Next()
 			next := p.lexer.Peek()
 			if next.Type == TokenStar {
@@ -2073,7 +2076,7 @@ func (p *parser) scanQName() string {
 	}
 	p.lexer.Next()
 	name := tok.Value
-	if p.lexer.Peek().Type == TokenColon {
+	if colonTok := p.lexer.Peek(); colonTok.Type == TokenColon && !colonTok.SpaceBefore {
 		p.lexer.Next()
 		localTok := p.lexer.Peek()
 		// Accept both plain names and keywords (map, array, etc.)
@@ -2166,6 +2169,12 @@ func (p *parser) looksLikeStepOffset(offset int) bool {
 			return false // function call
 		}
 		if next.Type == TokenColon {
+			// Per XPath 3.1 A.2.1: a QName is Name:Name with NO whitespace
+			// around the colon. If whitespace precedes ':', this is a plain
+			// name test (the ':' is a map-entry separator, not a QName colon).
+			if next.SpaceBefore {
+				return true // plain name test; ':' is map entry separator
+			}
 			// prefix:local (name test) vs prefix:name( (QName function call)
 			// vs prefix:name# (named function ref)
 			localTok := p.lexer.PeekAt(offset + 2)

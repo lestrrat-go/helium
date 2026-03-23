@@ -9,10 +9,11 @@ import (
 
 // lexer tokenizes an XPath 3.1 expression string.
 type lexer struct {
-	input  string
-	pos    int
-	tokens []Token
-	idx    int // read cursor into tokens
+	input    string
+	pos      int
+	tokens   []Token
+	idx      int  // read cursor into tokens
+	hadSpace bool // true if whitespace was skipped before current token
 }
 
 // newLexer creates a lexer and tokenizes the entire input.
@@ -127,7 +128,9 @@ var alwaysKeywords = map[string]TokenType{
 
 func (l *lexer) tokenize() error {
 	for l.pos < len(l.input) {
+		posBefore := l.pos
 		l.skipWhitespace()
+		l.hadSpace = l.pos > posBefore
 		if l.pos >= len(l.input) {
 			break
 		}
@@ -321,7 +324,7 @@ func (l *lexer) advanceRune(r rune) {
 }
 
 func (l *lexer) emit(typ TokenType, value string) {
-	l.tokens = append(l.tokens, Token{Type: typ, Value: value})
+	l.tokens = append(l.tokens, Token{Type: typ, Value: value, SpaceBefore: l.hadSpace})
 }
 
 func (l *lexer) skipWhitespace() {
