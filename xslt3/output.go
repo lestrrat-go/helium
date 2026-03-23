@@ -548,16 +548,17 @@ func serializeMapJSON(m xpath3.MapItem, nodeMethod string) (string, error) {
 		if v != nil {
 			vLen = sequence.Len(v)
 		}
-		if vLen == 1 {
+		switch vLen {
+		case 1:
 			s, err := serializeItemJSON(v.Get(0), nodeMethod)
 			if err != nil {
 				serErr = err
 				return err
 			}
 			buf.WriteString(s)
-		} else if vLen == 0 {
+		case 0:
 			buf.WriteString("null")
-		} else {
+		default:
 			members := make([]xpath3.Sequence, vLen)
 			for i := range vLen {
 				members[i] = xpath3.ItemSlice{v.Get(i)}
@@ -591,15 +592,16 @@ func serializeArrayJSON(a xpath3.ArrayItem, nodeMethod string) (string, error) {
 		if member != nil {
 			mLen = sequence.Len(member)
 		}
-		if mLen == 1 {
+		switch mLen {
+		case 1:
 			s, err := serializeItemJSON(member.Get(0), nodeMethod)
 			if err != nil {
 				return "", err
 			}
 			buf.WriteString(s)
-		} else if mLen == 0 {
+		case 0:
 			buf.WriteString("null")
-		} else {
+		default:
 			// Multi-item member: serialize as array
 			submembers := make([]xpath3.Sequence, mLen)
 			for j := range mLen {
@@ -773,11 +775,12 @@ func serializeMapAdaptive(m xpath3.MapItem, charMap map[rune]string) string {
 		if v != nil {
 			vLen2 = sequence.Len(v)
 		}
-		if vLen2 == 1 {
+		switch vLen2 {
+		case 1:
 			buf.WriteString(serializeItemAdaptive(v.Get(0), charMap))
-		} else if vLen2 == 0 {
+		case 0:
 			buf.WriteString("()")
-		} else {
+		default:
 			buf.WriteByte('(')
 			for i := range vLen2 {
 				if i > 0 {
@@ -806,11 +809,12 @@ func serializeArrayAdaptive(a xpath3.ArrayItem, charMap map[rune]string) string 
 		if member != nil {
 			mLen2 = sequence.Len(member)
 		}
-		if mLen2 == 1 {
+		switch mLen2 {
+		case 1:
 			buf.WriteString(serializeItemAdaptive(member.Get(0), charMap))
-		} else if mLen2 == 0 {
+		case 0:
 			buf.WriteString("()")
-		} else {
+		default:
 			buf.WriteByte('(')
 			for j := range mLen2 {
 				if j > 0 {
