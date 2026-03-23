@@ -499,6 +499,15 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 			"expression %q calls a shallow-descent function with a climbing argument, which is not streamable", expr.String())
 	}
 
+	// 10. Mixed-posture sequence expressions: a SequenceExpr used as the LHS
+	// of a path step where some items access the streaming source (crawling/
+	// striding) and others are grounded (variable refs, literals) has mixed
+	// posture and is not streamable.
+	if exprHasMixedPostureSequenceInPath(expr) {
+		return staticError(errCodeXTSE3430,
+			"expression %q has a mixed-posture sequence expression in a path, which is not streamable", expr.String())
+	}
+
 	return nil
 }
 
@@ -521,6 +530,106 @@ func exprHasShallowDescentCallWithClimbingArg(ss *Stylesheet, expr *xpath3.Expre
 			cat := lookupFuncStreamability(ss, fc.Name, len(fc.Args))
 			if cat == "shallow-descent" {
 				if exprHasUpwardAxis(fc.Args[0]) {
+					found = true
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// exprHasMixedPostureSequenceInPath returns true if the expression contains a
+// PathExpr or PathStepExpr whose LHS/filter is a SequenceExpr that mixes
+// items accessing the streaming source (crawling/striding) with grounded items
+// (variable references, literals). Such mixed-posture sequences are not
+// streamable per XSLT 3.0 spec.
+func exprHasMixedPostureSequenceInPath(expr *xpath3.Expression) bool {
+	if expr == nil {
+		return false
+	}
+	found := false
+	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		e = derefXPathExpr(e)
+		switch v := e.(type) {
+		case xpath3.PathExpr:
+			if seq, ok := derefXPathExpr(v.Filter).(xpath3.SequenceExpr); ok && v.Path != nil {
+				if seqHasMixedPosture(seq) {
+					found = true
+					return false
+				}
+			}
+		case xpath3.PathStepExpr:
+			if seq, ok := derefXPathExpr(v.Left).(xpath3.SequenceExpr); ok {
+				if seqHasMixedPosture(seq) {
+					found = true
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// seqHasMixedPosture returns true if a SequenceExpr has items with different
+// postures — specifically, some items are crawling (use descendant or
+// descendant-or-self axes) while others are non-crawling (grounded variable
+// refs, striding paths, etc.). Grounded + striding is fine; crawling mixed
+// with non-crawling is not streamable.
+func seqHasMixedPosture(seq xpath3.SequenceExpr) bool {
+	if len(seq.Items) < 2 {
+		return false
+	}
+	hasCrawling := false
+	hasNonCrawling := false
+	for _, item := range seq.Items {
+		if seqItemIsCrawling(item) {
+			hasCrawling = true
+		} else {
+			hasNonCrawling = true
+		}
+		if hasCrawling && hasNonCrawling {
+			return true
+		}
+	}
+	return false
+}
+
+// seqItemIsCrawling returns true if a single expression has crawling posture,
+// meaning it uses descendant or descendant-or-self axes from the streaming
+// context. Variable references, literals, and striding expressions (child-only
+// paths) are not crawling.
+func seqItemIsCrawling(expr xpath3.Expr) bool {
+	expr = derefXPathExpr(expr)
+	switch expr.(type) {
+	case xpath3.VariableExpr, xpath3.LiteralExpr:
+		return false
+	}
+	found := false
+	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+		if found {
+			return false
+		}
+		// Skip sub-expressions rooted in a variable — those navigate
+		// in-memory data, not the stream.
+		switch v := e.(type) {
+		case xpath3.PathExpr:
+			if _, isVar := derefXPathExpr(v.Filter).(xpath3.VariableExpr); isVar {
+				return false
+			}
+		case xpath3.PathStepExpr:
+			if _, isVar := derefXPathExpr(v.Left).(xpath3.VariableExpr); isVar {
+				return false
+			}
+		}
+		if lp, ok := e.(xpath3.LocationPath); ok {
+			for _, step := range lp.Steps {
+				if step.Axis == xpath3.AxisDescendant || step.Axis == xpath3.AxisDescendantOrSelf {
 					found = true
 					return false
 				}
