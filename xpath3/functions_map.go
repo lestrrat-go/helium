@@ -30,14 +30,6 @@ func extractMap(seq Sequence) (MapItem, error) {
 }
 
 func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
-	var maps []MapItem
-	for item := range seqItems(args[0]) {
-		m, ok := item.(MapItem)
-		if !ok {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:merge requires sequence of maps"}
-		}
-		maps = append(maps, m)
-	}
 	duplicates := MergeUseFirst
 	if len(args) > 1 {
 		if seqLen(args[1]) == 0 {
@@ -65,11 +57,20 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 			}
 		}
 	}
-	merged, err := MergeMaps(maps, duplicates)
-	if err != nil {
-		return nil, err
+	builder := NewMapBuilder(duplicates, seqLen(args[0]))
+	for item := range seqItems(args[0]) {
+		m, ok := item.(MapItem)
+		if !ok {
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:merge requires sequence of maps"}
+		}
+		mergeErr := m.ForEach(func(k AtomicValue, v Sequence) error {
+			return builder.Add(k, v)
+		})
+		if mergeErr != nil {
+			return nil, mergeErr
+		}
 	}
-	return ItemSlice{merged}, nil
+	return ItemSlice{builder.Build()}, nil
 }
 
 func fnMapSize(_ context.Context, args []Sequence) (Sequence, error) {

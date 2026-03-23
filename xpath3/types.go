@@ -656,7 +656,7 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
 					continue
 				case MergeReject:
 					return MapItem{}, &XPathError{
-						Code:    "FOJS0003",
+						Code:    errCodeFOJS0003,
 						Message: fmt.Sprintf("duplicate key in map merge: %v", e.key.Value),
 					}
 				case MergeCombine:
@@ -678,6 +678,64 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
 		newIndex[normalizeMapKey(e.key)] = i
 	}
 	return MapItem{entries: allEntries, index: newIndex}, nil
+}
+
+// MapBuilder accumulates map entries without defensive cloning,
+// producing a MapItem when Build is called. This is significantly
+// faster than MergeMaps for large merges because it avoids
+// per-entry cloneSequence calls and builds the index incrementally.
+type MapBuilder struct {
+	entries []mapEntry
+	index   map[mapKey]int
+	policy  MergePolicy
+}
+
+// NewMapBuilder creates a builder for accumulating map entries.
+// sizeHint is used to pre-allocate internal storage.
+func NewMapBuilder(policy MergePolicy, sizeHint int) *MapBuilder {
+	return &MapBuilder{
+		entries: make([]mapEntry, 0, sizeHint),
+		index:   make(map[mapKey]int, sizeHint),
+		policy:  policy,
+	}
+}
+
+// Add inserts a key-value pair into the builder, applying the merge policy
+// for duplicate keys. The value is NOT cloned — the caller must ensure the
+// value is not mutated after this call (which is the case for values produced
+// by the evaluator, since XPath values are immutable).
+func (b *MapBuilder) Add(key AtomicValue, value Sequence) error {
+	nk := normalizeMapKey(key)
+	if idx, ok := b.index[nk]; ok {
+		switch b.policy {
+		case MergeUseFirst:
+			return nil
+		case MergeUseLast:
+			b.entries[idx] = mapEntry{key: key, value: value}
+			return nil
+		case MergeReject:
+			return &XPathError{
+				Code:    errCodeFOJS0003,
+				Message: fmt.Sprintf("duplicate key in map merge: %v", key.Value),
+			}
+		case MergeCombine:
+			existing := b.entries[idx].value
+			b.entries[idx] = mapEntry{
+				key:   b.entries[idx].key,
+				value: ItemSlice(append(seqMaterialize(existing), seqMaterialize(value)...)),
+			}
+			return nil
+		}
+	}
+	b.index[nk] = len(b.entries)
+	b.entries = append(b.entries, mapEntry{key: key, value: value})
+	return nil
+}
+
+// Build returns the accumulated MapItem. The builder should not be used
+// after calling Build.
+func (b *MapBuilder) Build() MapItem {
+	return MapItem{entries: b.entries, index: b.index}
 }
 
 // --- ArrayItem ---
