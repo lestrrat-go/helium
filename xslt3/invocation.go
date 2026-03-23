@@ -299,18 +299,80 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 		}
 	}
 
-	// Receiver → wire individual handlers
+	// Receiver → wire individual handlers via receiverSet bridge.
+	// New error-returning receiver interfaces take priority over legacy
+	// void interfaces. The bridge adapts them to the existing transformConfig
+	// callback fields.
 	if c.receiver != nil {
-		if h, ok := c.receiver.(MessageHandler); ok {
+		rs := extractReceivers(c.receiver)
+
+		if rs.message != nil {
+			tcfg.msgHandler = messageReceiverAdapter{rs.message}
+		} else if h, ok := c.receiver.(MessageHandler); ok {
 			tcfg.msgHandler = h
 		}
-		if h, ok := c.receiver.(ResultDocumentHandler); ok {
+
+		if rs.resultDocument != nil {
+			tcfg.resultDocHandler = resultDocReceiverAdapter{rs.resultDocument}
+		} else if h, ok := c.receiver.(ResultDocumentHandler); ok {
 			tcfg.resultDocHandler = h
 		}
-		if h, ok := c.receiver.(AnnotationHandler); ok {
+
+		if rs.resultDocumentOutput != nil {
+			tcfg.resultDocOutputHandler = func(href string, outDef *OutputDef) {
+				_ = rs.resultDocumentOutput.HandleResultDocumentOutput(href, outDef)
+			}
+		}
+
+		if rs.rawResult != nil {
+			tcfg.rawResultHandler = func(seq xpath3.Sequence) {
+				_ = rs.rawResult.HandleRawResult(seq)
+			}
+			tcfg.rawCapture = true
+		}
+
+		if rs.primaryItems != nil {
+			tcfg.primaryItemsHandler = func(seq xpath3.Sequence) {
+				_ = rs.primaryItems.HandlePrimaryItems(seq)
+			}
+		}
+
+		if rs.annotations != nil {
+			tcfg.resultAnnotationsHandler = annotationReceiverAdapter{rs.annotations}
+		} else if h, ok := c.receiver.(AnnotationHandler); ok {
 			tcfg.resultAnnotationsHandler = h
 		}
 	}
 
 	return tcfg
+}
+
+// messageReceiverAdapter adapts MessageReceiver (error-returning) to
+// MessageHandler (void). Errors are dropped at the bridge layer.
+type messageReceiverAdapter struct {
+	r MessageReceiver
+}
+
+func (a messageReceiverAdapter) HandleMessage(msg string, terminate bool) {
+	_ = a.r.HandleMessage(msg, terminate)
+}
+
+// resultDocReceiverAdapter adapts ResultDocumentReceiver (error-returning)
+// to ResultDocumentHandler (void).
+type resultDocReceiverAdapter struct {
+	r ResultDocumentReceiver
+}
+
+func (a resultDocReceiverAdapter) HandleResultDocument(href string, doc *helium.Document) {
+	_ = a.r.HandleResultDocument(href, doc)
+}
+
+// annotationReceiverAdapter adapts AnnotationReceiver (error-returning)
+// to AnnotationHandler (void).
+type annotationReceiverAdapter struct {
+	r AnnotationReceiver
+}
+
+func (a annotationReceiverAdapter) HandleAnnotations(annotations map[helium.Node]string, declarations xpath3.SchemaDeclarations) {
+	_ = a.r.HandleAnnotations(annotations, declarations)
 }
