@@ -80,8 +80,8 @@ XPath 3.1 expression parsing and evaluation.
 XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` evaluation.
 
 - **CompileStylesheet(ctx, *Document) → (*Stylesheet, error)** / **CompileFile(ctx, path) → (*Stylesheet, error)** — compile parsed or file-backed stylesheet
-- **Transform(ctx, *Document, *Stylesheet) → (*Document, error)** — execute stylesheet, return result DOM
-- **TransformToWriter(ctx, *Document, *Stylesheet, io.Writer) → error** / **TransformString(ctx, *Document, *Stylesheet) → (string, error)** — serialize transformation result
+- **Transform(ctx, *Document, *Stylesheet) → (*Document, error)** — execute stylesheet, return result DOM; returns error (not panic) if ss is nil
+- **TransformToWriter(ctx, *Document, *Stylesheet, io.Writer) → error** / **TransformString(ctx, *Document, *Stylesheet) → (string, error)** — serialize transformation result; returns error (not panic) if ss is nil
 - Compile context options: `WithCompileBaseURI(ctx, uri)`, `WithCompileURIResolver(ctx, resolver)`
 - Transform context options: `WithParameter(ctx, name, value)`, `WithInitialTemplate(ctx, name)`, `WithMessageHandler(ctx, fn)`
 - Key types: `Stylesheet`, `Template`, `Variable`, `Param`, `KeyDef`, `OutputDef`, `URIResolver`
