@@ -68,10 +68,22 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 
 		schema, err := xsd.CompileFile(c.ctx, uri)
 		if err != nil {
+			// File not found — try pre-compiled import schemas by namespace.
+			if declaredNS != "" {
+				if resolved := c.findImportSchema(declaredNS); resolved != nil {
+					c.stylesheet.schemas = append(c.stylesheet.schemas, resolved)
+					return nil
+				}
+			}
 			return fmt.Errorf("xsl:import-schema: cannot compile %q: %w", uri, err)
 		}
 		// XTSE0220: namespace attribute must match the schema's targetNamespace.
 		if declaredNS != "" && schema.TargetNamespace() != declaredNS {
+			// Try pre-compiled import schemas by namespace before erroring.
+			if resolved := c.findImportSchema(declaredNS); resolved != nil {
+				c.stylesheet.schemas = append(c.stylesheet.schemas, resolved)
+				return nil
+			}
 			return staticError(errCodeXTSE0220,
 				"xsl:import-schema namespace %q does not match schema targetNamespace %q",
 				declaredNS, schema.TargetNamespace())
@@ -141,7 +153,23 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 		}
 	}
 
-	// Namespace-only declaration — no schema to compile, accepted silently
+	// Namespace-only declaration — try pre-compiled import schemas by namespace.
+	if declaredNS != "" {
+		if resolved := c.findImportSchema(declaredNS); resolved != nil {
+			c.stylesheet.schemas = append(c.stylesheet.schemas, resolved)
+		}
+	}
+	return nil
+}
+
+// findImportSchema looks up a pre-compiled schema by target namespace from
+// the import schemas provided at compile time.
+func (c *compiler) findImportSchema(ns string) *xsd.Schema {
+	for _, s := range c.importSchemas {
+		if s.TargetNamespace() == ns {
+			return s
+		}
+	}
 	return nil
 }
 

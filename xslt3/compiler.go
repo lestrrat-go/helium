@@ -6,6 +6,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 // Compiler configures XSLT 3.0 stylesheet compilation.
@@ -22,6 +23,7 @@ type xsltCompilerCfg struct {
 	uriResolver     URIResolver
 	packageResolver PackageResolver
 	staticParams    *Parameters
+	importSchemas   []*xsd.Schema
 }
 
 // NewCompiler creates a new Compiler with default settings.
@@ -79,6 +81,14 @@ func (c Compiler) SetStaticParameter(name string, value xpath3.Sequence) Compile
 	return c
 }
 
+// ImportSchemas provides pre-compiled schemas that satisfy xsl:import-schema
+// declarations by target namespace when schema-location cannot be resolved.
+func (c Compiler) ImportSchemas(schemas ...*xsd.Schema) Compiler {
+	c = c.clone()
+	c.cfg.importSchemas = append(c.cfg.importSchemas[:0:0], schemas...)
+	return c
+}
+
 // ClearStaticParameters removes all static parameter bindings.
 func (c Compiler) ClearStaticParameters() Compiler {
 	c = c.clone()
@@ -109,6 +119,7 @@ func (c Compiler) toCompileConfig() *compileConfig {
 		baseURI:         c.cfg.baseURI,
 		resolver:        c.cfg.uriResolver,
 		packageResolver: c.cfg.packageResolver,
+		importSchemas:   c.cfg.importSchemas,
 	}
 	if c.cfg.staticParams != nil {
 		cfg.staticParams = maps.Clone(c.cfg.staticParams.toMap())
