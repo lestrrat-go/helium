@@ -203,7 +203,7 @@ func (c *xpathCommand) evalXPath3(ctx context.Context, cfg *xpathConfig, doc *he
 		return ExitXPath
 	}
 
-	res, err := expr.Evaluate(ctx, doc)
+	res, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(ctx, expr, doc)
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitXPath

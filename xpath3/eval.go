@@ -107,64 +107,6 @@ func (s *variableScope) Lookup(name string) (Sequence, bool) {
 	return nil, false
 }
 
-func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
-	opCount := 0
-	now := time.Now()
-	ec := &evalContext{
-		goCtx:       ctx,
-		node:        node,
-		position:    1,
-		size:        1,
-		opCount:     &opCount,
-		docOrder:    &ixpath.DocOrderCache{},
-		maxNodes:    maxNodeSetLength,
-		currentTime: &now,
-		docCache:    make(map[string]helium.Node),
-	}
-	if cfg := getEvalConfig(ctx); cfg != nil {
-		ec.namespaces = cfg.namespaces
-		ec.vars = cfg.varScope
-		ec.opLimit = cfg.opLimit
-		if cfg.currentTime != nil {
-			ec.currentTime = cfg.currentTime
-		}
-		ec.functions = cfg.functions
-		ec.fnsNS = cfg.functionsNS
-		ec.implicitTimezone = cfg.implicitTimezone
-		ec.defaultLanguage = cfg.defaultLanguage
-		ec.defaultCollation = cfg.defaultCollation
-		if cfg.defaultDecimal != nil {
-			df := *cfg.defaultDecimal
-			ec.defaultDecimalFormat = &df
-		}
-		ec.decimalFormats = cfg.decimalFormats
-		ec.baseURI = cfg.baseURI
-		ec.uriResolver = cfg.uriResolver
-		ec.collectionResolver = cfg.collectionResolver
-		ec.httpClient = cfg.httpClient
-		ec.typeAnnotations = cfg.typeAnnotations
-		ec.variableResolver = cfg.variableResolver
-		ec.functionResolver = cfg.functionResolver
-		ec.strictPrefixes = cfg.strictPrefixes
-		ec.schemaDeclarations = cfg.schemaDeclarations
-		if cfg.position > 0 {
-			ec.position = cfg.position
-		}
-		if cfg.size > 0 {
-			ec.size = cfg.size
-		}
-		if cfg.contextItem != nil {
-			ec.contextItem = cfg.contextItem
-			ec.node = nil
-		}
-		if cfg.docOrder != nil {
-			ec.docOrder = cfg.docOrder
-		}
-	}
-	return ec
-}
-
-
 type evalContextFrame struct {
 	node        helium.Node
 	contextItem Item

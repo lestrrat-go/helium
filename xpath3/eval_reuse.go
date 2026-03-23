@@ -1,9 +1,7 @@
 package xpath3
 
 import (
-	"context"
 	"strings"
-	"time"
 
 	"github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
@@ -22,70 +20,6 @@ import (
 type EvalState struct {
 	ec      evalContext
 	oneItem [1]Item // reusable backing for single-item results
-}
-
-// NewEvalState creates a reusable evaluation state from the given context.
-// The context.Context should carry the same XPath evaluation settings
-// (variables, functions, namespaces) that would be passed to Evaluate.
-// The node parameter sets the initial context node (may be nil).
-//
-// Deprecated: NewEvalState is an internal optimization and will be unexported
-// in a future release. Use Evaluator.Evaluate for the public API.
-func NewEvalState(ctx context.Context, node helium.Node) *EvalState {
-	opCount := 0
-	now := time.Now()
-	s := &EvalState{}
-	ec := &s.ec
-	ec.goCtx = ctx
-	ec.node = node
-	ec.position = 1
-	ec.size = 1
-	ec.opCount = &opCount
-	ec.docOrder = &ixpath.DocOrderCache{}
-	ec.maxNodes = maxNodeSetLength
-	ec.currentTime = &now
-	ec.docCache = make(map[string]helium.Node)
-
-	if cfg := getEvalConfig(ctx); cfg != nil {
-		ec.namespaces = cfg.namespaces
-		ec.vars = cfg.varScope
-		ec.opLimit = cfg.opLimit
-		if cfg.currentTime != nil {
-			ec.currentTime = cfg.currentTime
-		}
-		ec.functions = cfg.functions
-		ec.fnsNS = cfg.functionsNS
-		ec.implicitTimezone = cfg.implicitTimezone
-		ec.defaultLanguage = cfg.defaultLanguage
-		ec.defaultCollation = cfg.defaultCollation
-		if cfg.defaultDecimal != nil {
-			df := *cfg.defaultDecimal
-			ec.defaultDecimalFormat = &df
-		}
-		ec.decimalFormats = cfg.decimalFormats
-		ec.baseURI = cfg.baseURI
-		ec.uriResolver = cfg.uriResolver
-		ec.collectionResolver = cfg.collectionResolver
-		ec.httpClient = cfg.httpClient
-		ec.typeAnnotations = cfg.typeAnnotations
-		ec.variableResolver = cfg.variableResolver
-		ec.strictPrefixes = cfg.strictPrefixes
-		ec.schemaDeclarations = cfg.schemaDeclarations
-		if cfg.position > 0 {
-			ec.position = cfg.position
-		}
-		if cfg.size > 0 {
-			ec.size = cfg.size
-		}
-		if cfg.contextItem != nil {
-			ec.contextItem = cfg.contextItem
-			ec.node = nil
-		}
-		if cfg.docOrder != nil {
-			ec.docOrder = cfg.docOrder
-		}
-	}
-	return s
 }
 
 // SetContextItem sets the non-node context item on the eval state.

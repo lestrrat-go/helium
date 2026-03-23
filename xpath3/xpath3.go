@@ -69,26 +69,6 @@ func (e *Expression) Validate(namespaces map[string]string) error {
 	return e.prefixPlan.Validate(namespaces, false, nil)
 }
 
-// Evaluate evaluates the compiled expression against the given context node.
-// The context.Context may carry XPath 3.1 evaluation settings attached via
-// WithNamespaces, WithVariables, WithFunction(s), and related mutators.
-//
-// Deprecated: use Evaluator.Evaluate instead for the new API.
-func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error) {
-	ec := newEvalContext(ctx, node)
-
-	// Static analysis: validate all namespace prefixes in the AST
-	if err := e.prefixPlan.Validate(ec.namespaces, ec.strictPrefixes, ec.schemaDeclarations); err != nil {
-		return nil, err
-	}
-
-	seq, err := e.evaluate(ec)
-	if err != nil {
-		return nil, err
-	}
-	return &Result{seq: seq}, nil
-}
-
 // String returns the original XPath expression string.
 func (e *Expression) String() string {
 	return e.source
@@ -218,7 +198,7 @@ func Find(ctx context.Context, node helium.Node, expr string) ([]helium.Node, er
 	if err != nil {
 		return nil, err
 	}
-	r, err := compiled.Evaluate(ctx, node)
+	r, err := NewEvaluator(DefaultEvaluatorOptions).Evaluate(ctx, compiled, node)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +213,7 @@ func Evaluate(ctx context.Context, node helium.Node, expr string) (*Result, erro
 	if err != nil {
 		return nil, err
 	}
-	return compiled.Evaluate(ctx, node)
+	return NewEvaluator(DefaultEvaluatorOptions).Evaluate(ctx, compiled, node)
 }
 
 // EvaluateExpr evaluates a parsed AST expression directly against a node.
@@ -246,12 +226,7 @@ func EvaluateExpr(ctx context.Context, expr Expr, node helium.Node) (*Result, er
 	if err != nil {
 		return nil, err
 	}
-	ec := newEvalContext(ctx, node)
-	seq, err := compiled.evaluate(ec)
-	if err != nil {
-		return nil, err
-	}
-	return &Result{seq: seq}, nil
+	return NewEvaluator(DefaultEvaluatorOptions).Evaluate(ctx, compiled, node)
 }
 
 func (e *Expression) evaluate(ec *evalContext) (Sequence, error) {
