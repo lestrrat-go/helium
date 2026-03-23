@@ -5,12 +5,13 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 // checkAtomizable returns FOTY0013 if the sequence contains any map or
 // function items, which cannot be atomized.
 func checkAtomizable(seq xpath3.Sequence) error {
-	for _, item := range seq {
+	for item := range sequence.Items(seq) {
 		switch item.(type) {
 		case xpath3.MapItem:
 			return dynamicError(errCodeFOTY0013, "cannot atomize a map item")
@@ -41,7 +42,7 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 			return err
 		}
 		seq := result.Sequence()
-		if len(seq) == 0 {
+		if seq == nil || sequence.Len(seq) == 0 {
 			emptySequence = true
 		}
 		// FOTY0013: maps and functions cannot be atomized
@@ -122,8 +123,8 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 // filterZeroLengthTextNodes removes zero-length text nodes from a sequence.
 // Per XSLT spec §11.3, these are discarded during xsl:value-of processing.
 func filterZeroLengthTextNodes(seq xpath3.Sequence) xpath3.Sequence {
-	result := make(xpath3.Sequence, 0, len(seq))
-	for _, item := range seq {
+	result := make(xpath3.ItemSlice, 0, sequence.Len(seq))
+	for item := range sequence.Items(seq) {
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			if ni.Node.Type() == helium.TextNode && len(ni.Node.Content()) == 0 {
 				continue
@@ -138,9 +139,9 @@ func filterZeroLengthTextNodes(seq xpath3.Sequence) xpath3.Sequence {
 // value from the sequence. Per XSLT 3.0 §5.7.2, zero-length text nodes
 // in the result sequence are removed before separator insertion.
 func removeZeroLengthTextNodes(seq xpath3.Sequence) xpath3.Sequence {
-	result := seq[:0:0]
+	var result xpath3.ItemSlice
 	changed := false
-	for _, item := range seq {
+	for item := range sequence.Items(seq) {
 		ni, ok := item.(xpath3.NodeItem)
 		if ok && ni.Node.Type() == helium.TextNode && len(ni.Node.Content()) == 0 {
 			changed = true
@@ -158,21 +159,22 @@ func removeZeroLengthTextNodes(seq xpath3.Sequence) xpath3.Sequence {
 // into single text nodes. Per XSLT spec §11.3, adjacent text nodes are
 // merged before separator insertion in xsl:value-of.
 func mergeAdjacentTextNodes(seq xpath3.Sequence) xpath3.Sequence {
-	if len(seq) <= 1 {
+	seqLen := sequence.Len(seq)
+	if seqLen <= 1 {
 		return seq
 	}
-	result := make(xpath3.Sequence, 0, len(seq))
-	for i := 0; i < len(seq); i++ {
-		ni, ok := seq[i].(xpath3.NodeItem)
+	result := make(xpath3.ItemSlice, 0, seqLen)
+	for i := 0; i < seqLen; i++ {
+		ni, ok := seq.Get(i).(xpath3.NodeItem)
 		if !ok || ni.Node.Type() != helium.TextNode {
-			result = append(result, seq[i])
+			result = append(result, seq.Get(i))
 			continue
 		}
 		// Merge consecutive text nodes
 		merged := string(ni.Node.Content())
 		j := i + 1
-		for j < len(seq) {
-			nj, ok := seq[j].(xpath3.NodeItem)
+		for j < seqLen {
+			nj, ok := seq.Get(j).(xpath3.NodeItem)
 			if !ok || nj.Node.Type() != helium.TextNode {
 				break
 			}
@@ -186,11 +188,11 @@ func mergeAdjacentTextNodes(seq xpath3.Sequence) xpath3.Sequence {
 			if err == nil {
 				result = append(result, xpath3.NodeItem{Node: text})
 			} else {
-				result = append(result, seq[i])
+				result = append(result, seq.Get(i))
 			}
 			i = j - 1
 		} else {
-			result = append(result, seq[i])
+			result = append(result, seq.Get(i))
 		}
 	}
 	return result
@@ -316,8 +318,9 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 	// is the Document itself (not a wrapper element), so also match that case.
 	atRootLevel := out.doc != nil && (out.current == out.doc.DocumentElement() || out.current == out.doc)
 	if out.captureItems && atRootLevel {
-		out.pendingItems = append(out.pendingItems, result.Sequence()...)
-		if len(result.Sequence()) > 0 {
+		rSeq := result.Sequence()
+		if rSeq != nil && sequence.Len(rSeq) > 0 {
+			out.pendingItems = append(out.pendingItems, sequence.Materialize(rSeq)...)
 			out.noteOutput()
 		}
 		return nil
@@ -327,7 +330,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceIns
 	prevHadOutput := out.prevHadOutput
 	hadAtomic := false // tracks whether any atomic (including empty) was seen
 	seq := flattenArraysInSequence(result.Sequence())
-	for _, item := range seq {
+	for item := range sequence.Items(seq) {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
 			prevWasAtomic = false
@@ -491,8 +494,8 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 	// In capture mode, accumulate items directly (handles maps, arrays,
 	// functions, and other non-DOM items that cannot be serialized to a tree).
 	if out.captureItems {
-		out.pendingItems = append(out.pendingItems, seq...)
-		if len(seq) > 0 {
+		if seq != nil && sequence.Len(seq) > 0 {
+			out.pendingItems = append(out.pendingItems, sequence.Materialize(seq)...)
 			out.noteOutput()
 		}
 		return nil
@@ -500,7 +503,7 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 
 	seq = flattenArraysInSequence(seq)
 	prevWasAtomic := out.prevWasAtomic
-	for _, item := range seq {
+	for item := range sequence.Items(seq) {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
 			prevWasAtomic = false
@@ -596,8 +599,8 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 // Arrays are flattened before atomization.
 func atomizeSequence(seq xpath3.Sequence) xpath3.Sequence {
 	seq = flattenArraysInSequence(seq)
-	result := make(xpath3.Sequence, 0, len(seq))
-	for _, item := range seq {
+	result := make(xpath3.ItemSlice, 0, sequence.Len(seq))
+	for item := range sequence.Items(seq) {
 		av, err := xpath3.AtomizeItem(item)
 		if err != nil {
 			result = append(result, xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: stringifyItem(item)})

@@ -8,6 +8,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 func (ec *execContext) registerSchemaConstructors(dst map[xpath3.QualifiedName]xpath3.Function) {
@@ -144,16 +145,16 @@ func resolveQNameFromMap(s string, ns map[string]string) (xpath3.QNameValue, err
 }
 
 func schemaConstructorArg(seq xpath3.Sequence, typeName string) (xpath3.AtomicValue, bool, error) {
-	if len(seq) == 0 {
+	if seq == nil || sequence.Len(seq) == 0 {
 		return xpath3.AtomicValue{}, true, nil
 	}
-	if len(seq) > 1 {
+	if sequence.Len(seq) > 1 {
 		return xpath3.AtomicValue{}, false, &xpath3.XPathError{
 			Code:    "XPTY0004",
 			Message: fmt.Sprintf("%s constructor requires a singleton argument", typeName),
 		}
 	}
-	av, err := xpath3.AtomizeItem(seq[0])
+	av, err := xpath3.AtomizeItem(seq.Get(0))
 	if err != nil {
 		return xpath3.AtomicValue{}, false, err
 	}

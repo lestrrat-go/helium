@@ -9,6 +9,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 // Sentinel errors for xsl:break and xsl:next-iteration control flow.
@@ -167,7 +168,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *IterateInst) error
 			val = xpath3.EmptySequence()
 		}
 		// Apply type coercion if as= is declared.
-		if p.As != "" && len(val) > 0 {
+		if p.As != "" && val != nil && sequence.Len(val) > 0 {
 			st := parseSequenceType(p.As)
 			coerced, err := checkSequenceType(val, st, errCodeXTTE0570, "xsl:iterate parameter $"+p.Name, ec)
 			if err != nil {
@@ -192,10 +193,11 @@ func (ec *execContext) execIterate(ctx context.Context, inst *IterateInst) error
 		ec.contextItem = savedItem
 	}()
 
-	ec.size = len(seq)
+	ec.size = sequence.Len(seq)
 
 	completed := true
-	for i, item := range seq {
+	for i := range sequence.Len(seq) {
+		item := seq.Get(i)
 		ec.position = i + 1
 
 		// Set context item/node.
@@ -234,7 +236,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *IterateInst) error
 				if ec.nextIterParams != nil {
 					for name, val := range ec.nextIterParams {
 						// Apply type coercion if as= is declared.
-						if asType, ok := paramTypes[name]; ok && asType != "" && len(val) > 0 {
+						if asType, ok := paramTypes[name]; ok && asType != "" && val != nil && sequence.Len(val) > 0 {
 							st := parseSequenceType(asType)
 							coerced, coerceErr := checkSequenceType(val, st, errCodeXTTE0570, "xsl:next-iteration parameter $"+name, ec)
 							if coerceErr != nil {
@@ -260,7 +262,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *IterateInst) error
 				// In capture mode (inside variable/function body),
 				// append items directly rather than writing to DOM,
 				// so non-node items (maps, arrays) are preserved.
-				out.pendingItems = append(out.pendingItems, ec.breakValue...)
+				out.pendingItems = append(out.pendingItems, sequence.Materialize(ec.breakValue)...)
 			} else {
 				if err := ec.outputSequence(ec.breakValue); err != nil {
 					return err
@@ -357,7 +359,7 @@ type mergeKeyValue struct {
 // their pre-extracted sort keys and the source name.
 type mergeSourceItems struct {
 	name            string
-	items           xpath3.Sequence
+	items           xpath3.ItemSlice
 	keys            [][]mergeKeyValue // keys[i] corresponds to items[i]
 	sortBeforeMerge bool              // from parent MergeSource
 	sourceIdx       int               // index into inst.Sources
@@ -366,8 +368,8 @@ type mergeSourceItems struct {
 // mergeGroup represents one group of items that share the same merge key tuple.
 type mergeGroup struct {
 	key      xpath3.Sequence            // the merge key tuple for current-merge-key()
-	allItems xpath3.Sequence            // all items across all sources
-	byName   map[string]xpath3.Sequence // items per named source
+	allItems xpath3.ItemSlice            // all items across all sources
+	byName   map[string]xpath3.ItemSlice // items per named source
 }
 
 // mergeKeyOrder tracks the descending flag for each key level.
@@ -717,8 +719,8 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 	// We temporarily add them to the cached function map.
 	ec.xsltFunctions() // ensure cachedFns is initialized
 
-	var currentMergeGroupAll xpath3.Sequence
-	var currentMergeGroupByName map[string]xpath3.Sequence
+	var currentMergeGroupAll xpath3.ItemSlice
+	var currentMergeGroupByName map[string]xpath3.ItemSlice
 	var currentMergeKeySeq xpath3.Sequence
 
 	// Collect valid merge-source names for XTDE3490 validation.
@@ -752,9 +754,9 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 			if !ec.inMergeAction {
 				return nil, dynamicError(errCodeXTDE3480, "current-merge-group() is not available outside the body of xsl:merge-action")
 			}
-			if len(args) > 0 && len(args[0]) > 0 {
+			if len(args) > 0 && args[0] != nil && sequence.Len(args[0]) > 0 {
 				// current-merge-group('source-name')
-				av, err := xpath3.AtomizeItem(args[0][0])
+				av, err := xpath3.AtomizeItem(args[0].Get(0))
 				if err != nil {
 					return nil, dynamicError(errCodeXTDE3490, "current-merge-group(): cannot atomize argument: %v", err)
 				}
@@ -844,7 +846,7 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 		}
 		uriSeq := uriResult.Sequence()
 
-		for _, uriItem := range uriSeq {
+		for uriItem := range sequence.Items(uriSeq) {
 			av, err := xpath3.AtomizeItem(uriItem)
 			if err != nil {
 				return nil, err
@@ -864,14 +866,14 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 			}
 
 			// Evaluate select against the document.
-			items, err := ec.evaluateMergeSelect(ctx, src, doc)
+			selItems, err := ec.evaluateMergeSelect(ctx, src, doc)
 			if err != nil {
 				return nil, err
 			}
 
 			result = append(result, mergeSourceItems{
 				name:            src.Name,
-				items:           items,
+				items:           xpath3.ItemSlice(sequence.Materialize(selItems)),
 				sortBeforeMerge: src.SortBeforeMerge,
 			})
 		}
@@ -884,7 +886,7 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 		}
 		itemSeq := itemResult.Sequence()
 
-		for _, sourceItem := range itemSeq {
+		for sourceItem := range sequence.Items(itemSeq) {
 			var contextNode helium.Node
 			if ni, ok := sourceItem.(xpath3.NodeItem); ok {
 				contextNode = ni.Node
@@ -895,18 +897,18 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 
 			// Evaluate select against this item. For atomic items (not nodes),
 			// set the context item so that "." resolves to the atomic value.
-			var items xpath3.Sequence
+			var mergeItems xpath3.Sequence
 			if contextNode == nil {
-				items, err = ec.evaluateMergeSelectOnItem(ctx, src, sourceItem)
+				mergeItems, err = ec.evaluateMergeSelectOnItem(ctx, src, sourceItem)
 			} else {
-				items, err = ec.evaluateMergeSelectOnNode(ctx, src, contextNode)
+				mergeItems, err = ec.evaluateMergeSelectOnNode(ctx, src, contextNode)
 			}
 			if err != nil {
 				return nil, err
 			}
 			result = append(result, mergeSourceItems{
 				name:            src.Name,
-				items:           items,
+				items:           xpath3.ItemSlice(sequence.Materialize(mergeItems)),
 				sortBeforeMerge: src.SortBeforeMerge,
 			})
 		}
@@ -920,7 +922,7 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 
 		result = append(result, mergeSourceItems{
 			name:            src.Name,
-			items:           selResult.Sequence(),
+			items:           xpath3.ItemSlice(sequence.Materialize(selResult.Sequence())),
 			sortBeforeMerge: src.SortBeforeMerge,
 		})
 	}
@@ -929,10 +931,10 @@ func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSou
 }
 
 func cloneAccumulatorSequence(seq xpath3.Sequence) xpath3.Sequence {
-	if len(seq) == 0 {
+	if seq == nil || sequence.Len(seq) == 0 {
 		return nil
 	}
-	return append(xpath3.Sequence(nil), seq...)
+	return append(xpath3.ItemSlice(nil), sequence.Materialize(seq)...)
 }
 
 func cloneAccumulatorSnapshot(state map[string]xpath3.Sequence) map[string]xpath3.Sequence {
@@ -1246,7 +1248,7 @@ func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effect
 // against a loaded document.
 func (ec *execContext) evaluateMergeSelect(ctx context.Context, src *MergeSource, doc *helium.Document) (xpath3.Sequence, error) {
 	if src.Select == nil {
-		return xpath3.Sequence{xpath3.NodeItem{Node: doc}}, nil
+		return xpath3.ItemSlice{xpath3.NodeItem{Node: doc}}, nil
 	}
 
 	savedSource := ec.sourceDoc
@@ -1274,7 +1276,7 @@ func (ec *execContext) evaluateMergeSelect(ctx context.Context, src *MergeSource
 func (ec *execContext) evaluateMergeSelectOnNode(ctx context.Context, src *MergeSource, node helium.Node) (xpath3.Sequence, error) {
 	if src.Select == nil {
 		if node != nil {
-			return xpath3.Sequence{xpath3.NodeItem{Node: node}}, nil
+			return xpath3.ItemSlice{xpath3.NodeItem{Node: node}}, nil
 		}
 		return xpath3.EmptySequence(), nil
 	}
@@ -1306,7 +1308,7 @@ func (ec *execContext) evaluateMergeSelectOnNode(ctx context.Context, src *Merge
 // items are not nodes).
 func (ec *execContext) evaluateMergeSelectOnItem(_ context.Context, src *MergeSource, item xpath3.Item) (xpath3.Sequence, error) {
 	if src.Select == nil {
-		return xpath3.Sequence{item}, nil
+		return xpath3.ItemSlice{item}, nil
 	}
 
 	savedItem := ec.contextItem
@@ -1379,17 +1381,21 @@ func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceIt
 				seq = bodySeq
 			}
 			// XTTE1020: merge key must evaluate to a single atomic value.
-			if len(seq) > 1 {
-				return nil, dynamicError(errCodeXTTE1020, "xsl:merge-key select expression must return a single atomic value, got %d items", len(seq))
+			seqLen := 0
+			if seq != nil {
+				seqLen = sequence.Len(seq)
+			}
+			if seqLen > 1 {
+				return nil, dynamicError(errCodeXTTE1020, "xsl:merge-key select expression must return a single atomic value, got %d items", seqLen)
 			}
 			// Extract the key value, preserving the atomic type.
-			if len(seq) == 1 {
-				if av, ok := seq[0].(xpath3.AtomicValue); ok {
+			if seqLen == 1 {
+				if av, ok := seq.Get(0).(xpath3.AtomicValue); ok {
 					itemKeys[k] = mergeKeyValue{atom: av}
 					continue
 				}
 				// Atomize node items to get typed atomic values.
-				av, atomErr := xpath3.AtomizeItem(seq[0])
+				av, atomErr := xpath3.AtomizeItem(seq.Get(0))
 				if atomErr == nil {
 					itemKeys[k] = mergeKeyValue{atom: av}
 					continue
@@ -1397,8 +1403,8 @@ func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceIt
 			}
 			// Fall back to string value.
 			var sv string
-			if len(seq) > 0 {
-				if av, ok := seq[0].(xpath3.AtomicValue); ok {
+			if seqLen > 0 {
+				if av, ok := seq.Get(0).(xpath3.AtomicValue); ok {
 					if s, err := xpath3.AtomicToString(av); err == nil {
 						sv = s
 					}
@@ -1450,7 +1456,7 @@ func (ec *execContext) nWayMerge(sources []mergeSourceItems, orders []mergeKeyOr
 
 		// Collect all items matching the minimum key from all sources.
 		g := mergeGroup{
-			byName: make(map[string]xpath3.Sequence),
+			byName: make(map[string]xpath3.ItemSlice),
 		}
 
 		for si, src := range sources {
@@ -1486,9 +1492,9 @@ func (ec *execContext) nWayMerge(sources []mergeSourceItems, orders []mergeKeyOr
 // mergeKeyValuesToSequence converts the merge key tuple to the XPath sequence
 // exposed by current-merge-key().
 func mergeKeyValuesToSequence(keys []mergeKeyValue) xpath3.Sequence {
-	var seq xpath3.Sequence
+	var seq xpath3.ItemSlice
 	for _, mkv := range keys {
-		seq = append(seq, mergeKeyValueToSequence(mkv)...)
+		seq = append(seq, sequence.Materialize(mergeKeyValueToSequence(mkv))...)
 	}
 	return seq
 }

@@ -8,12 +8,13 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTemplatesInst) error {
 	var nodes []helium.Node
 
-	var atomicItems xpath3.Sequence // XSLT 3.0: atomic values from select
+	var atomicItems xpath3.ItemSlice // XSLT 3.0: atomic values from select
 	if inst.Select != nil {
 		xpathCtx := ec.newXPathContext(ec.contextNode)
 		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
@@ -30,7 +31,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 			nodes = ns
 		} else {
 			// XSLT 3.0: separate nodes from atomic values
-			for _, item := range seq {
+			for item := range sequence.Items(seq) {
 				if ni, ok := item.(xpath3.NodeItem); ok {
 					nodes = append(nodes, ni.Node)
 				} else {
@@ -149,11 +150,11 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 
 	// XSLT 3.0: sort atomic items if sort keys are present.
 	if len(inst.Sort) > 0 && len(atomicItems) > 0 {
-		sorted, err := sortItems(ctx, ec, xpath3.Sequence(atomicItems), inst.Sort)
+		sorted, err := sortItems(ctx, ec, atomicItems, inst.Sort)
 		if err != nil {
 			return err
 		}
-		atomicItems = []xpath3.Item(sorted)
+		atomicItems = xpath3.ItemSlice(sequence.Materialize(sorted))
 	}
 
 	// XSLT 3.0: process atomic values — try template matching first,
@@ -227,7 +228,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 // applyTemplatesToSequence applies templates to each item in a sequence,
 // implementing the built-in template rules for arrays and maps (XSLT 3.0).
 func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.Sequence, inst *ApplyTemplatesInst, mode string) error {
-	for _, item := range seq {
+	for item := range sequence.Items(seq) {
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			if err := ec.applyTemplates(ctx, ni.Node, mode, nil); err != nil {
 				return err
@@ -510,7 +511,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 			val = xpath3.EmptySequence()
 		}
 
-		if p.As != "" && len(val) > 0 {
+		if p.As != "" && val != nil && sequence.Len(val) > 0 {
 			st := parseSequenceType(p.As)
 			errCode := errCodeXTTE0570
 			if fromCaller {
@@ -750,11 +751,11 @@ func (ec *execContext) checkContextItemType(tmpl *Template) error {
 	}
 
 	// Determine the current context item
-	var contextSeq xpath3.Sequence
+	var contextSeq xpath3.ItemSlice
 	if ec.contextItem != nil {
-		contextSeq = xpath3.Sequence{ec.contextItem}
+		contextSeq = xpath3.ItemSlice{ec.contextItem}
 	} else if normalizeNode(ec.contextNode) != nil {
-		contextSeq = xpath3.Sequence{xpath3.NodeItem{Node: ec.contextNode}}
+		contextSeq = xpath3.ItemSlice{xpath3.NodeItem{Node: ec.contextNode}}
 	}
 
 	use := tmpl.ContextItemUse

@@ -21,7 +21,7 @@ func init() {
 }
 
 func fnCount(_ context.Context, args []Sequence) (Sequence, error) {
-	return SingleInteger(int64(len(args[0]))), nil
+	return SingleInteger(int64(seqLen(args[0]))), nil
 }
 
 // aggregateTypeFamily classifies an atomic type for aggregate type checking.
@@ -65,7 +65,7 @@ func aggregateTypeFamily(typeName string) string {
 // Returns nil collation (use default) if the argument is absent or is the
 // codepoint collation.
 func resolveCollationArg(args []Sequence, idx int) (*collationImpl, error) {
-	if len(args) <= idx || len(args[idx]) == 0 {
+	if len(args) <= idx || seqLen(args[idx]) == 0 {
 		return nil, nil
 	}
 	uri, err := coerceArgToString(args[idx])
@@ -155,7 +155,7 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 	if family == "duration:YM" || family == "duration:DT" {
-		atomSeq := make(Sequence, len(atoms))
+		atomSeq := make(ItemSlice, len(atoms))
 		for i, a := range atoms {
 			atomSeq[i] = a
 		}
@@ -178,7 +178,7 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 func avgDurations(seq Sequence, family string) (Sequence, error) {
 	totalMonths := new(big.Int)
 	var totalSeconds float64
-	for _, item := range seq {
+	for item := range seqItems(seq) {
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
 		if d.Negative {
@@ -192,7 +192,7 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 	if !totalMonths.IsInt64() {
 		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
 	}
-	count := len(seq)
+	count := seqLen(seq)
 	// Per XPath F&O spec: months are rounded "half towards positive infinity"
 	// i.e. math.Floor(months + 0.5), matching op:divide-yearMonthDuration behavior.
 	monthsF := float64(totalMonths.Int64()) / float64(count)
@@ -476,7 +476,7 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 	if family == "duration:YM" || family == "duration:DT" {
-		atomSeq := make(Sequence, len(atoms))
+		atomSeq := make(ItemSlice, len(atoms))
 		for i, a := range atoms {
 			atomSeq[i] = a
 		}
@@ -497,7 +497,7 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 func sumDurations(seq Sequence, family string) (Sequence, error) {
 	var totalMonths int
 	var totalSeconds float64
-	for _, item := range seq {
+	for item := range seqItems(seq) {
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
 		if d.Negative {
@@ -524,7 +524,7 @@ func sumDurations(seq Sequence, family string) (Sequence, error) {
 }
 
 func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	if err := validateCollationArg(args, 1); err != nil {
@@ -544,7 +544,7 @@ func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
 	var numericFloat []AtomicValue
 	var numericDouble []AtomicValue
 	seenNaN := false
-	for _, item := range args[0] {
+	for item := range seqItems(args[0]) {
 		a, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
@@ -604,7 +604,7 @@ func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
 			result = append(result, a)
 		}
 	}
-	seq := make(Sequence, len(result))
+	seq := make(ItemSlice, len(result))
 	for i, a := range result {
 		seq[i] = a
 	}

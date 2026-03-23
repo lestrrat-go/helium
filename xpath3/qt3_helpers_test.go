@@ -97,7 +97,7 @@ func (r *qt3CollectionResolver) ResolveCollection(uri string) (xpath3.Sequence, 
 	if !ok {
 		return nil, fmt.Errorf("collection %q not found", uri)
 	}
-	return append(xpath3.Sequence(nil), seq...), nil
+	return xpath3.ItemSlice(append([]xpath3.Item(nil), seq.Materialize()...)), nil
 }
 
 func (r *qt3CollectionResolver) ResolveURICollection(uri string) ([]string, error) {
@@ -223,7 +223,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			}
 			for _, src := range tc.SourceDocs {
 				sourceDoc := qt3ParseDocSource(t, src)
-				vars[src.Name] = xpath3.Sequence{xpath3.NodeItem{Node: sourceDoc}}
+				vars[src.Name] = xpath3.ItemSlice{xpath3.NodeItem{Node: sourceDoc}}
 			}
 			if resolver := qt3BuildCollectionResolver(t, ctx, tc, opts, doc, vars); resolver != nil {
 				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithCollectionResolver(ctx, resolver) })
@@ -428,7 +428,7 @@ func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, o
 
 	for _, col := range tc.Collections {
 		if len(col.SourceDocs) > 0 {
-			seq := make(xpath3.Sequence, 0, len(col.SourceDocs))
+			seq := make(xpath3.ItemSlice, 0, len(col.SourceDocs))
 			uris := make([]string, 0, len(col.SourceDocs))
 			for _, src := range col.SourceDocs {
 				sourceDoc := qt3ParseDocSource(t, src)
@@ -461,8 +461,11 @@ func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, o
 
 func qt3CollectionURIs(t *testing.T, uri string, seq xpath3.Sequence) []string {
 	t.Helper()
-	uris := make([]string, 0, len(seq))
-	for _, item := range seq {
+	if seq == nil {
+		return nil
+	}
+	uris := make([]string, 0, seq.Len())
+	for item := range seq.Items() {
 		av, err := xpath3.AtomizeItem(item)
 		require.NoError(t, err, "atomize collection %q member", uri)
 		if av.TypeName != xpath3.TypeAnyURI {
@@ -480,8 +483,11 @@ func qt3CollectionURIs(t *testing.T, uri string, seq xpath3.Sequence) []string {
 // ──────────────────────────────────────────────────────────────────────
 
 func qt3StringValue(seq xpath3.Sequence) string {
+	if seq == nil {
+		return ""
+	}
 	var parts []string
-	for _, item := range seq {
+	for item := range seq.Items() {
 		av, err := xpath3.AtomizeItem(item)
 		if err != nil {
 			parts = append(parts, fmt.Sprintf("%v", item))
@@ -498,14 +504,14 @@ func qt3StringValue(seq xpath3.Sequence) string {
 }
 
 func qt3EBV(seq xpath3.Sequence) (bool, error) {
-	if len(seq) == 0 {
+	if seq == nil || seq.Len() == 0 {
 		return false, nil
 	}
-	first := seq[0]
+	first := seq.Get(0)
 	if _, ok := first.(xpath3.NodeItem); ok {
 		return true, nil
 	}
-	if len(seq) == 1 {
+	if seq.Len() == 1 {
 		av, err := xpath3.AtomizeItem(first)
 		if err != nil {
 			return false, err
@@ -524,7 +530,7 @@ func qt3EBV(seq xpath3.Sequence) (bool, error) {
 			return v.Sign() != 0, nil
 		}
 	}
-	return false, fmt.Errorf("cannot compute EBV for sequence of length %d", len(seq))
+	return false, fmt.Errorf("cannot compute EBV for sequence of length %d", seq.Len())
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -548,9 +554,9 @@ func qt3AssertEq(expected string) qt3Assertion {
 		}
 		// Try value comparison using eq operator for singleton atomic values
 		expSeq := result.Sequence()
-		if len(seq) == 1 && len(expSeq) == 1 {
-			av, aErr := xpath3.AtomizeItem(seq[0])
-			bv, bErr := xpath3.AtomizeItem(expSeq[0])
+		if seq.Len() == 1 && expSeq.Len() == 1 {
+			av, aErr := xpath3.AtomizeItem(seq.Get(0))
+			bv, bErr := xpath3.AtomizeItem(expSeq.Get(0))
 			if aErr == nil && bErr == nil {
 				eq, cmpErr := xpath3.ValueCompare(xpath3.TokenEq, av, bv)
 				if cmpErr == nil {
@@ -602,14 +608,18 @@ func qt3AssertFalse() qt3Assertion {
 func qt3AssertEmpty() qt3Assertion {
 	return func(t *testing.T, seq xpath3.Sequence) {
 		t.Helper()
-		require.Empty(t, seq, "expected empty sequence")
+		require.True(t, seq == nil || seq.Len() == 0, "expected empty sequence")
 	}
 }
 
 func qt3AssertCount(n int) qt3Assertion {
 	return func(t *testing.T, seq xpath3.Sequence) {
 		t.Helper()
-		require.Len(t, seq, n)
+		if seq == nil {
+			require.Equal(t, 0, n)
+		} else {
+			require.Equal(t, n, seq.Len())
+		}
 	}
 }
 
@@ -693,7 +703,7 @@ func qt3CheckFalse() qt3Check {
 
 func qt3CheckEmpty() qt3Check {
 	return func(seq xpath3.Sequence) bool {
-		return len(seq) == 0
+		return seq == nil || seq.Len() == 0
 	}
 }
 
@@ -705,7 +715,10 @@ func qt3CheckType(_ string) qt3Check {
 
 func qt3CheckCount(n int) qt3Check {
 	return func(seq xpath3.Sequence) bool {
-		return len(seq) == n
+		if seq == nil {
+			return n == 0
+		}
+		return seq.Len() == n
 	}
 }
 
@@ -747,12 +760,19 @@ func qt3AnyOf(checks ...qt3Check) qt3Assertion {
 // ──────────────────────────────────────────────────────────────────────
 
 // qt3DeepEqualSeq compares two sequences structurally.
+func qt3SeqLen(s xpath3.Sequence) int {
+	if s == nil {
+		return 0
+	}
+	return s.Len()
+}
+
 func qt3DeepEqualSeq(a, b xpath3.Sequence) bool {
-	if len(a) != len(b) {
+	if qt3SeqLen(a) != qt3SeqLen(b) {
 		return false
 	}
-	for i := range a {
-		if !qt3DeepEqualItem(a[i], b[i]) {
+	for i := range qt3SeqLen(a) {
+		if !qt3DeepEqualItem(a.Get(i), b.Get(i)) {
 			return false
 		}
 	}
@@ -833,12 +853,12 @@ func qt3DeepEqualAtomic(a, b xpath3.AtomicValue) bool {
 
 // qt3FormatSeq returns a human-readable representation of a sequence for error messages.
 func qt3FormatSeq(seq xpath3.Sequence) string {
-	if len(seq) == 0 {
+	if seq == nil || seq.Len() == 0 {
 		return "()"
 	}
-	parts := make([]string, len(seq))
-	for i, item := range seq {
-		parts[i] = qt3FormatItem(item)
+	parts := make([]string, seq.Len())
+	for i := range seq.Len() {
+		parts[i] = qt3FormatItem(seq.Get(i))
 	}
 	if len(parts) == 1 {
 		return parts[0]

@@ -227,7 +227,7 @@ func registerNS(uri, name string, min, max int, fn func(context.Context, []Seque
 // seqToStringErr atomizes the argument to a string, propagating errors.
 // For list-typed nodes, atomization may produce multiple items → XPTY0004.
 func seqToStringErr(seq Sequence) (string, error) {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return "", nil
 	}
 	atoms, err := AtomizeSequence(seq)
@@ -246,7 +246,7 @@ func seqToStringErr(seq Sequence) (string, error) {
 // coerceArgToStringRequired applies XPath 3.1 function coercion rules for xs:string params.
 // Like coerceArgToString but rejects empty sequences (for non-optional string parameters).
 func coerceArgToStringRequired(seq Sequence) (string, error) {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string, got empty sequence"}
 	}
 	return coerceArgToString(seq)
@@ -256,7 +256,7 @@ func coerceArgToStringRequired(seq Sequence) (string, error) {
 // Accepts: empty sequence → "", xs:string/xs:anyURI → as-is, xs:untypedAtomic → cast.
 // Rejects all other types with XPTY0004.
 func coerceArgToString(seq Sequence) (string, error) {
-	switch len(seq) {
+	switch seqLen(seq) {
 	case 0:
 		return "", nil
 	case 1:
@@ -302,14 +302,14 @@ func coerceArgToString(seq Sequence) (string, error) {
 // Accepts: xs:integer (and subtypes), xs:untypedAtomic (cast to integer).
 // Rejects all other types with XPTY0004.
 func coerceArgToInteger(seq Sequence) (int64, error) {
-	switch len(seq) {
+	switch seqLen(seq) {
 	case 0:
 		return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:integer, got empty sequence"}
 	case 1:
 	default:
 		return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:integer, got sequence of length > 1"}
 	}
-	a, err := AtomizeItem(seq[0])
+	a, err := AtomizeItem(seq.Get(0))
 	if err != nil {
 		return 0, err
 	}
@@ -362,11 +362,11 @@ func coerceArgToDoubleRequired(seq Sequence) (float64, error) {
 // extractSingleAtomicArg enforces that seq contains exactly one item and atomizes it.
 // Used for function parameters typed as xs:anyAtomicType (not optional).
 func extractSingleAtomicArg(seq Sequence, fnName string) (AtomicValue, error) {
-	switch len(seq) {
+	switch seqLen(seq) {
 	case 0:
 		return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fnName + ": expected single atomic value, got empty sequence"}
 	case 1:
-		return AtomizeItem(seq[0])
+		return AtomizeItem(seq.Get(0))
 	default:
 		return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fnName + ": expected single atomic value, got sequence of length > 1"}
 	}
@@ -391,10 +391,10 @@ func coerceToInteger(a AtomicValue) (AtomicValue, error) {
 
 // seqToDouble atomizes the first item to a float64.
 func seqToDouble(seq Sequence) float64 {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return 0
 	}
-	a, err := AtomizeItem(seq[0])
+	a, err := AtomizeItem(seq.Get(0))
 	if err != nil {
 		return 0
 	}

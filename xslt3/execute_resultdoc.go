@@ -8,6 +8,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 // validateDocumentStructure checks that a document node has exactly one element
@@ -154,7 +155,7 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 
 // validateJSONItems checks for SERE0022 (duplicate keys) in JSON-serializable items.
 func validateJSONItems(items xpath3.Sequence) error {
-	for _, item := range items {
+	for item := range sequence.Items(items) {
 		if m, ok := item.(xpath3.MapItem); ok {
 			if err := validateMapDuplicateKeys(m); err != nil {
 				return err

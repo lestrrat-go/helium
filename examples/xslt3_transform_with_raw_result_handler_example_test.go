@@ -49,7 +49,7 @@ func Example_xslt3_transform_with_raw_result_handler() {
 	// supplement to normal output handling, not a replacement for it.
 	ctx = xslt3.WithInitialTemplate(ctx, "numbers")
 	ctx = xslt3.WithRawResultHandler(ctx, func(seq xpath3.Sequence) {
-		rawResult = append(xpath3.Sequence(nil), seq...)
+		rawResult = xpath3.ItemSlice(append([]xpath3.Item(nil), seq.Materialize()...))
 	})
 
 	resultDoc, err := xslt3.Transform(ctx, sourceDoc, stylesheet)

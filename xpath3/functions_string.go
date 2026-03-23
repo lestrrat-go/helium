@@ -58,13 +58,13 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		return SingleString(s), nil
 	}
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return SingleString(""), nil
 	}
-	if len(args[0]) > 1 {
+	if seqLen(args[0]) > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:string requires a single item, got sequence of length > 1"}
 	}
-	item := args[0][0]
+	item := args[0].Get(0)
 	// fn:string does not accept function items, maps, or arrays
 	switch item.(type) {
 	case FunctionItem, MapItem, ArrayItem:
@@ -93,8 +93,8 @@ func fnCodepointsToString(ctx context.Context, args []Sequence) (Sequence, error
 
 	// Fast path: singleton integer (common in unicode-90 where each codepoint
 	// is mapped individually via codepoints-to-string(.))
-	if len(seq) == 1 {
-		cp, err := itemToCodepoint(seq[0])
+	if seqLen(seq) == 1 {
+		cp, err := itemToCodepoint(seq.Get(0))
 		if err != nil {
 			return nil, err
 		}
@@ -105,7 +105,7 @@ func fnCodepointsToString(ctx context.Context, args []Sequence) (Sequence, error
 	}
 
 	var b strings.Builder
-	for _, item := range seq {
+	for item := range seqItems(seq) {
 		cp, err := itemToCodepoint(item)
 		if err != nil {
 			return nil, err
@@ -183,7 +183,7 @@ func fnStringToCodepoints(_ context.Context, args []Sequence) (Sequence, error) 
 		return nil, nil
 	}
 	runes := []rune(s)
-	result := make(Sequence, len(runes))
+	result := make(ItemSlice, len(runes))
 	for i, r := range runes {
 		result[i] = AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(r))}
 	}
@@ -195,7 +195,7 @@ func fnCompare(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(args[0]) == 0 || len(args[1]) == 0 {
+	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
 		return nil, nil
 	}
 	s1, err := coerceArgToString(args[0])
@@ -211,7 +211,7 @@ func fnCompare(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnCodepointEqual(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 || len(args[1]) == 0 {
+	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
 		return nil, nil
 	}
 	s1, err := coerceArgToStringOpt(args[0])
@@ -320,8 +320,8 @@ func fnStringLength(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "string-length: context item is absent"}
 		}
 	} else {
-		if len(args[0]) > 1 {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("string-length: expected single item, got sequence of length %d", len(args[0]))}
+		if seqLen(args[0]) > 1 {
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("string-length: expected single item, got sequence of length %d", seqLen(args[0]))}
 		}
 		var err error
 		s, err = seqToStringErr(args[0])
@@ -600,7 +600,7 @@ func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(args[1]) == 0 {
+	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:matches pattern must not be empty sequence"}
 	}
 	pattern, err := coerceArgToStringRequired(args[1])
@@ -609,7 +609,7 @@ func fnMatches(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	flags := ""
 	if len(args) > 2 {
-		if len(args[2]) == 0 {
+		if seqLen(args[2]) == 0 {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:matches flags must not be empty sequence"}
 		}
 		flags, err = coerceArgToStringRequired(args[2])
@@ -656,21 +656,21 @@ func fnCollationKey(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return SingleString(""), nil // input is xs:string? — empty yields ""
 	}
 	s, err := coerceArgToString(args[0])
 	if err != nil {
 		return nil, err
 	}
-	if len(args[1]) == 0 {
+	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:replace pattern must not be empty sequence"}
 	}
 	pattern, err := coerceArgToStringRequired(args[1])
 	if err != nil {
 		return nil, err
 	}
-	if len(args[2]) == 0 {
+	if seqLen(args[2]) == 0 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:replace replacement must not be empty sequence"}
 	}
 	replacement, err := coerceArgToStringRequired(args[2])
@@ -679,7 +679,7 @@ func fnReplace(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	flags := ""
 	if len(args) > 3 {
-		if len(args[3]) == 0 {
+		if seqLen(args[3]) == 0 {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:replace flags must not be empty sequence"}
 		}
 		flags, err = coerceArgToStringRequired(args[3])
@@ -807,7 +807,7 @@ func translateXPathReplacement(repl string, numGroups int) (string, error) {
 }
 
 func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil // input is xs:string? — empty yields empty
 	}
 	s, err := coerceArgToString(args[0])
@@ -821,14 +821,14 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 	// 1-arg form: normalize XML whitespace (#x20, #x9, #xA, #xD), then split
 	if len(args) == 1 {
 		tokens := splitXMLWhitespace(s)
-		result := make(Sequence, len(tokens))
+		result := make(ItemSlice, len(tokens))
 		for i, t := range tokens {
 			result[i] = AtomicValue{TypeName: TypeString, Value: t}
 		}
 		return result, nil
 	}
 
-	if len(args[1]) == 0 {
+	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:tokenize pattern must not be empty sequence"}
 	}
 	pattern, err := coerceArgToStringRequired(args[1])
@@ -837,7 +837,7 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	flags := ""
 	if len(args) > 2 {
-		if len(args[2]) == 0 {
+		if seqLen(args[2]) == 0 {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:tokenize flags must not be empty sequence"}
 		}
 		flags, err = coerceArgToStringRequired(args[2])
@@ -863,7 +863,7 @@ func fnTokenize(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex split failed: %v", err)}
 	}
-	result := make(Sequence, len(parts))
+	result := make(ItemSlice, len(parts))
 	for i, p := range parts {
 		result[i] = AtomicValue{TypeName: TypeString, Value: p}
 	}
@@ -1012,7 +1012,7 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 
-	return Sequence{NodeItem{Node: root}}, nil
+	return ItemSlice{NodeItem{Node: root}}, nil
 }
 
 func createAnalyzeStringElement(doc *helium.Document, localName string) (*helium.Element, error) {
@@ -1360,7 +1360,7 @@ func fnContainsToken(ctx context.Context, args []Sequence) (Sequence, error) {
 	if token == "" {
 		return SingleBoolean(false), nil
 	}
-	for _, item := range args[0] {
+	for item := range seqItems(args[0]) {
 		a, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
@@ -1382,13 +1382,13 @@ func getCollation(ctx context.Context, args []Sequence, collationArgIdx int) (*c
 	baseURI := ""
 	if fc := getFnContext(ctx); fc != nil {
 		baseURI = fc.baseURI
-		if collationArgIdx >= len(args) || len(args[collationArgIdx]) == 0 {
+		if collationArgIdx >= len(args) || seqLen(args[collationArgIdx]) == 0 {
 			if fc.defaultCollation != "" {
 				return resolveCollation(fc.defaultCollation, baseURI)
 			}
 			return codepointCollation, nil
 		}
-	} else if collationArgIdx >= len(args) || len(args[collationArgIdx]) == 0 {
+	} else if collationArgIdx >= len(args) || seqLen(args[collationArgIdx]) == 0 {
 		return codepointCollation, nil
 	}
 	uri, err := coerceArgToString(args[collationArgIdx])

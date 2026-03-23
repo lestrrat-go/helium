@@ -6,6 +6,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStringInst) error {
@@ -20,7 +21,7 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStrin
 	// The select expression must produce a single xs:string value.
 	// A sequence of more than one item, or a non-string item, is XPTY0004.
 	isV2 := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
-	if len(seq) == 0 {
+	if seq == nil || sequence.Len(seq) == 0 {
 		if isV2 {
 			// XSLT 2.0: empty sequence is XPTY0004
 			return dynamicError(errCodeXPTY0004, "xsl:analyze-string select must be a single xs:string, got empty sequence")
@@ -28,10 +29,10 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStrin
 		// XSLT 3.0: empty sequence treated as ""
 		return nil
 	}
-	if len(seq) > 1 {
-		return dynamicError(errCodeXPTY0004, "xsl:analyze-string select must be a single xs:string, got sequence of %d items", len(seq))
+	if sequence.Len(seq) > 1 {
+		return dynamicError(errCodeXPTY0004, "xsl:analyze-string select must be a single xs:string, got sequence of %d items", sequence.Len(seq))
 	}
-	av, err := xpath3.AtomizeItem(seq[0])
+	av, err := xpath3.AtomizeItem(seq.Get(0))
 	if err != nil {
 		return dynamicError(errCodeXPTY0004, "xsl:analyze-string select must be xs:string: %v", err)
 	}
@@ -275,7 +276,7 @@ func (ec *execContext) execWherePopulatedSequence(ctx context.Context, inst *Whe
 		return nil
 	}
 	out := ec.currentOutput()
-	out.pendingItems = append(out.pendingItems, seq...)
+	out.pendingItems = append(out.pendingItems, sequence.Materialize(seq)...)
 	out.noteOutput()
 	return nil
 }
@@ -334,7 +335,10 @@ func isPopulated(node helium.Node) bool {
 //   - An empty string ("") is not significant.
 //   - Any other atomic value, node, or non-empty-string is significant.
 func isItemSequencePopulated(items xpath3.Sequence) bool {
-	for _, item := range items {
+	if items == nil {
+		return false
+	}
+	for item := range sequence.Items(items) {
 		if isItemSignificant(item) {
 			return true
 		}
@@ -505,10 +509,10 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 			return err
 		}
 		keySeq := keyResult.Sequence()
-		if len(keySeq) != 1 {
+		if keySeq == nil || sequence.Len(keySeq) != 1 {
 			return dynamicError(errCodeXPTY0004, "xsl:map-entry key must be a single atomic value")
 		}
-		keyAV, err := xpath3.AtomizeItem(keySeq[0])
+		keyAV, err := xpath3.AtomizeItem(keySeq.Get(0))
 		if err != nil {
 			return err
 		}
@@ -543,10 +547,10 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 		return err
 	}
 	keySeq := keyResult.Sequence()
-	if len(keySeq) != 1 {
+	if keySeq == nil || sequence.Len(keySeq) != 1 {
 		return dynamicError(errCodeXPTY0004, "xsl:map-entry key must be a single atomic value")
 	}
-	keyAV, err := xpath3.AtomizeItem(keySeq[0])
+	keyAV, err := xpath3.AtomizeItem(keySeq.Get(0))
 	if err != nil {
 		return err
 	}
@@ -576,7 +580,7 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 		return nil
 	}
 	// If not capturing items, output the map as text (fallback)
-	s := stringifySequenceWithSep(xpath3.Sequence{mapItem}, " ")
+	s := stringifySequenceWithSep(xpath3.ItemSlice{mapItem}, " ")
 	if s != "" {
 		text, err := ec.resultDoc.CreateText([]byte(s))
 		if err != nil {
@@ -639,10 +643,10 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 	if !ok {
 		// Atomize and convert to string
 		seq := xpathResult.Sequence()
-		if len(seq) == 0 {
+		if seq == nil || sequence.Len(seq) == 0 {
 			return dynamicError(errCodeXTDE3160, "xsl:evaluate: xpath attribute evaluated to empty sequence")
 		}
-		av, atomErr := xpath3.AtomizeItem(seq[0])
+		av, atomErr := xpath3.AtomizeItem(seq.Get(0))
 		if atomErr != nil {
 			return atomErr
 		}
@@ -667,15 +671,19 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 			return ciErr
 		}
 		ciSeq := ciResult.Sequence()
-		if len(ciSeq) == 1 {
-			switch v := ciSeq[0].(type) {
+		ciLen := 0
+		if ciSeq != nil {
+			ciLen = sequence.Len(ciSeq)
+		}
+		if ciLen == 1 {
+			switch v := ciSeq.Get(0).(type) {
 			case xpath3.NodeItem:
 				dynContextNode = v.Node
 			default:
 				dynContextItem = v
 			}
-		} else if len(ciSeq) > 1 {
-			return dynamicError(errCodeXTTE3210, "xsl:evaluate: context-item must be a single item, got %d items", len(ciSeq))
+		} else if ciLen > 1 {
+			return dynamicError(errCodeXTTE3210, "xsl:evaluate: context-item must be a single item, got %d items", ciLen)
 		} else {
 			// Empty sequence: no context item
 			hasContextItem = false
@@ -704,13 +712,17 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 			return ncErr
 		}
 		ncSeq := ncResult.Sequence()
-		// XTTE3170: namespace-context must produce a single node.
-		if len(ncSeq) > 1 {
-			return dynamicError(errCodeXTTE3170,
-				"xsl:evaluate namespace-context produced %d items; a single node is required", len(ncSeq))
+		ncLen := 0
+		if ncSeq != nil {
+			ncLen = sequence.Len(ncSeq)
 		}
-		if len(ncSeq) > 0 {
-			if ni, nodeOK := ncSeq[0].(xpath3.NodeItem); nodeOK {
+		// XTTE3170: namespace-context must produce a single node.
+		if ncLen > 1 {
+			return dynamicError(errCodeXTTE3170,
+				"xsl:evaluate namespace-context produced %d items; a single node is required", ncLen)
+		}
+		if ncLen > 0 {
+			if ni, nodeOK := ncSeq.Get(0).(xpath3.NodeItem); nodeOK {
 				nsNode := ni.Node
 				// Walk up to find an element
 				for nsNode != nil {
@@ -813,8 +825,8 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 			return wpErr
 		}
 		wpSeq := wpResult.Sequence()
-		if len(wpSeq) == 1 {
-			if wpMap, mapOK := wpSeq[0].(xpath3.MapItem); mapOK {
+		if wpSeq != nil && sequence.Len(wpSeq) == 1 {
+			if wpMap, mapOK := wpSeq.Get(0).(xpath3.MapItem); mapOK {
 				forEachErr := wpMap.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
 					// XTTE3165: with-params map keys must be xs:QName
 					if key.TypeName != xpath3.TypeQName {
@@ -923,7 +935,7 @@ func (ec *execContext) checkEvaluateAsType(asType string, seq xpath3.Sequence) e
 	case "xs:string":
 		// xs:string: nodes atomize to xs:untypedAtomic which coerces to string.
 		// xs:untypedAtomic also coerces. Other atomic types do NOT coerce.
-		for _, item := range seq {
+		for item := range sequence.Items(seq) {
 			if _, ok := item.(xpath3.NodeItem); ok {
 				continue // nodes atomize to xs:untypedAtomic → coerces to string
 			}
@@ -936,7 +948,7 @@ func (ec *execContext) checkEvaluateAsType(asType string, seq xpath3.Sequence) e
 			return dynamicError(errCodeXPTY0004, "xsl:evaluate: result does not match as=%q", asType)
 		}
 	case "xs:integer":
-		for _, item := range seq {
+		for item := range sequence.Items(seq) {
 			if av, ok := item.(xpath3.AtomicValue); ok {
 				switch av.TypeName {
 				case xpath3.TypeInteger, xpath3.TypeUntypedAtomic:
@@ -946,7 +958,7 @@ func (ec *execContext) checkEvaluateAsType(asType string, seq xpath3.Sequence) e
 			return dynamicError(errCodeXPTY0004, "xsl:evaluate: result does not match as=%q", asType)
 		}
 	case "xs:boolean":
-		for _, item := range seq {
+		for item := range sequence.Items(seq) {
 			if av, ok := item.(xpath3.AtomicValue); ok {
 				switch av.TypeName {
 				case xpath3.TypeBoolean, xpath3.TypeUntypedAtomic:

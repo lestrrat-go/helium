@@ -94,9 +94,9 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "data() requires a context item"}
 		}
 		if fc.contextItem != nil {
-			args = []Sequence{{fc.contextItem}}
+			args = []Sequence{ItemSlice{fc.contextItem}}
 		} else if fc.node != nil {
-			args = []Sequence{{nodeItemFor(fc, fc.node)}}
+			args = []Sequence{ItemSlice{nodeItemFor(fc, fc.node)}}
 		} else {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "data() requires a context item"}
 		}
@@ -105,7 +105,7 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := make(Sequence, len(atoms))
+	result := make(ItemSlice, len(atoms))
 	for i, a := range atoms {
 		result[i] = a
 	}
@@ -454,10 +454,10 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		return SingleDouble(a.DoubleVal()), nil
 	}
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return SingleDouble(math.NaN()), nil
 	}
-	a, err := AtomizeItem(args[0][0])
+	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
 		// FOTY0013 (atomizing function items) must propagate per XPath 3.1 §2.7.2
 		var xpErr *XPathError
@@ -485,7 +485,7 @@ func fnGenerateID(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	s, err := coerceArgToString(args[0])
@@ -501,11 +501,11 @@ func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml: %v", err)}
 	}
 	doc.SetProperties(doc.Properties() | helium.DocInternal)
-	return Sequence{NodeItem{Node: doc}}, nil
+	return ItemSlice{NodeItem{Node: doc}}, nil
 }
 
 func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	s, err := coerceArgToString(args[0])
@@ -539,7 +539,7 @@ func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) 
 		cur = next
 	}
 
-	return Sequence{NodeItem{Node: doc}}, nil
+	return ItemSlice{NodeItem{Node: doc}}, nil
 }
 
 func stripXMLTextDeclaration(s string) (string, error) {
@@ -826,7 +826,7 @@ func fnURICollection(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:uri-collection: cannot resolve collection: %v", err)}
 	}
 
-	result := make(Sequence, 0, len(uris))
+	result := make(ItemSlice, 0, len(uris))
 	for _, uri := range uris {
 		result = append(result, AtomicValue{TypeName: TypeAnyURI, Value: uri})
 	}
@@ -834,7 +834,7 @@ func fnURICollection(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnDoc(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	uri, err := docURIArg(args[0], "fn:doc")
@@ -849,7 +849,7 @@ func fnDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnDocAvailable(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return SingleBoolean(false), nil
 	}
 	uri, err := docURIArg(args[0], "fn:doc-available")
@@ -892,14 +892,14 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 }
 
 func docURIArg(seq Sequence, fnName string) (string, error) {
-	if len(seq) > 1 {
+	if seqLen(seq) > 1 {
 		return "", &XPathError{Code: errCodeXPTY0004, Message: fnName + ": expected xs:string?, got sequence of length > 1"}
 	}
 	return coerceArgToString(seq)
 }
 
 func collectionURIArg(args []Sequence, fnName string) (string, bool, error) {
-	if len(args) == 0 || len(args[0]) == 0 {
+	if len(args) == 0 || seqLen(args[0]) == 0 {
 		return "", false, nil
 	}
 	uri, err := docURIArg(args[0], fnName)
@@ -975,10 +975,10 @@ func resolveDocURI(ctx context.Context, uri string) (string, error) {
 func resolveIDLookupDocument(ctx context.Context, args []Sequence) (*helium.Document, error) {
 	var node helium.Node
 	if len(args) > 1 {
-		if len(args[1]) != 1 {
+		if seqLen(args[1]) != 1 {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:id second argument must be a single node"}
 		}
-		ni, ok := args[1][0].(NodeItem)
+		ni, ok := args[1].Get(0).(NodeItem)
 		if !ok {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:id second argument must be a node"}
 		}
@@ -1042,7 +1042,7 @@ func sequenceFromDocOrderedNodes(ctx context.Context, nodes []helium.Node) (Sequ
 		return nil, err
 	}
 
-	result := make(Sequence, 0, len(deduped))
+	result := make(ItemSlice, 0, len(deduped))
 	for _, node := range deduped {
 		result = append(result, nodeItemFor(fc, node))
 	}
@@ -1061,13 +1061,13 @@ func nodeArgOrCtx(ctx context.Context, args []Sequence) (helium.Node, error) {
 		}
 		return fc.node, nil
 	}
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
-	if len(args[0]) > 1 {
+	if seqLen(args[0]) > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected single node, got sequence of length > 1"}
 	}
-	ni, ok := args[0][0].(NodeItem)
+	ni, ok := args[0].Get(0).(NodeItem)
 	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected node"}
 	}

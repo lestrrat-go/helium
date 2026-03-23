@@ -8,6 +8,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 // SequenceType represents a parsed XSLT/XPath sequence type declaration
@@ -62,7 +63,10 @@ func checkSequenceType(seq xpath3.Sequence, st SequenceType, errCode string, con
 		execCtx = ec[0]
 	}
 	// Check cardinality
-	count := len(seq)
+	count := 0
+	if seq != nil {
+		count = sequence.Len(seq)
+	}
 	switch st.Occurrence {
 	case 'E': // empty-sequence() — must be empty
 		if count != 0 {
@@ -89,8 +93,8 @@ func checkSequenceType(seq xpath3.Sequence, st SequenceType, errCode string, con
 	}
 
 	// Check/coerce item types
-	result := make(xpath3.Sequence, 0, count)
-	for _, item := range seq {
+	result := make(xpath3.ItemSlice, 0, count)
+	for item := range sequence.Items(seq) {
 		coerced, err := coerceItem(item, st.ItemType, execCtx)
 		if err != nil {
 			return nil, dynamicError(errCode, "%s: %v", context, err)
@@ -239,7 +243,7 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 		if err != nil {
 			return item, nil // unparseable → pass through
 		}
-		seq := xpath3.Sequence{item}
+		seq := xpath3.ItemSlice{item}
 		// First try strict SequenceType matching (contravariant params, covariant return).
 		if xpath3.MatchesSequenceType(seq, st) {
 			return item, nil
@@ -256,8 +260,8 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 		// Try function coercion for return type flexibility — creates a
 		// wrapper that coerces args/return at call time.
 		coerced, ok := xpath3.CoerceToSequenceType(seq, st)
-		if ok && len(coerced) == 1 {
-			return coerced[0], nil
+		if ok && coerced != nil && sequence.Len(coerced) == 1 {
+			return coerced.Get(0), nil
 		}
 		return nil, fmt.Errorf("function item does not match required type %s", itemType)
 	}
@@ -780,7 +784,10 @@ func splitTopLevelTypeArgs(s string) []string {
 }
 
 func sequenceMatchesTypeStrict(seq xpath3.Sequence, st SequenceType) bool {
-	count := len(seq)
+	count := 0
+	if seq != nil {
+		count = sequence.Len(seq)
+	}
 	switch st.Occurrence {
 	case 0:
 		if count != 1 {
@@ -796,7 +803,7 @@ func sequenceMatchesTypeStrict(seq xpath3.Sequence, st SequenceType) bool {
 		}
 	}
 
-	for _, item := range seq {
+	for item := range sequence.Items(seq) {
 		if !itemMatchesTypeStrict(item, st.ItemType) {
 			return false
 		}

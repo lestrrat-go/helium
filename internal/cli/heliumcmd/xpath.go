@@ -237,7 +237,7 @@ func (c *xpathCommand) evalXPath3(ctx context.Context, cfg *xpathConfig, doc *he
 		return ExitOK
 	}
 
-	for _, item := range res.Sequence() {
+	for item := range res.Sequence().Items() {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
 			if code := c.printXPathNode(v.Node); code != ExitOK {

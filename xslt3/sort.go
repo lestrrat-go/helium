@@ -11,6 +11,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 // SortKey is a compiled xsl:sort specification.
@@ -390,9 +391,13 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 		seq := result.Sequence()
 
 		// XTTE1020: sort key value must be a single atomic value after atomization
-		if len(seq) > 1 {
+		seqLen := 0
+		if seq != nil {
+			seqLen = sequence.Len(seq)
+		}
+		if seqLen > 1 {
 			return sortValue{}, dynamicError(errCodeXTTE1020,
-				"sort key value is a sequence of %d items; a single value is required", len(seq))
+				"sort key value is a sequence of %d items; a single value is required", seqLen)
 		}
 
 		implicitTZ := ec.currentTime.Location()
@@ -405,8 +410,8 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 			// Auto-detected numeric: preserve date/time ordering.
 			sv := extractNumericValueFromResult(seq, result, implicitTZ)
 			// Preserve original type name for XTDE1030 checking
-			if len(seq) == 1 {
-				if av, ok := seq[0].(xpath3.AtomicValue); ok {
+			if seqLen == 1 {
+				if av, ok := seq.Get(0).(xpath3.AtomicValue); ok {
 					sv.typeName = av.TypeName
 				}
 			}
@@ -414,8 +419,8 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 		}
 
 		sv := sortValue{kind: sortValueText, str: result.StringValue()}
-		if len(seq) == 1 {
-			switch v := seq[0].(type) {
+		if seqLen == 1 {
+			switch v := seq.Get(0).(type) {
 			case xpath3.AtomicValue:
 				sv.typeName = v.TypeName
 				if *dtMode == dataTypeAuto && v.IsNumeric() {
@@ -497,8 +502,8 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 	}
 
 	sv := sortValue{kind: sortValueText, str: stringifySequence(val)}
-	if *dtMode == dataTypeAuto && len(val) == 1 {
-		if av, ok := val[0].(xpath3.AtomicValue); ok {
+	if *dtMode == dataTypeAuto && val != nil && sequence.Len(val) == 1 {
+		if av, ok := val.Get(0).(xpath3.AtomicValue); ok {
 			if av.IsNumeric() {
 				*dtMode = dataTypeNumberAuto
 			} else if av.TypeName == xpath3.TypeYearMonthDuration || av.TypeName == xpath3.TypeDayTimeDuration {
@@ -540,8 +545,8 @@ func extractSortValues(ctx context.Context, ec *execContext, sortKeys []*SortKey
 // Only actual numeric types use direct conversion; others (date, duration)
 // fall through to string → double (producing NaN for dates).
 func extractNumericValueExplicit(seq xpath3.Sequence, result xpath3.Result, implicitTZ *time.Location) sortValue {
-	if len(seq) == 1 {
-		if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
+	if seq != nil && sequence.Len(seq) == 1 {
+		if av, ok := seq.Get(0).(xpath3.AtomicValue); ok && av.IsNumeric() {
 			if sv, ok := atomicToNumericSortValue(av, implicitTZ); ok {
 				return sv
 			}
@@ -551,8 +556,8 @@ func extractNumericValueExplicit(seq xpath3.Sequence, result xpath3.Result, impl
 }
 
 func extractNumericValueExplicitSeq(seq xpath3.Sequence, implicitTZ *time.Location) sortValue {
-	if len(seq) == 1 {
-		if av, ok := seq[0].(xpath3.AtomicValue); ok && av.IsNumeric() {
+	if seq != nil && sequence.Len(seq) == 1 {
+		if av, ok := seq.Get(0).(xpath3.AtomicValue); ok && av.IsNumeric() {
 			if sv, ok := atomicToNumericSortValue(av, implicitTZ); ok {
 				return sv
 			}
@@ -562,8 +567,8 @@ func extractNumericValueExplicitSeq(seq xpath3.Sequence, implicitTZ *time.Locati
 }
 
 func extractNumericValueFromResult(seq xpath3.Sequence, result xpath3.Result, implicitTZ *time.Location) sortValue {
-	if len(seq) == 1 {
-		if av, ok := seq[0].(xpath3.AtomicValue); ok {
+	if seq != nil && sequence.Len(seq) == 1 {
+		if av, ok := seq.Get(0).(xpath3.AtomicValue); ok {
 			if sv, ok := atomicToNumericSortValue(av, implicitTZ); ok {
 				return sv
 			}
@@ -573,8 +578,8 @@ func extractNumericValueFromResult(seq xpath3.Sequence, result xpath3.Result, im
 }
 
 func extractNumericValueFromSeq(seq xpath3.Sequence, implicitTZ *time.Location) sortValue {
-	if len(seq) == 1 {
-		if av, ok := seq[0].(xpath3.AtomicValue); ok {
+	if seq != nil && sequence.Len(seq) == 1 {
+		if av, ok := seq.Get(0).(xpath3.AtomicValue); ok {
 			if sv, ok := atomicToNumericSortValue(av, implicitTZ); ok {
 				return sv
 			}
@@ -717,7 +722,7 @@ func sortNodes(ctx context.Context, ec *execContext, nodes []helium.Node, sortKe
 }
 
 func sortItems(ctx context.Context, ec *execContext, items xpath3.Sequence, sortKeys []*SortKey) (xpath3.Sequence, error) {
-	if len(sortKeys) == 0 || len(items) == 0 {
+	if len(sortKeys) == 0 || items == nil || sequence.Len(items) == 0 {
 		return items, nil
 	}
 	if len(sortKeys) == 1 {
@@ -799,12 +804,13 @@ func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk 
 	}
 
 	evalState := ec.sortXPathEvalState()
-	entries := make([]keyed1[xpath3.Item], len(items))
+	entries := make([]keyed1[xpath3.Item], sequence.Len(items))
 
 	savedItem := ec.contextItem
 	defer func() { ec.contextItem = savedItem }()
 
-	for i, item := range items {
+	for i := range sequence.Len(items) {
+		item := items.Get(i)
 		ec.contextItem = item
 		var node helium.Node
 		if ni, ok := item.(xpath3.NodeItem); ok {
@@ -836,7 +842,7 @@ func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk 
 		return cmp.Compare(a.index, b.index)
 	})
 
-	result := make(xpath3.Sequence, len(entries))
+	result := make(xpath3.ItemSlice, len(entries))
 	for i, e := range entries {
 		result[i] = e.item
 	}
@@ -891,12 +897,13 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 	}
 
 	evalState := ec.sortXPathEvalState()
-	entries := make(keyedSlice[xpath3.Item], len(items))
+	entries := make(keyedSlice[xpath3.Item], sequence.Len(items))
 
 	savedItem := ec.contextItem
 	defer func() { ec.contextItem = savedItem }()
 
-	for i, item := range items {
+	for i := range sequence.Len(items) {
+		item := items.Get(i)
 		ec.contextItem = item
 		var node helium.Node
 		if ni, ok := item.(xpath3.NodeItem); ok {
@@ -920,7 +927,7 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 		return rs.compareKeys(a.keys, b.keys, a.index, b.index)
 	})
 
-	result := make(xpath3.Sequence, len(entries))
+	result := make(xpath3.ItemSlice, len(entries))
 	for i, e := range entries {
 		result[i] = e.item
 	}

@@ -43,10 +43,10 @@ func fnQName(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnPrefixFromQName(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
-	a, err := AtomizeItem(args[0][0])
+	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -58,14 +58,14 @@ func fnPrefixFromQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if qv.Prefix == "" {
 		return nil, nil
 	}
-	return Sequence{AtomicValue{TypeName: TypeNCName, Value: qv.Prefix}}, nil
+	return ItemSlice{AtomicValue{TypeName: TypeNCName, Value: qv.Prefix}}, nil
 }
 
 func fnLocalNameFromQName(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
-	a, err := AtomizeItem(args[0][0])
+	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -73,14 +73,14 @@ func fnLocalNameFromQName(_ context.Context, args []Sequence) (Sequence, error) 
 	if a.TypeName != TypeQName {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected QName"}
 	}
-	return Sequence{AtomicValue{TypeName: TypeNCName, Value: a.QNameVal().Local}}, nil
+	return ItemSlice{AtomicValue{TypeName: TypeNCName, Value: a.QNameVal().Local}}, nil
 }
 
 func fnNamespaceURIFromQName(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
-	a, err := AtomizeItem(args[0][0])
+	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -96,10 +96,10 @@ func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, erro
 	if err != nil {
 		return nil, err
 	}
-	if len(args[1]) == 0 {
+	if seqLen(args[1]) == 0 {
 		return nil, nil
 	}
-	ni, ok := args[1][0].(NodeItem)
+	ni, ok := args[1].Get(0).(NodeItem)
 	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected element node"}
 	}
@@ -114,17 +114,17 @@ func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, erro
 }
 
 func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	qnameStr, err := coerceQNameString(args[0], false, false, "resolve-QName: QName argument must be a string")
 	if err != nil {
 		return nil, err
 	}
-	if len(args[1]) == 0 {
+	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "resolve-QName: element argument is empty"}
 	}
-	ni, ok := args[1][0].(NodeItem)
+	ni, ok := args[1].Get(0).(NodeItem)
 	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "resolve-QName: expected element node"}
 	}
@@ -179,7 +179,7 @@ func parseLexicalQName(qname string) (string, string, error) {
 }
 
 func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message string) (string, error) {
-	switch len(seq) {
+	switch seqLen(seq) {
 	case 0:
 		if allowEmpty {
 			return "", nil
@@ -190,7 +190,7 @@ func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message strin
 		return "", &XPathError{Code: errCodeXPTY0004, Message: message}
 	}
 
-	a, err := AtomizeItem(seq[0])
+	a, err := AtomizeItem(seq.Get(0))
 	if err != nil {
 		return "", err
 	}
@@ -212,10 +212,10 @@ func coerceQNameString(seq Sequence, allowEmpty, allowAnyURI bool, message strin
 }
 
 func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
-	ni, ok := args[0][0].(NodeItem)
+	ni, ok := args[0].Get(0).(NodeItem)
 	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected element node"}
 	}
@@ -258,7 +258,7 @@ func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	sort.Strings(sorted)
 
-	result := make(Sequence, 0, len(sorted))
+	result := make(ItemSlice, 0, len(sorted))
 	for _, prefix := range sorted {
 		result = append(result, AtomicValue{TypeName: TypeString, Value: prefix})
 	}

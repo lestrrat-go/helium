@@ -7,6 +7,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 func (ec *execContext) execIf(ctx context.Context, inst *IfInst) error {
@@ -158,8 +159,9 @@ func (ec *execContext) execForEach(ctx context.Context, inst *ForEachInst) error
 			ec.popVarScope()
 		}
 	} else {
-		ec.size = len(seq)
-		for i, item := range seq {
+		ec.size = sequence.Len(seq)
+		for i := range sequence.Len(seq) {
+			item := seq.Get(i)
 			ec.position = i + 1
 			if ni, ok := item.(xpath3.NodeItem); ok {
 				ec.currentNode = ni.Node
@@ -219,7 +221,7 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 		groups = ec.groupEndingWith(seq, inst.GroupEndingWith)
 	default:
 		// No grouping attribute — treat entire sequence as one group
-		groups = []fegGroup{{items: seq}}
+		groups = []fegGroup{{items: xpath3.ItemSlice(sequence.Materialize(seq))}}
 	}
 	if err != nil {
 		return err
@@ -339,7 +341,7 @@ func (ec *execContext) withSortGroupContext(groups []fegGroup, hasKey bool, fn f
 
 type fegGroup struct {
 	key   xpath3.Sequence
-	items xpath3.Sequence
+	items xpath3.ItemSlice
 }
 
 func groupLookupKey(item xpath3.Item, collationKeyFn func(string) string) (string, xpath3.Sequence) {
@@ -347,9 +349,9 @@ func groupLookupKey(item xpath3.Item, collationKeyFn func(string) string) (strin
 	if err != nil {
 		s := stringifyItem(item)
 		if collationKeyFn != nil {
-			return collationKeyFn(s), xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: s}}
+			return collationKeyFn(s), xpath3.ItemSlice{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: s}}
 		}
-		return s, xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: s}}
+		return s, xpath3.ItemSlice{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: s}}
 	}
 
 	s, err := xpath3.AtomicToString(av)
@@ -357,9 +359,9 @@ func groupLookupKey(item xpath3.Item, collationKeyFn func(string) string) (strin
 		s = ""
 	}
 	if collationKeyFn != nil {
-		return collationKeyFn(s), xpath3.Sequence{av}
+		return collationKeyFn(s), xpath3.ItemSlice{av}
 	}
-	return canonicalKey(av), xpath3.Sequence{av}
+	return canonicalKey(av), xpath3.ItemSlice{av}
 }
 
 // groupBy implements group-by: items are grouped by the string value of the
@@ -372,7 +374,7 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 		key      string
 		keyAtom  xpath3.AtomicValue // original atomic value for eq comparison
 		keySeq   xpath3.Sequence
-		items    xpath3.Sequence
+		items    xpath3.ItemSlice
 		orderIdx int // index into order slice
 	}
 	var order []string
@@ -387,7 +389,7 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 	savedItem := ec.contextItem
 	savedContext := ec.contextNode
 	savedCurrent := ec.currentNode
-	ec.size = len(seq)
+	ec.size = sequence.Len(seq)
 	defer func() {
 		ec.position = savedPos
 		ec.size = savedSize
@@ -396,7 +398,8 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 		ec.currentNode = savedCurrent
 	}()
 
-	for i, item := range seq {
+	for i := range sequence.Len(seq) {
+		item := seq.Get(i)
 		ec.position = i + 1
 		var node helium.Node
 		if ni, ok := item.(xpath3.NodeItem); ok {
@@ -416,7 +419,7 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 		}
 
 		resultSeq := result.Sequence()
-		if len(resultSeq) == 0 {
+		if resultSeq == nil || sequence.Len(resultSeq) == 0 {
 			continue
 		}
 
@@ -430,7 +433,7 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 			if e, ok := groupMap[lookupKey]; ok {
 				e.items = append(e.items, item)
 			} else {
-				groupMap[lookupKey] = &entry{key: keyVal, keySeq: atomizeSequence(resultSeq), items: xpath3.Sequence{item}}
+				groupMap[lookupKey] = &entry{key: keyVal, keySeq: atomizeSequence(resultSeq), items: xpath3.ItemSlice{item}}
 				order = append(order, lookupKey)
 			}
 		} else {
@@ -439,7 +442,7 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 			// since an item with duplicate key values (e.g., pop=5
 			// and name-length=5) should appear only once in a group.
 			addedToGroup := make(map[int]struct{})
-			for _, keyItem := range resultSeq {
+			for keyItem := range sequence.Items(resultSeq) {
 				av, atomErr := xpath3.AtomizeItem(keyItem)
 				isNumeric := atomErr == nil && av.IsNumeric()
 
@@ -461,7 +464,7 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 					if !matched {
 						idx := len(order)
 						lookupKey := "N:" + strconv.Itoa(idx)
-						e := &entry{keyAtom: av, keySeq: xpath3.Sequence{av}, items: xpath3.Sequence{item}, orderIdx: idx}
+						e := &entry{keyAtom: av, keySeq: xpath3.ItemSlice{av}, items: xpath3.ItemSlice{item}, orderIdx: idx}
 						groupMap[lookupKey] = e
 						numericGroups = append(numericGroups, e)
 						order = append(order, lookupKey)
@@ -477,7 +480,7 @@ func (ec *execContext) groupBy(_ context.Context, seq xpath3.Sequence, groupByEx
 						}
 					} else {
 						idx := len(order)
-						e := &entry{keySeq: keySeq, items: xpath3.Sequence{item}, orderIdx: idx}
+						e := &entry{keySeq: keySeq, items: xpath3.ItemSlice{item}, orderIdx: idx}
 						groupMap[lookupKey] = e
 						order = append(order, lookupKey)
 						addedToGroup[idx] = struct{}{}
@@ -506,14 +509,14 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 	var groups []fegGroup
 	var currentKey string
 	var currentKeySeq xpath3.Sequence
-	var currentItems xpath3.Sequence
+	var currentItems xpath3.ItemSlice
 
 	savedPos := ec.position
 	savedSize := ec.size
 	savedItem := ec.contextItem
 	savedContext := ec.contextNode
 	savedCurrent := ec.currentNode
-	ec.size = len(seq)
+	ec.size = sequence.Len(seq)
 	defer func() {
 		ec.position = savedPos
 		ec.size = savedSize
@@ -522,7 +525,8 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 		ec.currentNode = savedCurrent
 	}()
 
-	for i, item := range seq {
+	for i := range sequence.Len(seq) {
+		item := seq.Get(i)
 		ec.position = i + 1
 		var node helium.Node
 		if ni, ok := item.(xpath3.NodeItem); ok {
@@ -549,17 +553,17 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 			keySeq = atomizeSequence(rSeq)
 		} else {
 			resultSeq := result.Sequence()
-			if len(resultSeq) == 0 {
+			if resultSeq == nil || sequence.Len(resultSeq) == 0 {
 				// XTTE1100: group-adjacent key must not be an empty sequence
 				return nil, dynamicError(errCodeXTTE1100,
 					"group-adjacent key is an empty sequence")
 			}
-			if len(resultSeq) > 1 {
+			if sequence.Len(resultSeq) > 1 {
 				// XTTE1100: group-adjacent key must be a single atomic value
 				return nil, dynamicError(errCodeXTTE1100,
-					"group-adjacent key has %d items (expected 1)", len(resultSeq))
+					"group-adjacent key has %d items (expected 1)", sequence.Len(resultSeq))
 			}
-			keyVal, keySeq = groupLookupKey(resultSeq[0], nil)
+			keyVal, keySeq = groupLookupKey(resultSeq.Get(0), nil)
 		}
 
 		lookupKey := keyVal
@@ -576,13 +580,13 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 				if currentKeySeq != nil {
 					gKey = currentKeySeq
 				} else {
-					gKey = xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}}
+					gKey = xpath3.ItemSlice{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}}
 				}
 				groups = append(groups, fegGroup{key: gKey, items: currentItems})
 			}
 			currentKey = lookupKey
 			currentKeySeq = keySeq
-			currentItems = xpath3.Sequence{item}
+			currentItems = xpath3.ItemSlice{item}
 		}
 	}
 	if len(currentItems) > 0 {
@@ -590,7 +594,7 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 		if currentKeySeq != nil {
 			gKey = currentKeySeq
 		} else {
-			gKey = xpath3.Sequence{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}}
+			gKey = xpath3.ItemSlice{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: currentKey}}
 		}
 		groups = append(groups, fegGroup{key: gKey, items: currentItems})
 	}
@@ -601,9 +605,9 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 // key for use as a map key. Items are separated by a NUL byte to avoid
 // collisions.
 func compositeKeyString(seq xpath3.Sequence) string {
-	parts := make([]string, len(seq))
-	for i, item := range seq {
-		parts[i] = stringifyItem(item)
+	parts := make([]string, sequence.Len(seq))
+	for i := range sequence.Len(seq) {
+		parts[i] = stringifyItem(seq.Get(i))
 	}
 	return strings.Join(parts, "\x00")
 }
@@ -612,8 +616,8 @@ func compositeKeyString(seq xpath3.Sequence) string {
 // whenever an item matches the pattern.
 func (ec *execContext) groupStartingWith(seq xpath3.Sequence, pat *Pattern) []fegGroup {
 	var groups []fegGroup
-	var currentItems xpath3.Sequence
-	for _, item := range seq {
+	var currentItems xpath3.ItemSlice
+	for item := range sequence.Items(seq) {
 		if pat.matchPatternItem(ec, item) && len(currentItems) > 0 {
 			groups = append(groups, fegGroup{items: currentItems})
 			currentItems = nil
@@ -630,8 +634,8 @@ func (ec *execContext) groupStartingWith(seq xpath3.Sequence, pat *Pattern) []fe
 // an item matches the pattern.
 func (ec *execContext) groupEndingWith(seq xpath3.Sequence, pat *Pattern) []fegGroup {
 	var groups []fegGroup
-	var currentItems xpath3.Sequence
-	for _, item := range seq {
+	var currentItems xpath3.ItemSlice
+	for item := range sequence.Items(seq) {
 		currentItems = append(currentItems, item)
 		if pat.matchPatternItem(ec, item) {
 			groups = append(groups, fegGroup{items: currentItems})

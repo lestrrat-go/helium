@@ -11,6 +11,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
@@ -25,17 +26,21 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 			return err
 		}
 		seq := result.Sequence()
-		if len(seq) == 0 {
+		seqLen := 0
+		if seq != nil {
+			seqLen = sequence.Len(seq)
+		}
+		if seqLen == 0 {
 			// XTTE1000: select evaluates to empty sequence
 			return dynamicError(errCodeXTTE1000,
 				"xsl:number select expression returned empty sequence")
 		}
-		if len(seq) > 1 {
+		if seqLen > 1 {
 			// XTTE1000: select must return exactly one node
 			return dynamicError(errCodeXTTE1000,
 				"xsl:number select expression returned more than one item")
 		}
-		if ni, ok := seq[0].(xpath3.NodeItem); ok {
+		if ni, ok := seq.Get(0).(xpath3.NodeItem); ok {
 			node = ni.Node
 		} else {
 			// XTTE0990: select result is not a node
@@ -60,7 +65,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 			return err
 		}
 		seq := result.Sequence()
-		for _, item := range seq {
+		for item := range sequence.Items(seq) {
 			av, err := xpath3.AtomizeItem(item)
 			if err != nil {
 				// XTDE0980: value is not numeric

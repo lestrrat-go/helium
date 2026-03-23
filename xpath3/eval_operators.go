@@ -95,13 +95,13 @@ func evalConcatExpr(evalFn exprEvaluator, ec *evalContext, e ConcatExpr) (Sequen
 // concatToString converts a sequence to string for the || operator.
 // Raises FOTY0014 for function/map/array items that have no string value.
 func concatToString(seq Sequence) (string, error) {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return "", nil
 	}
-	if len(seq) > 1 {
+	if seq.Len() > 1 {
 		return "", &XPathError{Code: errCodeXPTY0004, Message: "cannot get string value of sequence of length > 1"}
 	}
-	switch seq[0].(type) {
+	switch seq.Get(0).(type) {
 	case FunctionItem:
 		return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of function item"}
 	case MapItem:
@@ -117,9 +117,10 @@ func evalSimpleMapExpr(evalFn exprEvaluator, ec *evalContext, e SimpleMapExpr) (
 	if err != nil {
 		return nil, err
 	}
-	var result Sequence
-	size := len(left)
-	for i, item := range left {
+	var result ItemSlice
+	size := seqLen(left)
+	i := 0
+	for item := range seqItems(left) {
 		var frame evalContextFrame
 		if ni, ok := item.(NodeItem); ok {
 			frame = ec.pushNodeContext(ni.Node, i+1, size)
@@ -131,7 +132,8 @@ func evalSimpleMapExpr(evalFn exprEvaluator, ec *evalContext, e SimpleMapExpr) (
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, r...)
+		result = append(result, seqMaterialize(r)...)
+		i++
 	}
 	return result, nil
 }
@@ -145,14 +147,14 @@ func evalRangeExpr(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (Sequence
 	if err != nil {
 		return nil, err
 	}
-	if len(startSeq) == 0 || len(endSeq) == 0 {
+	if seqLen(startSeq) == 0 || seqLen(endSeq) == 0 {
 		return nil, nil
 	}
-	sa, err := AtomizeItem(startSeq[0])
+	sa, err := AtomizeItem(startSeq.Get(0))
 	if err != nil {
 		return nil, err
 	}
-	ea, err := AtomizeItem(endSeq[0])
+	ea, err := AtomizeItem(endSeq.Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -176,8 +178,13 @@ func evalRangeExpr(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (Sequence
 	if !count.IsInt64() || count.Int64() > int64(ec.maxNodes) {
 		return nil, ErrNodeSetLimit
 	}
+	// Use lazy RangeSequence when both bounds fit in int64
+	if start.IsInt64() && end.IsInt64() {
+		return NewRangeSequence(start.Int64(), end.Int64()), nil
+	}
+	// Fallback for big integer ranges (rare)
 	n := count.Int64()
-	result := make(Sequence, 0, n)
+	result := make(ItemSlice, 0, n)
 	cur := new(big.Int).Set(start)
 	for cur.Cmp(end) <= 0 {
 		result = append(result, AtomicValue{TypeName: TypeInteger, Value: new(big.Int).Set(cur)})
@@ -204,7 +211,7 @@ func evalUnionExpr(evalFn exprEvaluator, ec *evalContext, e UnionExpr) (Sequence
 	if err != nil {
 		return nil, err
 	}
-	result := make(Sequence, len(merged))
+	result := make(ItemSlice, len(merged))
 	for i, n := range merged {
 		result[i] = nodeItemFor(ec, n)
 	}
@@ -249,7 +256,7 @@ func evalIntersectExceptExpr(evalFn exprEvaluator, ec *evalContext, e IntersectE
 	if err != nil {
 		return nil, err
 	}
-	seq := make(Sequence, len(result))
+	seq := make(ItemSlice, len(result))
 	for i, n := range result {
 		seq[i] = nodeItemFor(ec, n)
 	}
@@ -270,7 +277,7 @@ func evalFilterExpr(evalFn exprEvaluator, ec *evalContext, e FilterExpr) (Sequen
 				return nil, err
 			}
 		}
-		result := make(Sequence, len(nodes))
+		result := make(ItemSlice, len(nodes))
 		for i, n := range nodes {
 			result[i] = nodeItemFor(ec, n)
 		}
@@ -291,9 +298,10 @@ func evalFilterExpr(evalFn exprEvaluator, ec *evalContext, e FilterExpr) (Sequen
 // applySequencePredicate filters a sequence by a predicate expression.
 // Each item becomes the context item; numeric predicates select by position.
 func applySequencePredicate(evalFn exprEvaluator, ec *evalContext, seq Sequence, pred Expr) (Sequence, error) {
-	var result Sequence
-	size := len(seq)
-	for i, item := range seq {
+	var result ItemSlice
+	size := seqLen(seq)
+	i := 0
+	for item := range seqItems(seq) {
 		var frame evalContextFrame
 		if ni, ok := item.(NodeItem); ok {
 			frame = ec.pushNodeContext(ni.Node, i+1, size)
@@ -306,12 +314,13 @@ func applySequencePredicate(evalFn exprEvaluator, ec *evalContext, seq Sequence,
 			return nil, err
 		}
 		// Numeric predicate: position match
-		if len(r) == 1 {
-			if a, ok := r[0].(AtomicValue); ok && a.IsNumeric() {
+		if seqLen(r) == 1 {
+			if a, ok := r.Get(0).(AtomicValue); ok && a.IsNumeric() {
 				f := a.ToFloat64()
 				if f == float64(i+1) {
 					result = append(result, item)
 				}
+				i++
 				continue
 			}
 		}
@@ -323,6 +332,7 @@ func applySequencePredicate(evalFn exprEvaluator, ec *evalContext, seq Sequence,
 		if b {
 			result = append(result, item)
 		}
+		i++
 	}
 	return result, nil
 }
@@ -362,7 +372,7 @@ func evalPathExpr(evalFn exprEvaluator, ec *evalContext, e PathExpr) (Sequence, 
 	if err != nil {
 		return nil, err
 	}
-	seq := make(Sequence, len(deduped))
+	seq := make(ItemSlice, len(deduped))
 	for i, n := range deduped {
 		seq[i] = nodeItemFor(ec, n)
 	}
@@ -401,7 +411,7 @@ func evalVMPathExpr(evalFn exprEvaluator, ec *evalContext, e vmPathExpr) (Sequen
 	if err != nil {
 		return nil, err
 	}
-	seq := make(Sequence, len(deduped))
+	seq := make(ItemSlice, len(deduped))
 	for i, n := range deduped {
 		seq[i] = nodeItemFor(ec, n)
 	}
@@ -437,7 +447,7 @@ func evalPathStepExpr(evalFn exprEvaluator, ec *evalContext, e PathStepExpr) (Se
 		return nil, ErrPathNotNodeSet
 	}
 	var allNodes []helium.Node
-	var allItems Sequence
+	var allItems ItemSlice
 	isNodeResult := true
 
 	for i, n := range baseNodes {
@@ -461,7 +471,7 @@ func evalPathStepExpr(evalFn exprEvaluator, ec *evalContext, e PathStepExpr) (Se
 			}
 			allNodes = nil
 		}
-		allItems = append(allItems, r...)
+		allItems = append(allItems, seqMaterialize(r)...)
 	}
 
 	if isNodeResult {
@@ -473,7 +483,7 @@ func evalPathStepExpr(evalFn exprEvaluator, ec *evalContext, e PathStepExpr) (Se
 		if err != nil {
 			return nil, err
 		}
-		seq := make(Sequence, len(allNodes))
+		seq := make(ItemSlice, len(allNodes))
 		for i, n := range allNodes {
 			seq[i] = nodeItemFor(ec, n)
 		}

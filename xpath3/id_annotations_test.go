@@ -52,7 +52,7 @@ func TestFnIDUsesTypeAnnotationsForIDSubtype(t *testing.T) {
 	seq := evalExprCtx(t, ctx, doc, `id("alpha")/name()`)
 	require.Len(t, seq, 1)
 
-	av, ok := seq[0].(xpath3.AtomicValue)
+	av, ok := seq.Get(0).(xpath3.AtomicValue)
 	require.True(t, ok)
 	require.Equal(t, "root", av.StringVal())
 }

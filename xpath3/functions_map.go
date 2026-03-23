@@ -19,19 +19,19 @@ func init() {
 }
 
 func extractMap(seq Sequence) (MapItem, error) {
-	if len(seq) != 1 {
+	if seqLen(seq) != 1 {
 		return MapItem{}, &XPathError{Code: errCodeXPTY0004, Message: "expected single map"}
 	}
-	m, ok := seq[0].(MapItem)
+	m, ok := seq.Get(0).(MapItem)
 	if !ok {
-		return MapItem{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected map, got %T", seq[0])}
+		return MapItem{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected map, got %T", seq.Get(0))}
 	}
 	return m, nil
 }
 
 func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 	var maps []MapItem
-	for _, item := range args[0] {
+	for item := range seqItems(args[0]) {
 		m, ok := item.(MapItem)
 		if !ok {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:merge requires sequence of maps"}
@@ -40,11 +40,11 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	duplicates := MergeUseFirst
 	if len(args) > 1 {
-		if len(args[1]) == 0 {
+		if seqLen(args[1]) == 0 {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:merge: options argument must be a map, got empty sequence"}
 		}
 		// The options map should contain "duplicates" key
-		optMap, ok := args[1][0].(MapItem)
+		optMap, ok := args[1].Get(0).(MapItem)
 		if ok {
 			key := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 			if val, found := optMap.Get(key); found {
@@ -69,7 +69,7 @@ func fnMapMerge(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Sequence{merged}, nil
+	return ItemSlice{merged}, nil
 }
 
 func fnMapSize(_ context.Context, args []Sequence) (Sequence, error) {
@@ -86,7 +86,7 @@ func fnMapKeys(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	keys := m.Keys()
-	result := make(Sequence, len(keys))
+	result := make(ItemSlice, len(keys))
 	for i, k := range keys {
 		result[i] = k
 	}
@@ -110,13 +110,13 @@ func fnMapGet(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(args[1]) == 0 {
+	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:get requires a key argument"}
 	}
-	if len(args[1]) > 1 {
+	if seqLen(args[1]) > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:get key must be a single atomic value"}
 	}
-	ka, err := AtomizeItem(args[1][0])
+	ka, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -132,25 +132,25 @@ func fnMapPut(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(args[1]) == 0 {
+	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:put requires key"}
 	}
-	ka, err := AtomizeItem(args[1][0])
+	ka, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
 		return nil, err
 	}
-	return Sequence{m.Put(ka, args[2])}, nil
+	return ItemSlice{m.Put(ka, args[2])}, nil
 }
 
 func fnMapEntry(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "map:entry requires key"}
 	}
-	ka, err := AtomizeItem(args[0][0])
+	ka, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
 		return nil, err
 	}
-	return Sequence{NewMap([]MapEntry{{Key: ka, Value: args[1]}})}, nil
+	return ItemSlice{NewMap([]MapEntry{{Key: ka, Value: args[1]}})}, nil
 }
 
 func fnMapRemove(_ context.Context, args []Sequence) (Sequence, error) {
@@ -158,14 +158,14 @@ func fnMapRemove(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, item := range args[1] {
+	for item := range seqItems(args[1]) {
 		ka, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
 		}
 		m = m.Remove(ka)
 	}
-	return Sequence{m}, nil
+	return ItemSlice{m}, nil
 }
 
 func fnMapForEach(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -177,13 +177,13 @@ func fnMapForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	var result Sequence
+	var result ItemSlice
 	mapErr := m.ForEach(func(k AtomicValue, v Sequence) error {
-		r, err := fi.Invoke(ctx, []Sequence{{k}, v})
+		r, err := fi.Invoke(ctx, []Sequence{ItemSlice{k}, v})
 		if err != nil {
 			return err
 		}
-		result = append(result, r...)
+		result = append(result, seqMaterialize(r)...)
 		return nil
 	})
 	if mapErr != nil {
@@ -193,22 +193,22 @@ func fnMapForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnMapFind(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[1]) == 0 {
-		return Sequence{NewArray(nil)}, nil
+	if seqLen(args[1]) == 0 {
+		return ItemSlice{NewArray(nil)}, nil
 	}
-	ka, err := AtomizeItem(args[1][0])
+	ka, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
 		return nil, err
 	}
 	var results []Sequence
 	mapFindRecurse(args[0], ka, &results)
-	return Sequence{NewArray(results)}, nil
+	return ItemSlice{NewArray(results)}, nil
 }
 
 // mapFindRecurse recursively searches for a key in maps within items.
 // Per XPath 3.1, map:find searches recursively through maps and arrays.
 func mapFindRecurse(items Sequence, key AtomicValue, results *[]Sequence) {
-	for _, item := range items {
+	for item := range seqItems(items) {
 		switch v := item.(type) {
 		case MapItem:
 			if val, found := v.Get(key); found {

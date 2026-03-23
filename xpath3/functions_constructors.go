@@ -222,10 +222,10 @@ func makeXSStringRestriction(typeName string, validate *regexp.Regexp) func(cont
 // makeXSTokenList returns a constructor for xs:NMTOKENS or xs:IDREFS (whitespace-separated list).
 func makeXSTokenList(itemType string, tokenRe *regexp.Regexp) func(context.Context, []Sequence) (Sequence, error) {
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
-		if len(args[0]) == 0 {
+		if seqLen(args[0]) == 0 {
 			return nil, nil
 		}
-		a, err := AtomizeItem(args[0][0])
+		a, err := AtomizeItem(args[0].Get(0))
 		if err != nil {
 			return nil, err
 		}
@@ -241,7 +241,7 @@ func makeXSTokenList(itemType string, tokenRe *regexp.Regexp) func(context.Conte
 			}
 		}
 		tokens := strings.Fields(s)
-		result := make(Sequence, len(tokens))
+		result := make(ItemSlice, len(tokens))
 		for i, tok := range tokens {
 			if !tokenRe.MatchString(tok) {
 				return nil, &XPathError{
@@ -437,16 +437,16 @@ func makeXSDateTimeStamp() func(context.Context, []Sequence) (Sequence, error) {
 }
 
 func atomizeConstructorArg(seq Sequence, typeName string) (AtomicValue, bool, error) {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return AtomicValue{}, true, nil
 	}
-	if len(seq) > 1 {
+	if seq.Len() > 1 {
 		return AtomicValue{}, false, &XPathError{
 			Code:    errCodeXPTY0004,
 			Message: fmt.Sprintf("%s constructor requires a singleton argument", typeName),
 		}
 	}
-	a, err := AtomizeItem(seq[0])
+	a, err := AtomizeItem(seq.Get(0))
 	if err != nil {
 		return AtomicValue{}, false, err
 	}
@@ -454,7 +454,7 @@ func atomizeConstructorArg(seq Sequence, typeName string) (AtomicValue, bool, er
 }
 
 func fnXSError(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	return nil, &XPathError{

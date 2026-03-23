@@ -40,10 +40,10 @@ func promoteToNumeric(item Item) (AtomicValue, error) {
 }
 
 func fnAbs(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
-	a, err := promoteToNumeric(args[0][0])
+	a, err := promoteToNumeric(args[0].Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -57,10 +57,10 @@ func fnAbs(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnCeiling(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
-	a, err := promoteToNumeric(args[0][0])
+	a, err := promoteToNumeric(args[0].Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -78,10 +78,10 @@ func fnCeiling(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
-	a, err := promoteToNumeric(args[0][0])
+	a, err := promoteToNumeric(args[0].Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -99,16 +99,16 @@ func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
-	a, err := promoteToNumeric(args[0][0])
+	a, err := promoteToNumeric(args[0].Get(0))
 	if err != nil {
 		return nil, err
 	}
 	precision := 0
-	if len(args) > 1 && len(args[1]) > 0 {
-		pa, err := AtomizeItem(args[1][0])
+	if len(args) > 1 && seqLen(args[1]) > 0 {
+		pa, err := AtomizeItem(args[1].Get(0))
 		if err != nil {
 			return nil, err
 		}
@@ -146,16 +146,16 @@ func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
-	a, err := promoteToNumeric(args[0][0])
+	a, err := promoteToNumeric(args[0].Get(0))
 	if err != nil {
 		return nil, err
 	}
 	precision := 0
-	if len(args) > 1 && len(args[1]) > 0 {
-		pa, err := AtomizeItem(args[1][0])
+	if len(args) > 1 && seqLen(args[1]) > 0 {
+		pa, err := AtomizeItem(args[1].Get(0))
 		if err != nil {
 			return nil, err
 		}
@@ -351,7 +351,7 @@ func roundHalfToEvenFloat(n float64, precision int) float64 {
 }
 
 func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		// Per F&O: empty sequence is treated as NaN for formatting, result is xs:string
 		a := AtomicValue{TypeName: TypeDouble, Value: NewDouble(math.NaN())}
 		picture, err := coerceArgToStringRequired(args[1])
@@ -359,7 +359,7 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 		df := defaultDecimalFormat(ctx)
-		if len(args) > 2 && len(args[2]) > 0 {
+		if len(args) > 2 && seqLen(args[2]) > 0 {
 			formatName, fErr := coerceArgToString(args[2])
 			if fErr != nil {
 				return nil, fErr
@@ -375,10 +375,10 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		return SingleString(s), nil
 	}
-	if len(args[0]) != 1 {
+	if seqLen(args[0]) != 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "format-number() first argument must be a singleton numeric value"}
 	}
-	a, err := AtomizeItem(args[0][0])
+	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +398,7 @@ func fnFormatNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	df := defaultDecimalFormat(ctx)
-	if len(args) > 2 && len(args[2]) > 0 {
+	if len(args) > 2 && seqLen(args[2]) > 0 {
 		formatName, err := coerceArgToString(args[2])
 		if err != nil {
 			return nil, err

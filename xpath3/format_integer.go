@@ -15,11 +15,11 @@ func fnFormatInteger(ctx context.Context, args []Sequence) (Sequence, error) {
 	picSeq := args[1]
 
 	// Empty sequence → empty string
-	if len(valSeq) == 0 {
+	if seqLen(valSeq) == 0 {
 		return SingleString(""), nil
 	}
 
-	valAtom, err := AtomizeItem(valSeq[0])
+	valAtom, err := AtomizeItem(valSeq.Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func fnFormatInteger(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, fmt.Errorf("xpath3: internal error: expected *big.Int for %s", valAtom.TypeName)
 	}
 
-	picAtom, err := AtomizeItem(picSeq[0])
+	picAtom, err := AtomizeItem(picSeq.Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -47,8 +47,8 @@ func fnFormatInteger(ctx context.Context, args []Sequence) (Sequence, error) {
 	if ec := getFnContext(ctx); ec != nil {
 		lang = ec.getDefaultLanguage()
 	}
-	if len(args) > 2 && len(args[2]) > 0 {
-		langAtom, err := AtomizeItem(args[2][0])
+	if len(args) > 2 && seqLen(args[2]) > 0 {
+		langAtom, err := AtomizeItem(args[2].Get(0))
 		if err != nil {
 			return nil, err
 		}

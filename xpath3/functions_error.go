@@ -35,7 +35,7 @@ func fnError(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func coerceErrorCode(seq Sequence) (QNameValue, bool, error) {
-	switch len(seq) {
+	switch seqLen(seq) {
 	case 0:
 		return QNameValue{}, false, nil
 	case 1:
@@ -43,7 +43,7 @@ func coerceErrorCode(seq Sequence) (QNameValue, bool, error) {
 		return QNameValue{}, false, &XPathError{Code: errCodeXPTY0004, Message: "fn:error code argument must be xs:QName?"}
 	}
 
-	a, err := AtomizeItem(seq[0])
+	a, err := AtomizeItem(seq.Get(0))
 	if err != nil {
 		return QNameValue{}, false, err
 	}
@@ -71,7 +71,8 @@ func fnTrace(_ context.Context, args []Sequence) (Sequence, error) {
 	} else {
 		_, _ = fmt.Fprint(traceWriter, "[trace] ")
 	}
-	for i, item := range args[0] {
+	for i := range seqLen(args[0]) {
+		item := args[0].Get(i)
 		if i > 0 {
 			_, _ = fmt.Fprint(traceWriter, ", ")
 		}

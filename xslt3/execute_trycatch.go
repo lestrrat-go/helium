@@ -9,11 +9,12 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error {
 	var value string
-	var bodySeq xpath3.Sequence
+	var bodySeq xpath3.ItemSlice
 	if inst.Select != nil {
 		xpathCtx := ec.newXPathContext(ec.contextNode)
 		result, err := inst.Select.Evaluate(xpathCtx, ec.contextNode)
@@ -21,7 +22,7 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 			// Errors evaluating message content are recoverable
 			value = err.Error()
 		} else {
-			bodySeq = result.Sequence()
+			bodySeq = xpath3.ItemSlice(sequence.Materialize(result.Sequence()))
 			value = serializeMessageSequence(bodySeq)
 		}
 	}
@@ -44,7 +45,7 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 			// Other errors evaluating message body are recoverable
 			value += err.Error()
 		} else {
-			bodySeq = append(bodySeq, val...)
+			bodySeq = append(bodySeq, sequence.Materialize(val)...)
 			value += serializeMessageSequence(val)
 		}
 	}
@@ -95,12 +96,12 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 // XML so that the message preserves markup structure. Atomic values are
 // converted to their string representations and joined with spaces.
 func serializeMessageSequence(seq xpath3.Sequence) string {
-	if len(seq) == 0 {
+	if seq == nil || sequence.Len(seq) == 0 {
 		return ""
 	}
 	var sb strings.Builder
 	prevWasAtomic := false
-	for _, item := range seq {
+	for item := range sequence.Items(seq) {
 		ni, isNode := item.(xpath3.NodeItem)
 		if !isNode {
 			// Atomic value — stringify and space-separate
@@ -303,7 +304,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	defer ec.popVarScope()
 
 	// $err:code is an xs:QName value with the error code
-	errCodeSeq := xpath3.Sequence{xpath3.AtomicValue{
+	errCodeSeq := xpath3.ItemSlice{xpath3.AtomicValue{
 		TypeName: xpath3.TypeQName,
 		Value:    errQName,
 	}}
@@ -312,11 +313,11 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	// For xsl:message terminate="yes", this is the message body content.
 	errValueSeq := xpath3.EmptySequence()
 	if xErr, ok := errors.AsType[*XSLTError](tryErr); ok {
-		if seq, ok := xErr.Value.(xpath3.Sequence); ok && len(seq) > 0 {
+		if seq, ok := xErr.Value.(xpath3.Sequence); ok && sequence.Len(seq) > 0 {
 			// Copy nodes into the result document so they are usable
 			// in the catch body's output tree.
-			var copied xpath3.Sequence
-			for _, item := range seq {
+			var copied xpath3.ItemSlice
+			for item := range sequence.Items(seq) {
 				if ni, isNode := item.(xpath3.NodeItem); isNode {
 					dup, cpErr := helium.CopyNode(ni.Node, ec.resultDoc)
 					if cpErr == nil {
@@ -407,7 +408,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *TryCatc
 		errDesc = xErr.Message
 		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
 	}
-	errCodeSeq := xpath3.Sequence{xpath3.AtomicValue{
+	errCodeSeq := xpath3.ItemSlice{xpath3.AtomicValue{
 		TypeName: xpath3.TypeQName,
 		Value:    errQName,
 	}}

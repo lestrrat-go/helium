@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/sequence"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -20,15 +21,21 @@ type Item interface {
 	itemTag()
 }
 
-// Sequence is an ordered collection of items.
-type Sequence []Item
+// Sequence is an ordered collection of XPath 3.1 items.
+// Implementations include ItemSlice (slice-backed) and lazy sequences via sequence.Range.
+type Sequence = sequence.Interface[Item]
 
-func cloneSequence(seq Sequence) Sequence {
-	if seq == nil {
-		return nil
-	}
-	return append(Sequence(nil), seq...)
-}
+// ItemSlice is a Sequence backed by a plain slice of Item values.
+type ItemSlice = sequence.Slice[Item]
+
+// Nil-safe helpers — delegate to generic sequence package.
+var (
+	seqLen         = sequence.Len[Item]
+	seqItems       = sequence.Items[Item]
+	seqMaterialize = sequence.Materialize[Item]
+)
+
+var cloneSequence = sequence.Clone[Item]
 
 func cloneSequences(seqs []Sequence) []Sequence {
 	if seqs == nil {
@@ -656,7 +663,7 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
 					// Combine: concatenate values
 					allEntries[idx] = mapEntry{
 						key:   allEntries[idx].key,
-						value: append(cloneSequence(allEntries[idx].value), e.value...),
+						value: ItemSlice(append(cloneSequence(allEntries[idx].value).Materialize(), e.value.Materialize()...)),
 					}
 					continue
 				}
@@ -764,11 +771,11 @@ func (a ArrayItem) SubArray(start, length int) (ArrayItem, error) {
 // Flatten returns all members concatenated into a single sequence.
 // Nested arrays are recursively flattened per XPath 3.1 spec.
 func (a ArrayItem) Flatten() Sequence {
-	var result Sequence
+	var result ItemSlice
 	for _, m := range a.members {
-		for _, item := range m {
+		for item := range m.Items() {
 			if nested, ok := item.(ArrayItem); ok {
-				result = append(result, nested.Flatten()...)
+				result = append(result, nested.Flatten().Materialize()...)
 			} else {
 				result = append(result, item)
 			}
@@ -964,8 +971,8 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 		}
 		if v.Size() == 1 {
 			member, _ := v.Get(1)
-			if len(member) == 1 {
-				return AtomizeItem(member[0])
+			if seqLen(member) == 1 {
+				return AtomizeItem(member.Get(0))
 			}
 		}
 		return AtomicValue{}, &XPathError{

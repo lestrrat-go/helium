@@ -52,7 +52,7 @@ func compareSingletonAgainstRange(evalFn exprEvaluator, ec *evalContext, op Toke
 	if err != nil {
 		return false, true, err
 	}
-	if len(singletonSeq) == 0 {
+	if seqLen(singletonSeq) == 0 {
 		return false, true, nil
 	}
 	singletonAtoms, err := AtomizeSequence(singletonSeq)
@@ -85,7 +85,7 @@ func evalRangeBounds(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (*big.I
 	if err != nil {
 		return nil, nil, false, err
 	}
-	if len(startSeq) == 0 || len(endSeq) == 0 {
+	if seqLen(startSeq) == 0 || seqLen(endSeq) == 0 {
 		return nil, nil, true, nil
 	}
 	startAtoms, err := AtomizeSequence(startSeq)
@@ -194,17 +194,17 @@ func evalNodeComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Se
 		return nil, err
 	}
 	// Empty sequence yields empty sequence
-	if len(left) == 0 || len(right) == 0 {
+	if seqLen(left) == 0 || seqLen(right) == 0 {
 		return nil, nil
 	}
-	if len(left) > 1 || len(right) > 1 {
+	if left.Len() > 1 || right.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires singletons"}
 	}
-	ln, ok := left[0].(NodeItem)
+	ln, ok := left.Get(0).(NodeItem)
 	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires node operands"}
 	}
-	rn, ok := right[0].(NodeItem)
+	rn, ok := right.Get(0).(NodeItem)
 	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires node operands"}
 	}
@@ -288,12 +288,12 @@ func newAtomicSequenceIter(seq Sequence) *atomicSequenceIter {
 func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
 	for len(it.stack) > 0 {
 		top := &it.stack[len(it.stack)-1]
-		if top.index >= len(top.seq) {
+		if top.index >= seqLen(top.seq) {
 			it.stack = it.stack[:len(it.stack)-1]
 			continue
 		}
 
-		item := top.seq[top.index]
+		item := top.seq.Get(top.index)
 		top.index++
 
 		if arr, ok := item.(ArrayItem); ok {
@@ -313,7 +313,7 @@ func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
 			if listItem != "" {
 				s := ixpath.StringValue(ni.Node)
 				tokens := strings.Fields(s)
-				listSeq := make(Sequence, len(tokens))
+				listSeq := make(ItemSlice, len(tokens))
 				for i, tok := range tokens {
 					cast, err := CastFromString(tok, listItem)
 					if err != nil {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
@@ -41,15 +42,15 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 			return err
 		}
 		seq := result.Sequence()
-		if len(seq) == 0 {
+		if seq == nil || sequence.Len(seq) == 0 {
 			return nil // empty sequence: skip body
 		}
 		// XTTE3180: xsl:copy select must produce at most one item.
-		if len(seq) > 1 {
+		if sequence.Len(seq) > 1 {
 			return dynamicError(errCodeXTTE3180,
-				"xsl:copy select produced %d items; at most one is allowed", len(seq))
+				"xsl:copy select produced %d items; at most one is allowed", sequence.Len(seq))
 		}
-		for _, item := range seq {
+		for item := range sequence.Items(seq) {
 			switch v := item.(type) {
 			case xpath3.NodeItem:
 				// Set focus to the selected node (singleton focus)
@@ -439,7 +440,7 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 	out := ec.currentOutput()
 	prevWasAtomic := out.prevWasAtomic
 	seq := flattenArraysInSequence(result.Sequence())
-	for _, item := range seq {
+	for item := range sequence.Items(seq) {
 		switch v := item.(type) {
 		case xpath3.NodeItem:
 			prevWasAtomic = false

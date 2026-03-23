@@ -16,20 +16,20 @@ func evalArithmetic(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequen
 	if err != nil {
 		return nil, err
 	}
-	if len(left) == 0 || len(right) == 0 {
+	if seqLen(left) == 0 || seqLen(right) == 0 {
 		return nil, nil // empty sequence
 	}
-	if len(left) > 1 {
+	if left.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "arithmetic operand must be a single item"}
 	}
-	if len(right) > 1 {
+	if right.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "arithmetic operand must be a single item"}
 	}
-	la, err := AtomizeItem(left[0])
+	la, err := AtomizeItem(left.Get(0))
 	if err != nil {
 		return nil, err
 	}
-	ra, err := AtomizeItem(right[0])
+	ra, err := AtomizeItem(right.Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -245,13 +245,13 @@ func evalUnaryExpr(evalFn exprEvaluator, ec *evalContext, e UnaryExpr) (Sequence
 	if err != nil {
 		return nil, err
 	}
-	if len(r) == 0 {
+	if seqLen(r) == 0 {
 		return nil, nil
 	}
-	if len(r) > 1 {
+	if r.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "unary minus operand must be a single item"}
 	}
-	a, err := AtomizeItem(r[0])
+	a, err := AtomizeItem(r.Get(0))
 	if err != nil {
 		return nil, err
 	}

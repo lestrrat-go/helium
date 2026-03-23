@@ -28,13 +28,13 @@ func evalLookupExpr(evalFn exprEvaluator, ec *evalContext, e LookupExpr) (Sequen
 	if err != nil {
 		return nil, err
 	}
-	var result Sequence
-	for _, item := range base {
+	var result ItemSlice
+	for item := range seqItems(base) {
 		r, err := lookupItem(evalFn, ec, item, e.Key, e.All)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, r...)
+		result = append(result, seqMaterialize(r)...)
 	}
 	return result, nil
 }
@@ -53,9 +53,9 @@ func lookupItem(evalFn exprEvaluator, ec *evalContext, item Item, keyExpr Expr, 
 	switch v := item.(type) {
 	case MapItem:
 		if all {
-			var result Sequence
+			var result ItemSlice
 			_ = v.ForEach(func(_ AtomicValue, val Sequence) error {
-				result = append(result, val...)
+				result = append(result, seqMaterialize(val)...)
 				return nil
 			})
 			return result, nil
@@ -64,26 +64,26 @@ func lookupItem(evalFn exprEvaluator, ec *evalContext, item Item, keyExpr Expr, 
 		if err != nil {
 			return nil, err
 		}
-		if len(keySeq) == 0 {
+		if seqLen(keySeq) == 0 {
 			return nil, nil
 		}
-		var result Sequence
-		for _, keyItem := range keySeq {
+		var result ItemSlice
+		for keyItem := range seqItems(keySeq) {
 			ka, err := AtomizeItem(keyItem)
 			if err != nil {
 				return nil, err
 			}
 			val, ok := v.Get(ka)
 			if ok {
-				result = append(result, val...)
+				result = append(result, seqMaterialize(val)...)
 			}
 		}
 		return result, nil
 	case ArrayItem:
 		if all {
-			var result Sequence
+			var result ItemSlice
 			for _, m := range v.members0() {
-				result = append(result, m...)
+				result = append(result, seqMaterialize(m)...)
 			}
 			return result, nil
 		}
@@ -91,11 +91,11 @@ func lookupItem(evalFn exprEvaluator, ec *evalContext, item Item, keyExpr Expr, 
 		if err != nil {
 			return nil, err
 		}
-		if len(keySeq) == 0 {
+		if seqLen(keySeq) == 0 {
 			return nil, nil
 		}
-		var result Sequence
-		for _, keyItem := range keySeq {
+		var result ItemSlice
+		for keyItem := range seqItems(keySeq) {
 			ka, err := AtomizeItem(keyItem)
 			if err != nil {
 				return nil, err
@@ -117,7 +117,7 @@ func lookupItem(evalFn exprEvaluator, ec *evalContext, item Item, keyExpr Expr, 
 			if err != nil {
 				return nil, err
 			}
-			result = append(result, member...)
+			result = append(result, seqMaterialize(member)...)
 		}
 		return result, nil
 	default:
@@ -140,14 +140,14 @@ func (f tupleConsumerFunc) ConsumeTuple(scope *variableScope) error {
 }
 
 func evalFLWOR(evalFn exprEvaluator, ec *evalContext, e FLWORExpr) (Sequence, error) {
-	var result Sequence
+	var result ItemSlice
 	consumer := tupleConsumerFunc(func(scope *variableScope) error {
 		retCtx := ec.withScope(scope)
 		r, err := evalFn(retCtx, e.Return)
 		if err != nil {
 			return err
 		}
-		result = append(result, r...)
+		result = append(result, seqMaterialize(r)...)
 		return nil
 	})
 
@@ -175,14 +175,16 @@ func iterateFLWORClauses(evalFn exprEvaluator, ec *evalContext, clauses []FLWORC
 		if err != nil {
 			return err
 		}
-		for pos, item := range domain {
-			inner := scopeWithBinding(scope, c.Var, Sequence{item})
+		pos := 0
+		for item := range seqItems(domain) {
+			inner := scopeWithBinding(scope, c.Var, ItemSlice{item})
 			if c.PosVar != "" {
-				inner = scopeWithBinding(inner, c.PosVar, Sequence{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(pos + 1))}})
+				inner = scopeWithBinding(inner, c.PosVar, ItemSlice{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(pos + 1))}})
 			}
 			if err := iterateFLWORClauses(evalFn, ec, clauses, i+1, inner, consumer); err != nil {
 				return err
 			}
+			pos++
 		}
 		return nil
 
@@ -222,8 +224,8 @@ func evalQuantifiedBindings(evalFn exprEvaluator, ec *evalContext, e QuantifiedE
 	if err != nil {
 		return nil, err
 	}
-	for _, item := range domain {
-		subCtx := ec.withScope(scopeWithBinding(ec.vars, binding.Var, Sequence{item}))
+	for item := range seqItems(domain) {
+		subCtx := ec.withScope(scopeWithBinding(ec.vars, binding.Var, ItemSlice{item}))
 		result, err := evalQuantifiedBindings(evalFn, subCtx, e, idx+1)
 		if err != nil {
 			return nil, err

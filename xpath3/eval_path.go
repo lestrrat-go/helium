@@ -69,7 +69,7 @@ func enrichNodeItems(ec *evalContext, seq Sequence) Sequence {
 		return seq
 	}
 	needsEnrich := false
-	for _, item := range seq {
+	for item := range seqItems(seq) {
 		if ni, ok := item.(NodeItem); ok && ni.TypeAnnotation == "" {
 			if _, hasAnn := ec.typeAnnotations[ni.Node]; hasAnn {
 				needsEnrich = true
@@ -80,14 +80,16 @@ func enrichNodeItems(ec *evalContext, seq Sequence) Sequence {
 	if !needsEnrich {
 		return seq
 	}
-	result := make(Sequence, len(seq))
-	for i, item := range seq {
+	result := make(ItemSlice, seqLen(seq))
+	i := 0
+	for item := range seqItems(seq) {
 		if ni, ok := item.(NodeItem); ok && ni.TypeAnnotation == "" {
 			enriched := nodeItemFor(ec, ni.Node)
 			result[i] = enriched
 		} else {
 			result[i] = item
 		}
+		i++
 	}
 	return result
 }
@@ -96,13 +98,13 @@ func evalSequenceExpr(evalFn exprEvaluator, ec *evalContext, e SequenceExpr) (Se
 	if len(e.Items) == 0 {
 		return nil, nil
 	}
-	var result Sequence
+	var result ItemSlice
 	for _, item := range e.Items {
 		seq, err := evalFn(ec, item)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, seq...)
+		result = append(result, seqMaterialize(seq)...)
 	}
 	return result, nil
 }
@@ -139,7 +141,7 @@ func evalLocationPath(evalFn exprEvaluator, ec *evalContext, lp *LocationPath) (
 		}
 	}
 
-	result := make(Sequence, len(nodes))
+	result := make(ItemSlice, len(nodes))
 	for i, n := range nodes {
 		result[i] = nodeItemFor(ec, n)
 	}
@@ -178,7 +180,7 @@ func evalVMLocationPath(evalFn exprEvaluator, ec *evalContext, lp vmLocationPath
 		}
 	}
 
-	result := make(Sequence, len(nodes))
+	result := make(ItemSlice, len(nodes))
 	for i, n := range nodes {
 		result[i] = nodeItemFor(ec, n)
 	}
@@ -752,8 +754,8 @@ func resolveTestTypeName(raw string, ec *evalContext) string {
 // predicateTrue evaluates a predicate result per XPath spec:
 // numeric → compare to position, otherwise → EBV.
 func predicateTrue(r Sequence, position int) (bool, error) {
-	if len(r) == 1 {
-		if av, ok := r[0].(AtomicValue); ok && av.IsNumeric() {
+	if seqLen(r) == 1 {
+		if av, ok := r.Get(0).(AtomicValue); ok && av.IsNumeric() {
 			return av.ToFloat64() == float64(position), nil
 		}
 	}

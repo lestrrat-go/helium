@@ -18,6 +18,7 @@ import (
 	"golang.org/x/text/encoding/htmlindex"
 	xtunicode "golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/unicode/norm"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 // outputFrame represents the current output target during transformation.
@@ -28,7 +29,7 @@ type outputFrame struct {
 	separateTextNodes   bool             // when true, text nodes are captured as separate string items (prevents DOM merging)
 	sequenceMode        bool             // when true, all nodes (text, element, attr, comment, PI) are captured as separate items
 	mapConstructor      bool             // when true, xsl:map-entry emits single-entry maps into pendingItems
-	pendingItems        xpath3.Sequence  // captured items from xsl:sequence
+	pendingItems        xpath3.ItemSlice // captured items from xsl:sequence
 	prevWasAtomic       bool             // true when last xsl:sequence output was an atomic value (for inter-call space separation)
 	emptyAtomicGen      uint64           // seqConstructorGen when prevWasAtomic was set by an empty-string atomic
 	wherePopulated      bool             // when true, xsl:document emits document node (not children) so xsl:where-populated can check emptiness
@@ -85,7 +86,7 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 	case methodAdaptive:
 		return serializeAdaptiveItems(w, items, doc, outDef.ItemSeparator, outDef.ResolvedCharMap)
 	default:
-		if len(items) > 0 {
+		if items != nil && sequence.Len(items) > 0 {
 			return serializeItemsWithSeparator(w, items, doc, outDef)
 		}
 		return SerializeResult(w, doc, outDef)
@@ -101,8 +102,9 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, doc *helium
 	} else if outDef.ItemSeparatorAbsent {
 		sep = ""
 	}
-	for i, item := range items {
-		if i > 0 && sep != "" {
+	idx := 0
+	for item := range sequence.Items(items) {
+		if idx > 0 && sep != "" {
 			if _, err := io.WriteString(w, sep); err != nil {
 				return err
 			}
@@ -146,6 +148,7 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, doc *helium
 				return err
 			}
 		}
+		idx++
 	}
 	return nil
 }
@@ -302,7 +305,11 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 // serializeJSONItems serializes a sequence of items as JSON output.
 // Per XSLT 3.0 §26: the sequence is serialized as a single JSON value.
 func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, outDef *OutputDef) error {
-	if len(items) == 0 && doc != nil {
+	itemsLen := 0
+	if items != nil {
+		itemsLen = sequence.Len(items)
+	}
+	if itemsLen == 0 && doc != nil {
 		// No captured items: serialize DOM content as text for JSON
 		return serializeAdaptiveItems(w, items, doc, nil)
 	}
@@ -310,8 +317,8 @@ func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document
 	if outDef != nil {
 		nodeMethod = outDef.JSONNodeOutputMethod
 	}
-	if len(items) == 1 {
-		s, err := serializeItemJSON(items[0], nodeMethod)
+	if itemsLen == 1 {
+		s, err := serializeItemJSON(items.Get(0), nodeMethod)
 		if err != nil {
 			return err
 		}
@@ -319,9 +326,9 @@ func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document
 		return err
 	}
 	// Multiple items: serialize as JSON array
-	members := make([]xpath3.Sequence, len(items))
-	for i, item := range items {
-		members[i] = xpath3.Sequence{item}
+	members := make([]xpath3.Sequence, itemsLen)
+	for i := range itemsLen {
+		members[i] = xpath3.ItemSlice{items.Get(i)}
 	}
 	s, err := serializeItemJSON(xpath3.NewArray(members), nodeMethod)
 	if err != nil {
@@ -334,7 +341,7 @@ func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document
 // serializeAdaptiveItems serializes a sequence of items using the adaptive
 // serialization method. Each item is serialized according to its type.
 func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, itemSep *string, charMaps ...map[rune]string) error {
-	if len(items) == 0 && doc != nil {
+	if (items == nil || sequence.Len(items) == 0) && doc != nil {
 		var cm map[rune]string
 		if len(charMaps) > 0 {
 			cm = charMaps[0]
@@ -353,9 +360,10 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 	// element node, serialize it using the XML method (which includes the
 	// XML declaration by default). When there are multiple items, serialize
 	// each without a declaration.
-	singleNodeItem := len(items) == 1
-	for i, item := range items {
-		if i > 0 && sep != "" {
+	singleNodeItem := items != nil && sequence.Len(items) == 1
+	adaptIdx := 0
+	for item := range sequence.Items(items) {
+		if adaptIdx > 0 && sep != "" {
 			if _, err := io.WriteString(w, sep); err != nil {
 				return err
 			}
@@ -381,6 +389,7 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 		if _, err := io.WriteString(w, s); err != nil {
 			return err
 		}
+		adaptIdx++
 	}
 	return nil
 }
@@ -535,19 +544,23 @@ func serializeMapJSON(m xpath3.MapItem, nodeMethod string) (string, error) {
 		ks, _ := xpath3.AtomicToString(k)
 		buf.WriteString(jsonEscapeString(ks))
 		buf.WriteByte(':')
-		if len(v) == 1 {
-			s, err := serializeItemJSON(v[0], nodeMethod)
+		vLen := 0
+		if v != nil {
+			vLen = sequence.Len(v)
+		}
+		if vLen == 1 {
+			s, err := serializeItemJSON(v.Get(0), nodeMethod)
 			if err != nil {
 				serErr = err
 				return err
 			}
 			buf.WriteString(s)
-		} else if len(v) == 0 {
+		} else if vLen == 0 {
 			buf.WriteString("null")
 		} else {
-			members := make([]xpath3.Sequence, len(v))
-			for i, vi := range v {
-				members[i] = xpath3.Sequence{vi}
+			members := make([]xpath3.Sequence, vLen)
+			for i := range vLen {
+				members[i] = xpath3.ItemSlice{v.Get(i)}
 			}
 			s, err := serializeItemJSON(xpath3.NewArray(members), nodeMethod)
 			if err != nil {
@@ -574,19 +587,23 @@ func serializeArrayJSON(a xpath3.ArrayItem, nodeMethod string) (string, error) {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		if len(member) == 1 {
-			s, err := serializeItemJSON(member[0], nodeMethod)
+		mLen := 0
+		if member != nil {
+			mLen = sequence.Len(member)
+		}
+		if mLen == 1 {
+			s, err := serializeItemJSON(member.Get(0), nodeMethod)
 			if err != nil {
 				return "", err
 			}
 			buf.WriteString(s)
-		} else if len(member) == 0 {
+		} else if mLen == 0 {
 			buf.WriteString("null")
 		} else {
 			// Multi-item member: serialize as array
-			submembers := make([]xpath3.Sequence, len(member))
-			for j, mi := range member {
-				submembers[j] = xpath3.Sequence{mi}
+			submembers := make([]xpath3.Sequence, mLen)
+			for j := range mLen {
+				submembers[j] = xpath3.ItemSlice{member.Get(j)}
 			}
 			s, err := serializeItemJSON(xpath3.NewArray(submembers), nodeMethod)
 			if err != nil {
@@ -752,17 +769,21 @@ func serializeMapAdaptive(m xpath3.MapItem, charMap map[rune]string) string {
 		ks, _ := xpath3.AtomicToString(k)
 		buf.WriteString(jsonEscapeString(ks))
 		buf.WriteByte(':')
-		if len(v) == 1 {
-			buf.WriteString(serializeItemAdaptive(v[0], charMap))
-		} else if len(v) == 0 {
+		vLen2 := 0
+		if v != nil {
+			vLen2 = sequence.Len(v)
+		}
+		if vLen2 == 1 {
+			buf.WriteString(serializeItemAdaptive(v.Get(0), charMap))
+		} else if vLen2 == 0 {
 			buf.WriteString("()")
 		} else {
 			buf.WriteByte('(')
-			for i, vi := range v {
+			for i := range vLen2 {
 				if i > 0 {
 					buf.WriteByte(',')
 				}
-				buf.WriteString(serializeItemAdaptive(vi, charMap))
+				buf.WriteString(serializeItemAdaptive(v.Get(i), charMap))
 			}
 			buf.WriteByte(')')
 		}
@@ -781,17 +802,21 @@ func serializeArrayAdaptive(a xpath3.ArrayItem, charMap map[rune]string) string 
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		if len(member) == 1 {
-			buf.WriteString(serializeItemAdaptive(member[0], charMap))
-		} else if len(member) == 0 {
+		mLen2 := 0
+		if member != nil {
+			mLen2 = sequence.Len(member)
+		}
+		if mLen2 == 1 {
+			buf.WriteString(serializeItemAdaptive(member.Get(0), charMap))
+		} else if mLen2 == 0 {
 			buf.WriteString("()")
 		} else {
 			buf.WriteByte('(')
-			for j, vi := range member {
+			for j := range mLen2 {
 				if j > 0 {
 					buf.WriteByte(',')
 				}
-				buf.WriteString(serializeItemAdaptive(vi, charMap))
+				buf.WriteString(serializeItemAdaptive(member.Get(j), charMap))
 			}
 			buf.WriteByte(')')
 		}

@@ -237,7 +237,7 @@ func WithAdditionalVariables(ctx context.Context, vars map[string]Sequence) cont
 			c.variables = make(map[string]Sequence, len(vars))
 		}
 		for name, seq := range vars {
-			c.variables[name] = append(Sequence(nil), seq...)
+			c.variables[name] = cloneSequence(seq)
 		}
 		return true
 	})
@@ -539,7 +539,7 @@ func cloneVariableMap(vars map[string]Sequence) map[string]Sequence {
 	}
 	cloned := make(map[string]Sequence, len(vars))
 	for name, seq := range vars {
-		cloned[name] = append(Sequence(nil), seq...)
+		cloned[name] = cloneSequence(seq)
 	}
 	return cloned
 }

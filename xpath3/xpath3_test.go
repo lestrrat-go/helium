@@ -160,7 +160,7 @@ func TestNilContextRangeExpr(t *testing.T) {
 	// "1 to 10" doesn't require a context item; evaluation with nil node must succeed.
 	result, err := xpath3.Evaluate(t.Context(), nil, `1 to 10`)
 	require.NoError(t, err)
-	require.Equal(t, 10, len(result.Sequence()))
+	require.Equal(t, 10, result.Sequence().Len())
 }
 
 func TestNilContextWithContextItem(t *testing.T) {
@@ -170,7 +170,7 @@ func TestNilContextWithContextItem(t *testing.T) {
 	require.NoError(t, err)
 	result, err := compiled.Evaluate(ctx, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(result.Sequence()))
+	require.Equal(t, 1, result.Sequence().Len())
 }
 
 func TestNilContextElementKindTest(t *testing.T) {
@@ -180,7 +180,7 @@ func TestNilContextElementKindTest(t *testing.T) {
 	result, err := xpath3.Evaluate(t.Context(), doc, `element()`)
 	require.NoError(t, err)
 	// The doc has a root element "library"
-	require.True(t, len(result.Sequence()) > 0)
+	require.True(t, result.Sequence().Len() > 0)
 }
 
 func TestResultIsNodeSet(t *testing.T) {
@@ -422,7 +422,7 @@ func TestResultSequence(t *testing.T) {
 	doc := parseTestDoc(t)
 	result, err := xpath3.Evaluate(t.Context(), doc, `(1, 2, 3)`)
 	require.NoError(t, err)
-	require.Len(t, result.Sequence(), 3)
+	require.Equal(t, 3, result.Sequence().Len())
 }
 
 // --- Location paths ---
@@ -594,15 +594,15 @@ func TestSequenceOperations(t *testing.T) {
 	t.Run("range", func(t *testing.T) {
 		result, err := xpath3.Evaluate(t.Context(), doc, `1 to 5`)
 		require.NoError(t, err)
-		require.Len(t, result.Sequence(), 5)
+		require.Equal(t, 5, result.Sequence().Len())
 	})
 
 	t.Run("reverse", func(t *testing.T) {
 		result, err := xpath3.Evaluate(t.Context(), doc, `reverse((1, 2, 3))`)
 		require.NoError(t, err)
 		seq := result.Sequence()
-		require.Len(t, seq, 3)
-		av, ok := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 3, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
 		require.True(t, ok)
 		require.Equal(t, int64(3), av.IntegerVal())
 	})
@@ -610,13 +610,13 @@ func TestSequenceOperations(t *testing.T) {
 	t.Run("distinct-values", func(t *testing.T) {
 		result, err := xpath3.Evaluate(t.Context(), doc, `distinct-values((1, 2, 2, 3, 3))`)
 		require.NoError(t, err)
-		require.Len(t, result.Sequence(), 3)
+		require.Equal(t, 3, result.Sequence().Len())
 	})
 
 	t.Run("subsequence", func(t *testing.T) {
 		result, err := xpath3.Evaluate(t.Context(), doc, `subsequence((1, 2, 3, 4, 5), 2, 3)`)
 		require.NoError(t, err)
-		require.Len(t, result.Sequence(), 3)
+		require.Equal(t, 3, result.Sequence().Len())
 	})
 }
 
@@ -710,8 +710,8 @@ func TestFLWOR(t *testing.T) {
 		result, err := xpath3.Evaluate(t.Context(), doc, `for $x in (1, 2, 3) return $x * 2`)
 		require.NoError(t, err)
 		seq := result.Sequence()
-		require.Len(t, seq, 3)
-		av, ok := seq[2].(xpath3.AtomicValue)
+		require.Equal(t, 3, seq.Len())
+		av, ok := seq.Get(2).(xpath3.AtomicValue)
 		require.True(t, ok)
 		require.Equal(t, int64(6), av.IntegerVal())
 	})
@@ -831,8 +831,8 @@ func TestHOFFunctions(t *testing.T) {
 		result, err := xpath3.Evaluate(t.Context(), doc, `for-each((1, 2, 3), function($x) { $x * 10 })`)
 		require.NoError(t, err)
 		seq := result.Sequence()
-		require.Len(t, seq, 3)
-		av, ok := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 3, seq.Len())
+		av, ok := seq.Get(0).(xpath3.AtomicValue)
 		require.True(t, ok)
 		require.Equal(t, int64(10), av.IntegerVal())
 	})
@@ -854,7 +854,7 @@ func TestHOFFunctions(t *testing.T) {
 	t.Run("filter", func(t *testing.T) {
 		result, err := xpath3.Evaluate(t.Context(), doc, `filter((1, 2, 3, 4, 5), function($x) { $x > 3 })`)
 		require.NoError(t, err)
-		require.Len(t, result.Sequence(), 2)
+		require.Equal(t, 2, result.Sequence().Len())
 	})
 
 	t.Run("fold-left", func(t *testing.T) {
@@ -873,8 +873,8 @@ func TestSimpleMapOperator(t *testing.T) {
 	result, err := xpath3.Evaluate(t.Context(), doc, `(1, 2, 3) ! (. * 2)`)
 	require.NoError(t, err)
 	seq := result.Sequence()
-	require.Len(t, seq, 3)
-	av, ok := seq[1].(xpath3.AtomicValue)
+	require.Equal(t, 3, seq.Len())
+	av, ok := seq.Get(1).(xpath3.AtomicValue)
 	require.True(t, ok)
 	require.Equal(t, int64(4), av.IntegerVal())
 }
@@ -947,7 +947,7 @@ func TestWithVariablesCopiesSequences(t *testing.T) {
 		"x": seq,
 	})
 
-	seq[0] = xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)}
+	seq.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)}
 
 	result, err := xpath3.Evaluate(ctx, nil, `$x`)
 	require.NoError(t, err)
@@ -1021,7 +1021,7 @@ func TestRegexFunctions(t *testing.T) {
 	t.Run("tokenize", func(t *testing.T) {
 		result, err := xpath3.Evaluate(t.Context(), doc, `tokenize("a-b-c", "-")`)
 		require.NoError(t, err)
-		require.Len(t, result.Sequence(), 3)
+		require.Equal(t, 3, result.Sequence().Len())
 	})
 }
 

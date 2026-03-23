@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortInst) error {
@@ -25,7 +26,7 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortIns
 			return err
 		}
 	}
-	if len(seq) == 0 {
+	if seq == nil || sequence.Len(seq) == 0 {
 		return nil
 	}
 
@@ -75,16 +76,17 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortIns
 	// rather than merged text nodes.
 	out := ec.currentOutput()
 	if out.captureItems && out.doc != nil && out.current == out.doc.DocumentElement() {
-		out.pendingItems = append(out.pendingItems, seq...)
-		if len(seq) > 0 {
+		out.pendingItems = append(out.pendingItems, sequence.Materialize(seq)...)
+		if seq != nil && sequence.Len(seq) > 0 {
 			out.noteOutput()
 		}
 		return nil
 	}
 
 	// Output atomic items separated by spaces
-	for i, item := range seq {
-		if i > 0 {
+	idx := 0
+	for item := range sequence.Items(seq) {
+		if idx > 0 {
 			sep, err := ec.resultDoc.CreateText([]byte(" "))
 			if err != nil {
 				return err
@@ -108,6 +110,7 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortIns
 		if err := ec.addNode(text); err != nil {
 			return err
 		}
+		idx++
 	}
 	return nil
 }

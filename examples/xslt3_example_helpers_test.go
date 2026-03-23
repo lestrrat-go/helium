@@ -60,8 +60,8 @@ func serializeExampleItems(items xpath3.Sequence, doc *helium.Document, outDef *
 }
 
 func formatExampleAtomicSequence(seq xpath3.Sequence) (string, error) {
-	parts := make([]string, 0, len(seq))
-	for _, item := range seq {
+	parts := make([]string, 0, seq.Len())
+	for item := range seq.Items() {
 		atomic, ok := item.(xpath3.AtomicValue)
 		if !ok {
 			return "", fmt.Errorf("unexpected non-atomic item %T", item)

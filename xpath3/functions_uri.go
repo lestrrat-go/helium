@@ -24,10 +24,10 @@ func fnEncodeForURI(_ context.Context, args []Sequence) (Sequence, error) {
 // coerceArgToStringOpt extracts a string from xs:string? argument, validating
 // both cardinality (0 or 1) and type (string-derived, anyURI, untypedAtomic).
 func coerceArgToStringOpt(seq Sequence) (string, error) {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return "", nil
 	}
-	if len(seq) > 1 {
+	if seq.Len() > 1 {
 		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
 	}
 	return coerceArgToString(seq)
@@ -83,7 +83,7 @@ func fnIRIToURI(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	relative, err := coerceArgToString(args[0])

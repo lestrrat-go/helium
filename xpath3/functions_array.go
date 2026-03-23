@@ -29,12 +29,12 @@ func init() {
 }
 
 func extractArray(seq Sequence) (ArrayItem, error) {
-	if len(seq) != 1 {
+	if seqLen(seq) != 1 {
 		return ArrayItem{}, &XPathError{Code: errCodeXPTY0004, Message: "expected single array"}
 	}
-	a, ok := seq[0].(ArrayItem)
+	a, ok := seq.Get(0).(ArrayItem)
 	if !ok {
-		return ArrayItem{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected array, got %T", seq[0])}
+		return ArrayItem{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected array, got %T", seq.Get(0))}
 	}
 	return a, nil
 }
@@ -62,10 +62,10 @@ func fnArrayGet(_ context.Context, args []Sequence) (Sequence, error) {
 // extractArrayIndex extracts a single xs:integer index from a sequence, validating
 // that it is exactly one integer (not a decimal, sequence, etc.).
 func extractArrayIndex(seq Sequence) (int, error) {
-	if len(seq) != 1 {
+	if seqLen(seq) != 1 {
 		return 0, &XPathError{Code: errCodeXPTY0004, Message: "array index must be a single xs:integer"}
 	}
-	av, err := AtomizeItem(seq[0])
+	av, err := AtomizeItem(seq.Get(0))
 	if err != nil {
 		return 0, err
 	}
@@ -92,7 +92,7 @@ func fnArrayPut(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Sequence{result}, nil
+	return ItemSlice{result}, nil
 }
 
 func fnArrayAppend(_ context.Context, args []Sequence) (Sequence, error) {
@@ -100,7 +100,7 @@ func fnArrayAppend(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Sequence{a.Append(args[1])}, nil
+	return ItemSlice{a.Append(args[1])}, nil
 }
 
 func fnArraySubarray(_ context.Context, args []Sequence) (Sequence, error) {
@@ -117,7 +117,7 @@ func fnArraySubarray(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Sequence{sub}, nil
+	return ItemSlice{sub}, nil
 }
 
 func fnArrayRemove(_ context.Context, args []Sequence) (Sequence, error) {
@@ -128,7 +128,7 @@ func fnArrayRemove(_ context.Context, args []Sequence) (Sequence, error) {
 	// args[1] is a sequence of positions to remove
 	positions := make(map[int]struct{})
 	size := a.Size()
-	for _, item := range args[1] {
+	for item := range seqItems(args[1]) {
 		av, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
@@ -146,7 +146,7 @@ func fnArrayRemove(_ context.Context, args []Sequence) (Sequence, error) {
 			result = append(result, m)
 		}
 	}
-	return Sequence{NewArray(result)}, nil
+	return ItemSlice{NewArray(result)}, nil
 }
 
 func fnArrayInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
@@ -163,7 +163,7 @@ func fnArrayInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	result = append(result, members[:pos-1]...)
 	result = append(result, args[2])
 	result = append(result, members[pos-1:]...)
-	return Sequence{NewArray(result)}, nil
+	return ItemSlice{NewArray(result)}, nil
 }
 
 func fnArrayHead(_ context.Context, args []Sequence) (Sequence, error) {
@@ -189,7 +189,7 @@ func fnArrayTail(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Sequence{sub}, nil
+	return ItemSlice{sub}, nil
 }
 
 func fnArrayReverse(_ context.Context, args []Sequence) (Sequence, error) {
@@ -202,37 +202,37 @@ func fnArrayReverse(_ context.Context, args []Sequence) (Sequence, error) {
 	for i, m := range members {
 		reversed[len(members)-1-i] = m
 	}
-	return Sequence{NewArray(reversed)}, nil
+	return ItemSlice{NewArray(reversed)}, nil
 }
 
 func fnArrayJoin(_ context.Context, args []Sequence) (Sequence, error) {
 	var allMembers []Sequence
-	for _, item := range args[0] {
+	for item := range seqItems(args[0]) {
 		a, ok := item.(ArrayItem)
 		if !ok {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "array:join requires sequence of arrays"}
 		}
 		allMembers = append(allMembers, a.members0()...)
 	}
-	return Sequence{NewArray(allMembers)}, nil
+	return ItemSlice{NewArray(allMembers)}, nil
 }
 
 func fnArrayFlatten(_ context.Context, args []Sequence) (Sequence, error) {
-	var result Sequence
-	for _, item := range args[0] {
+	var result ItemSlice
+	for item := range seqItems(args[0]) {
 		flattenArrayItem(&result, item)
 	}
 	return result, nil
 }
 
-func flattenArrayItem(dst *Sequence, item Item) {
+func flattenArrayItem(dst *ItemSlice, item Item) {
 	arr, ok := item.(ArrayItem)
 	if !ok {
 		*dst = append(*dst, item)
 		return
 	}
 	for _, member := range arr.members0() {
-		for _, child := range member {
+		for child := range seqItems(member) {
 			flattenArrayItem(dst, child)
 		}
 	}
@@ -254,15 +254,15 @@ func fnArrayFlatMap(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 		// Each result should be an array; collect members
-		for _, item := range r {
+		for item := range seqItems(r) {
 			if ra, ok := item.(ArrayItem); ok {
 				allMembers = append(allMembers, ra.members0()...)
 			} else {
-				allMembers = append(allMembers, Sequence{item})
+				allMembers = append(allMembers, ItemSlice{item})
 			}
 		}
 	}
-	return Sequence{NewArray(allMembers)}, nil
+	return ItemSlice{NewArray(allMembers)}, nil
 }
 
 func fnArrayFilter(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -281,10 +281,10 @@ func fnArrayFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, err
 		}
 		// Per XPath 3.1, the callback must return exactly one xs:boolean
-		if len(r) != 1 {
+		if seqLen(r) != 1 {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "array:filter callback must return a single xs:boolean value"}
 		}
-		av, ok := r[0].(AtomicValue)
+		av, ok := r.Get(0).(AtomicValue)
 		if !ok || av.TypeName != TypeBoolean {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "array:filter callback must return xs:boolean"}
 		}
@@ -292,7 +292,7 @@ func fnArrayFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 			result = append(result, m)
 		}
 	}
-	return Sequence{NewArray(result)}, nil
+	return ItemSlice{NewArray(result)}, nil
 }
 
 func fnArrayFoldLeft(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -351,7 +351,7 @@ func fnArrayForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		results = append(results, r)
 	}
-	return Sequence{NewArray(results)}, nil
+	return ItemSlice{NewArray(results)}, nil
 }
 
 func fnArrayForEachPair(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -384,7 +384,7 @@ func fnArrayForEachPair(ctx context.Context, args []Sequence) (Sequence, error) 
 		}
 		results = append(results, r)
 	}
-	return Sequence{NewArray(results)}, nil
+	return ItemSlice{NewArray(results)}, nil
 }
 
 func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -398,7 +398,7 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	// Optional collation (2nd arg)
 	var coll *collationImpl
-	if len(args) > 1 && len(args[1]) > 0 {
+	if len(args) > 1 && seqLen(args[1]) > 0 {
 		uri, err := coerceArgToString(args[1])
 		if err != nil {
 			return nil, err
@@ -440,10 +440,11 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 			if err != nil {
 				return nil, err
 			}
-			entries[i].key = make(Sequence, len(atoms))
+			keySlice := make(ItemSlice, len(atoms))
 			for j, av := range atoms {
-				entries[i].key[j] = av
+				keySlice[j] = av
 			}
+			entries[i].key = keySlice
 		}
 	}
 
@@ -455,13 +456,13 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 		ki := entries[i].key
 		kj := entries[j].key
 		// Compare element-by-element per XPath 3.1 sort key comparison
-		minLen := len(ki)
-		if len(kj) < minLen {
-			minLen = len(kj)
+		minLen := seqLen(ki)
+		if seqLen(kj) < minLen {
+			minLen = seqLen(kj)
 		}
 		for idx := 0; idx < minLen; idx++ {
-			ai, errI := AtomizeItem(ki[idx])
-			aj, errJ := AtomizeItem(kj[idx])
+			ai, errI := AtomizeItem(ki.Get(idx))
+			aj, errJ := AtomizeItem(kj.Get(idx))
 			if errI != nil {
 				sortErr = errI
 				return false
@@ -483,7 +484,7 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 			}
 			// equal — continue to next element
 		}
-		return len(ki) < len(kj)
+		return seqLen(ki) < seqLen(kj)
 	})
 	if sortErr != nil {
 		return nil, sortErr
@@ -493,5 +494,5 @@ func fnArraySort(ctx context.Context, args []Sequence) (Sequence, error) {
 	for i, e := range entries {
 		sorted[i] = e.member
 	}
-	return Sequence{NewArray(sorted)}, nil
+	return ItemSlice{NewArray(sorted)}, nil
 }

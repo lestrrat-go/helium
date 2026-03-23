@@ -7,6 +7,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 func (ec *execContext) execVariable(ctx context.Context, inst *VariableInst) error {
@@ -46,8 +47,8 @@ func (ec *execContext) execVariable(ctx context.Context, inst *VariableInst) err
 				// and the body produced an empty document (no children), return
 				// an empty sequence instead of the empty document. This handles
 				// xsl:where-populated discarding all content.
-				if evalErr == nil && len(val) == 1 {
-					if docItem, ok := val[0].(xpath3.NodeItem); ok {
+				if evalErr == nil && val != nil && sequence.Len(val) == 1 {
+					if docItem, ok := val.Get(0).(xpath3.NodeItem); ok {
 						if doc, ok := docItem.Node.(*helium.Document); ok && doc.FirstChild() == nil {
 							if strings.HasSuffix(inst.As, "?") {
 								val = nil

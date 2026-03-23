@@ -6,6 +6,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 // AVT is a compiled Attribute Value Template. It consists of alternating
@@ -242,11 +243,12 @@ func stringifyItem(item xpath3.Item) string {
 
 func stringifySequenceWithSep(seq xpath3.Sequence, sep string) string {
 	seq = flattenArraysInSequence(seq)
-	if len(seq) == 0 {
+	if seq == nil || sequence.Len(seq) == 0 {
 		return ""
 	}
 	var sb strings.Builder
-	for i, item := range seq {
+	i := 0
+	for item := range sequence.Items(seq) {
 		if i > 0 {
 			sb.WriteString(sep)
 		}
@@ -259,6 +261,7 @@ func stringifySequenceWithSep(seq xpath3.Sequence, sep string) string {
 			continue
 		}
 		sb.WriteString(s)
+		i++
 	}
 	return sb.String()
 }
@@ -269,8 +272,11 @@ func stringifySequenceWithSep(seq xpath3.Sequence, sep string) string {
 // in sequence constructors, apply-templates select, value-of, etc.
 // are expanded before further processing.
 func flattenArraysInSequence(seq xpath3.Sequence) xpath3.Sequence {
+	if seq == nil {
+		return nil
+	}
 	hasArray := false
-	for _, item := range seq {
+	for item := range sequence.Items(seq) {
 		if _, ok := item.(xpath3.ArrayItem); ok {
 			hasArray = true
 			break
@@ -279,10 +285,10 @@ func flattenArraysInSequence(seq xpath3.Sequence) xpath3.Sequence {
 	if !hasArray {
 		return seq
 	}
-	var result xpath3.Sequence
-	for _, item := range seq {
+	var result xpath3.ItemSlice
+	for item := range sequence.Items(seq) {
 		if arr, ok := item.(xpath3.ArrayItem); ok {
-			result = append(result, arr.Flatten()...)
+			result = append(result, sequence.Materialize(arr.Flatten())...)
 		} else {
 			result = append(result, item)
 		}

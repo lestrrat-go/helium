@@ -118,13 +118,13 @@ func (e *Expression) EvaluateReuse(state *EvalState, node helium.Node) (Result, 
 	if e.program != nil && e.program.stream.isContextItem {
 		if ec.contextItem != nil {
 			state.oneItem[0] = ec.contextItem
-			return Result{seq: state.oneItem[:]}, nil
+			return Result{seq: ItemSlice(state.oneItem[:])}, nil
 		}
 		if ec.node == nil {
 			return Result{}, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 		}
 		state.oneItem[0] = nodeItemFor(ec, ec.node)
-		return Result{seq: state.oneItem[:]}, nil
+		return Result{seq: ItemSlice(state.oneItem[:])}, nil
 	}
 
 	if err := e.prefixPlan.Validate(ec.namespaces, ec.strictPrefixes, ec.schemaDeclarations); err != nil {
@@ -141,11 +141,11 @@ func (e *Expression) EvaluateReuse(state *EvalState, node helium.Node) (Result, 
 // For single-node results, this returns the node's string value directly,
 // avoiding the AtomizeItem → AtomicValue → AtomicToString round-trip.
 func (r Result) StringValue() string {
-	if len(r.seq) == 0 {
+	if seqLen(r.seq) == 0 {
 		return ""
 	}
-	if len(r.seq) == 1 {
-		switch v := r.seq[0].(type) {
+	if seqLen(r.seq) == 1 {
+		switch v := r.seq.Get(0).(type) {
 		case NodeItem:
 			return ixpath.StringValue(v.Node)
 		case AtomicValue:
@@ -154,19 +154,23 @@ func (r Result) StringValue() string {
 		}
 	}
 	var sb strings.Builder
-	for i, item := range r.seq {
+	i := 0
+	for item := range seqItems(r.seq) {
 		if i > 0 {
 			sb.WriteByte(' ')
 		}
 		av, err := AtomizeItem(item)
 		if err != nil {
+			i++
 			continue
 		}
 		s, err := AtomicToString(av)
 		if err != nil {
+			i++
 			continue
 		}
 		sb.WriteString(s)
+		i++
 	}
 	return sb.String()
 }

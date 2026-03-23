@@ -103,12 +103,10 @@ type Result struct {
 // independent of any EvalState. Use this to retain a Result beyond
 // the next EvaluateReuse call.
 func (r Result) Copy() Result {
-	if len(r.seq) == 0 {
+	if seqLen(r.seq) == 0 {
 		return Result{}
 	}
-	cp := make(Sequence, len(r.seq))
-	copy(cp, r.seq)
-	return Result{seq: cp}
+	return Result{seq: cloneSequence(r.seq)}
 }
 
 // Sequence returns the raw result sequence.
@@ -118,7 +116,7 @@ func (r *Result) Sequence() Sequence {
 
 // IsNodeSet returns true if the result consists entirely of nodes.
 func (r *Result) IsNodeSet() bool {
-	for _, item := range r.seq {
+	for item := range seqItems(r.seq) {
 		if _, ok := item.(NodeItem); !ok {
 			return false
 		}
@@ -129,11 +127,11 @@ func (r *Result) IsNodeSet() bool {
 // Nodes extracts all nodes from the result.
 // Returns ErrNotNodeSet if any non-node items are present.
 func (r *Result) Nodes() ([]helium.Node, error) {
-	if len(r.seq) == 0 {
+	if seqLen(r.seq) == 0 {
 		return nil, nil
 	}
-	nodes := make([]helium.Node, 0, len(r.seq))
-	for _, item := range r.seq {
+	nodes := make([]helium.Node, 0, r.seq.Len())
+	for item := range seqItems(r.seq) {
 		ni, ok := item.(NodeItem)
 		if !ok {
 			return nil, ErrNotNodeSet
@@ -145,17 +143,17 @@ func (r *Result) Nodes() ([]helium.Node, error) {
 
 // IsAtomic returns true if the result is a single atomic value.
 func (r *Result) IsAtomic() bool {
-	if len(r.seq) != 1 {
+	if seqLen(r.seq) != 1 {
 		return false
 	}
-	_, ok := r.seq[0].(AtomicValue)
+	_, ok := r.seq.Get(0).(AtomicValue)
 	return ok
 }
 
 // Atomics extracts all atomic values from the result.
 func (r *Result) Atomics() ([]AtomicValue, error) {
 	var result []AtomicValue
-	for _, item := range r.seq {
+	for item := range seqItems(r.seq) {
 		av, ok := item.(AtomicValue)
 		if !ok {
 			return nil, fmt.Errorf("%w: item is %T, not AtomicValue", ErrTypeMismatch, item)
@@ -167,10 +165,10 @@ func (r *Result) Atomics() ([]AtomicValue, error) {
 
 // IsBoolean returns the boolean value and true if the result is a single boolean.
 func (r *Result) IsBoolean() (bool, bool) {
-	if len(r.seq) != 1 {
+	if seqLen(r.seq) != 1 {
 		return false, false
 	}
-	av, ok := r.seq[0].(AtomicValue)
+	av, ok := r.seq.Get(0).(AtomicValue)
 	if !ok || av.TypeName != TypeBoolean {
 		return false, false
 	}
@@ -180,10 +178,10 @@ func (r *Result) IsBoolean() (bool, bool) {
 
 // IsNumber returns the float64 value and true if the result is a single number.
 func (r *Result) IsNumber() (float64, bool) {
-	if len(r.seq) != 1 {
+	if seqLen(r.seq) != 1 {
 		return 0, false
 	}
-	av, ok := r.seq[0].(AtomicValue)
+	av, ok := r.seq.Get(0).(AtomicValue)
 	if !ok {
 		return 0, false
 	}
@@ -192,10 +190,10 @@ func (r *Result) IsNumber() (float64, bool) {
 
 // IsString returns the string value and true if the result is a single string.
 func (r *Result) IsString() (string, bool) {
-	if len(r.seq) != 1 {
+	if seqLen(r.seq) != 1 {
 		return "", false
 	}
-	av, ok := r.seq[0].(AtomicValue)
+	av, ok := r.seq.Get(0).(AtomicValue)
 	if !ok || av.TypeName != TypeString {
 		return "", false
 	}

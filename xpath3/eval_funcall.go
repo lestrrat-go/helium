@@ -41,7 +41,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ec *evalContext, e DynamicFun
 	if err != nil {
 		return nil, err
 	}
-	if len(funcSeq) != 1 {
+	if seqLen(funcSeq) != 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "dynamic function call requires single function item"}
 	}
 
@@ -68,7 +68,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ec *evalContext, e DynamicFun
 	}
 
 	if hasPlaceholders {
-		fi, ok := funcSeq[0].(FunctionItem)
+		fi, ok := funcSeq.Get(0).(FunctionItem)
 		if !ok {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "partial application requires function item"}
 		}
@@ -102,10 +102,10 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ec *evalContext, e DynamicFun
 				return fi.Invoke(ctx, fullArgs)
 			},
 		}
-		return Sequence{result}, nil
+		return ItemSlice{result}, nil
 	}
 
-	switch v := funcSeq[0].(type) {
+	switch v := funcSeq.Get(0).(type) {
 	case FunctionItem:
 		if v.Arity >= 0 && len(args) != v.Arity {
 			return nil, fmt.Errorf("%w: expected %d arguments, got %d", ErrArityMismatch, v.Arity, len(args))
@@ -113,10 +113,10 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ec *evalContext, e DynamicFun
 		return v.Invoke(withDynamicCall(withFnContext(ec.goCtx, ec)), args)
 	case MapItem:
 		// Maps are functions: $map($key) → value
-		if len(args) != 1 || len(args[0]) != 1 {
+		if len(args) != 1 || seqLen(args[0]) != 1 {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "map lookup requires exactly one argument"}
 		}
-		key, err := AtomizeItem(args[0][0])
+		key, err := AtomizeItem(args[0].Get(0))
 		if err != nil {
 			return nil, err
 		}
@@ -127,10 +127,10 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ec *evalContext, e DynamicFun
 		return val, nil
 	case ArrayItem:
 		// Arrays are functions: $array($index) → member
-		if len(args) != 1 || len(args[0]) != 1 {
+		if len(args) != 1 || seqLen(args[0]) != 1 {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "array lookup requires exactly one argument"}
 		}
-		key, err := AtomizeItem(args[0][0])
+		key, err := AtomizeItem(args[0].Get(0))
 		if err != nil {
 			return nil, err
 		}
@@ -149,7 +149,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ec *evalContext, e DynamicFun
 		}
 		return v.Get(idx)
 	default:
-		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("dynamic function call requires function item, got %T", funcSeq[0])}
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("dynamic function call requires function item, got %T", funcSeq.Get(0))}
 	}
 }
 
@@ -173,7 +173,7 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 				return nil, &XPathError{Code: errCode, Message: fmt.Sprintf("%s: dynamic call to %s is not allowed", errCode, fnName)}
 			},
 		}
-		return Sequence{fi}, nil
+		return ItemSlice{fi}, nil
 	}
 
 	minArity := fn.MinArity()
@@ -221,7 +221,7 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 			return fn.Call(withFnContext(ctx, capturedEC), args)
 		},
 	}
-	return Sequence{fi}, nil
+	return ItemSlice{fi}, nil
 }
 
 func evalInlineFunctionExpr(evalFn exprEvaluator, ec *evalContext, e InlineFunctionExpr) (Sequence, error) {
@@ -286,7 +286,7 @@ func evalInlineFunctionExpr(evalFn exprEvaluator, ec *evalContext, e InlineFunct
 			return result, nil
 		},
 	}
-	return Sequence{fi}, nil
+	return ItemSlice{fi}, nil
 }
 
 func partialApply(ec *evalContext, e FunctionCall, fixedArgs []Sequence) (Sequence, error) {
@@ -338,7 +338,7 @@ func partialApply(ec *evalContext, e FunctionCall, fixedArgs []Sequence) (Sequen
 			return fn.Call(ctx, fullArgs)
 		},
 	}
-	return Sequence{fi}, nil
+	return ItemSlice{fi}, nil
 }
 
 func evalMapConstructorExpr(evalFn exprEvaluator, ec *evalContext, e MapConstructorExpr) (Sequence, error) {
@@ -349,10 +349,10 @@ func evalMapConstructorExpr(evalFn exprEvaluator, ec *evalContext, e MapConstruc
 		if err != nil {
 			return nil, err
 		}
-		if len(keySeq) != 1 {
+		if seqLen(keySeq) != 1 {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "map key must be a single atomic value"}
 		}
-		ka, err := AtomizeItem(keySeq[0])
+		ka, err := AtomizeItem(keySeq.Get(0))
 		if err != nil {
 			return nil, err
 		}
@@ -368,7 +368,7 @@ func evalMapConstructorExpr(evalFn exprEvaluator, ec *evalContext, e MapConstruc
 		}
 		entries[i] = MapEntry{Key: ka, Value: valSeq}
 	}
-	return Sequence{NewMap(entries)}, nil
+	return ItemSlice{NewMap(entries)}, nil
 }
 
 func evalArrayConstructorExpr(evalFn exprEvaluator, ec *evalContext, e ArrayConstructorExpr) (Sequence, error) {
@@ -382,19 +382,19 @@ func evalArrayConstructorExpr(evalFn exprEvaluator, ec *evalContext, e ArrayCons
 			}
 			members[i] = seq
 		}
-		return Sequence{NewArray(members)}, nil
+		return ItemSlice{NewArray(members)}, nil
 	}
 	// array { expr } — evaluate as sequence, each item is singleton member
 	if len(e.Items) == 0 {
-		return Sequence{NewArray(nil)}, nil
+		return ItemSlice{NewArray(nil)}, nil
 	}
 	seq, err := evalFn(ec, e.Items[0])
 	if err != nil {
 		return nil, err
 	}
-	members := make([]Sequence, len(seq))
-	for i, item := range seq {
-		members[i] = Sequence{item}
+	members := make([]Sequence, seqLen(seq))
+	for i := range seqLen(seq) {
+		members[i] = ItemSlice{seq.Get(i)}
 	}
-	return Sequence{NewArray(members)}, nil
+	return ItemSlice{NewArray(members)}, nil
 }

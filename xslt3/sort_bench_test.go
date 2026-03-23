@@ -8,6 +8,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 // benchSortEnv holds pre-built test data for sort benchmarks.
@@ -63,7 +64,7 @@ func newBenchSortEnv(b *testing.B, n int, sortKeys []*SortKey) *benchSortEnv {
 		globalVars:  map[string]xpath3.Sequence{},
 	}
 
-	items := make(xpath3.Sequence, len(nodes))
+	items := make(xpath3.ItemSlice, len(nodes))
 	for i, node := range nodes {
 		items[i] = xpath3.NodeItem{Node: node}
 	}
@@ -160,8 +161,8 @@ func BenchmarkSortItems(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 			for range b.N {
-				work := make(xpath3.Sequence, len(env.items))
-				copy(work, env.items)
+				work := make(xpath3.ItemSlice, sequence.Len(env.items))
+				copy(work, sequence.Materialize(env.items))
 				if _, err := sortItems(env.ctx, env.ec, work, env.sortKey); err != nil {
 					b.Fatal(err)
 				}

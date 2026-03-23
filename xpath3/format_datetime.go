@@ -23,11 +23,11 @@ func fnFormatTime(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return SingleString(""), nil
 	}
 
-	valAtom, err := AtomizeItem(args[0][0])
+	valAtom, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 		lang = ec.getDefaultLanguage()
 	}
 	calendar := ""
-	if len(args) > 2 && len(args[2]) > 0 {
+	if len(args) > 2 && seqLen(args[2]) > 0 {
 		lang, err = coerceArgToString(args[2])
 		if err != nil {
 			return nil, err
@@ -61,7 +61,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 			return nil, &XPathError{Code: errCodeFOFD1340, Message: "format-dateTime: language argument must not be empty"}
 		}
 	}
-	if len(args) > 3 && len(args[3]) > 0 {
+	if len(args) > 3 && seqLen(args[3]) > 0 {
 		calendar, err = coerceArgToString(args[3])
 		if err != nil {
 			return nil, err
@@ -71,7 +71,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 		}
 	}
 
-	if len(args) > 4 && len(args[4]) > 0 {
+	if len(args) > 4 && seqLen(args[4]) > 0 {
 		place, err := coerceArgToString(args[4])
 		if err != nil {
 			return nil, err

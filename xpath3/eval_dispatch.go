@@ -21,12 +21,12 @@ func evalWith(evalFn exprEvaluator, ec *evalContext, expr Expr) (Sequence, error
 
 func evalContextItemExpr(ec *evalContext) (Sequence, error) {
 	if ec.contextItem != nil {
-		return Sequence{ec.contextItem}, nil
+		return ItemSlice{ec.contextItem}, nil
 	}
 	if ixpath.IsNilNode(ec.node) {
 		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 	}
-	return Sequence{nodeItemFor(ec, ec.node)}, nil
+	return ItemSlice{nodeItemFor(ec, ec.node)}, nil
 }
 
 func evalRootExpr(ec *evalContext) (Sequence, error) {
@@ -38,7 +38,7 @@ func evalRootExpr(ec *evalContext) (Sequence, error) {
 	if root.Type() != helium.DocumentNode && root.Type() != helium.HTMLDocumentNode {
 		return nil, &XPathError{Code: errCodeXPDY0050, Message: "root of the tree containing the context node is not a document node"}
 	}
-	return Sequence{nodeItemFor(ec, root)}, nil
+	return ItemSlice{nodeItemFor(ec, root)}, nil
 }
 
 func dispatchExpr(evalFn exprEvaluator, ec *evalContext, expr Expr) (Sequence, error) {

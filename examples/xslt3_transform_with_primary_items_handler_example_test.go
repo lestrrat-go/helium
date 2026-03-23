@@ -55,7 +55,7 @@ func Example_xslt3_transform_with_primary_items_handler() {
 	// normal element-based XML result, the returned document is usually the more
 	// natural API to consume.
 	ctx = xslt3.WithPrimaryItemsHandler(ctx, func(seq xpath3.Sequence) {
-		primaryItems = append(xpath3.Sequence(nil), seq...)
+		primaryItems = xpath3.ItemSlice(append([]xpath3.Item(nil), seq.Materialize()...))
 	})
 
 	resultDoc, err := xslt3.Transform(ctx, sourceDoc, stylesheet)
@@ -70,7 +70,7 @@ func Example_xslt3_transform_with_primary_items_handler() {
 		return
 	}
 
-	fmt.Printf("captured items: %d\n", len(primaryItems))
+	fmt.Printf("captured items: %d\n", primaryItems.Len())
 	fmt.Printf("serialized: %s\n", serialized)
 	// Output:
 	// captured items: 1
