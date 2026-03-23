@@ -79,11 +79,9 @@ func castStringToFloat(s string) (AtomicValue, error) {
 	if math.IsInf(f, 0) {
 		return AtomicValue{}, castError(s, TypeFloat)
 	}
-	// Reject finite values that overflow float32 range
+	// Values that overflow float32 range become ±INF for xs:float
+	// (per XSD casting rules: overflow → infinity, not error).
 	f32 := float32(f)
-	if math.IsInf(float64(f32), 0) {
-		return AtomicValue{}, castError(s, TypeFloat)
-	}
 	// Store the float32-rounded value so precision matches xs:float semantics
 	return AtomicValue{TypeName: TypeFloat, Value: NewFloat(float64(f32))}, nil
 }

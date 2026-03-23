@@ -535,7 +535,20 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 					propagateAnnotationToPending(out, pendingBefore, copiedElem, inst.TypeName)
 				}
 			} else if preserve {
-				ec.transferAnnotationsForCopy(v.Node, out.current, lastBefore)
+				if out.sequenceMode && len(out.pendingItems) > pendingBefore {
+					// In sequence mode, the copied node lives in pendingItems,
+					// not as a child of out.current. Transfer annotations from
+					// the source node to the copy, then propagate to pending
+					// NodeItems so instance-of checks work.
+					for i := pendingBefore; i < len(out.pendingItems); i++ {
+						if ni, ok := out.pendingItems[i].(xpath3.NodeItem); ok {
+							ec.deepTransferAnnotations(v.Node, ni.Node)
+						}
+					}
+					ec.propagateValidationAnnotationsToPending(out, pendingBefore)
+				} else {
+					ec.transferAnnotationsForCopy(v.Node, out.current, lastBefore)
+				}
 			} else if effectiveVal == validationStrict || effectiveVal == validationLax || effectiveVal == validationStrip {
 				// Apply validation/strip to the most recently added node in output.
 				// In sequence mode the copied node lives in pendingItems, not

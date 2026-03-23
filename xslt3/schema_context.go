@@ -248,6 +248,19 @@ func (r *schemaRegistry) ValidateCast(value, typeName string) error {
 	return xsd.ValidateSimpleValue(value, td)
 }
 
+// ValidateCastWithNS validates a value against a schema type using namespace
+// context for QName/NOTATION resolution. Implements xpath3.SchemaDeclarations.
+func (r *schemaRegistry) ValidateCastWithNS(value, typeName string, nsMap map[string]string) error {
+	td, _, found := r.LookupTypeDef(typeName)
+	if !found {
+		return nil
+	}
+	if td.ContentType != xsd.ContentTypeSimple {
+		return nil
+	}
+	return xsd.ValidateSimpleValueWithNS(value, nsMap, td)
+}
+
 // ListItemType implements xpath3.SchemaDeclarations.
 // For list types, returns the item type name in annotation format.
 func (r *schemaRegistry) ListItemType(typeName string) (string, bool) {
@@ -491,9 +504,10 @@ func (r *schemaRegistry) ValidateAttribute(localName, nsURI, value string) (stri
 			return "xs:untypedAtomic", true, nil
 		}
 		typeName := xsdTypeNameFromDef(td)
-		_, castErr := xpath3.CastFromString(value, typeName)
-		if castErr != nil {
-			return typeName, false, castErr
+		// Validate using the XSD type definition (supports pattern facets,
+		// enumerations, and other constraints that CastFromString doesn't handle).
+		if valErr := xsd.ValidateSimpleValue(value, td); valErr != nil {
+			return typeName, false, valErr
 		}
 		return typeName, true, nil
 	}

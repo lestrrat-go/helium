@@ -669,11 +669,21 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) e
 	if out.sequenceMode {
 		// Resolve namespace for prefixed attribute names.
 		var attrNS *helium.Namespace
+		localName := name
+		nsURI := ""
 		if idx := strings.IndexByte(name, ':'); idx >= 0 {
 			prefix := name[:idx]
-			if nsURI := ec.resolvePrefix(prefix); nsURI != "" {
+			localName = name[idx+1:]
+			nsURI = ec.resolvePrefix(prefix)
+			if nsURI != "" {
 				ns, _ := out.doc.CreateNamespace(prefix, nsURI)
 				attrNS = ns
+			}
+		}
+		// Schema validation when validation attribute is set.
+		if inst.Validation == validationStrict || inst.Validation == validationLax {
+			if err := ec.validateConstructedAttribute(localName, nsURI, value, inst.Validation); err != nil {
+				return err
 			}
 		}
 		attr, attrErr := out.doc.CreateAttribute(name, value, attrNS)

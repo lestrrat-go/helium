@@ -500,8 +500,9 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execConte
 		return av, nil
 	}
 
-	// xs:anyURI -> xs:string promotion (per XPath spec)
-	if av.TypeName == xpath3.TypeAnyURI && target == xpath3.TypeString {
+	// xs:anyURI -> xs:string promotion (per XPath spec).
+	// Also handles schema-defined types derived from xs:anyURI.
+	if target == xpath3.TypeString && isAnyURIType(av.TypeName, ec...) {
 		return xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: av.StringVal()}, nil
 	}
 
@@ -529,9 +530,12 @@ func castAtomicToType(av xpath3.AtomicValue, targetType string, ec ...*execConte
 	// Numeric promotion: a value whose numeric type is narrower than
 	// the target is promoted (cast) to the target type. Demotion
 	// (wider→narrower, e.g., double→float) is rejected (XTTE0570).
-	if isNumericType(target) && isNumericType(av.TypeName) {
-		srcRank := numericRank(av.TypeName)
-		tgtRank := numericRank(target)
+	// This also handles schema-defined types whose builtin base is numeric.
+	srcBase, srcIsNum := resolveToNumericBase(av.TypeName, ec...)
+	tgtBase, tgtIsNum := resolveToNumericBase(target, ec...)
+	if srcIsNum && tgtIsNum {
+		srcRank := numericRank(srcBase)
+		tgtRank := numericRank(tgtBase)
 		if srcRank > tgtRank {
 			return nil, fmt.Errorf("cannot convert %s to %s", av.TypeName, targetType)
 		}
@@ -696,6 +700,7 @@ func normalizeTypeName(name string, ec ...*execContext) string {
 
 // numericRank returns the promotion rank of a numeric type.
 // Higher rank = wider type. Promotion is only valid from lower to higher rank.
+// Derived integer types (xs:int, xs:long, etc.) have the same rank as xs:integer.
 func numericRank(t string) int {
 	switch t {
 	case xpath3.TypeInteger:
@@ -707,18 +712,57 @@ func numericRank(t string) int {
 	case xpath3.TypeDouble:
 		return 4
 	}
+	// Derived integer types all promote at the same rank as xs:integer.
+	if xpath3.BuiltinIsSubtypeOf(t, xpath3.TypeInteger) {
+		return 1
+	}
+	// Derived decimal types (not integer) promote at decimal rank.
+	if xpath3.BuiltinIsSubtypeOf(t, xpath3.TypeDecimal) {
+		return 2
+	}
 	return 0
 }
 
-// isNumericType returns true for xs:integer, xs:decimal, xs:float, xs:double.
+// isNumericType returns true for xs:integer, xs:decimal, xs:float, xs:double
+// and all built-in derived integer/decimal types (xs:int, xs:long, etc.).
 func isNumericType(t string) bool {
 	switch t {
 	case xpath3.TypeInteger, xpath3.TypeDecimal, xpath3.TypeFloat, xpath3.TypeDouble:
 		return true
 	}
-	return false
+	return xpath3.BuiltinIsSubtypeOf(t, xpath3.TypeDecimal)
 }
 
+// resolveToNumericBase resolves a schema-defined type to its builtin numeric
+// base type, if any. Returns the builtin type name and true, or ("", false).
+func resolveToNumericBase(typeName string, ec ...*execContext) (string, bool) {
+	if isNumericType(typeName) {
+		return typeName, true
+	}
+	if len(ec) == 0 || ec[0] == nil || ec[0].schemaRegistry == nil {
+		return "", false
+	}
+	local, ns := splitAnnotationName(typeName)
+	base := resolveToBuiltin(local, ns, ec[0].schemaRegistry)
+	if base != "" && isNumericType(base) {
+		return base, true
+	}
+	return "", false
+}
+
+// isAnyURIType returns true if the type is xs:anyURI or a schema-defined type
+// that derives from xs:anyURI.
+func isAnyURIType(typeName string, ec ...*execContext) bool {
+	if typeName == xpath3.TypeAnyURI {
+		return true
+	}
+	if len(ec) == 0 || ec[0] == nil || ec[0].schemaRegistry == nil {
+		return false
+	}
+	local, ns := splitAnnotationName(typeName)
+	base := resolveToBuiltin(local, ns, ec[0].schemaRegistry)
+	return base == xpath3.TypeAnyURI
+}
 
 // resolveSchemaQName resolves a QName string (e.g. "my:userNode" or "localName")
 // to (localName, namespace) using the stylesheet's namespace bindings.
