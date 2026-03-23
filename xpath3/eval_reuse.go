@@ -16,6 +16,9 @@ import (
 // The returned Result from EvaluateReuse is only valid until the next
 // EvaluateReuse call on the same EvalState — the result's backing
 // storage may be overwritten.
+//
+// Deprecated: EvalState is an internal optimization and will be unexported
+// in a future release. Use Evaluator.Evaluate for the public API.
 type EvalState struct {
 	ec      evalContext
 	oneItem [1]Item // reusable backing for single-item results
@@ -25,6 +28,9 @@ type EvalState struct {
 // The context.Context should carry the same XPath evaluation settings
 // (variables, functions, namespaces) that would be passed to Evaluate.
 // The node parameter sets the initial context node (may be nil).
+//
+// Deprecated: NewEvalState is an internal optimization and will be unexported
+// in a future release. Use Evaluator.Evaluate for the public API.
 func NewEvalState(ctx context.Context, node helium.Node) *EvalState {
 	opCount := 0
 	now := time.Now()
@@ -105,6 +111,9 @@ func (s *EvalState) SetSize(size int) { s.ec.size = size }
 // The returned Result is only valid until the next EvaluateReuse call
 // on the same EvalState. Callers must extract all needed values from
 // the Result before calling EvaluateReuse again.
+//
+// Deprecated: EvaluateReuse is an internal optimization and will be unexported
+// in a future release. Use Evaluator.Evaluate for the public API.
 func (e *Expression) EvaluateReuse(state *EvalState, node helium.Node) (Result, error) {
 	ec := &state.ec
 	ec.node = node

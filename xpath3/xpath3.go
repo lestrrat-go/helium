@@ -19,6 +19,8 @@ type Expression struct {
 }
 
 // Compile parses an XPath 3.1 expression string into a reusable Expression.
+//
+// Deprecated: use NewCompiler().Compile(expr) instead.
 func Compile(expr string) (*Expression, error) {
 	l, err := newLexer(expr)
 	if err != nil {
@@ -36,6 +38,8 @@ func Compile(expr string) (*Expression, error) {
 }
 
 // CompileExpr compiles a pre-parsed AST Expr into an Expression.
+//
+// Deprecated: use NewCompiler().CompileExpr(ast) instead.
 func CompileExpr(ast Expr) (*Expression, error) {
 	program, prefixPlan, err := compileVMProgram(ast)
 	if err != nil {
@@ -49,6 +53,8 @@ func CompileExpr(ast Expr) (*Expression, error) {
 }
 
 // MustCompile is like Compile but panics on error.
+//
+// Deprecated: use NewCompiler().MustCompile(expr) instead.
 func MustCompile(expr string) *Expression {
 	e, err := Compile(expr)
 	if err != nil {
@@ -66,6 +72,8 @@ func (e *Expression) Validate(namespaces map[string]string) error {
 // Evaluate evaluates the compiled expression against the given context node.
 // The context.Context may carry XPath 3.1 evaluation settings attached via
 // WithNamespaces, WithVariables, WithFunction(s), and related mutators.
+//
+// Deprecated: use Evaluator.Evaluate instead for the new API.
 func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error) {
 	ec := newEvalContext(ctx, node)
 
@@ -203,6 +211,8 @@ func (r *Result) IsString() (string, bool) {
 
 // Find is a convenience function: compile + evaluate, returning a node-set.
 // Returns an error if the expression does not evaluate to a node-set.
+//
+// Deprecated: use NewCompiler().Compile + NewEvaluator().Evaluate instead.
 func Find(ctx context.Context, node helium.Node, expr string) ([]helium.Node, error) {
 	compiled, err := Compile(expr)
 	if err != nil {
@@ -216,6 +226,8 @@ func Find(ctx context.Context, node helium.Node, expr string) ([]helium.Node, er
 }
 
 // Evaluate is a convenience function: compile + evaluate in one call.
+//
+// Deprecated: use NewCompiler().Compile + NewEvaluator().Evaluate instead.
 func Evaluate(ctx context.Context, node helium.Node, expr string) (*Result, error) {
 	compiled, err := Compile(expr)
 	if err != nil {
@@ -227,6 +239,8 @@ func Evaluate(ctx context.Context, node helium.Node, expr string) (*Result, erro
 // EvaluateExpr evaluates a parsed AST expression directly against a node.
 // This is useful when you already have the parsed Expr (e.g., from Parse)
 // and want to evaluate it without going through Compile.
+//
+// Deprecated: use NewCompiler().CompileExpr + NewEvaluator().Evaluate instead.
 func EvaluateExpr(ctx context.Context, expr Expr, node helium.Node) (*Result, error) {
 	compiled, err := CompileExpr(expr)
 	if err != nil {
