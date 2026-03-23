@@ -249,6 +249,7 @@ var xsdTypeParent = map[string]string{
 type AtomicValue struct {
 	TypeName string // e.g. "xs:string", "xs:integer"
 	Value    any    // Go native backing value (see type table in design doc)
+	BaseType string // built-in base type when TypeName is a user-defined schema type
 }
 
 func (AtomicValue) itemTag() {}
@@ -1005,6 +1006,7 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 				// Preserve the user-defined type annotation so that
 				// "instance of" checks match the original schema type.
 				if v.TypeAnnotation != "" && !IsKnownXSDType(v.TypeAnnotation) {
+					cast.BaseType = cast.TypeName
 					cast.TypeName = v.TypeAnnotation
 				}
 				return cast, nil

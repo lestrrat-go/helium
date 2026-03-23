@@ -175,19 +175,19 @@ func validateIRI(s string) error {
 		}
 	}
 	for _, r := range s {
-		if r == ' ' || r < 0x20 || (r > 0x7E && r < 0xA0) {
+		if r < 0x20 || (r > 0x7E && r < 0xA0) {
 			return fmt.Errorf("invalid IRI character U+%04X", r)
 		}
 	}
 	return nil
 }
 
-// iriToURI percent-encodes non-ASCII characters for use with Go's url.Parse.
+// iriToURI percent-encodes non-ASCII characters and spaces for use with Go's url.Parse.
 func iriToURI(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if c > 0x7E {
+		if c > 0x7E || c == ' ' {
 			fmt.Fprintf(&b, "%%%02X", c)
 		} else {
 			b.WriteByte(c)
@@ -196,7 +196,8 @@ func iriToURI(s string) string {
 	return b.String()
 }
 
-// uriToIRI decodes percent-encoded non-ASCII characters back to their IRI form.
+// uriToIRI decodes percent-encoded non-ASCII characters and spaces back to
+// their IRI form.
 func uriToIRI(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
@@ -205,7 +206,7 @@ func uriToIRI(s string) string {
 			lo := unhexByte(s[i+2])
 			if hi >= 0 && lo >= 0 {
 				c := byte(hi<<4 | lo)
-				if c > 0x7E {
+				if c > 0x7E || c == ' ' {
 					b.WriteByte(c)
 					i += 2
 					continue

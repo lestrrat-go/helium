@@ -93,6 +93,10 @@ func PromoteSchemaType(a AtomicValue) AtomicValue {
 	if IsKnownXSDType(a.TypeName) {
 		return a
 	}
+	// If the value carries a known built-in base type, use it directly.
+	if a.BaseType != "" && IsKnownXSDType(a.BaseType) {
+		return AtomicValue{TypeName: a.BaseType, Value: a.Value}
+	}
 	switch v := a.Value.(type) {
 	case *big.Int:
 		return AtomicValue{TypeName: TypeInteger, Value: v}

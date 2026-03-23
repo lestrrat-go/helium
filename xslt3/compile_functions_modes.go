@@ -258,6 +258,16 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 				"duplicate xsl:function %s with arity %d", name, len(fn.Params))
 		}
 	}
+	// XTSE0770: it is a static error if an xsl:function has the same
+	// expanded QName and arity as a schema-defined constructor function.
+	if len(fn.Params) == 1 {
+		for _, sch := range c.stylesheet.schemas {
+			if _, found := sch.LookupType(qn.Name, qn.URI); found {
+				return staticError(errCodeXTSE0770,
+					"xsl:function %s conflicts with schema-defined constructor of the same name", name)
+			}
+		}
+	}
 	c.stylesheet.functions[fk] = fn
 	return nil
 }
