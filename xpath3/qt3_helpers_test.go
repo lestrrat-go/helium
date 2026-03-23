@@ -27,7 +27,7 @@ type qt3Assertion func(t *testing.T, seq xpath3.Sequence)
 
 // qt3Check returns true if a result sequence satisfies a condition (for any-of).
 type qt3Check func(seq xpath3.Sequence) bool
-type qt3ContextMutator func(context.Context) context.Context
+type qt3EvalMutator func(xpath3.Evaluator) xpath3.Evaluator
 
 type qt3Param struct {
 	Name   string
@@ -108,11 +108,11 @@ func (r *qt3CollectionResolver) ResolveURICollection(uri string) ([]string, erro
 	return append([]string(nil), uris...), nil
 }
 
-func qt3ApplyContext(ctx context.Context, muts []qt3ContextMutator) context.Context {
+func qt3ApplyEval(eval xpath3.Evaluator, muts []qt3EvalMutator) xpath3.Evaluator {
 	for _, mut := range muts {
-		ctx = mut(ctx)
+		eval = mut(eval)
 	}
-	return ctx
+	return eval
 }
 
 func (df qt3DecimalFormat) toXPath3() xpath3.DecimalFormat {
@@ -182,36 +182,40 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 			ctx := t.Context()
 			// QT3 test suite expects implicit timezone of -05:00 (PT5H).
 			qt3ImplicitTZ := time.FixedZone("", -5*3600)
-			opts := []qt3ContextMutator{
-				func(ctx context.Context) context.Context { return xpath3.WithImplicitTimezone(ctx, qt3ImplicitTZ) },
-				func(ctx context.Context) context.Context { return xpath3.WithHTTPClient(ctx, httpClient) },
+			opts := []qt3EvalMutator{
+				func(e xpath3.Evaluator) xpath3.Evaluator { return e.ImplicitTimezone(qt3ImplicitTZ) },
+				func(e xpath3.Evaluator) xpath3.Evaluator { return e.HTTPClient(httpClient) },
 			}
 			if tc.DefaultDecimal != nil {
 				df := tc.DefaultDecimal.toXPath3()
-				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithDefaultDecimalFormat(ctx, df) })
+				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.DefaultDecimalFormat(df) })
 			}
 			if len(tc.NamedDecimalFormats) > 0 {
 				dfs := make(map[xpath3.QualifiedName]xpath3.DecimalFormat, len(tc.NamedDecimalFormats))
 				for _, df := range tc.NamedDecimalFormats {
 					dfs[xpath3.QualifiedName{URI: df.URI, Name: df.Name}] = df.Format.toXPath3()
 				}
-				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithNamedDecimalFormats(ctx, dfs) })
+				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.NamedDecimalFormats(dfs) })
 			}
 			if tc.DefaultCollation != "" {
-				opts = append(opts, func(ctx context.Context) context.Context {
-					return xpath3.WithDefaultCollation(ctx, tc.DefaultCollation)
+				collation := tc.DefaultCollation
+				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator {
+					return e.DefaultCollation(collation)
 				})
 			}
 			if tc.DefaultLanguage != "" {
-				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithDefaultLanguage(ctx, tc.DefaultLanguage) })
+				lang := tc.DefaultLanguage
+				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.DefaultLanguage(lang) })
 			}
 			if len(tc.Namespaces) > 0 {
-				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithNamespaces(ctx, tc.Namespaces) })
+				ns := tc.Namespaces
+				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.Namespaces(ns) })
 			}
 			if tc.BaseURI != "" {
-				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithBaseURI(ctx, tc.BaseURI) })
+				uri := tc.BaseURI
+				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.BaseURI(uri) })
 			} else if baseURI := qt3DefaultBaseURI(tc); baseURI != "" {
-				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithBaseURI(ctx, baseURI) })
+				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.BaseURI(baseURI) })
 			}
 			var doc helium.Node
 			if tc.DocPath != "" {
@@ -226,26 +230,26 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 				vars[src.Name] = xpath3.ItemSlice{xpath3.NodeItem{Node: sourceDoc}}
 			}
 			if resolver := qt3BuildCollectionResolver(t, ctx, tc, opts, doc, vars); resolver != nil {
-				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithCollectionResolver(ctx, resolver) })
+				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.CollectionResolver(resolver) })
 			}
 			if len(tc.Params) > 0 {
 				for _, param := range tc.Params {
-					paramOpts := append([]qt3ContextMutator{}, opts...)
+					paramEval := qt3ApplyEval(xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), opts)
 					if len(vars) > 0 {
-						paramOpts = append(paramOpts, func(ctx context.Context) context.Context { return xpath3.WithVariables(ctx, vars) })
+						paramEval = paramEval.Variables(xpath3.VariablesFromMap(vars))
 					}
-					paramCtx := qt3ApplyContext(ctx, paramOpts)
 					compiledParam, err := xpath3.Compile(param.Select)
 					require.NoError(t, err, "compile param $%s: %s", param.Name, param.Select)
-					result, err := compiledParam.Evaluate(paramCtx, doc)
+					result, err := paramEval.Evaluate(ctx, compiledParam, doc)
 					require.NoError(t, err, "eval param $%s: %s", param.Name, param.Select)
 					vars[param.Name] = result.Sequence()
 				}
 			}
 			if len(vars) > 0 {
-				opts = append(opts, func(ctx context.Context) context.Context { return xpath3.WithVariables(ctx, vars) })
+				v := vars
+				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.Variables(xpath3.VariablesFromMap(v)) })
 			}
-			ctx = qt3ApplyContext(ctx, opts)
+			eval := qt3ApplyEval(xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), opts)
 			compiled, err := xpath3.Compile(tc.XPath)
 			if err != nil {
 				if tc.ExpectError || tc.AcceptError {
@@ -253,7 +257,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 				}
 				require.NoError(t, err, "compile: %s", tc.XPath)
 			}
-			result, err := compiled.Evaluate(ctx, doc)
+			result, err := eval.Evaluate(ctx, compiled, doc)
 			if err != nil {
 				if tc.ExpectError || tc.AcceptError {
 					return
@@ -409,7 +413,7 @@ func qt3ParseDocSource(t *testing.T, src qt3SourceDoc) helium.Node {
 	return doc
 }
 
-func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, opts []qt3ContextMutator, doc helium.Node, vars map[string]xpath3.Sequence) xpath3.CollectionResolver {
+func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, opts []qt3EvalMutator, doc helium.Node, vars map[string]xpath3.Sequence) xpath3.CollectionResolver {
 	t.Helper()
 	if len(tc.Collections) == 0 {
 		return nil
@@ -420,11 +424,10 @@ func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, o
 		uriCollections: make(map[string][]string, len(tc.Collections)),
 	}
 
-	queryOpts := append([]qt3ContextMutator{}, opts...)
+	queryEval := qt3ApplyEval(xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), opts)
 	if len(vars) > 0 {
-		queryOpts = append(queryOpts, func(ctx context.Context) context.Context { return xpath3.WithVariables(ctx, vars) })
+		queryEval = queryEval.Variables(xpath3.VariablesFromMap(vars))
 	}
-	queryCtx := qt3ApplyContext(ctx, queryOpts)
 
 	for _, col := range tc.Collections {
 		if len(col.SourceDocs) > 0 {
@@ -450,7 +453,7 @@ func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, o
 
 		expr, err := xpath3.Compile(col.Query)
 		require.NoError(t, err, "compile collection %q query: %s", col.URI, col.Query)
-		result, err := expr.Evaluate(queryCtx, doc)
+		result, err := queryEval.Evaluate(ctx, expr, doc)
 		require.NoError(t, err, "eval collection %q query: %s", col.URI, col.Query)
 		resolver.collections[col.URI] = result.Sequence()
 		resolver.uriCollections[col.URI] = qt3CollectionURIs(t, col.URI, result.Sequence())
@@ -547,7 +550,7 @@ func qt3AssertEq(expected string) qt3Assertion {
 			require.Equal(t, expected, qt3StringValue(seq))
 			return
 		}
-		result, err := compiled.Evaluate(t.Context(), nil)
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, nil)
 		if err != nil {
 			require.Equal(t, expected, qt3StringValue(seq))
 			return
@@ -638,7 +641,7 @@ func qt3AssertDeepEq(expected string) qt3Assertion {
 			require.Equal(t, expected, qt3StringValue(seq), "deep-eq")
 			return
 		}
-		result, err := compiled.Evaluate(t.Context(), nil)
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, nil)
 		if err != nil {
 			require.Equal(t, expected, qt3StringValue(seq), "deep-eq")
 			return
@@ -665,7 +668,7 @@ func qt3CheckEq(expected string) qt3Check {
 		if err != nil {
 			return qt3StringValue(seq) == expected
 		}
-		result, err := compiled.Evaluate(context.Background(), nil)
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(context.Background(), compiled, nil)
 		if err != nil {
 			return qt3StringValue(seq) == expected
 		}
@@ -728,7 +731,7 @@ func qt3CheckDeepEq(expected string) qt3Check {
 		if err != nil {
 			return qt3StringValue(seq) == expected
 		}
-		result, err := compiled.Evaluate(context.Background(), nil)
+		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(context.Background(), compiled, nil)
 		if err != nil {
 			return qt3StringValue(seq) == expected
 		}

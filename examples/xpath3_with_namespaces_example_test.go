@@ -17,14 +17,20 @@ func Example_xpath3_with_namespaces() {
 		return
 	}
 
-	ctx := xpath3.WithNamespaces(context.Background(), map[string]string{
-		"x": "http://example.com/ns",
-	})
-
 	// XPath expressions do not automatically know the namespace prefixes used in
 	// your Go code. Bind the prefixes you want to use in the expression through
-	// the context, then evaluate as normal.
-	r, err := xpath3.Evaluate(ctx, doc, "//x:item")
+	// the Evaluator, then evaluate as normal.
+	compiled, err := xpath3.Compile("//x:item")
+	if err != nil {
+		fmt.Printf("compile error: %s\n", err)
+		return
+	}
+
+	r, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Namespaces(map[string]string{
+			"x": "http://example.com/ns",
+		}).
+		Evaluate(context.Background(), compiled, doc)
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return

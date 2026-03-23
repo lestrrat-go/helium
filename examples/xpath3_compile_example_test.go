@@ -25,8 +25,9 @@ func Example_xpath3_compile() {
 		return
 	}
 
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 	for child := doc.FirstChild().FirstChild(); child != nil; child = child.NextSibling() {
-		r, err := expr.Evaluate(context.Background(), child)
+		r, err := eval.Evaluate(context.Background(), expr, child)
 		if err != nil {
 			fmt.Printf("eval error: %s\n", err)
 			return

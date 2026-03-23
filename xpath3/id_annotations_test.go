@@ -44,12 +44,13 @@ func TestFnIDUsesTypeAnnotationsForIDSubtype(t *testing.T) {
 	doc := mustParseXML(t, `<root id="alpha"/>`)
 	attr := doc.DocumentElement().Attributes()[0]
 
-	ctx := xpath3.WithTypeAnnotations(t.Context(), map[helium.Node]string{
-		attr: xpath3.QAnnotation("urn:test", "myID"),
-	})
-	ctx = xpath3.WithSchemaDeclarations(ctx, idSubtypeDecls{})
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		TypeAnnotations(map[helium.Node]string{
+			attr: xpath3.QAnnotation("urn:test", "myID"),
+		}).
+		SchemaDeclarations(idSubtypeDecls{})
 
-	seq := evalExprCtx(t, ctx, doc, `id("alpha")/name()`)
+	seq := evalExprWithEval(t, eval, doc, `id("alpha")/name()`)
 	require.Len(t, seq, 1)
 
 	av, ok := seq.Get(0).(xpath3.AtomicValue)

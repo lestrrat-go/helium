@@ -33,11 +33,12 @@ func BenchmarkCompilePath(b *testing.B) {
 func BenchmarkEvaluateCompiledCount(b *testing.B) {
 	doc := benchmarkDoc(b)
 	expr := xpath3.MustCompile(benchCountExpr)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		result, err := expr.Evaluate(b.Context(), doc)
+		result, err := eval.Evaluate(b.Context(), expr, doc)
 		require.NoError(b, err)
 		value, ok := result.IsNumber()
 		require.True(b, ok)
@@ -62,11 +63,12 @@ func BenchmarkEvaluateConvenienceCount(b *testing.B) {
 func BenchmarkEvaluateCompiledFLWOR(b *testing.B) {
 	doc := benchmarkDoc(b)
 	expr := xpath3.MustCompile(benchFLWORExpr)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		result, err := expr.Evaluate(b.Context(), doc)
+		result, err := eval.Evaluate(b.Context(), expr, doc)
 		require.NoError(b, err)
 		value, ok := result.IsString()
 		require.True(b, ok)

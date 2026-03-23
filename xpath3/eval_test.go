@@ -26,18 +26,20 @@ func mustParseExpr(t *testing.T, s string) xpath3.Expr {
 
 func evalExpr(t *testing.T, node helium.Node, expr string) xpath3.Sequence {
 	t.Helper()
-	parsed := mustParseExpr(t, expr)
-	result, err := xpath3.EvalForTesting(t.Context(), node, parsed)
+	compiled, err := xpath3.Compile(expr)
 	require.NoError(t, err)
-	return result
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, node)
+	require.NoError(t, err)
+	return result.Sequence()
 }
 
-func evalExprCtx(t *testing.T, ctx context.Context, node helium.Node, expr string) xpath3.Sequence {
+func evalExprWithEval(t *testing.T, eval xpath3.Evaluator, node helium.Node, expr string) xpath3.Sequence {
 	t.Helper()
-	parsed := mustParseExpr(t, expr)
-	result, err := xpath3.EvalForTesting(ctx, node, parsed)
+	compiled, err := xpath3.Compile(expr)
 	require.NoError(t, err)
-	return result
+	result, err := eval.Evaluate(t.Context(), compiled, node)
+	require.NoError(t, err)
+	return result.Sequence()
 }
 
 // --- 3.1: Basic dispatch ---
@@ -63,10 +65,11 @@ func TestEvalLiteral(t *testing.T) {
 
 func TestEvalVariable(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
-	ctx := xpath3.WithVariables(t.Context(), map[string]xpath3.Sequence{
-		"x": xpath3.SingleInteger(42),
-	})
-	seq := evalExprCtx(t, ctx, doc, "$x")
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+			"x": xpath3.SingleInteger(42),
+		}))
+	seq := evalExprWithEval(t, eval, doc, "$x")
 	require.Equal(t, 1, seq.Len())
 	av := seq.Get(0).(xpath3.AtomicValue)
 	require.Equal(t, int64(42), av.IntegerVal())
@@ -74,8 +77,9 @@ func TestEvalVariable(t *testing.T) {
 
 func TestEvalUndefinedVariable(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
-	parsed := mustParseExpr(t, "$y")
-	_, err := xpath3.EvalForTesting(t.Context(), doc, parsed)
+	compiled, err := xpath3.Compile("$y")
+	require.NoError(t, err)
+	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
 	require.Error(t, err)
 }
 
@@ -304,21 +308,22 @@ func TestEvalSimpleMap(t *testing.T) {
 
 func TestEvalFLWOR(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
-	ctx := xpath3.WithVariables(t.Context(), map[string]xpath3.Sequence{
-		"items": xpath3.ItemSlice{
-			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
-			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
-			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
-		},
-	})
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+			"items": xpath3.ItemSlice{
+				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
+				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
+				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
+			},
+		}))
 
 	t.Run("simple for", func(t *testing.T) {
-		seq := evalExprCtx(t, ctx, doc, "for $x in $items return $x")
+		seq := evalExprWithEval(t, eval, doc, "for $x in $items return $x")
 		require.Equal(t, 3, seq.Len())
 	})
 
 	t.Run("let binding", func(t *testing.T) {
-		seq := evalExprCtx(t, ctx, doc, `let $x := 42 return $x`)
+		seq := evalExprWithEval(t, eval, doc, `let $x := 42 return $x`)
 		require.Equal(t, 1, seq.Len())
 		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, int64(42), av.IntegerVal())
@@ -327,30 +332,31 @@ func TestEvalFLWOR(t *testing.T) {
 
 func TestEvalQuantified(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
-	ctx := xpath3.WithVariables(t.Context(), map[string]xpath3.Sequence{
-		"nums": xpath3.ItemSlice{
-			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
-			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
-			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
-		},
-	})
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+			"nums": xpath3.ItemSlice{
+				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(1)},
+				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(2)},
+				xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(3)},
+			},
+		}))
 
 	t.Run("some", func(t *testing.T) {
-		seq := evalExprCtx(t, ctx, doc, "some $x in $nums satisfies $x = 2")
+		seq := evalExprWithEval(t, eval, doc, "some $x in $nums satisfies $x = 2")
 		require.Equal(t, 1, seq.Len())
 		av := seq.Get(0).(xpath3.AtomicValue)
 		require.True(t, av.BooleanVal())
 	})
 
 	t.Run("every", func(t *testing.T) {
-		seq := evalExprCtx(t, ctx, doc, "every $x in $nums satisfies $x > 0")
+		seq := evalExprWithEval(t, eval, doc, "every $x in $nums satisfies $x > 0")
 		require.Equal(t, 1, seq.Len())
 		av := seq.Get(0).(xpath3.AtomicValue)
 		require.True(t, av.BooleanVal())
 	})
 
 	t.Run("every false", func(t *testing.T) {
-		seq := evalExprCtx(t, ctx, doc, "every $x in $nums satisfies $x > 1")
+		seq := evalExprWithEval(t, eval, doc, "every $x in $nums satisfies $x > 1")
 		require.Equal(t, 1, seq.Len())
 		av := seq.Get(0).(xpath3.AtomicValue)
 		require.False(t, av.BooleanVal())
@@ -441,10 +447,13 @@ func TestEvalInlineFunction(t *testing.T) {
 
 	// Inline function that returns its argument
 	parsed := mustParseExpr(t, `let $f := function($x) { $x } return $f(42)`)
-	result, err := xpath3.EvalForTesting(t.Context(), doc, parsed)
+	compiled, err := xpath3.CompileExpr(parsed)
 	require.NoError(t, err)
-	require.Equal(t, 1, result.Len())
-	av := result.Get(0).(xpath3.AtomicValue)
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
+	require.NoError(t, err)
+	seq := result.Sequence()
+	require.Equal(t, 1, seq.Len())
+	av := seq.Get(0).(xpath3.AtomicValue)
 	require.Equal(t, int64(42), av.IntegerVal())
 }
 
@@ -528,15 +537,19 @@ func TestEvalUserFunction(t *testing.T) {
 		},
 	}
 
-	ctx := xpath3.WithFunctions(t.Context(), map[string]xpath3.Function{
-		"myfunc": fn,
-	})
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Functions(xpath3.FunctionLibraryFromMaps(map[string]xpath3.Function{
+			"myfunc": fn,
+		}, nil))
 
 	parsed := mustParseExpr(t, `myfunc("arg")`)
-	result, err := xpath3.EvalForTesting(ctx, doc, parsed)
+	compiled, err := xpath3.CompileExpr(parsed)
 	require.NoError(t, err)
-	require.Equal(t, 1, result.Len())
-	av := result.Get(0).(xpath3.AtomicValue)
+	result, err := eval.Evaluate(t.Context(), compiled, doc)
+	require.NoError(t, err)
+	seq := result.Sequence()
+	require.Equal(t, 1, seq.Len())
+	av := seq.Get(0).(xpath3.AtomicValue)
 	require.Equal(t, "custom", av.StringVal())
 }
 

@@ -99,7 +99,7 @@ func TestContextItemCompiledIsContextItem(t *testing.T) {
 	compiled, err := xpath3.Compile(".")
 	require.NoError(t, err)
 
-	state := xpath3.NewEvalState(t.Context(), root)
+	state := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).NewEvalState(t.Context(), root)
 	result, err := compiled.EvaluateReuse(state, root)
 	require.NoError(t, err)
 
