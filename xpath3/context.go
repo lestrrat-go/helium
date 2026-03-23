@@ -167,7 +167,8 @@ func (c *evalConfig) rebuildVariableScope() {
 }
 
 // WithNamespaces binds namespace prefixes to URIs for the evaluation.
-// The map is defensively copied to prevent caller mutation from affecting evaluation.
+//
+// Deprecated: use NewEvaluator().Namespaces(ns).Evaluate(...) instead.
 func WithNamespaces(ctx context.Context, ns map[string]string) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) bool {
 		c.namespaces = maps.Clone(ns)
@@ -175,10 +176,9 @@ func WithNamespaces(ctx context.Context, ns map[string]string) context.Context {
 	})
 }
 
-// WithStrictPrefixes disables the default prefix→namespace fallback (fn:, xs:,
-// math:, map:, array:, err:). When set, only prefixes explicitly declared via
-// WithNamespaces are considered valid. This is used by XSLT, where namespace
-// prefixes must be declared on the stylesheet element.
+// WithStrictPrefixes disables the default prefix→namespace fallback.
+//
+// Deprecated: use NewEvaluator().StrictPrefixes().Evaluate(...) instead.
 func WithStrictPrefixes(ctx context.Context) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) bool {
 		c.strictPrefixes = true
@@ -187,6 +187,8 @@ func WithStrictPrefixes(ctx context.Context) context.Context {
 }
 
 // WithAdditionalNamespaces merges namespace prefixes into the returned context.
+//
+// Deprecated: use Evaluator.Namespaces instead.
 func WithAdditionalNamespaces(ctx context.Context, ns map[string]string) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) bool {
 		c.namespaces = maps.Clone(c.namespaces)
