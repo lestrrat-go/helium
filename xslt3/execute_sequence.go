@@ -36,7 +36,7 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error
 				return err
 			}
 		}
-		result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -301,7 +301,7 @@ func (ec *execContext) execLiteralText(inst *LiteralTextInst) error {
 }
 
 func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceInst) error {
-	result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
+	result, err := ec.evalXPath(inst.Select, ec.contextNode)
 	if err != nil {
 		return err
 	}

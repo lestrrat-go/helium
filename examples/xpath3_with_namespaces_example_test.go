@@ -20,7 +20,7 @@ func Example_xpath3_with_namespaces() {
 	// XPath expressions do not automatically know the namespace prefixes used in
 	// your Go code. Bind the prefixes you want to use in the expression through
 	// the Evaluator, then evaluate as normal.
-	compiled, err := xpath3.Compile("//x:item")
+	compiled, err := xpath3.NewCompiler().Compile("//x:item")
 	if err != nil {
 		fmt.Printf("compile error: %s\n", err)
 		return

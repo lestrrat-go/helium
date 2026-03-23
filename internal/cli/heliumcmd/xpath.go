@@ -197,7 +197,7 @@ func (c *xpathCommand) printXPath1Result(res *xpath1.Result) int {
 }
 
 func (c *xpathCommand) evalXPath3(ctx context.Context, cfg *xpathConfig, doc *helium.Document) int {
-	expr, err := xpath3.Compile(cfg.expr)
+	expr, err := xpath3.NewCompiler().Compile(cfg.expr)
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitXPath

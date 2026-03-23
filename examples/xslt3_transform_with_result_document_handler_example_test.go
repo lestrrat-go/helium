@@ -4,9 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-
-	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xslt3"
 )
 
 func Example_xslt3_transform_with_result_document_handler() {
@@ -44,30 +41,20 @@ func Example_xslt3_transform_with_result_document_handler() {
 		return
 	}
 
-	var secondaryDoc *helium.Document
-	var secondaryOutputDef *xslt3.OutputDef
-
-	// Use a result-document handler to receive each secondary output as a DOM.
+	// Use a receiver that implements both ResultDocumentReceiver and
+	// ResultDocumentOutputReceiver to receive each secondary output as a DOM
+	// along with its output definition.
 	// This is useful when your application wants to decide where or how to store
 	// side outputs instead of letting the stylesheet write directly to disk.
-	ctx = xslt3.WithResultDocumentHandler(ctx, xslt3.ResultDocumentHandlerFunc(func(href string, doc *helium.Document) {
-		if href == "reports/items.txt" {
-			secondaryDoc = doc
-		}
-	}))
+	//
+	// The OutputDef captures details such as method="text",
+	// omit-xml-declaration, indentation, or named output formats selected by
+	// the stylesheet that would otherwise be lost when re-serializing.
+	recv := newExampleResultDocReceiver()
 
-	// Pair it with WithResultDocOutputDefHandler when the secondary result may
-	// use a different output method or formatting rules from the primary result.
-	// Without the OutputDef, re-serializing the DOM yourself can lose details
-	// such as method="text", omit-xml-declaration, indentation, or named output
-	// formats selected by the stylesheet.
-	ctx = xslt3.WithResultDocOutputDefHandler(ctx, func(href string, outDef *xslt3.OutputDef) {
-		if href == "reports/items.txt" {
-			secondaryOutputDef = outDef
-		}
-	})
-
-	resultDoc, err := xslt3.Transform(ctx, sourceDoc, stylesheet)
+	resultDoc, err := stylesheet.Transform(sourceDoc).
+		Receiver(recv).
+		Do(ctx)
 	if err != nil {
 		fmt.Printf("transform failed: %s\n", err)
 		return
@@ -80,14 +67,14 @@ func Example_xslt3_transform_with_result_document_handler() {
 	}
 	primaryOut = strings.TrimSpace(primaryOut)
 
-	secondaryOut, err := serializeExampleResult(secondaryDoc, secondaryOutputDef)
+	secondaryOut, err := serializeExampleResult(recv.docs["reports/items.txt"], recv.outDefs["reports/items.txt"])
 	if err != nil {
 		fmt.Printf("failed to serialize secondary result: %s\n", err)
 		return
 	}
 
 	fmt.Println(primaryOut)
-	fmt.Printf("secondary (%s): %s\n", secondaryOutputDef.Method, secondaryOut)
+	fmt.Printf("secondary (%s): %s\n", recv.outDefs["reports/items.txt"].Method, secondaryOut)
 	// Output:
 	// <summary count="2"/>
 	// secondary (text): Tea, Coffee

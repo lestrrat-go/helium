@@ -13,6 +13,58 @@ import (
 	"github.com/lestrrat-go/helium/xslt3"
 )
 
+// exampleMessageReceiver implements xslt3.MessageReceiver for examples.
+type exampleMessageReceiver struct{}
+
+func (r *exampleMessageReceiver) HandleMessage(msg string, terminate bool) error {
+	fmt.Printf("message: %s (terminate=%t)\n", msg, terminate)
+	return nil
+}
+
+// examplePrimaryItemsReceiver implements xslt3.PrimaryItemsReceiver.
+type examplePrimaryItemsReceiver struct {
+	items xpath3.Sequence
+}
+
+func (r *examplePrimaryItemsReceiver) HandlePrimaryItems(seq xpath3.Sequence) error {
+	r.items = xpath3.ItemSlice(append([]xpath3.Item(nil), seq.Materialize()...))
+	return nil
+}
+
+// exampleRawResultReceiver implements xslt3.RawResultReceiver.
+type exampleRawResultReceiver struct {
+	result xpath3.Sequence
+}
+
+func (r *exampleRawResultReceiver) HandleRawResult(seq xpath3.Sequence) error {
+	r.result = xpath3.ItemSlice(append([]xpath3.Item(nil), seq.Materialize()...))
+	return nil
+}
+
+// exampleResultDocReceiver implements xslt3.ResultDocumentReceiver and
+// xslt3.ResultDocumentOutputReceiver.
+type exampleResultDocReceiver struct {
+	docs    map[string]*helium.Document
+	outDefs map[string]*xslt3.OutputDef
+}
+
+func newExampleResultDocReceiver() *exampleResultDocReceiver {
+	return &exampleResultDocReceiver{
+		docs:    make(map[string]*helium.Document),
+		outDefs: make(map[string]*xslt3.OutputDef),
+	}
+}
+
+func (r *exampleResultDocReceiver) HandleResultDocument(href string, doc *helium.Document) error {
+	r.docs[href] = doc
+	return nil
+}
+
+func (r *exampleResultDocReceiver) HandleResultDocumentOutput(href string, outDef *xslt3.OutputDef) error {
+	r.outDefs[href] = outDef
+	return nil
+}
+
 type exampleXSLTResolver map[string]string
 
 func (r exampleXSLTResolver) Resolve(uri string) (io.ReadCloser, error) {
@@ -36,7 +88,7 @@ func compileExampleStylesheet(ctx context.Context, src string) (*xslt3.Styleshee
 	if err != nil {
 		return nil, err
 	}
-	return xslt3.CompileStylesheet(ctx, doc)
+	return xslt3.NewCompiler().Compile(ctx, doc)
 }
 
 func parseExampleDocument(ctx context.Context, src string) (*helium.Document, error) {

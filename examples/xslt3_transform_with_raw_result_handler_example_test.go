@@ -3,9 +3,6 @@ package examples_test
 import (
 	"context"
 	"fmt"
-
-	"github.com/lestrrat-go/helium/xpath3"
-	"github.com/lestrrat-go/helium/xslt3"
 )
 
 func Example_xslt3_transform_with_raw_result_handler() {
@@ -35,30 +32,27 @@ func Example_xslt3_transform_with_raw_result_handler() {
 		return
 	}
 
-	var rawResult xpath3.Sequence
-
-	// Select a named template as the entry point, then use a raw-result handler
-	// to keep the original typed XDM sequence before it is serialized into the
-	// result document.
+	// Use a raw-result receiver to keep the original typed XDM sequence
+	// before it is serialized into the result document.
 	//
 	// Use this when the type matters to your application, for example if you
 	// need to preserve xs:integer/xs:date/xs:decimal values instead of consuming
 	// only their text form after serialization.
 	//
-	// Gotcha: Transform still returns a result document, so the raw handler is a
+	// Gotcha: Do still returns a result document, so the raw receiver is a
 	// supplement to normal output handling, not a replacement for it.
-	ctx = xslt3.WithInitialTemplate(ctx, "numbers")
-	ctx = xslt3.WithRawResultHandler(ctx, func(seq xpath3.Sequence) {
-		rawResult = xpath3.ItemSlice(append([]xpath3.Item(nil), seq.Materialize()...))
-	})
+	recv := &exampleRawResultReceiver{}
 
-	resultDoc, err := xslt3.Transform(ctx, sourceDoc, stylesheet)
+	resultDoc, err := stylesheet.CallTemplate("numbers").
+		SourceDocument(sourceDoc).
+		Receiver(recv).
+		Do(ctx)
 	if err != nil {
 		fmt.Printf("transform failed: %s\n", err)
 		return
 	}
 
-	rawSummary, err := formatExampleAtomicSequence(rawResult)
+	rawSummary, err := formatExampleAtomicSequence(recv.result)
 	if err != nil {
 		fmt.Printf("failed to describe raw result: %s\n", err)
 		return

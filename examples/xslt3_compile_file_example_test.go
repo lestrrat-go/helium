@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xslt3"
 )
 
@@ -41,20 +41,10 @@ func Example_xslt3_compile_file() {
 		return
 	}
 
-	sourceDoc, err := helium.Parse(context.Background(), []byte(`<ignored/>`))
-	if err != nil {
-		fmt.Printf("failed to parse source: %s\n", err)
-		return
-	}
-
-	ctx := context.Background()
-	ctx = xslt3.WithInitialTemplate(ctx, "report")
-	ctx = xslt3.WithParameter(ctx, "title", "Helium")
-	ctx = xslt3.WithMessageHandler(ctx, xslt3.MessageHandlerFunc(func(msg string, terminate bool) {
-		fmt.Printf("message: %s (terminate=%t)\n", msg, terminate)
-	}))
-
-	resultDoc, err := xslt3.Transform(ctx, sourceDoc, stylesheet)
+	resultDoc, err := stylesheet.CallTemplate("report").
+		SetParameter("title", xpath3.SingleString("Helium")).
+		Receiver(&exampleMessageReceiver{}).
+		Do(context.Background())
 	if err != nil {
 		fmt.Printf("transform failed: %s\n", err)
 		return

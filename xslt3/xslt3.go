@@ -1,7 +1,6 @@
 package xslt3
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"os"
@@ -19,19 +18,15 @@ func parseStylesheetDocument(ctx context.Context, data []byte, baseURI string) (
 	return p.Parse(ctx, data)
 }
 
-// CompileStylesheet compiles a parsed XSLT stylesheet document into a
-// reusable Stylesheet. Use WithCompileBaseURI and WithCompileURIResolver
-// to configure compilation via ctx.
-//
-// Deprecated: use NewCompiler().Compile(ctx, doc) instead.
+// CompileStylesheet compiles a parsed XSLT stylesheet document.
+// This is a convenience wrapper over NewCompiler().Compile(ctx, doc).
 func CompileStylesheet(ctx context.Context, doc *helium.Document) (*Stylesheet, error) {
-	cfg := deriveCompileConfig(ctx)
-	return compile(doc, cfg)
+	return NewCompiler().Compile(ctx, doc)
 }
 
 // CompileFile parses and compiles an XSLT stylesheet from a file path.
-// This is a convenience function that parses the file and delegates to
-// NewCompiler().Compile.
+// This is a convenience wrapper that parses the file, sets the base URI,
+// and delegates to NewCompiler().Compile.
 func CompileFile(ctx context.Context, path string) (*Stylesheet, error) {
 	absPath, absErr := filepath.Abs(path)
 	if absErr != nil {
@@ -45,47 +40,23 @@ func CompileFile(ctx context.Context, path string) (*Stylesheet, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg := deriveCompileConfig(ctx)
-	if cfg.baseURI == "" {
-		cfg.baseURI = absPath
-	}
-	return compile(doc, cfg)
+	return NewCompiler().BaseURI(absPath).Compile(ctx, doc)
 }
 
-// Transform applies the compiled stylesheet to the source document and
-// returns the result document. Use WithParameter, WithInitialTemplate,
-// and WithMessageHandler to configure the transformation via ctx.
-//
-// Deprecated: use ss.Transform(source).Do(ctx) instead.
+// Transform applies the compiled stylesheet to the source document.
+// This is a convenience wrapper over ss.Transform(source).Do(ctx).
 func Transform(ctx context.Context, source *helium.Document, ss *Stylesheet) (*helium.Document, error) {
-	cfg := getTransformConfig(ctx)
-	return executeTransform(ctx, source, ss, cfg)
+	return ss.Transform(source).Do(ctx)
 }
 
-// TransformToWriter applies the compiled stylesheet to the source document
-// and writes the serialized result to w.
-//
-// Deprecated: use ss.Transform(source).WriteTo(ctx, w) instead.
-func TransformToWriter(ctx context.Context, source *helium.Document, ss *Stylesheet, w io.Writer) error {
-	cfg := getTransformConfig(ctx)
-	resultDoc, err := executeTransform(ctx, source, ss, cfg)
-	if err != nil {
-		return err
-	}
-
-	// Get the output definition
-	outDef := ss.outputs[""]
-	return SerializeResult(w, resultDoc, outDef)
-}
-
-// TransformString applies the compiled stylesheet to the source document
-// and returns the serialized result as a string.
-//
-// Deprecated: use ss.Transform(source).Serialize(ctx) instead.
+// TransformString applies the compiled stylesheet and returns the serialized result.
+// This is a convenience wrapper over ss.Transform(source).Serialize(ctx).
 func TransformString(ctx context.Context, source *helium.Document, ss *Stylesheet) (string, error) {
-	var buf bytes.Buffer
-	if err := TransformToWriter(ctx, source, ss, &buf); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
+	return ss.Transform(source).Serialize(ctx)
+}
+
+// TransformToWriter applies the compiled stylesheet and writes the result to w.
+// This is a convenience wrapper over ss.Transform(source).WriteTo(ctx, w).
+func TransformToWriter(ctx context.Context, source *helium.Document, ss *Stylesheet, w io.Writer) error {
+	return ss.Transform(source).WriteTo(ctx, w)
 }

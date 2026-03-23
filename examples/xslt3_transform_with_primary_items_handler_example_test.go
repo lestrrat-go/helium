@@ -3,9 +3,6 @@ package examples_test
 import (
 	"context"
 	"fmt"
-
-	"github.com/lestrrat-go/helium/xpath3"
-	"github.com/lestrrat-go/helium/xslt3"
 )
 
 func Example_xslt3_transform_with_primary_items_handler() {
@@ -43,9 +40,7 @@ func Example_xslt3_transform_with_primary_items_handler() {
 		return
 	}
 
-	var primaryItems xpath3.Sequence
-
-	// For json/adaptive output, a primary-items handler lets callers access the
+	// For json/adaptive output, a primary-items receiver lets callers access the
 	// non-node XDM items that the serializer will turn into the final output.
 	// This is useful if your program wants to inspect the map/array structure,
 	// apply custom serialization, or hand the items to another layer without
@@ -54,23 +49,23 @@ func Example_xslt3_transform_with_primary_items_handler() {
 	// Gotcha: this callback is primarily interesting for non-XML outputs. For a
 	// normal element-based XML result, the returned document is usually the more
 	// natural API to consume.
-	ctx = xslt3.WithPrimaryItemsHandler(ctx, func(seq xpath3.Sequence) {
-		primaryItems = xpath3.ItemSlice(append([]xpath3.Item(nil), seq.Materialize()...))
-	})
+	recv := &examplePrimaryItemsReceiver{}
 
-	resultDoc, err := xslt3.Transform(ctx, sourceDoc, stylesheet)
+	resultDoc, err := stylesheet.Transform(sourceDoc).
+		Receiver(recv).
+		Do(ctx)
 	if err != nil {
 		fmt.Printf("transform failed: %s\n", err)
 		return
 	}
 
-	serialized, err := serializeExampleItems(primaryItems, resultDoc, stylesheet.DefaultOutputDef())
+	serialized, err := serializeExampleItems(recv.items, resultDoc, stylesheet.DefaultOutputDef())
 	if err != nil {
 		fmt.Printf("failed to serialize captured items: %s\n", err)
 		return
 	}
 
-	fmt.Printf("captured items: %d\n", primaryItems.Len())
+	fmt.Printf("captured items: %d\n", recv.items.Len())
 	fmt.Printf("serialized: %s\n", serialized)
 	// Output:
 	// captured items: 1

@@ -42,11 +42,12 @@ func Example_xslt3_with_uri_resolver() {
 
 	// The base URI matters because relative href values such as "common.xsl"
 	// are resolved against it before the resolver is called.
-	compileCtx := xslt3.WithCompileBaseURI(ctx, "/virtual/main.xsl")
-	compileCtx = xslt3.WithCompileURIResolver(compileCtx, exampleXSLTResolver{
-		"/virtual/common.xsl": includedStylesheetSrc,
-	})
-	stylesheet, err := xslt3.CompileStylesheet(compileCtx, stylesheetDoc)
+	stylesheet, err := xslt3.NewCompiler().
+		BaseURI("/virtual/main.xsl").
+		URIResolver(exampleXSLTResolver{
+			"/virtual/common.xsl": includedStylesheetSrc,
+		}).
+		Compile(ctx, stylesheetDoc)
 	if err != nil {
 		fmt.Printf("failed to compile stylesheet: %s\n", err)
 		return
@@ -58,7 +59,7 @@ func Example_xslt3_with_uri_resolver() {
 		return
 	}
 
-	resultDoc, err := xslt3.Transform(ctx, sourceDoc, stylesheet)
+	resultDoc, err := stylesheet.Transform(sourceDoc).Do(ctx)
 	if err != nil {
 		fmt.Printf("transform failed: %s\n", err)
 		return

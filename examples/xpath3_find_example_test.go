@@ -15,12 +15,23 @@ func Example_xpath3_find() {
 		return
 	}
 
-	// xpath3.Find is the convenience API for the common "give me the matching
-	// nodes" case. It compiles the XPath expression, evaluates it, and returns
-	// the node slice directly.
-	nodes, err := xpath3.Find(context.Background(), doc, "//book")
+	// Compile the expression, evaluate it, and extract the matching nodes.
+	expr, err := xpath3.NewCompiler().Compile("//book")
+	if err != nil {
+		fmt.Printf("compile error: %s\n", err)
+		return
+	}
+
+	r, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Evaluate(context.Background(), expr, doc)
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
+		return
+	}
+
+	nodes, err := r.Nodes()
+	if err != nil {
+		fmt.Printf("nodes error: %s\n", err)
 		return
 	}
 

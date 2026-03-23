@@ -1,11 +1,11 @@
 package xslt3
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"maps"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -72,6 +72,11 @@ type invocationCfg struct {
 	parameters       *Parameters
 	tunnelParameters *Parameters
 
+	// initialTemplateParams and initialModeParams hold non-tunnel
+	// xsl:with-param values for the initial template/mode invocation.
+	initialTemplateParams *Parameters
+	initialModeParams     *Parameters
+
 	receiver           any
 	collectionResolver xpath3.CollectionResolver
 	baseOutputURI      string
@@ -86,6 +91,15 @@ func newInvocation(ss *Stylesheet, kind InvocationKind) Invocation {
 func (inv Invocation) clone() Invocation {
 	cp := *inv.cfg
 	return Invocation{cfg: &cp}
+}
+
+// SourceDocument sets the source document for the invocation.
+// This is needed for CallTemplate/CallFunction when the transform
+// requires a source document for fn:doc("") or similar.
+func (inv Invocation) SourceDocument(doc *helium.Document) Invocation {
+	inv = inv.clone()
+	inv.cfg.source = doc
+	return inv
 }
 
 // Mode sets the initial mode for template matching.
@@ -142,6 +156,32 @@ func (inv Invocation) SetTunnelParameter(name string, value xpath3.Sequence) Inv
 	return inv
 }
 
+// SetInitialTemplateParameter sets a non-tunnel xsl:with-param for the
+// initial template call (CallTemplate entry).
+func (inv Invocation) SetInitialTemplateParameter(name string, value xpath3.Sequence) Invocation {
+	inv = inv.clone()
+	if inv.cfg.initialTemplateParams == nil {
+		inv.cfg.initialTemplateParams = NewParameters()
+	} else {
+		inv.cfg.initialTemplateParams = inv.cfg.initialTemplateParams.Clone()
+	}
+	inv.cfg.initialTemplateParams.Set(name, value)
+	return inv
+}
+
+// SetInitialModeParameter sets a non-tunnel xsl:with-param for the
+// initial mode invocation (Transform / ApplyTemplates entry).
+func (inv Invocation) SetInitialModeParameter(name string, value xpath3.Sequence) Invocation {
+	inv = inv.clone()
+	if inv.cfg.initialModeParams == nil {
+		inv.cfg.initialModeParams = NewParameters()
+	} else {
+		inv.cfg.initialModeParams = inv.cfg.initialModeParams.Clone()
+	}
+	inv.cfg.initialModeParams.Set(name, value)
+	return inv
+}
+
 // Receiver sets the receiver object that may implement any subset of
 // MessageReceiver, ResultDocumentReceiver, RawResultReceiver,
 // PrimaryItemsReceiver, AnnotationReceiver, etc.
@@ -192,7 +232,7 @@ func (inv Invocation) Do(ctx context.Context) (*helium.Document, error) {
 // Serialize executes the transformation and returns the serialized result.
 // Secondary result documents are delivered through the receiver only.
 func (inv Invocation) Serialize(ctx context.Context) (string, error) {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	if err := inv.WriteTo(ctx, &buf); err != nil {
 		return "", err
 	}
@@ -219,13 +259,13 @@ func (inv Invocation) validate() error {
 	c := inv.cfg
 	switch c.kind {
 	case InvocationTransform:
-		if c.source == nil {
-			return fmt.Errorf("xslt3: Transform requires a source document")
-		}
+		// nil source is allowed: the stylesheet may use xsl:source-document,
+		// global-context-item use="absent", or an initial template.
+		// executeTransform will raise XTDE0040 if source is truly needed.
 	case InvocationApplyTemplates:
-		if c.source == nil && c.matchSelection == nil {
-			return fmt.Errorf("xslt3: ApplyTemplates requires a source document or match selection")
-		}
+		// nil source is allowed when a match selection is provided, or when
+		// the stylesheet does not require a source document.
+		// executeTransform will raise XTDE0040 if needed.
 	case InvocationCallTemplate:
 		if c.initialTemplate == "" {
 			return fmt.Errorf("xslt3: CallTemplate requires a template name")
@@ -288,6 +328,14 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 		tcfg.sequenceParams = maps.Clone(c.parameters.toMap())
 	}
 
+	// Initial template/mode non-tunnel params
+	if c.initialTemplateParams != nil {
+		tcfg.initialTemplateParams = maps.Clone(c.initialTemplateParams.toMap())
+	}
+	if c.initialModeParams != nil {
+		tcfg.initialModeParams = maps.Clone(c.initialModeParams.toMap())
+	}
+
 	// Tunnel parameters → initial mode tunnel or initial template tunnel
 	if c.tunnelParameters != nil {
 		tunnel := maps.Clone(c.tunnelParameters.toMap())
@@ -299,80 +347,16 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 		}
 	}
 
-	// Receiver → wire individual handlers via receiverSet bridge.
-	// New error-returning receiver interfaces take priority over legacy
-	// void interfaces. The bridge adapts them to the existing transformConfig
-	// callback fields.
+	// Receiver → wire directly into transformConfig.
 	if c.receiver != nil {
 		rs := extractReceivers(c.receiver)
-
-		if rs.message != nil {
-			tcfg.msgHandler = messageReceiverAdapter{rs.message}
-		} else if h, ok := c.receiver.(MessageHandler); ok {
-			tcfg.msgHandler = h
-		}
-
-		if rs.resultDocument != nil {
-			tcfg.resultDocHandler = resultDocReceiverAdapter{rs.resultDocument}
-		} else if h, ok := c.receiver.(ResultDocumentHandler); ok {
-			tcfg.resultDocHandler = h
-		}
-
-		if rs.resultDocumentOutput != nil {
-			tcfg.resultDocOutputHandler = func(href string, outDef *OutputDef) {
-				_ = rs.resultDocumentOutput.HandleResultDocumentOutput(href, outDef)
-			}
-		}
-
-		if rs.rawResult != nil {
-			tcfg.rawResultHandler = func(seq xpath3.Sequence) {
-				_ = rs.rawResult.HandleRawResult(seq)
-			}
-			tcfg.rawCapture = true
-		}
-
-		if rs.primaryItems != nil {
-			tcfg.primaryItemsHandler = func(seq xpath3.Sequence) {
-				_ = rs.primaryItems.HandlePrimaryItems(seq)
-			}
-		}
-
-		if rs.annotations != nil {
-			tcfg.resultAnnotationsHandler = annotationReceiverAdapter{rs.annotations}
-		} else if h, ok := c.receiver.(AnnotationHandler); ok {
-			tcfg.resultAnnotationsHandler = h
-		}
+		tcfg.msgReceiver = rs.message
+		tcfg.resultDocReceiver = rs.resultDocument
+		tcfg.resultDocOutputReceiver = rs.resultDocumentOutput
+		tcfg.rawResultReceiver = rs.rawResult
+		tcfg.primaryItemsReceiver = rs.primaryItems
+		tcfg.annotationReceiver = rs.annotations
 	}
 
 	return tcfg
-}
-
-// messageReceiverAdapter adapts MessageReceiver (error-returning) to
-// MessageHandler (void). Errors are dropped at the bridge layer.
-type messageReceiverAdapter struct {
-	r MessageReceiver
-}
-
-func (a messageReceiverAdapter) HandleMessage(msg string, terminate bool) {
-	_ = a.r.HandleMessage(msg, terminate)
-}
-
-// resultDocReceiverAdapter adapts ResultDocumentReceiver (error-returning)
-// to ResultDocumentHandler (void).
-type resultDocReceiverAdapter struct {
-	r ResultDocumentReceiver
-}
-
-func (a resultDocReceiverAdapter) HandleResultDocument(href string, doc *helium.Document) {
-	_ = a.r.HandleResultDocument(href, doc)
-}
-
-// annotationReceiverAdapter adapts AnnotationReceiver (error-returning)
-// to AnnotationHandler (void).
-type annotationReceiverAdapter struct {
-	r AnnotationReceiver
-}
-
-func (a annotationReceiverAdapter) HandleAnnotations(annotations map[helium.Node]string, declarations xpath3.SchemaDeclarations) {
-	_ = a.r.HandleAnnotations(annotations, declarations)
 }

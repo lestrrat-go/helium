@@ -35,14 +35,14 @@ func Example_xslt3_transform() {
 	// 1. parse or load the stylesheet
 	// 2. compile it to *xslt3.Stylesheet
 	// 3. parse the source document
-	// 4. call xslt3.Transform
+	// 4. call stylesheet.Transform(source).Do(ctx)
 	stylesheetDoc, err := helium.Parse(ctx, []byte(stylesheetSrc))
 	if err != nil {
 		fmt.Printf("failed to parse stylesheet: %s\n", err)
 		return
 	}
 
-	stylesheet, err := xslt3.CompileStylesheet(ctx, stylesheetDoc)
+	stylesheet, err := xslt3.NewCompiler().Compile(ctx, stylesheetDoc)
 	if err != nil {
 		fmt.Printf("failed to compile stylesheet: %s\n", err)
 		return
@@ -56,7 +56,7 @@ func Example_xslt3_transform() {
 
 	// Transform returns the primary result tree as a helium document. You can
 	// keep working with it as a DOM or serialize it afterward.
-	resultDoc, err := xslt3.Transform(ctx, sourceDoc, stylesheet)
+	resultDoc, err := stylesheet.Transform(sourceDoc).Do(ctx)
 	if err != nil {
 		fmt.Printf("transform failed: %s\n", err)
 		return

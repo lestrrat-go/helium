@@ -16,7 +16,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 
 	var atomicItems xpath3.ItemSlice // XSLT 3.0: atomic values from select
 	if inst.Select != nil {
-		result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -286,7 +286,7 @@ func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.
 func (ec *execContext) evaluateWithParam(ctx context.Context, wp *WithParam) (xpath3.Sequence, error) {
 	var val xpath3.Sequence
 	if wp.Select != nil {
-		result, err := ec.evalXPath(nil, wp.Select, ec.contextNode)
+		result, err := ec.evalXPath(wp.Select, ec.contextNode)
 		if err != nil {
 			return nil, err
 		}
@@ -485,7 +485,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 		}
 
 		if !fromCaller && p.Select != nil {
-			result, err := ec.evalXPath(nil, p.Select, ec.contextNode)
+			result, err := ec.evalXPath(p.Select, ec.contextNode)
 			if err != nil {
 				return err
 			}

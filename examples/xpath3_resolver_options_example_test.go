@@ -29,7 +29,7 @@ func Example_xpath3_resolver_options() {
 		return
 	}
 
-	compiled, err := xpath3.Compile(`upper-case(unparsed-text($file))`)
+	compiled, err := xpath3.NewCompiler().Compile(`upper-case(unparsed-text($file))`)
 	if err != nil {
 		fmt.Printf("compile error: %s\n", err)
 		return

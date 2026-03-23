@@ -3,8 +3,6 @@ package examples_test
 import (
 	"context"
 	"fmt"
-
-	"github.com/lestrrat-go/helium/xslt3"
 )
 
 func Example_xslt3_transform_with_message_handler() {
@@ -42,18 +40,16 @@ func Example_xslt3_transform_with_message_handler() {
 		return
 	}
 
-	// Attach a message handler to the transform context to capture xsl:message
+	// Attach a message receiver to the invocation to capture xsl:message
 	// output during execution. This is the place to connect logging, progress
 	// reporting, or application-specific diagnostics.
 	//
-	// Gotcha: the handler is notified when xsl:message runs, but terminate="yes"
-	// still causes Transform to return an error afterward. The terminate flag
+	// Gotcha: the receiver is notified when xsl:message runs, but terminate="yes"
+	// still causes Do to return an error afterward. The terminate flag
 	// tells you whether the message was informational or fatal.
-	ctx = xslt3.WithMessageHandler(ctx, xslt3.MessageHandlerFunc(func(msg string, terminate bool) {
-		fmt.Printf("message: %s (terminate=%t)\n", msg, terminate)
-	}))
-
-	resultDoc, err := xslt3.Transform(ctx, sourceDoc, stylesheet)
+	resultDoc, err := stylesheet.Transform(sourceDoc).
+		Receiver(&exampleMessageReceiver{}).
+		Do(ctx)
 	if err != nil {
 		fmt.Printf("transform failed: %s\n", err)
 		return

@@ -80,7 +80,7 @@ func newBenchSortEnv(b *testing.B, n int, sortKeys []*SortKey) *benchSortEnv {
 
 func mustCompileSortXPath(b *testing.B, expr string) *xpath3.Expression {
 	b.Helper()
-	e, err := xpath3.Compile(expr)
+	e, err := xpath3.NewCompiler().Compile(expr)
 	if err != nil {
 		b.Fatalf("compiling %q: %v", expr, err)
 	}

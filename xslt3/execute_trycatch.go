@@ -16,7 +16,7 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 	var value string
 	var bodySeq xpath3.ItemSlice
 	if inst.Select != nil {
-		result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(inst.Select, ec.contextNode)
 		if err != nil {
 			// Errors evaluating message content are recoverable
 			value = err.Error()
@@ -68,8 +68,10 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 		}
 	}
 
-	if ec.msgHandler != nil {
-		ec.msgHandler.HandleMessage(value, terminate)
+	if ec.msgReceiver != nil {
+		if err := ec.msgReceiver.HandleMessage(value, terminate); err != nil {
+			return err
+		}
 	}
 
 	if terminate {
@@ -180,7 +182,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 
 	tryErr := func() error {
 		if inst.Select != nil {
-			result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
+			result, err := ec.evalXPath(inst.Select, ec.contextNode)
 			if err != nil {
 				return err
 			}
@@ -340,7 +342,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 
 	// Execute matched catch body
 	if matchedCatch.Select != nil {
-		result, err := ec.evalXPath(nil, matchedCatch.Select, ec.contextNode)
+		result, err := ec.evalXPath(matchedCatch.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}
@@ -361,7 +363,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *TryCatc
 
 	tryErr := func() error {
 		if inst.Select != nil {
-			result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
+			result, err := ec.evalXPath(inst.Select, ec.contextNode)
 			if err != nil {
 				return err
 			}

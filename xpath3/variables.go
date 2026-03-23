@@ -1,7 +1,5 @@
 package xpath3
 
-import "maps"
-
 // Variables holds named XPath variable bindings keyed by expanded name string.
 // It is a mutable collection: callers build it up, then pass it to an Evaluator.
 // The Evaluator clones it at terminal method time.
@@ -75,13 +73,4 @@ func (v *Variables) toMap() map[string]Sequence {
 		return nil
 	}
 	return v.values
-}
-
-// cloneFlatMap returns a shallow clone of the underlying map suitable for
-// building a variableScope. For internal use.
-func (v *Variables) cloneFlatMap() map[string]Sequence {
-	if v == nil {
-		return nil
-	}
-	return maps.Clone(v.values)
 }

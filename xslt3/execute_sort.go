@@ -11,7 +11,7 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortIns
 	var seq xpath3.Sequence
 
 	if inst.Select != nil {
-		result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(inst.Select, ec.contextNode)
 		if err != nil {
 			return err
 		}

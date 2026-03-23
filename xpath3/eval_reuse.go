@@ -14,9 +14,6 @@ import (
 // The returned Result from EvaluateReuse is only valid until the next
 // EvaluateReuse call on the same EvalState — the result's backing
 // storage may be overwritten.
-//
-// Deprecated: EvalState is an internal optimization and will be unexported
-// in a future release. Use Evaluator.Evaluate for the public API.
 type EvalState struct {
 	ec      evalContext
 	oneItem [1]Item // reusable backing for single-item results
@@ -45,9 +42,6 @@ func (s *EvalState) SetSize(size int) { s.ec.size = size }
 // The returned Result is only valid until the next EvaluateReuse call
 // on the same EvalState. Callers must extract all needed values from
 // the Result before calling EvaluateReuse again.
-//
-// Deprecated: EvaluateReuse is an internal optimization and will be unexported
-// in a future release. Use Evaluator.Evaluate for the public API.
 func (e *Expression) EvaluateReuse(state *EvalState, node helium.Node) (Result, error) {
 	ec := &state.ec
 	ec.node = node

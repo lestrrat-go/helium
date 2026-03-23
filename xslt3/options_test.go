@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +31,7 @@ func parseTransformSource(t *testing.T) *helium.Document {
 	return doc
 }
 
-func TestWithInitialTemplatePreservesParameters(t *testing.T) {
+func TestCallTemplatePreservesParameters(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:param name="x" select="'default-x'"/>
@@ -43,15 +44,15 @@ func TestWithInitialTemplatePreservesParameters(t *testing.T) {
 </xsl:stylesheet>`)
 
 	source := parseTransformSource(t)
-	ctx := xslt3.WithParameter(t.Context(), "x", "one")
-	ctx = xslt3.WithInitialTemplate(ctx, "t")
-
-	result, err := xslt3.TransformString(ctx, source, ss)
+	result, err := ss.CallTemplate("t").
+		SourceDocument(source).
+		SetParameter("x", xpath3.SingleString("one")).
+		Serialize(t.Context())
 	require.NoError(t, err)
 	require.Contains(t, result, "<out>one</out>")
 }
 
-func TestDerivedContextUsesCopyOnWriteParameters(t *testing.T) {
+func TestInvocationCopyOnWriteParameters(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:param name="x" select="'default-x'"/>
@@ -62,14 +63,14 @@ func TestDerivedContextUsesCopyOnWriteParameters(t *testing.T) {
 </xsl:stylesheet>`)
 
 	source := parseTransformSource(t)
-	base := xslt3.WithParameter(t.Context(), "x", "one")
-	derived := xslt3.WithParameter(base, "y", "two")
+	base := ss.Transform(source).SetParameter("x", xpath3.SingleString("one"))
+	derived := base.SetParameter("y", xpath3.SingleString("two"))
 
-	baseResult, err := xslt3.TransformString(base, source, ss)
+	baseResult, err := base.Serialize(t.Context())
 	require.NoError(t, err)
 	require.True(t, strings.Contains(baseResult, "<out>one|default-y</out>"), baseResult)
 
-	derivedResult, err := xslt3.TransformString(derived, source, ss)
+	derivedResult, err := derived.Serialize(t.Context())
 	require.NoError(t, err)
 	require.True(t, strings.Contains(derivedResult, "<out>one|two</out>"), derivedResult)
 }

@@ -205,7 +205,7 @@ func (a *AVT) evaluate(ctx context.Context, node helium.Node) (string, error) {
 			var result *xpath3.Result
 			var err error
 			if ec != nil {
-				result, err = ec.evalXPath(nil, p.expr, node)
+				result, err = ec.evalXPath(p.expr, node)
 			} else {
 				result, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(ctx, p.expr, node)
 			}

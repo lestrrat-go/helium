@@ -15,7 +15,7 @@ func (ec *execContext) execVariable(ctx context.Context, inst *VariableInst) err
 	var evalErr error
 
 	if inst.Select != nil {
-		result, err := ec.evalXPath(nil, inst.Select, ec.contextNode)
+		result, err := ec.evalXPath(inst.Select, ec.contextNode)
 		if err != nil {
 			// XSLT 3.0 §9.5: circular references are only errors when
 			// the variable is actually used. Defer the error so that

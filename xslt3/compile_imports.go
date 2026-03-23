@@ -278,7 +278,7 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 			name := getAttr(elem, "name")
 			sel := getAttr(elem, "select")
 			if name != "" && sel != "" {
-				compiled, err := xpath3.Compile(sel)
+				compiled, err := xpath3.NewCompiler().Compile(sel)
 				if err == nil {
 					eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 					if len(c.staticVars) > 0 {
