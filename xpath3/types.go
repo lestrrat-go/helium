@@ -951,6 +951,21 @@ func atomizedTypeForAnnotation(annotation string, decls SchemaDeclarations) stri
 		return ""
 	}
 
+	// Check if this is a union type — if so, return the annotation itself
+	// so that AtomizeItem can try member types via the SchemaDeclarations.
+	members := decls.UnionMemberTypes(annotation)
+	if len(members) > 0 {
+		// For union types, find the first member type that resolves to a
+		// concrete built-in type — this will be used for atomization.
+		for _, m := range members {
+			mType := atomizedTypeForAnnotation(m, decls)
+			if mType != "" && mType != TypeAnySimpleType && mType != TypeAnyAtomicType {
+				return mType
+			}
+		}
+		return ""
+	}
+
 	current := annotation
 	for i := 0; i < 32; i++ {
 		local, ns, ok := schemaAnnotationParts(current)
@@ -963,6 +978,12 @@ func atomizedTypeForAnnotation(annotation string, decls SchemaDeclarations) stri
 		}
 		switch baseType {
 		case TypeUntypedAtomic, TypeUntyped:
+			return ""
+		}
+		// xs:anySimpleType is not a useful atomized type — it means we
+		// reached the top of the simple type hierarchy without finding a
+		// concrete type (e.g. for union types). Return empty.
+		if baseType == TypeAnySimpleType || baseType == TypeAnyAtomicType {
 			return ""
 		}
 		if IsKnownXSDType(baseType) {

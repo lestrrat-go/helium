@@ -37,9 +37,10 @@ func WithCompileErrorHandler(h helium.ErrorHandler) CompileOption {
 type ValidateOption func(*validateConfig)
 
 type validateConfig struct {
-	filename     string
-	errorHandler helium.ErrorHandler
-	annotations  *TypeAnnotations
+	filename       string
+	errorHandler   helium.ErrorHandler
+	annotations    *TypeAnnotations
+	nilledElements *NilledElements
 }
 
 // WithFilename sets the filename used in error messages.
@@ -67,5 +68,18 @@ type TypeAnnotations map[helium.Node]string
 func WithAnnotations(ann *TypeAnnotations) ValidateOption {
 	return func(c *validateConfig) {
 		c.annotations = ann
+	}
+}
+
+// NilledElements tracks elements whose xsi:nil="true" was confirmed valid
+// during schema validation (i.e. the element declaration is nillable).
+type NilledElements map[*helium.Element]struct{}
+
+// WithNilledElements enables collection of nilled element information during
+// validation. The caller must provide a non-nil pointer to a NilledElements
+// value; the map is populated during validation.
+func WithNilledElements(ne *NilledElements) ValidateOption {
+	return func(c *validateConfig) {
+		c.nilledElements = ne
 	}
 }

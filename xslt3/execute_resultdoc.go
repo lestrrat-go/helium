@@ -82,14 +82,14 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 			}
 		}
 		if ec.schemaRegistry != nil {
-			ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+			vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
 			if valErr != nil && v == validationStrict {
 				return dynamicError(errCodeXTTE1510, "validation of document node failed: %v", valErr)
 			}
 			if valErr == nil && v == validationStrict {
 				// XTTE1510: strict validation requires a matching schema.
 				// If no annotations were produced, no schema matched.
-				if len(ann) == 0 {
+				if len(vr.Annotations) == 0 {
 					root := findDocumentElement(tmpDoc)
 					rootNS := ""
 					if root != nil {
@@ -99,12 +99,15 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 						"no matching schema declaration for document element in namespace %q", rootNS)
 				}
 				// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
-				if err := ValidateDocIDConstraints(tmpDoc, ann); err != nil {
+				if err := ValidateDocIDConstraints(tmpDoc, vr.Annotations); err != nil {
 					return err
 				}
 			}
-			for node, typeName := range ann {
+			for node, typeName := range vr.Annotations {
 				ec.annotateNode(node, typeName)
+			}
+			for elem := range vr.NilledElements {
+				ec.markNilled(elem)
 			}
 		}
 	}
@@ -411,18 +414,21 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 				}
 			}
 			if ec.schemaRegistry != nil {
-				ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+				vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
 				if valErr != nil && v == validationStrict {
 					return dynamicError(errCodeXTTE1540, "validation of primary result document failed: %v", valErr)
 				}
 				if valErr == nil && v == validationStrict {
 					// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
-					if err := ValidateDocIDConstraints(tmpDoc, ann); err != nil {
+					if err := ValidateDocIDConstraints(tmpDoc, vr.Annotations); err != nil {
 						return err
 					}
 				}
-				for node, typeName := range ann {
+				for node, typeName := range vr.Annotations {
 					ec.annotateNode(node, typeName)
+				}
+				for elem := range vr.NilledElements {
+					ec.markNilled(elem)
 				}
 			}
 			// Copy validated children into the primary output.
@@ -617,13 +623,13 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 			}
 		}
 		if ec.schemaRegistry != nil {
-			ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+			vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
 			if valErr != nil && v == validationStrict {
 				return dynamicError(errCodeXTTE1510, "validation of result document failed: %v", valErr)
 			}
 			if valErr == nil && v == validationStrict {
 				// Check that the root element has a matching schema declaration.
-				if len(ann) == 0 {
+				if len(vr.Annotations) == 0 {
 					root := findDocumentElement(tmpDoc)
 					if root != nil {
 						rootLocal := root.LocalName()
@@ -635,12 +641,15 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 					}
 				}
 				// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
-				if err := ValidateDocIDConstraints(tmpDoc, ann); err != nil {
+				if err := ValidateDocIDConstraints(tmpDoc, vr.Annotations); err != nil {
 					return err
 				}
 			}
-			for node, typeName := range ann {
+			for node, typeName := range vr.Annotations {
 				ec.annotateNode(node, typeName)
+			}
+			for elem := range vr.NilledElements {
+				ec.markNilled(elem)
 			}
 		}
 	} else if inst.Validation == validationStrip {

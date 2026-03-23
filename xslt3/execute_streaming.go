@@ -61,7 +61,7 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 
 	// Apply schema validation when validation="strict"|"lax" or type is specified.
 	if ec.schemaRegistry != nil && (inst.Validation == validationStrict || inst.Validation == validationLax || inst.TypeName != "") {
-		ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, doc)
+		vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, doc)
 		if valErr != nil {
 			if inst.TypeName != "" {
 				return dynamicError(errCodeXTTE1540,
@@ -72,8 +72,11 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 					"source-document: strict validation failed: %v", valErr)
 			}
 		}
-		for node, typeName := range ann {
+		for node, typeName := range vr.Annotations {
 			ec.annotateNode(node, typeName)
+		}
+		for elem := range vr.NilledElements {
+			ec.markNilled(elem)
 		}
 	}
 

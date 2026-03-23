@@ -13,6 +13,7 @@ import (
 
 	"github.com/dlclark/regexp2"
 	"github.com/lestrrat-go/helium"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"golang.org/x/text/unicode/norm"
@@ -69,6 +70,12 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 	switch item.(type) {
 	case FunctionItem, MapItem, ArrayItem:
 		return nil, &XPathError{Code: errCodeFOTY0014, Message: fmt.Sprintf("fn:string: cannot get string value of %T", item)}
+	}
+	// For node items, fn:string returns the dm:string-value (text content),
+	// NOT the typed/atomized value. This preserves lexical forms like "003"
+	// even when the node is typed as xs:integer.
+	if ni, ok := item.(NodeItem); ok {
+		return SingleString(ixpath.StringValue(ni.Node)), nil
 	}
 	a, err := AtomizeItem(item)
 	if err != nil {

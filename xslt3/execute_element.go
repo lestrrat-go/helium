@@ -357,7 +357,8 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 		if err := tmpDoc.AddChild(copied); err != nil {
 			return err
 		}
-		ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+		vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+		ann := vr.Annotations
 		if valErr != nil {
 			switch validation {
 			case validationStrict:
@@ -400,6 +401,9 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 					}
 				}
 			}
+		}
+		for elem := range vr.NilledElements {
+			ec.markNilled(elem)
 		}
 		// Merge type annotations for the actual (non-copy) element by walking
 		// the temp tree and live tree in parallel.
@@ -462,7 +466,8 @@ func (ec *execContext) validateConstructedElementWithIDCheck(ctx context.Context
 		if err := tmpDoc.AddChild(copied); err != nil {
 			return err
 		}
-		ann, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+		vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+		ann := vr.Annotations
 		if valErr != nil {
 			switch validation {
 			case validationStrict:
@@ -494,12 +499,14 @@ func (ec *execContext) validateConstructedElementWithIDCheck(ctx context.Context
 				}
 			}
 		}
+		for nElem := range vr.NilledElements {
+			ec.markNilled(nElem)
+		}
 		// NOTE: xs:ID uniqueness and xs:IDREF resolution (XTTE1555) are NOT
 		// checked here. Partial validation of a subtree (e.g., copy-of of a
 		// single element) cannot resolve IDREFs that reference IDs elsewhere
 		// in the source document. XTTE1555 is enforced at the result-document
 		// level instead (see execute_resultdoc.go).
-
 		// Merge type annotations back to the live element.
 		if len(ann) > 0 {
 			ec.mapAnnotationsFromValidation(ann, copied, elem)

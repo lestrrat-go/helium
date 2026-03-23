@@ -19,6 +19,10 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	if cfg.annotations != nil && *cfg.annotations == nil {
 		*cfg.annotations = make(TypeAnnotations)
 	}
+	// Initialize nilled elements map if requested.
+	if cfg.nilledElements != nil && *cfg.nilledElements == nil {
+		*cfg.nilledElements = make(NilledElements)
+	}
 
 	root := findDocumentElement(doc)
 	if root == nil {
@@ -514,6 +518,11 @@ func (vc *validationContext) validateNilledElement(elem *helium.Element, edecl *
 		vc.out.WriteString(validityError(vc.filename, elem.Line(), dn,
 			"Element is not nillable."))
 		return fmt.Errorf("element not nillable")
+	}
+
+	// Record the element as nilled for PSVI consumers (e.g. fn:nilled()).
+	if vc.cfg != nil && vc.cfg.nilledElements != nil {
+		(*vc.cfg.nilledElements)[elem] = struct{}{}
 	}
 
 	// Validate attributes even for nilled elements.

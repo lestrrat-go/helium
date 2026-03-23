@@ -574,10 +574,16 @@ func (r *schemaRegistry) IsComplexType(typeName string) bool {
 // ValidateDoc validates a document against the imported schemas and returns
 // per-node type annotations. If no schema matches the document's root element,
 // empty annotations are returned (lax behavior).
-func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) (xsd.TypeAnnotations, error) {
+// ValidateDocResult holds the results of schema-validating a document.
+type ValidateDocResult struct {
+	Annotations    xsd.TypeAnnotations
+	NilledElements xsd.NilledElements
+}
+
+func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) (ValidateDocResult, error) {
 	root := findDocumentElement(doc)
 	if root == nil {
-		return nil, nil
+		return ValidateDocResult{}, nil
 	}
 
 	rootNS := root.URI()
@@ -586,11 +592,9 @@ func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) 
 	for _, s := range r.schemas {
 		if s.TargetNamespace() == rootNS {
 			var ann xsd.TypeAnnotations
-			err := xsd.Validate(ctx, doc, s, xsd.WithAnnotations(&ann))
-			if err != nil {
-				return ann, err
-			}
-			return ann, nil
+			var nilled xsd.NilledElements
+			err := xsd.Validate(ctx, doc, s, xsd.WithAnnotations(&ann), xsd.WithNilledElements(&nilled))
+			return ValidateDocResult{Annotations: ann, NilledElements: nilled}, err
 		}
 	}
 
@@ -601,17 +605,15 @@ func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) 
 		for _, s := range r.schemas {
 			if s.TargetNamespace() == "" {
 				var ann xsd.TypeAnnotations
-				err := xsd.Validate(ctx, doc, s, xsd.WithAnnotations(&ann))
-				if err != nil {
-					return ann, err
-				}
-				return ann, nil
+				var nilled xsd.NilledElements
+				err := xsd.Validate(ctx, doc, s, xsd.WithAnnotations(&ann), xsd.WithNilledElements(&nilled))
+				return ValidateDocResult{Annotations: ann, NilledElements: nilled}, err
 			}
 		}
 	}
 
 	// No matching schema — return empty annotations.
-	return nil, nil
+	return ValidateDocResult{}, nil
 }
 
 // findDocumentElement returns the root element of a document, or nil.
