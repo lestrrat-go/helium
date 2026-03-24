@@ -195,7 +195,19 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	// Initial function invocation (XSLT 3.0 §2.4)
 	if cfg != nil && cfg.initialFunction != "" {
 		cfg.resolvedOutputDef = cloneOutputDef(ss.outputs[""])
-		return ec.invokeInitialFunction(ctx, cfg)
+		doc, err := ec.invokeInitialFunction(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		// Collect captured items for raw delivery format.
+		out := ec.currentOutput()
+		if out != nil && len(out.pendingItems) > 0 {
+			if cfg.rawCapture {
+				cfg.rawCapturedItems = out.pendingItems
+			}
+			cfg.primaryItems = out.pendingItems
+		}
+		return doc, nil
 	}
 
 	// Either call the initial-template or apply templates to the document root

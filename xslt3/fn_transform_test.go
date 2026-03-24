@@ -167,11 +167,7 @@ func TestFnTransformTunnelParams(t *testing.T) {
 // TestFnTransformInitialFunction verifies that initial-function and
 // function-params passed through fn:transform() invoke the correct
 // xsl:function and return its result.
-// BUG: getStr("initial-function") loses the namespace URI from QName values;
-// the lookup expects Clark notation {uri}local but AtomicToString returns
-// only the local name.
 func TestFnTransformInitialFunction(t *testing.T) {
-	t.Skip("initial-function QName loses namespace URI in fn:transform")
 	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"

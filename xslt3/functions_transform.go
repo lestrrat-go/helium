@@ -266,6 +266,34 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		return s
 	}
 
+	// getQNameStr extracts a string option that may be a QName value.
+	// Unlike getStr, it preserves the namespace URI by producing Clark
+	// notation {uri}local when the value is xs:QName.
+	getQNameStr := func(key string) string {
+		k := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: key}
+		seq, ok := m.Get(k)
+		if !ok || seq == nil || sequence.Len(seq) == 0 {
+			return ""
+		}
+		av, err := xpath3.AtomizeItem(seq.Get(0))
+		if err != nil {
+			return ""
+		}
+		if av.TypeName == xpath3.TypeQName {
+			if qv, ok := av.Value.(xpath3.QNameValue); ok {
+				if qv.URI != "" {
+					return "{" + qv.URI + "}" + qv.Local
+				}
+				return qv.Local
+			}
+		}
+		s, err := xpath3.AtomicToString(av)
+		if err != nil {
+			return ""
+		}
+		return s
+	}
+
 	getSeq := func(key string) xpath3.Sequence {
 		k := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: key}
 		seq, ok := m.Get(k)
@@ -282,7 +310,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	packageVersion := getStr("package-version")
 	initialTemplate := getStr("initial-template")
 	initialMode := getStr("initial-mode")
-	initialFunction := getStr("initial-function")
+	initialFunction := getQNameStr("initial-function")
 	deliveryFormat := getStr("delivery-format")
 	baseOutputURI := getStr("base-output-uri")
 	initialMatchSel := getSeq("initial-match-selection")
