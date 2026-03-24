@@ -2,7 +2,6 @@ package xslt3
 
 import (
 	"context"
-	"reflect"
 	"strconv"
 	"strings"
 
@@ -485,8 +484,37 @@ func isNilNode(n helium.Node) bool {
 		return true
 	}
 	// Guard against typed-nil interface values (e.g. (*Document)(nil)).
-	v := reflect.ValueOf(n)
-	return v.Kind() == reflect.Ptr && v.IsNil()
+	// helium.Node is a sealed interface; all implementations are pointer types.
+	switch v := n.(type) {
+	case *helium.Document:
+		return v == nil
+	case *helium.Element:
+		return v == nil
+	case *helium.Text:
+		return v == nil
+	case *helium.Comment:
+		return v == nil
+	case *helium.ProcessingInstruction:
+		return v == nil
+	case *helium.Attribute:
+		return v == nil
+	case *helium.DTD:
+		return v == nil
+	case *helium.EntityRef:
+		return v == nil
+	case *helium.NamespaceNodeWrapper:
+		return v == nil
+	case *helium.XIncludeMarker:
+		return v == nil
+	case *helium.Notation:
+		return v == nil
+	case *helium.AttributeDecl:
+		return v == nil
+	case *helium.ElementDecl:
+		return v == nil
+	default:
+		return false
+	}
 }
 
 func (ec *execContext) ensureAccumulatorStates(ctx context.Context, node helium.Node) error {
