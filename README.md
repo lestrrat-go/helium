@@ -6,7 +6,7 @@
 ** WARNING: THIS SOFTWARE SHOULD BE CONSIDERED ALPHA. ALL API STILL SUBJECT TO CHANGE **
 
 Helium is an XML toolkit for Go covering XML parsing, SAX2-style streaming,
-XPath 3.1, XInclude, XSD, Relax NG, and Schematron.
+XPath 3.1, XSLT 3.0, XInclude, XSD, Relax NG, and Schematron.
 
 It started as an effort to port libxml2-style capabilities to Go, but grew
 new features and broader native Go APIs along the way. The goal is to provide
@@ -264,6 +264,71 @@ func Example_xpath3_find() {
 }
 ```
 source: [examples/xpath3_find_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xpath3_find_example_test.go)
+<!-- END INCLUDE -->
+
+# XSLT 3.0
+
+The `xslt3` package compiles XSLT 3.0 stylesheets and applies them to helium
+documents. It targets Basic XSLT 3.0 conformance and uses the `xpath3`
+evaluator for XPath 3.1 expressions, functions, maps, arrays, and other
+language features used inside stylesheets.
+
+<!-- INCLUDE(examples/xslt3_transform_string_example_test.go) -->
+```go
+package examples_test
+
+import (
+  "context"
+  "fmt"
+
+  "github.com/lestrrat-go/helium"
+  "github.com/lestrrat-go/helium/xslt3"
+)
+
+func Example_xslt3_transform_string() {
+  const stylesheetSrc = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <greeting>Hello, <xsl:value-of select="person/@name"/>!</greeting>
+  </xsl:template>
+</xsl:stylesheet>`
+
+  const sourceSrc = `<person name="World"/>`
+
+  ctx := context.Background()
+
+  stylesheetDoc, err := helium.Parse(ctx, []byte(stylesheetSrc))
+  if err != nil {
+    fmt.Printf("parse stylesheet error: %s\n", err)
+    return
+  }
+
+  stylesheet, err := xslt3.CompileStylesheet(ctx, stylesheetDoc)
+  if err != nil {
+    fmt.Printf("compile error: %s\n", err)
+    return
+  }
+
+  sourceDoc, err := helium.Parse(ctx, []byte(sourceSrc))
+  if err != nil {
+    fmt.Printf("parse error: %s\n", err)
+    return
+  }
+
+  // TransformString is a convenience that compiles+transforms+serializes
+  // in one call, returning the result as a string.
+  result, err := xslt3.TransformString(ctx, sourceDoc, stylesheet)
+  if err != nil {
+    fmt.Printf("transform error: %s\n", err)
+    return
+  }
+
+  fmt.Println(result)
+  // Output:
+  // <?xml version="1.0" encoding="UTF-8"?><greeting>Hello, World!</greeting>
+}
+```
+source: [examples/xslt3_transform_string_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xslt3_transform_string_example_test.go)
 <!-- END INCLUDE -->
 
 # XInclude
@@ -576,8 +641,9 @@ Use `helium lint` in place of the old `heliumlint` command.
 
 # Current status
 
-* Core functionality is implemented: XML/HTML parsing, DOM building, SAX2, XPath, XInclude, C14N, RelaxNG, Schematron, XSD, and `encoding/xml` compatibility (`shim` package).
+* Core functionality is implemented: XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RelaxNG, Schematron, XSD, and `encoding/xml` compatibility (`shim` package).
 * The codebase includes broad compatibility tests and examples, and active parity work against libxml2 behavior.
+* XSLT support is intentionally scoped to Basic XSLT 3.0. Backwards compatibility modes for XSLT 1.0/2.0 are not part of the target feature set.
 * Some edge cases and parity gaps are still being iterated on; contributions and issue reports are welcome.
 
 # encoding/xml Compatibility

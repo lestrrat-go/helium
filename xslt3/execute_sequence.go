@@ -210,11 +210,19 @@ func (ec *execContext) execText(inst *textInst) error {
 		if err != nil {
 			return err
 		}
-		// For TVTs that evaluate to empty, skip the text node but
-		// break atomic adjacency chains, consistent with static
-		// empty xsl:text behaviour.
+		// For TVTs that evaluate to empty, in sequenceMode create a
+		// zero-length text node (needed for function return values
+		// that use text nodes to break atomic adjacency). Outside
+		// sequenceMode, just break atomic adjacency chains.
 		if value == "" {
 			out := ec.currentOutput()
+			if out.sequenceMode {
+				text, tErr := ec.resultDoc.CreateText(nil)
+				if tErr != nil {
+					return tErr
+				}
+				return ec.addNode(text)
+			}
 			if !out.wherePopulated {
 				out.prevWasAtomic = false
 			}
@@ -291,6 +299,23 @@ func (ec *execContext) execLiteralText(inst *literalTextInst) error {
 		}
 	}
 	if value == "" {
+		// Empty literal text breaks the atomic adjacency chain,
+		// preventing inter-atomic space insertion (XSLT 3.0 §5.7.2).
+		// In sequenceMode, create a zero-length text node (needed for
+		// function return values that use text boundaries to break
+		// atomic adjacency in the caller). Outside sequenceMode, just
+		// break adjacency.
+		out := ec.currentOutput()
+		if out.sequenceMode {
+			text, tErr := ec.resultDoc.CreateText(nil)
+			if tErr != nil {
+				return tErr
+			}
+			return ec.addNode(text)
+		}
+		if !out.wherePopulated {
+			out.prevWasAtomic = false
+		}
 		return nil
 	}
 	text, err := ec.resultDoc.CreateText([]byte(value))
