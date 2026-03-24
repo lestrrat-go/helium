@@ -1084,12 +1084,6 @@ func (ec *execContext) effectiveStylesheet() *Stylesheet {
 // (variables, position, size, context item, collation, doc-order cache).
 func (ec *execContext) xpathEvaluator() xpath3.Evaluator {
 	vars := ec.collectAllVars()
-	// When executing in a used package, remove variables from the map
-	// that are overridden in the package so they fall through to
-	// ResolveVariable which handles package-scoped isolation.
-	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
-		vars = ec.filterPackageShadowedVars(vars)
-	}
 	eval := ec.baseXPathEvaluator().
 		Variables(xpath3.VariablesFromMap(vars)).
 		Functions(xpath3.FunctionLibraryFromMaps(ec.xsltFunctions(), ec.xsltFunctionsNS()))
@@ -1216,52 +1210,28 @@ func (ec *execContext) evaluatePackageVar(v *variable) (xpath3.Sequence, error) 
 	if val, ok := ec.packageVarCache[v]; ok {
 		return val, nil
 	}
+	// Save the current value in globalVars (if any) so that evaluating
+	// this package variable doesn't overwrite an override from the main
+	// stylesheet.
+	savedVal, hadSaved := ec.globalVars[v.Name]
 	val, err := ec.evaluateGlobalVar(v)
 	if err != nil {
+		// Restore on error
+		if hadSaved {
+			ec.globalVars[v.Name] = savedVal
+		} else {
+			delete(ec.globalVars, v.Name)
+		}
 		return nil, err
+	}
+	// Restore the original globalVars entry
+	if hadSaved {
+		ec.globalVars[v.Name] = savedVal
+	} else {
+		delete(ec.globalVars, v.Name)
 	}
 	ec.packageVarCache[v] = val
 	return val, nil
-}
-
-// filterPackageShadowedVars returns a copy of the vars map with any
-// variables that are defined in the current package removed, so they
-// fall through to ResolveVariable for package-scoped resolution.
-func (ec *execContext) filterPackageShadowedVars(base map[string]xpath3.Sequence) map[string]xpath3.Sequence {
-	pkgVarNames := collectPackageVarNames(ec.currentPackage, nil)
-	if len(pkgVarNames) == 0 {
-		return base
-	}
-	vars := make(map[string]xpath3.Sequence, len(base))
-	for k, v := range base {
-		if _, shadowed := pkgVarNames[k]; shadowed {
-			continue // let ResolveVariable handle this
-		}
-		vars[k] = v
-	}
-	return vars
-}
-
-// collectPackageVarNames collects the names of all global variables
-// defined in a package and its used packages recursively.
-func collectPackageVarNames(pkg *Stylesheet, visited map[*Stylesheet]struct{}) map[string]struct{} {
-	if visited == nil {
-		visited = make(map[*Stylesheet]struct{})
-	}
-	if _, seen := visited[pkg]; seen {
-		return nil
-	}
-	visited[pkg] = struct{}{}
-	names := make(map[string]struct{})
-	for _, v := range pkg.globalVars {
-		names[v.Name] = struct{}{}
-	}
-	for _, sub := range pkg.usedPackages {
-		for k := range collectPackageVarNames(sub, visited) {
-			names[k] = struct{}{}
-		}
-	}
-	return names
 }
 
 // ResolveFunction implements xpath3.FunctionResolver. It resolves
@@ -1301,27 +1271,43 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 		}
 	}
 
-	// When executing in a used package, check the package's own variables
-	// first (package-scoped isolation). This ensures that when two
-	// packages define the same variable with different override values,
-	// each package sees its own version.
-	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
-		if v := findPackageVar(ec.currentPackage, expandedName, nil); v != nil {
-			val, err := ec.evaluatePackageVar(v)
-			if err != nil {
-				return nil, false, err
-			}
-			return val, true, nil
-		}
-	}
-
-	// Check if the variable is already evaluated as a global
+	// Check if the variable is already evaluated as a global.
+	// When executing in a used package, the package may define its own
+	// version of a variable that also exists in the main stylesheet.
+	// In that case, the package's version takes precedence (unless the
+	// main stylesheet has an override, which is already in globalVars).
 	lookupNames := []string{name}
 	if expandedName != name {
 		lookupNames = append(lookupNames, expandedName)
 	}
 	for _, n := range lookupNames {
 		if v, ok := ec.globalVars[n]; ok {
+			// When executing in a used package, check if the package has
+			// its own definition of this variable. If the package's variable
+			// is a different object from what was merged into globalVars,
+			// it means the package has its own value (e.g. a private
+			// override). Use the package's version in that case.
+			if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+				if pkgVar := findPackageVar(ec.currentPackage, n, nil); pkgVar != nil {
+					// Check if the package's variable definition was the
+					// source of the value in globalVars. Walk the main
+					// stylesheet's globalVars defs to find the matching def.
+					isFromMainSS := false
+					for _, mainVar := range ec.stylesheet.globalVars {
+						if mainVar.Name == n && mainVar == pkgVar {
+							isFromMainSS = true
+							break
+						}
+					}
+					if !isFromMainSS {
+						val, err := ec.evaluatePackageVar(pkgVar)
+						if err != nil {
+							return nil, false, err
+						}
+						return val, true, nil
+					}
+				}
+			}
 			return v, true, nil
 		}
 	}
@@ -1350,6 +1336,19 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	for _, n := range lookupNames {
 		if def, ok := ec.globalParamDefs[n]; ok {
 			val, err := ec.evaluateGlobalParam(def)
+			if err != nil {
+				return nil, false, err
+			}
+			return val, true, nil
+		}
+	}
+	// When executing in a used package, check the package's own variables
+	// as a fallback (package-scoped isolation). Variables that are private
+	// within the package chain may not be in the main stylesheet's
+	// globalVars but are accessible to package code.
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		if v := findPackageVar(ec.currentPackage, expandedName, nil); v != nil {
+			val, err := ec.evaluatePackageVar(v)
 			if err != nil {
 				return nil, false, err
 			}

@@ -1330,6 +1330,9 @@ var w3cImplicitSkips = map[string]string{
 	"package-022err": "XTSE3050 package xsl:override static check not implemented",
 	"package-101":    "package cross-reference variable resolution not implemented",
 
+	// use-package: package template override precedence
+	"use-package-176": "package template override precedence with versioned packages incorrect",
+
 	// use-package: character map namespace serialization in package context
 	"use-package-108":  "package-scoped character map with namespace serialization not fully implemented",
 	"use-package-108b": "package-scoped character map with namespace serialization not fully implemented",
