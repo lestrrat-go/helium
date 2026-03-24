@@ -78,7 +78,7 @@ type execContext struct {
 	errSourceLine                int                        // source line of last-executed instruction (for xsl:catch)
 	errSourceModule              string                     // source module of last-executed instruction (for xsl:catch)
 	msgHandler                   MessageHandler
-	transformCfg                 *transformConfig
+	transformConfig                 *transformConfig
 	transformCtx                 context.Context             // parent context from Transform caller (for cancellation/deadlines)
 	currentTime                  time.Time                   // stable fn:current-* value for whole transformation
 	schemaRegistry               *schemaRegistry             // merged schema registry for schema-aware processing
@@ -860,14 +860,14 @@ func collectPackageNamespaces(ss *Stylesheet, ns map[string]string) {
 }
 
 func (ec *execContext) collectionResolver() xpath3.CollectionResolver {
-	if ec.transformCfg == nil || ec.transformCfg.collectionResolver == nil {
+	if ec.transformConfig == nil || ec.transformConfig.collectionResolver == nil {
 		return nil
 	}
 	if len(ec.stylesheet.stripSpace) == 0 && len(ec.stylesheet.preserveSpace) == 0 {
-		return ec.transformCfg.collectionResolver
+		return ec.transformConfig.collectionResolver
 	}
 	return strippingCollectionResolver{
-		base: ec.transformCfg.collectionResolver,
+		base: ec.transformConfig.collectionResolver,
 		ec:   ec,
 	}
 }

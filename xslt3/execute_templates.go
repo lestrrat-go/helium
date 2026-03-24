@@ -172,8 +172,8 @@ func (ec *execContext) onMultipleMatchFail(mode string) bool {
 		}
 	}
 	// Fall back to transform-time override (e.g. from W3C test dependency)
-	if ec.transformCfg != nil && ec.transformCfg.onMultipleMatch != "" {
-		return ec.transformCfg.onMultipleMatch == onNoMatchFail
+	if ec.transformConfig != nil && ec.transformConfig.onMultipleMatch != "" {
+		return ec.transformConfig.onMultipleMatch == onNoMatchFail
 	}
 	return false
 }

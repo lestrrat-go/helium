@@ -13,7 +13,7 @@ import (
 // Params with caller-provided values are set immediately; all others are
 // evaluated on first access to support arbitrary declaration order.
 func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig) error {
-	ec.transformCfg = cfg
+	ec.transformConfig = cfg
 	ec.globalVarDefs = make(map[string]*variable, len(ec.stylesheet.globalVars))
 	ec.globalParamDefs = make(map[string]*param, len(ec.stylesheet.globalParams))
 	ec.globalEvaluating = make(map[string]bool)
