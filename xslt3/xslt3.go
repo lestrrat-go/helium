@@ -25,10 +25,8 @@ func CompileStylesheet(ctx context.Context, doc *helium.Document) (*Stylesheet, 
 	return NewCompiler().Compile(ctx, doc)
 }
 
-// CompileFile parses and compiles an XSLT stylesheet from a file path.
-// This is a convenience wrapper that parses the file, sets the base URI,
-// and delegates to NewCompiler().Compile.
-func CompileFile(ctx context.Context, path string) (*Stylesheet, error) {
+// compileFile parses and compiles an XSLT stylesheet from a file path.
+func compileFile(ctx context.Context, path string) (*Stylesheet, error) {
 	absPath, absErr := filepath.Abs(path)
 	if absErr != nil {
 		absPath = path

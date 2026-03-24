@@ -273,7 +273,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 			loc = filepath.Join(filepath.Dir(ec.stylesheet.baseURI), loc)
 		}
 		var compileErr error
-		ss, compileErr = CompileFile(ctx, loc)
+		ss, compileErr = compileFile(ctx, loc)
 		if compileErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot compile stylesheet %q: %v", stylesheetLoc, compileErr)
 		}

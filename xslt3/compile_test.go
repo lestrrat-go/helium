@@ -3,7 +3,6 @@ package xslt3_test
 import (
 	"io"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -232,16 +231,3 @@ func TestCompileStylesheetConvenience(t *testing.T) {
 	require.NotNil(t, ss)
 }
 
-func TestCompileFileConvenience(t *testing.T) {
-	dir := t.TempDir()
-	path := dir + "/test.xsl"
-	require.NoError(t, os.WriteFile(path, []byte(minimalStylesheet), 0644))
-
-	ss, err := xslt3.CompileFile(t.Context(), path)
-	require.NoError(t, err)
-	require.NotNil(t, ss)
-
-	result, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
-	require.NoError(t, err)
-	require.True(t, strings.Contains(result, "<out/>") || strings.Contains(result, "<out></out>"), result)
-}
