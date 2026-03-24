@@ -311,20 +311,37 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if ec.stylesheet.baseURI != "" && !filepath.IsAbs(loc) {
 			loc = filepath.Join(filepath.Dir(ec.stylesheet.baseURI), loc)
 		}
-		absPath, absErr := filepath.Abs(loc)
-		if absErr != nil {
-			absPath = loc
+		var data []byte
+		baseURI := loc
+		if ec.stylesheet.uriResolver != nil {
+			rc, resolveErr := ec.stylesheet.uriResolver.Resolve(loc)
+			if resolveErr != nil {
+				return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot resolve stylesheet %q: %v", stylesheetLoc, resolveErr)
+			}
+			var readErr error
+			data, readErr = io.ReadAll(rc)
+			_ = rc.Close()
+			if readErr != nil {
+				return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
+			}
+		} else {
+			absPath, absErr := filepath.Abs(loc)
+			if absErr != nil {
+				absPath = loc
+			}
+			baseURI = absPath
+			var readErr error
+			data, readErr = os.ReadFile(loc)
+			if readErr != nil {
+				return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
+			}
 		}
-		data, readErr := os.ReadFile(loc)
-		if readErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
-		}
-		doc, parseErr := parseStylesheetDocument(ctx, data, absPath)
+		doc, parseErr := parseStylesheetDocument(ctx, data, baseURI)
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse stylesheet %q: %v", stylesheetLoc, parseErr)
 		}
 		var compileErr error
-		ss, compileErr = nestedCompiler.BaseURI(absPath).Compile(ctx, doc)
+		ss, compileErr = nestedCompiler.BaseURI(baseURI).Compile(ctx, doc)
 		if compileErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot compile stylesheet %q: %v", stylesheetLoc, compileErr)
 		}
