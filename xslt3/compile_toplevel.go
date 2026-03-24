@@ -238,6 +238,15 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 				return staticError(errCodeXTSE3008,
 					"xsl:use-package is not allowed in an imported stylesheet module")
 			}
+			if uw := getAttr(elem, "use-when"); uw != "" {
+				include, err := c.evaluateUseWhen(uw)
+				if err != nil {
+					return err
+				}
+				if !include {
+					continue
+				}
+			}
 			if err := c.compileUsePackage(elem); err != nil {
 				return err
 			}

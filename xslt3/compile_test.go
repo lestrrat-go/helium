@@ -111,6 +111,24 @@ func TestUsePackageWithoutResolver(t *testing.T) {
 	require.Contains(t, err.Error(), "PackageResolver")
 }
 
+func TestUsePackageExcludedByUseWhenDoesNotRequireResolver(t *testing.T) {
+	doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:param name="use-package" as="xs:boolean" static="yes" select="false()"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"/>
+  <xsl:use-package name="http://example.com/some-package" use-when="$use-package"/>
+  <xsl:template match="/"><out>ok</out></xsl:template>
+</xsl:stylesheet>`))
+	require.NoError(t, err)
+
+	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	result, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, result, "<out>ok</out>")
+}
+
 func TestCompilerStaticParameters(t *testing.T) {
 	// Static parameters affect compile-time use-when evaluation.
 	// When debug='yes', the use-when branch includes the debug template.
@@ -246,4 +264,3 @@ func TestCompileStylesheetConvenience(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, ss)
 }
-
