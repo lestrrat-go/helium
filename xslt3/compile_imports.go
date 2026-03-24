@@ -286,7 +286,7 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 			if name != "" && sel != "" {
 				compiled, err := xpath3.NewCompiler().Compile(sel)
 				if err == nil {
-					eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
+					eval := c.staticEvaluator()
 					if len(c.staticVars) > 0 {
 						eval = eval.Variables(xpath3.VariablesFromMap(c.staticVars))
 					}
