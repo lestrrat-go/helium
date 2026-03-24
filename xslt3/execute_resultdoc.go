@@ -109,7 +109,7 @@ func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) err
 						"no matching schema declaration for document element in namespace %q", rootNS)
 				}
 				// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
-				if err := ValidateDocIDConstraints(tmpDoc, vr.Annotations); err != nil {
+				if err := validateDocIDConstraints(tmpDoc, vr.Annotations); err != nil {
 					return err
 				}
 			}
@@ -434,7 +434,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 				}
 				if valErr == nil && v == validationStrict {
 					// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
-					if err := ValidateDocIDConstraints(tmpDoc, vr.Annotations); err != nil {
+					if err := validateDocIDConstraints(tmpDoc, vr.Annotations); err != nil {
 						return err
 					}
 				}
@@ -655,7 +655,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 					}
 				}
 				// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
-				if err := ValidateDocIDConstraints(tmpDoc, vr.Annotations); err != nil {
+				if err := validateDocIDConstraints(tmpDoc, vr.Annotations); err != nil {
 					return err
 				}
 			}

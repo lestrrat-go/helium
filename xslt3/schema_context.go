@@ -574,16 +574,16 @@ func (r *schemaRegistry) IsComplexType(typeName string) bool {
 // ValidateDoc validates a document against the imported schemas and returns
 // per-node type annotations. If no schema matches the document's root element,
 // empty annotations are returned (lax behavior).
-// ValidateDocResult holds the results of schema-validating a document.
-type ValidateDocResult struct {
+// validateDocResult holds the results of schema-validating a document.
+type validateDocResult struct {
 	Annotations    xsd.TypeAnnotations
 	NilledElements xsd.NilledElements
 }
 
-func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) (ValidateDocResult, error) {
+func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) (validateDocResult, error) {
 	root := findDocumentElement(doc)
 	if root == nil {
-		return ValidateDocResult{}, nil
+		return validateDocResult{}, nil
 	}
 
 	rootNS := root.URI()
@@ -594,7 +594,7 @@ func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) 
 			var ann xsd.TypeAnnotations
 			var nilled xsd.NilledElements
 			err := xsd.Validate(ctx, doc, s, xsd.WithAnnotations(&ann), xsd.WithNilledElements(&nilled))
-			return ValidateDocResult{Annotations: ann, NilledElements: nilled}, err
+			return validateDocResult{Annotations: ann, NilledElements: nilled}, err
 		}
 	}
 
@@ -607,13 +607,13 @@ func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) 
 				var ann xsd.TypeAnnotations
 				var nilled xsd.NilledElements
 				err := xsd.Validate(ctx, doc, s, xsd.WithAnnotations(&ann), xsd.WithNilledElements(&nilled))
-				return ValidateDocResult{Annotations: ann, NilledElements: nilled}, err
+				return validateDocResult{Annotations: ann, NilledElements: nilled}, err
 			}
 		}
 	}
 
 	// No matching schema — return empty annotations.
-	return ValidateDocResult{}, nil
+	return validateDocResult{}, nil
 }
 
 // findDocumentElement returns the root element of a document, or nil.
@@ -650,10 +650,10 @@ func xsdTypeNameFromDef(td *xsd.TypeDef) string {
 	return "xs:anyType"
 }
 
-// ValidateDocIDConstraints checks document-level xs:ID uniqueness and xs:IDREF
+// validateDocIDConstraints checks document-level xs:ID uniqueness and xs:IDREF
 // resolution using the type annotations from a prior ValidateDoc call. Returns
 // an error wrapping XTTE1555 if any constraint is violated.
-func ValidateDocIDConstraints(doc *helium.Document, ann xsd.TypeAnnotations) error {
+func validateDocIDConstraints(doc *helium.Document, ann xsd.TypeAnnotations) error {
 	// Collect all xs:ID and xs:IDREF values by walking the annotation map.
 	ids := make(map[string]struct{})
 	var idrefs []string

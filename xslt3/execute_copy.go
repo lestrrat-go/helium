@@ -715,7 +715,7 @@ func findPendingDocument(out *outputFrame, pendingBefore int) *helium.Document {
 func (ec *execContext) checkIDConstraintsForCopiedDoc(out *outputFrame, pendingBefore int, copiedElem *helium.Element) error {
 	// In sequence mode, the document lives in pendingItems.
 	if pendingDoc := findPendingDocument(out, pendingBefore); pendingDoc != nil {
-		return ValidateDocIDConstraints(pendingDoc, ec.collectAnnotations(pendingDoc))
+		return validateDocIDConstraints(pendingDoc, ec.collectAnnotations(pendingDoc))
 	}
 	// In non-sequence mode, copiedElem was added directly to the output.
 	// Build a temporary document containing just this element for ID checking.
@@ -730,7 +730,7 @@ func (ec *execContext) checkIDConstraintsForCopiedDoc(out *outputFrame, pendingB
 	// Transfer annotations from the live tree to the copy.
 	ann := make(xsd.TypeAnnotations)
 	ec.transferAnnotationsToDoc(copiedElem, copied, ann)
-	return ValidateDocIDConstraints(tmpDoc, ann)
+	return validateDocIDConstraints(tmpDoc, ann)
 }
 
 // transferAnnotationsToDoc recursively copies type annotations from src tree
