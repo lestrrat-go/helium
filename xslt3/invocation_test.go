@@ -2,7 +2,6 @@ package xslt3_test
 
 import (
 	"bytes"
-	"io"
 	"strings"
 	"testing"
 
@@ -226,12 +225,6 @@ type discardWriter struct {
 func (w *discardWriter) Write(p []byte) (int, error) {
 	w.written += len(p)
 	return len(p), nil
-}
-
-type errorWriter struct{}
-
-func (w *errorWriter) Write(p []byte) (int, error) {
-	return 0, io.ErrShortWrite
 }
 
 func TestInvocationWriteToErrorPropagation(t *testing.T) {

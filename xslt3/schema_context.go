@@ -767,9 +767,10 @@ func collectXSITypeIDREFsFromNode(node helium.Node, idrefs *[]string) {
 						continue
 					}
 				}
-				if localName == "IDREFS" {
+				switch localName {
+				case "IDREFS":
 					*idrefs = append(*idrefs, splitSpaceSeparated(string(elem.Content()))...)
-				} else if localName == "IDREF" {
+				case "IDREF":
 					val := string(elem.Content())
 					if val != "" {
 						*idrefs = append(*idrefs, val)
