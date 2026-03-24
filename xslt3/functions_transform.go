@@ -275,16 +275,23 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		return seq
 	}
 
+	// Unhandled fn:transform options (processor-specific or optional):
+	//   requested-properties, vendor-options, cache, post-process, serialization-params
 	stylesheetLoc := getStr("stylesheet-location")
 	packageName := getStr("package-name")
 	packageVersion := getStr("package-version")
 	initialTemplate := getStr("initial-template")
 	initialMode := getStr("initial-mode")
+	initialFunction := getStr("initial-function")
 	deliveryFormat := getStr("delivery-format")
+	baseOutputURI := getStr("base-output-uri")
 	initialMatchSel := getSeq("initial-match-selection")
 	sourceNode := getSeq("source-node")
 	stylesheetParamsSeq := getSeq("stylesheet-params")
 	staticParamsSeq := getSeq("static-params")
+	templateParamsSeq := getSeq("template-params")
+	tunnelParamsSeq := getSeq("tunnel-params")
+	functionParamsSeq := getSeq("function-params")
 
 	// Build a compiler that inherits the outer stylesheet's configuration.
 	nestedCompiler := ec.stylesheet.newNestedCompiler()
@@ -425,22 +432,43 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	fnTransformCfg := &transformConfig{
 		initialTemplate:   initialTemplate,
 		initialMode:       initialMode,
+		initialFunction:   initialFunction,
+		baseOutputURI:     baseOutputURI,
 		resultDocReceiver: resultDocCollector{results: secondaryResults},
 	}
 
-	// Apply stylesheet-params from the options map as runtime parameters.
-	if stylesheetParamsSeq != nil && sequence.Len(stylesheetParamsSeq) > 0 {
-		if sm, ok := stylesheetParamsSeq.Get(0).(xpath3.MapItem); ok {
-			params := make(map[string]xpath3.Sequence, sm.Size())
-			_ = sm.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
-				name, sErr := xpath3.AtomicToString(key)
-				if sErr != nil {
-					return nil
-				}
-				params[name] = value
+	// Apply map-valued options from the fn:transform options map.
+	for _, mp := range []struct {
+		seq    xpath3.Sequence
+		target *map[string]xpath3.Sequence
+	}{
+		{stylesheetParamsSeq, &fnTransformCfg.sequenceParams},
+		{templateParamsSeq, &fnTransformCfg.initialTemplateParams},
+		{tunnelParamsSeq, &fnTransformCfg.initialTemplateTunnel},
+	} {
+		if mp.seq == nil || sequence.Len(mp.seq) == 0 {
+			continue
+		}
+		sm, ok := mp.seq.Get(0).(xpath3.MapItem)
+		if !ok {
+			continue
+		}
+		params := make(map[string]xpath3.Sequence, sm.Size())
+		_ = sm.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
+			name, sErr := xpath3.AtomicToString(key)
+			if sErr != nil {
 				return nil
-			})
-			fnTransformCfg.sequenceParams = params
+			}
+			params[name] = value
+			return nil
+		})
+		*mp.target = params
+	}
+
+	// Apply function-params (array of sequences) for initial-function.
+	if functionParamsSeq != nil && sequence.Len(functionParamsSeq) > 0 {
+		if arr, ok := functionParamsSeq.Get(0).(xpath3.ArrayItem); ok {
+			fnTransformCfg.initialFunctionParams = arr.Members()
 		}
 	}
 
