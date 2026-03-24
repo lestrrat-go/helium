@@ -41,6 +41,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		resultDocItems:      make(map[string]xpath3.Sequence),
 		resultDocOutputDefs: make(map[string]*OutputDef),
 		usedResultURIs:      make(map[string]struct{}),
+		defaultValidation:   ss.defaultValidation,
 		defaultCollation:    ss.defaultCollation,
 		docOrderCache:       xpath3.NewDocOrderCache(),
 	}

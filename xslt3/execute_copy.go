@@ -245,7 +245,7 @@ func (ec *execContext) effectiveValidation(instValidation string) string {
 	if instValidation != "" {
 		return instValidation
 	}
-	return ec.stylesheet.defaultValidation
+	return ec.defaultValidation
 }
 
 // isComplexType returns true if typeName refers to a complex type in the

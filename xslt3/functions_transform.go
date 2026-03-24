@@ -509,6 +509,7 @@ func executeTransformWithSelection(ctx context.Context, source *helium.Document,
 		transformCtx:        ctx,
 		resultDocuments:     make(map[string]*helium.Document),
 		usedResultURIs:      make(map[string]struct{}),
+		defaultValidation:   ss.defaultValidation,
 		docOrderCache:       xpath3.NewDocOrderCache(),
 	}
 	ec.setCurrentTemplate(nil) // initialize currentTemplateBaseDir from stylesheet
