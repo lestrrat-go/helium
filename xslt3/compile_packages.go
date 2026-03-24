@@ -325,26 +325,26 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		}
 	}
 
-	// Merge global variables
+	// Merge global variables. Private variables are also merged (for
+	// package-internal evaluation) but keep their private visibility.
 	for _, v := range pkg.globalVars {
 		pkgVis := getComponentVisibility(pkg, xslElemVariable, v.Name)
-		if !isVisibleFromOutside(pkgVis) {
-			continue
-		}
-		if len(acceptRules) > 0 {
-			acceptVis := applyAcceptRules(xslElemVariable, v.Name, acceptRules, pkgVis)
-			if acceptVis == visHidden {
-				continue
-			}
-			v.Visibility = acceptVis
-		}
 		if _, overridden := overrideNames[xslElemVariable+":"+v.Name]; overridden {
 			continue
 		}
-		// XTSE3050: local variable with same name as package component
-		if _, local := c.localVarNames[v.Name]; local {
-			return staticError(errCodeXTSE3050,
-				"local variable %q conflicts with public component from used package", v.Name)
+		if isVisibleFromOutside(pkgVis) {
+			if len(acceptRules) > 0 {
+				acceptVis := applyAcceptRules(xslElemVariable, v.Name, acceptRules, pkgVis)
+				if acceptVis == visHidden {
+					continue
+				}
+				v.Visibility = acceptVis
+			}
+			// XTSE3050: local variable with same name as package component
+			if _, local := c.localVarNames[v.Name]; local {
+				return staticError(errCodeXTSE3050,
+					"local variable %q conflicts with public component from used package", v.Name)
+			}
 		}
 		v.OwnerPackage = pkg
 		c.stylesheet.globalVars = append(c.stylesheet.globalVars, v)

@@ -1147,9 +1147,22 @@ func (ec *execContext) ResolveFunction(_ context.Context, uri, name string, arit
 // XPath expressions to reference globals that aren't in the snapshot built
 // by collectAllVars (e.g. during circular-but-unused variable scenarios).
 func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.Sequence, bool, error) {
-	// Handle $xsl:original — resolve to the original overridden variable's value
-	if name == "{"+lexicon.NamespaceXSLT+"}original" && ec.overridingVarDef != nil && ec.overridingVarDef.OriginalVar != nil {
+	// Handle $xsl:original — resolve to the original overridden variable's value.
+	// The name may come as either the expanded form "{uri}original" or the
+	// prefixed form "xsl:original" depending on whether namespace resolution
+	// happened in the XPath evaluator.
+	isXSLOriginal := name == "{"+lexicon.NamespaceXSLT+"}original" || name == "xsl:original"
+	if isXSLOriginal && ec.overridingVarDef != nil && ec.overridingVarDef.OriginalVar != nil {
+		// Temporarily clear the "evaluating" flag for the overriding
+		// variable so the original can be evaluated without triggering
+		// a false circular reference.
+		origName := ec.overridingVarDef.Name
+		wasEvaluating := ec.globalEvaluating[origName]
+		delete(ec.globalEvaluating, origName)
 		val, err := ec.evaluateGlobalVar(ec.overridingVarDef.OriginalVar)
+		if wasEvaluating {
+			ec.globalEvaluating[origName] = true
+		}
 		if err != nil {
 			return nil, false, err
 		}
