@@ -140,6 +140,9 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 	}()
 
 	for i, node := range nodes {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		ec.position = i + 1
 
 		if err := ec.applyTemplates(ctx, node, mode, paramValues); err != nil {

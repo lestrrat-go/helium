@@ -205,6 +205,9 @@ func (ec *execContext) execIterate(ctx context.Context, inst *IterateInst) error
 
 	completed := true
 	for i := range sequence.Len(seq) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		item := seq.Get(i)
 		ec.position = i + 1
 

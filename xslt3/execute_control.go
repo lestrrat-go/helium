@@ -146,6 +146,9 @@ func (ec *execContext) execForEach(ctx context.Context, inst *ForEachInst) error
 	if isNodes {
 		ec.size = len(nodes)
 		for i, node := range nodes {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			ec.position = i + 1
 			ec.currentNode = node
 			ec.contextNode = node
@@ -161,6 +164,9 @@ func (ec *execContext) execForEach(ctx context.Context, inst *ForEachInst) error
 	} else {
 		ec.size = sequence.Len(seq)
 		for i := range sequence.Len(seq) {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			item := seq.Get(i)
 			ec.position = i + 1
 			if ni, ok := item.(xpath3.NodeItem); ok {
@@ -258,6 +264,9 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupI
 	}()
 
 	for i, g := range groups {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		ec.position = i + 1
 		ec.currentGroup = g.items
 		ec.currentGroupKey = g.key
