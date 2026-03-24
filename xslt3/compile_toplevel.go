@@ -125,7 +125,7 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 		if ln != lexicon.XSLTElementParam && ln != lexicon.XSLTElementVariable {
 			continue
 		}
-		if getAttr(elem, "static") == lexicon.ValueYes {
+		if xsdBoolTrue(getAttr(elem, "static")) {
 			name := getAttr(elem, "name")
 			sel := getAttr(elem, "select")
 			if name != "" && sel != "" {
