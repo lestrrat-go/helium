@@ -526,7 +526,18 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
 		for _, n := range strings.Fields(uas) {
-			asd.UseAttrSets = append(asd.UseAttrSets, resolveQName(n, c.nsBindings))
+			resolved := resolveQName(n, c.nsBindings)
+			// Handle xsl:original — reference to the original attribute-set
+			if resolved == "{"+lexicon.NamespaceXSLT+"}original" {
+				// Replace with the original attribute-set's use-attribute-sets
+				// and attributes, effectively inlining the original definition.
+				if pkgAS != nil {
+					asd.UseAttrSets = append(asd.UseAttrSets, pkgAS.UseAttrSets...)
+					asd.Attrs = append(asd.Attrs, pkgAS.Attrs...)
+				}
+				continue
+			}
+			asd.UseAttrSets = append(asd.UseAttrSets, resolved)
 		}
 	}
 

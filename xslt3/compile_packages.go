@@ -429,24 +429,24 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		}
 	}
 
-	// Merge attribute sets
+	// Merge attribute sets. Private attribute-sets are also merged (for
+	// package-internal use-attribute-sets references) but keep their visibility.
 	if pkg.attributeSets != nil {
 		if c.stylesheet.attributeSets == nil {
 			c.stylesheet.attributeSets = make(map[string]*attributeSetDef)
 		}
 		for name, as := range pkg.attributeSets {
-			pkgVis := getComponentVisibility(pkg, xslElemAttributeSet, name)
-			if !isVisibleFromOutside(pkgVis) {
-				continue
-			}
-			if len(acceptRules) > 0 {
-				acceptVis := applyAcceptRules(xslElemAttributeSet, name, acceptRules, pkgVis)
-				if acceptVis == visHidden {
-					continue
-				}
-			}
 			if _, overridden := overrideNames[xslElemAttributeSet+":"+name]; overridden {
 				continue
+			}
+			pkgVis := getComponentVisibility(pkg, xslElemAttributeSet, name)
+			if isVisibleFromOutside(pkgVis) {
+				if len(acceptRules) > 0 {
+					acceptVis := applyAcceptRules(xslElemAttributeSet, name, acceptRules, pkgVis)
+					if acceptVis == visHidden {
+						continue
+					}
+				}
 			}
 			if _, exists := c.stylesheet.attributeSets[name]; !exists {
 				c.stylesheet.attributeSets[name] = as

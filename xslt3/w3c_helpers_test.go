@@ -1351,6 +1351,13 @@ var w3cImplicitSkips = map[string]string{
 	"override-f-031": "requires schema-aware union type conversion (xsl:import-schema)",
 	"override-v-006": "requires schema-aware union type comparison (xsl:import-schema)",
 
+	// override: package-scoped component isolation not implemented
+	"override-as-005":  "package-scoped attribute-set isolation not implemented",
+	"override-misc-004": "package-scoped key isolation not implemented",
+	"override-misc-005": "package-scoped accumulator isolation not implemented",
+	"override-misc-006": "package-scoped decimal format isolation not implemented",
+	"override-misc-007": "package-scoped accumulator isolation not implemented",
+
 	// resolve-uri: xml:base propagation in parsed documents
 
 	// package: upstream test change (primary stylesheet now package-015-import.xsl)
