@@ -76,7 +76,7 @@ func TestMessageReceiverErrorAbortsTransform(t *testing.T) {
 </xsl:stylesheet>`)
 
 	receiver := &messageAbortReceiver{}
-	_, err := ss.Transform(parseTransformSource(t)).Receiver(receiver).Do(t.Context())
+	_, err := ss.Transform(parseTransformSource(t)).MessageReceiver(receiver).Do(t.Context())
 
 	require.True(t, receiver.called)
 	require.ErrorIs(t, err, errReceiverAborted)
@@ -92,7 +92,7 @@ func TestResultDocumentReceiverErrorAbortsTransform(t *testing.T) {
 </xsl:stylesheet>`)
 
 	receiver := &resultDocumentAbortReceiver{}
-	_, err := ss.Transform(parseTransformSource(t)).Receiver(receiver).Do(t.Context())
+	_, err := ss.Transform(parseTransformSource(t)).ResultDocumentReceiver(receiver).Do(t.Context())
 
 	require.True(t, receiver.called)
 	require.ErrorIs(t, err, errReceiverAborted)
@@ -108,7 +108,7 @@ func TestResultDocumentOutputReceiverErrorAbortsTransform(t *testing.T) {
 </xsl:stylesheet>`)
 
 	receiver := &resultDocumentOutputAbortReceiver{}
-	_, err := ss.Transform(parseTransformSource(t)).Receiver(receiver).Do(t.Context())
+	_, err := ss.Transform(parseTransformSource(t)).ResultDocumentOutputReceiver(receiver).Do(t.Context())
 
 	require.True(t, receiver.called)
 	require.ErrorIs(t, err, errReceiverAborted)
@@ -125,7 +125,7 @@ func TestRawResultReceiverErrorAbortsTransform(t *testing.T) {
 </xsl:stylesheet>`)
 
 	receiver := &rawResultAbortReceiver{}
-	_, err := ss.Transform(parseTransformSource(t)).Receiver(receiver).Do(t.Context())
+	_, err := ss.Transform(parseTransformSource(t)).RawResultReceiver(receiver).Do(t.Context())
 
 	require.True(t, receiver.called)
 	require.ErrorIs(t, err, errReceiverAborted)
@@ -141,7 +141,7 @@ func TestPrimaryItemsReceiverErrorAbortsTransform(t *testing.T) {
 </xsl:stylesheet>`)
 
 	receiver := &primaryItemsAbortReceiver{}
-	_, err := ss.Transform(parseTransformSource(t)).Receiver(receiver).Do(t.Context())
+	_, err := ss.Transform(parseTransformSource(t)).PrimaryItemsReceiver(receiver).Do(t.Context())
 
 	require.True(t, receiver.called)
 	require.ErrorIs(t, err, errReceiverAborted)
@@ -163,7 +163,7 @@ func TestAnnotationReceiverErrorAbortsTransform(t *testing.T) {
 </xsl:stylesheet>`)
 
 	receiver := &annotationAbortReceiver{}
-	_, err := ss.Transform(parseTransformSource(t)).Receiver(receiver).Do(t.Context())
+	_, err := ss.Transform(parseTransformSource(t)).AnnotationReceiver(receiver).Do(t.Context())
 
 	require.True(t, receiver.called)
 	require.ErrorIs(t, err, errReceiverAborted)

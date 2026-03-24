@@ -78,9 +78,14 @@ type invocationCfg struct {
 	initialTemplateParams *Parameters
 	initialModeParams     *Parameters
 
-	receiver           any
-	receiverErr        error
-	collectionResolver xpath3.CollectionResolver
+	msgReceiver             MessageReceiver
+	resultDocReceiver       ResultDocumentReceiver
+	resultDocOutputReceiver ResultDocumentOutputReceiver
+	rawResultReceiver       RawResultReceiver
+	primaryItemsReceiver    PrimaryItemsReceiver
+	annotationReceiver      AnnotationReceiver
+	receiverErr             error
+	collectionResolver      xpath3.CollectionResolver
 	baseOutputURI      string
 	sourceSchemas      []*xsd.Schema
 	onMultipleMatch    OnMultipleMatchMode
@@ -193,15 +198,87 @@ func (inv Invocation) SetInitialModeParameter(name string, value xpath3.Sequence
 	return inv
 }
 
-// Receiver sets the receiver object that may implement any subset of
-// MessageReceiver, ResultDocumentReceiver, RawResultReceiver,
-// PrimaryItemsReceiver, AnnotationReceiver, etc.
+// Receiver sets one or more receiver hooks by type-asserting r against the
+// known receiver interfaces (MessageReceiver, ResultDocumentReceiver,
+// ResultDocumentOutputReceiver, RawResultReceiver, PrimaryItemsReceiver,
+// AnnotationReceiver). For better discoverability, prefer the typed methods
+// MessageReceiver, ResultDocumentReceiver, ResultDocumentOutputReceiver,
+// RawResultReceiver, PrimaryItemsReceiver, and AnnotationReceiver.
 func (inv Invocation) Receiver(r any) Invocation {
 	inv = inv.clone()
-	inv.cfg.receiver = r
-	if r != nil && extractReceivers(r) == (receiverSet{}) {
-		inv.cfg.receiverErr = fmt.Errorf("xslt3: Receiver value of type %T does not implement any known receiver interface", r)
+	if r == nil {
+		return inv
 	}
+	rs := extractReceivers(r)
+	if rs == (receiverSet{}) {
+		inv.cfg.receiverErr = fmt.Errorf("xslt3: Receiver value of type %T does not implement any known receiver interface", r)
+		return inv
+	}
+	if rs.message != nil {
+		inv.cfg.msgReceiver = rs.message
+	}
+	if rs.resultDocument != nil {
+		inv.cfg.resultDocReceiver = rs.resultDocument
+	}
+	if rs.resultDocumentOutput != nil {
+		inv.cfg.resultDocOutputReceiver = rs.resultDocumentOutput
+	}
+	if rs.rawResult != nil {
+		inv.cfg.rawResultReceiver = rs.rawResult
+	}
+	if rs.primaryItems != nil {
+		inv.cfg.primaryItemsReceiver = rs.primaryItems
+	}
+	if rs.annotations != nil {
+		inv.cfg.annotationReceiver = rs.annotations
+	}
+	return inv
+}
+
+// MessageReceiver sets the handler for xsl:message output.
+func (inv Invocation) MessageReceiver(r MessageReceiver) Invocation {
+	inv = inv.clone()
+	inv.cfg.msgReceiver = r
+	return inv
+}
+
+// ResultDocumentReceiver sets the handler for secondary result documents
+// produced by xsl:result-document.
+func (inv Invocation) ResultDocumentReceiver(r ResultDocumentReceiver) Invocation {
+	inv = inv.clone()
+	inv.cfg.resultDocReceiver = r
+	return inv
+}
+
+// ResultDocumentOutputReceiver sets the handler that receives the effective
+// output definition for each secondary result document.
+func (inv Invocation) ResultDocumentOutputReceiver(r ResultDocumentOutputReceiver) Invocation {
+	inv = inv.clone()
+	inv.cfg.resultDocOutputReceiver = r
+	return inv
+}
+
+// RawResultReceiver sets the handler that receives the raw XDM result
+// sequence from the primary output before serialization.
+func (inv Invocation) RawResultReceiver(r RawResultReceiver) Invocation {
+	inv = inv.clone()
+	inv.cfg.rawResultReceiver = r
+	return inv
+}
+
+// PrimaryItemsReceiver sets the handler that receives non-node items
+// captured from the primary output (needed for json/adaptive serialization).
+func (inv Invocation) PrimaryItemsReceiver(r PrimaryItemsReceiver) Invocation {
+	inv = inv.clone()
+	inv.cfg.primaryItemsReceiver = r
+	return inv
+}
+
+// AnnotationReceiver sets the handler that receives type annotations and
+// schema declarations from schema-aware transformations.
+func (inv Invocation) AnnotationReceiver(r AnnotationReceiver) Invocation {
+	inv = inv.clone()
+	inv.cfg.annotationReceiver = r
 	return inv
 }
 
@@ -388,16 +465,13 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 		}
 	}
 
-	// Receiver → wire directly into transformConfig.
-	if c.receiver != nil {
-		rs := extractReceivers(c.receiver)
-		tcfg.msgReceiver = rs.message
-		tcfg.resultDocReceiver = rs.resultDocument
-		tcfg.resultDocOutputReceiver = rs.resultDocumentOutput
-		tcfg.rawResultReceiver = rs.rawResult
-		tcfg.primaryItemsReceiver = rs.primaryItems
-		tcfg.annotationReceiver = rs.annotations
-	}
+	// Receivers
+	tcfg.msgReceiver = c.msgReceiver
+	tcfg.resultDocReceiver = c.resultDocReceiver
+	tcfg.resultDocOutputReceiver = c.resultDocOutputReceiver
+	tcfg.rawResultReceiver = c.rawResultReceiver
+	tcfg.primaryItemsReceiver = c.primaryItemsReceiver
+	tcfg.annotationReceiver = c.annotationReceiver
 
 	return tcfg
 }

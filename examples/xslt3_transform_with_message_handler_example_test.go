@@ -25,7 +25,7 @@ func Example_xslt3_transform_with_message_handler() {
 	// Compile the stylesheet once, then reuse the returned *xslt3.Stylesheet
 	// across multiple calls to xslt3.Transform. The receiver itself is not stored
 	// on the stylesheet; it is supplied per transformation through the fluent
-	// invocation API (see the .Receiver() call below).
+	// invocation API (see the .MessageReceiver() call below).
 	stylesheet, err := compileExampleStylesheet(ctx, stylesheetSrc)
 	if err != nil {
 		fmt.Printf("failed to compile stylesheet: %s\n", err)
@@ -49,7 +49,7 @@ func Example_xslt3_transform_with_message_handler() {
 	// still causes Do to return an error afterward. The terminate flag
 	// tells you whether the message was informational or fatal.
 	resultDoc, err := stylesheet.Transform(sourceDoc).
-		Receiver(&exampleMessageReceiver{}).
+		MessageReceiver(&exampleMessageReceiver{}).
 		Do(ctx)
 	if err != nil {
 		fmt.Printf("transform failed: %s\n", err)
