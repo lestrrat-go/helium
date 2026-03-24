@@ -405,6 +405,14 @@ func stylesheetBaseURI(n helium.Node, fallback string) string {
 		if !ok {
 			continue
 		}
+		// Stop before the document element (stylesheet root).
+		// Its xml:base is already factored into the compiler's baseURI
+		// (the fallback parameter), so including it again would double-count.
+		if p := elem.Parent(); p != nil {
+			if _, isDoc := p.(*helium.Document); isDoc {
+				break
+			}
+		}
 		if xmlBase, ok := elem.GetAttributeNS("base", helium.XMLNamespace); ok && xmlBase != "" {
 			bases = append(bases, xmlBase)
 		}

@@ -1423,31 +1423,6 @@ var w3cImplicitSkips = map[string]string{
 	"strip-space-008": "schema-aware whitespace stripping not implemented",
 	"strip-space-023": "XPDY0002 context-dependent expression in strip-space not detected",
 
-	// base-uri: static-base-uri and base URI propagation through includes
-	"base-uri-005": "base-uri on result document nodes incorrect",
-	"base-uri-007": "base-uri on result document nodes incorrect",
-	"base-uri-010": "xml:base resolution in included stylesheets incorrect",
-	"base-uri-013": "static-base-uri with non-standard URI scheme incorrect",
-	"base-uri-014": "static-base-uri in included module incorrect",
-	"base-uri-016": "static-base-uri in included module incorrect",
-	"base-uri-024": "xml:base on source document not resolved",
-	"base-uri-025": "static-base-uri in included module incorrect",
-	"base-uri-028": "static-base-uri in included module incorrect",
-	"base-uri-030": "static-base-uri in included module incorrect",
-	"base-uri-032": "static-base-uri in included module incorrect",
-	"base-uri-033": "static-base-uri in included module incorrect",
-	"base-uri-035": "static-base-uri in included module incorrect",
-	"base-uri-038": "static-base-uri in included module incorrect",
-	"base-uri-039": "static-base-uri in included module incorrect",
-	"base-uri-040": "static-base-uri in included module incorrect",
-	"base-uri-042": "static-base-uri in included module incorrect",
-	"base-uri-046": "xml:base resolution on source doc elements incorrect",
-	"base-uri-050": "xsl:document base-uri propagation incorrect",
-	"base-uri-051": "xsl:document base-uri propagation incorrect",
-	"base-uri-051a": "xsl:document base-uri propagation incorrect",
-	"base-uri-051b": "xsl:document base-uri propagation incorrect",
-	"base-uri-052": "xsl:document base-uri propagation incorrect",
-	"base-uri-053": "xsl:copy base-uri propagation incorrect",
 
 	// arrays: array construction and apply-templates on arrays
 

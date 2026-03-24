@@ -317,13 +317,28 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 	// Empty string means the stylesheet module itself (XSLT spec 14.1).
 	// When called from an included/imported module, return that module's
 	// document, not the top-level stylesheet.
+	// However, if xml:base changes the effective base URI, resolve against
+	// that URI instead (the base URI may point to a different file).
 	if uri == "" {
+		effectiveBase := ec.effectiveStaticBaseURI()
 		if ec.currentTemplate != nil && ec.currentTemplate.BaseURI != "" {
 			if modDoc, ok := ec.stylesheet.moduleDocs[ec.currentTemplate.BaseURI]; ok {
-				return modDoc, nil
+				// Only return the module doc if the effective base URI
+				// matches the template's module. If xml:base overrides,
+				// fall through to load the overridden URI.
+				if effectiveBase == ec.currentTemplate.BaseURI || effectiveBase == "" {
+					return modDoc, nil
+				}
+			} else if effectiveBase == ec.currentTemplate.BaseURI || effectiveBase == "" {
+				return ec.stylesheet.sourceDoc, nil
 			}
+		} else if effectiveBase == "" || effectiveBase == ec.stylesheet.baseURI {
+			return ec.stylesheet.sourceDoc, nil
 		}
-		return ec.stylesheet.sourceDoc, nil
+		// xml:base overrides the base URI — resolve the empty string
+		// against the effective base URI to load the target document.
+		uri = effectiveBase
+		baseDir = filepath.Dir(effectiveBase)
 	}
 
 	// Strip fragment identifier before loading.
