@@ -1,6 +1,7 @@
 package xslt3_test
 
 import (
+	"io"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -221,4 +222,68 @@ func TestFnTransformBaseOutputURI(t *testing.T) {
 		cleaned = cleaned[idx+2:]
 	}
 	require.Contains(t, cleaned, "http://example.com/output.xml")
+}
+
+// memResolver serves stylesheet content from an in-memory map keyed by URI.
+type memResolver struct {
+	files      map[string]string
+	calledWith []string
+}
+
+func (r *memResolver) Resolve(uri string) (io.ReadCloser, error) {
+	r.calledWith = append(r.calledWith, uri)
+	content, ok := r.files[uri]
+	if !ok {
+		return nil, &xpath3.XPathError{Code: "FOXT0003", Message: "not found: " + uri}
+	}
+	return io.NopCloser(strings.NewReader(content)), nil
+}
+
+// TestFnTransformCustomURIScheme verifies that fn:transform() resolves
+// relative stylesheet-location using proper URI resolution rather than
+// filepath.Join, so custom URI schemes (e.g. mem://) are preserved.
+func TestFnTransformCustomURIScheme(t *testing.T) {
+	resolver := &memResolver{
+		files: map[string]string{
+			"mem://pkg/main.xsl": `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:template match="/">
+    <xsl:variable name="result" select="transform(map{
+      'stylesheet-location': 'inner.xsl',
+      'delivery-format': 'serialized'
+    })"/>
+    <result><xsl:value-of select="$result('output')"/></result>
+  </xsl:template>
+</xsl:stylesheet>`,
+			"mem://pkg/inner.xsl": `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <inner>resolved</inner>
+  </xsl:template>
+</xsl:stylesheet>`,
+		},
+	}
+
+	ctx := t.Context()
+	doc, err := helium.Parse(ctx, []byte(resolver.files["mem://pkg/main.xsl"]))
+	require.NoError(t, err)
+
+	ss, err := xslt3.NewCompiler().
+		BaseURI("mem://pkg/main.xsl").
+		URIResolver(resolver).
+		Compile(ctx, doc)
+	require.NoError(t, err)
+
+	src, _ := helium.Parse(ctx, []byte(`<dummy/>`))
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err, "fn:transform with custom URI scheme should succeed")
+	require.Contains(t, out, "resolved")
+
+	// Verify the resolver was called with the correctly resolved URI,
+	// not a filepath.Join-corrupted one like "mem:/pkg/inner.xsl".
+	require.Contains(t, resolver.calledWith, "mem://pkg/inner.xsl",
+		"resolver should receive properly resolved URI, got: %v", resolver.calledWith)
 }

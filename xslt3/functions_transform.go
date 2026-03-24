@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -210,6 +211,22 @@ func (c resultDocCollector) HandleResultDocument(href string, doc *helium.Docume
 	return nil
 }
 
+// resolveRelativeURI resolves a relative reference against a base URI.
+// For URIs with a scheme (e.g. mem://pkg/main.xsl), it uses net/url
+// resolution to preserve the scheme and authority. For plain file
+// paths it falls back to filepath.Join.
+func resolveRelativeURI(base, ref string) string {
+	baseURL, err := url.Parse(base)
+	if err != nil || baseURL.Scheme == "" {
+		return filepath.Join(filepath.Dir(base), ref)
+	}
+	refURL, err := url.Parse(ref)
+	if err != nil {
+		return filepath.Join(filepath.Dir(base), ref)
+	}
+	return baseURL.ResolveReference(refURL).String()
+}
+
 // newNestedCompiler creates a Compiler pre-configured with the same
 // resolver, package resolver, and import schemas that were used to
 // compile this stylesheet, so that fn:transform nested compiles
@@ -344,7 +361,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		// Resolve relative to the current stylesheet base URI
 		loc := stylesheetLoc
 		if ec.stylesheet.baseURI != "" && !filepath.IsAbs(loc) {
-			loc = filepath.Join(filepath.Dir(ec.stylesheet.baseURI), loc)
+			loc = resolveRelativeURI(ec.stylesheet.baseURI, loc)
 		}
 		var data []byte
 		baseURI := loc
