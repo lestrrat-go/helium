@@ -208,11 +208,11 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 		}
 		av, err := xpath3.AtomizeItem(item)
 		if err != nil {
-			continue
+			return err
 		}
 		s, err := xpath3.AtomicToString(av)
 		if err != nil {
-			continue
+			return err
 		}
 		text, err := ec.resultDoc.CreateText([]byte(s))
 		if err != nil {
@@ -268,11 +268,11 @@ func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.
 		}
 		av, err := xpath3.AtomizeItem(item)
 		if err != nil {
-			continue
+			return err
 		}
 		s, err := xpath3.AtomicToString(av)
 		if err != nil {
-			continue
+			return err
 		}
 		text, err := ec.resultDoc.CreateText([]byte(s))
 		if err != nil {
@@ -717,11 +717,11 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *ApplyImportsI
 		// Built-in rule for atomic values: output string value
 		av, err := xpath3.AtomizeItem(ec.contextItem)
 		if err != nil {
-			return nil
+			return err
 		}
 		s, err := xpath3.AtomicToString(av)
 		if err != nil {
-			return nil
+			return err
 		}
 		text, err := ec.resultDoc.CreateText([]byte(s))
 		if err != nil {
