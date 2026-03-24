@@ -268,16 +268,39 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 		tmpl.Priority = tmpl.Match.Alternatives[0].priority
 	}
 
-	// Validate: override match template can only use public/abstract modes
-	if tmpl.Mode != "" && pkg.modeDefs != nil {
-		if md, ok := pkg.modeDefs[tmpl.Mode]; ok {
-			if md.Visibility == visFinal {
-				return nil, staticError(errCodeXTSE3060,
-					"cannot override templates in final mode %q", tmpl.Mode)
+	// XTSE3440: override match template can only use modes that are public
+	// or abstract in the used package. Using a mode that doesn't exist in the
+	// package, or a private/final/hidden mode, is a static error.
+	if tmpl.Match != nil {
+		modeToCheck := tmpl.Mode
+		// Resolve #unnamed and #default to the empty string for lookup
+		if modeToCheck == "#unnamed" || modeToCheck == "#default" {
+			modeToCheck = ""
+		}
+		if pkg.modeDefs != nil {
+			if md, ok := pkg.modeDefs[modeToCheck]; ok {
+				if md.Visibility == visFinal {
+					return nil, staticError(errCodeXTSE3060,
+						"cannot override templates in final mode %q", tmpl.Mode)
+				}
+				if md.Visibility == visPrivate || md.Visibility == visHidden {
+					return nil, staticError(errCodeXTSE3440,
+						"cannot override templates in %s mode %q", md.Visibility, tmpl.Mode)
+				}
+			} else {
+				// Mode not defined in the package — check default visibility.
+				defVis := defaultComponentVisibility(pkg)
+				if defVis == visPrivate {
+					return nil, staticError(errCodeXTSE3440,
+						"mode %q is not defined in the used package (default visibility is private)", tmpl.Mode)
+				}
 			}
-			if md.Visibility == visPrivate || md.Visibility == visHidden {
-				return nil, staticError(errCodeXTSE3060,
-					"cannot override templates in %s mode %q", md.Visibility, tmpl.Mode)
+		} else {
+			// No modeDefs at all — for packages, default visibility is private
+			defVis := defaultComponentVisibility(pkg)
+			if defVis == visPrivate {
+				return nil, staticError(errCodeXTSE3440,
+					"mode %q is not defined in the used package", tmpl.Mode)
 			}
 		}
 	}
@@ -309,7 +332,7 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 		}
 	}
 
-	body, params, err := c.compileTemplateBody(elem)
+	ctxDecl, body, params, err := c.compileTemplateBodyEx(elem, false)
 	c.expandText = savedExpandText
 	if err != nil {
 		return nil, err
@@ -317,6 +340,10 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 	tmpl.Params = params
 	tmpl.Body = body
 	tmpl.As = getAttr(elem, "as")
+	if ctxDecl != nil {
+		tmpl.ContextItemAs = ctxDecl.as
+		tmpl.ContextItemUse = ctxDecl.use
+	}
 
 	// XTSE3070: check type compatibility of override against base template.
 	if tmpl.Name != "" {
@@ -390,6 +417,18 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 	}
 
 	v := &variable{Name: resolvedName, As: getAttr(elem, "as")}
+
+	// XTSE3070: the required type of the override must match the base.
+	// Only check when both types are standard XSD types (xs: prefix or
+	// built-in names). Custom schema types from xsl:import-schema cannot
+	// be reliably compared by name alone.
+	if pkgVar != nil && v.As != "" && pkgVar.As != "" && v.As != pkgVar.As {
+		if isStandardType(v.As) && isStandardType(pkgVar.As) {
+			return nil, staticError(errCodeXTSE3070,
+				"override variable %q type %q does not match base type %q",
+				name, v.As, pkgVar.As)
+		}
+	}
 
 	// Link the original variable for $xsl:original references
 	if pkgVar != nil {
@@ -523,6 +562,19 @@ func checkOverrideTemplateCompat(override, base *template) error {
 			override.Name, override.As, base.As)
 	}
 
+	// XTSE3070: check context-item compatibility.
+	// The override must have the same context-item type and use as the base.
+	if override.ContextItemAs != "" && override.ContextItemAs != base.ContextItemAs {
+		return staticError(errCodeXTSE3070,
+			"override template %q context-item type %q does not match base type %q",
+			override.Name, override.ContextItemAs, base.ContextItemAs)
+	}
+	if override.ContextItemUse != "" && override.ContextItemUse != base.ContextItemUse {
+		return staticError(errCodeXTSE3070,
+			"override template %q context-item use %q does not match base use %q",
+			override.Name, override.ContextItemUse, base.ContextItemUse)
+	}
+
 	// Build map of base params by name
 	baseParams := make(map[string]*param)
 	for _, p := range base.Params {
@@ -547,6 +599,27 @@ func checkOverrideTemplateCompat(override, base *template) error {
 		}
 	}
 	return nil
+}
+
+// isStandardType returns true if the type name is a well-known XSD type
+// (xs: prefix) or standard type keyword. Returns false for custom schema
+// types defined via xsl:import-schema.
+func isStandardType(as string) bool {
+	// Strip occurrence indicator
+	name := strings.TrimRight(as, "?*+")
+	name = strings.TrimSpace(name)
+	if strings.HasPrefix(name, "xs:") {
+		return true
+	}
+	// Standard keywords
+	switch name {
+	case "item()", "node()", "element()", "attribute()", "text()",
+		"comment()", "processing-instruction()", "document-node()",
+		"namespace-node()", "schema-element()", "schema-attribute()",
+		"function(*)", "map(*)", "array(*)":
+		return true
+	}
+	return false
 }
 
 func parseFloat(s string) (float64, error) {

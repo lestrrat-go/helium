@@ -1349,6 +1349,7 @@ var w3cImplicitSkips = map[string]string{
 
 	// override: schema-aware union types from xsl:import-schema
 	"override-f-031": "requires schema-aware union type conversion (xsl:import-schema)",
+	"override-v-006": "requires schema-aware union type comparison (xsl:import-schema)",
 
 	// resolve-uri: xml:base propagation in parsed documents
 

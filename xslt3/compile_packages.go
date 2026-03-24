@@ -268,6 +268,14 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 			}
 		}
 
+		// XTSE3050: local template with same name as package component
+		if tmpl.Name != "" {
+			if _, local := c.localTemplateNames[tmpl.Name]; local {
+				return staticError(errCodeXTSE3050,
+					"local template %q conflicts with public component from used package", tmpl.Name)
+			}
+		}
+
 		tmpl.ImportPrec = c.importPrec - 1
 		tmpl.MinImportPrec = tmpl.ImportPrec // package templates have no sub-imports
 		tmpl.OwnerPackage = pkg
@@ -332,6 +340,11 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		if _, overridden := overrideNames[xslElemVariable+":"+v.Name]; overridden {
 			continue
 		}
+		// XTSE3050: local variable with same name as package component
+		if _, local := c.localVarNames[v.Name]; local {
+			return staticError(errCodeXTSE3050,
+				"local variable %q conflicts with public component from used package", v.Name)
+		}
 		v.OwnerPackage = pkg
 		c.stylesheet.globalVars = append(c.stylesheet.globalVars, v)
 	}
@@ -392,6 +405,11 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 					continue
 				}
 				md.Visibility = acceptVis
+			}
+			// XTSE3050: local mode with same name as package mode
+			if _, local := c.localModeNames[name]; local {
+				return staticError(errCodeXTSE3050,
+					"local mode %q conflicts with public component from used package", name)
 			}
 			if _, exists := c.stylesheet.modeDefs[name]; !exists {
 				c.stylesheet.modeDefs[name] = md
@@ -494,6 +512,47 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 			}
 			pkg.attributeSets[name] = as
 		}
+	}
+
+	// XTSE3080: check that no abstract components remain unimplemented.
+	// An abstract template/function from the package must be overridden.
+	for _, tmpl := range pkg.templates {
+		if tmpl.Name == "" {
+			continue
+		}
+		vis := getComponentVisibility(pkg, xslElemTemplate, tmpl.Name)
+		// Accept rules may have changed the visibility
+		if len(acceptRules) > 0 {
+			vis = applyAcceptRules(xslElemTemplate, tmpl.Name, acceptRules, vis)
+		}
+		if vis != visAbstract {
+			continue
+		}
+		// Check if it was overridden
+		if oset != nil {
+			if _, ok := oset.namedTemplates[tmpl.Name]; ok {
+				continue // overridden — OK
+			}
+		}
+		return staticError(errCodeXTSE3080,
+			"abstract template %q from used package is not overridden", tmpl.Name)
+	}
+	for fk, fn := range pkg.functions {
+		vis := getComponentVisibility(pkg, xslElemFunction, functionVisKey(fk.Name, len(fn.Params)))
+		if len(acceptRules) > 0 {
+			vis = applyAcceptRules(xslElemFunction, functionVisKey(fk.Name, len(fn.Params)), acceptRules, vis)
+		}
+		if vis != visAbstract {
+			continue
+		}
+		if oset != nil {
+			if _, ok := oset.functions[fk]; ok {
+				continue
+			}
+		}
+		return staticError(errCodeXTSE3080,
+			"abstract function %s#%d from used package is not overridden",
+			fmt.Sprintf("{%s}%s", fk.Name.URI, fk.Name.Name), fk.Arity)
 	}
 
 	return nil

@@ -53,6 +53,8 @@ type compiler struct {
 	usedModes                 map[string]struct{}        // all mode names referenced (for XTSE3085)
 	usedAttrSetRefs           []string                   // all use-attribute-sets names referenced (for XTSE0710)
 	localTemplateNames        map[string]struct{}        // pre-scanned named templates in this module (for XTSE3055)
+	localVarNames             map[string]struct{}        // pre-scanned variable names in this module (for XTSE3050)
+	localModeNames            map[string]struct{}        // pre-scanned mode names in this module (for XTSE3050)
 	// Declared visibility snapshots (before xsl:expose modification)
 	declaredTemplateVis map[string]string
 	declaredFunctionVis map[string]string
