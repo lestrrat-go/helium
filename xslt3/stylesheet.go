@@ -264,6 +264,7 @@ type keyDef struct {
 	Use       *xpath3.Expression
 	Body      []instruction // content constructor (when use attribute is absent)
 	Composite bool          // composite="yes" on xsl:key
+	Collation string        // collation URI (explicit or default; empty = codepoint)
 }
 
 // OutputDef is a compiled xsl:output.

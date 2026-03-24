@@ -124,6 +124,12 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst instruction)
 		return ec.execEvaluate(ctx, v)
 	case *fallbackInst:
 		return ec.execFallback(ctx, v)
+	case *collationScopeInst:
+		saved := ec.defaultCollation
+		ec.defaultCollation = v.DefaultCollation
+		err := ec.executeInstruction(ctx, v.Inner)
+		ec.defaultCollation = saved
+		return err
 	default:
 		return dynamicError(errCodeXTDE0820, "unsupported instruction type %T", inst)
 	}

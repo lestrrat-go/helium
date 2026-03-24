@@ -89,12 +89,21 @@ func (c *compiler) compileCharacterMap(elem *helium.Element) error {
 func (c *compiler) compileKey(elem *helium.Element) error {
 	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {}, "match": {}, "use": {}, "collation": {}, "composite": {},
-		"use-when": {},
+		"use-when": {}, "default-collation": {},
 	}); err != nil {
 		return err
 	}
 	// Collect local namespace declarations (e.g., xmlns:ex="..." on xsl:key)
 	c.collectNamespaces(elem)
+
+	// Handle per-element default-collation override (standard attribute)
+	savedDefaultCollation := c.defaultCollation
+	if dc := getAttr(elem, "default-collation"); dc != "" {
+		if uri := resolveDefaultCollation(dc); uri != "" {
+			c.defaultCollation = uri
+		}
+	}
+	defer func() { c.defaultCollation = savedDefaultCollation }()
 
 	name := getAttr(elem, "name")
 	if name == "" {
@@ -126,10 +135,24 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 		}
 	}
 
-	// XTSE1210: collation must be a recognized URI
+	// Resolve collation: explicit attribute takes precedence over default-collation.
+	collationURI := ""
 	if collAttr := getAttr(elem, "collation"); collAttr != "" {
+		// XTSE1210: collation must be a recognized URI
 		if !xpath3.IsCollationSupported(collAttr) {
 			return staticError(errCodeXTSE1210, "unrecognized collation URI %q on xsl:key", collAttr)
+		}
+		collationURI = collAttr
+	} else if c.defaultCollation != "" {
+		collationURI = c.defaultCollation
+	}
+
+	// XTSE1220: if there is already a key with the same name, the collation
+	// must agree across all declarations
+	if existingDefs, ok := c.stylesheet.keys[expandedName]; ok && len(existingDefs) > 0 {
+		if existingDefs[0].Collation != collationURI {
+			return staticError(errCodeXTSE1220,
+				"xsl:key declarations with name %q have conflicting collation attributes", expandedName)
 		}
 	}
 
@@ -137,6 +160,7 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 		Name:      expandedName,
 		Match:     matchPat,
 		Composite: composite,
+		Collation: collationURI,
 	}
 
 	useAttr := getAttr(elem, "use")

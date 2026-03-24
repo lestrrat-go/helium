@@ -141,6 +141,10 @@ func getInstructionBodies(inst instruction) [][]instruction {
 		if v.Body != nil {
 			return [][]instruction{v.Body}
 		}
+	case *collationScopeInst:
+		if v.Inner != nil {
+			return [][]instruction{{v.Inner}}
+		}
 	}
 	return nil
 }
@@ -602,6 +606,10 @@ func getChildInstructions(inst instruction) [][]instruction {
 	case *analyzeStringInst:
 		children = append(children, v.MatchingBody)
 		children = append(children, v.NonMatchingBody)
+	case *collationScopeInst:
+		if v.Inner != nil {
+			children = append(children, []instruction{v.Inner})
+		}
 	}
 
 	return children
