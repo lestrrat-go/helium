@@ -175,7 +175,7 @@ func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
 		for _, name := range strings.Fields(uas) {
 			resolved := resolveQName(name, c.nsBindings)
-			inst.UseAttributeSets = append(inst.UseAttributeSets, resolved)
+			inst.UseAttrSets = append(inst.UseAttrSets, resolved)
 			c.usedAttrSetRefs = append(c.usedAttrSetRefs, resolved)
 		}
 	}
@@ -191,10 +191,6 @@ func (c *compiler) compileElement(elem *helium.Element) (*ElementInst, error) {
 		return nil, err
 	}
 	inst.Body = body
-
-	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
-		inst.UseAttrSets = strings.Fields(uas)
-	}
 
 	return inst, nil
 }
@@ -393,7 +389,7 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
 		for _, name := range strings.Fields(uas) {
 			resolved := resolveQName(name, c.nsBindings)
-			inst.UseAttributeSets = append(inst.UseAttributeSets, resolved)
+			inst.UseAttrSets = append(inst.UseAttrSets, resolved)
 			c.usedAttrSetRefs = append(c.usedAttrSetRefs, resolved)
 		}
 	}
@@ -403,10 +399,6 @@ func (c *compiler) compileCopy(elem *helium.Element) (*CopyInst, error) {
 		return nil, err
 	}
 	inst.Body = body
-
-	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
-		inst.UseAttrSets = strings.Fields(uas)
-	}
 
 	return inst, nil
 }
@@ -946,10 +938,9 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*LiteralRe
 	if uas, ok := elem.GetAttributeNS("use-attribute-sets", lexicon.NamespaceXSLT); ok {
 		for _, name := range strings.Fields(uas) {
 			resolved := resolveQName(name, c.nsBindings)
-			lre.UseAttributeSets = append(lre.UseAttributeSets, resolved)
+			lre.UseAttrSets = append(lre.UseAttrSets, resolved)
 			c.usedAttrSetRefs = append(c.usedAttrSetRefs, resolved)
 		}
-		lre.UseAttrSets = strings.Fields(uas)
 	}
 
 	// Handle xsl:validation

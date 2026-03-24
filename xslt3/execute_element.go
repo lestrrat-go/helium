@@ -153,11 +153,6 @@ func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error
 	}()
 
 	// Apply attribute sets (before body so body can override)
-	if len(inst.UseAttributeSets) > 0 {
-		if err := ec.applyAttributeSets(ctx, inst.UseAttributeSets); err != nil {
-			return err
-		}
-	}
 	if len(inst.UseAttrSets) > 0 {
 		if err := ec.applyAttributeSets(ctx, inst.UseAttrSets); err != nil {
 			return err
