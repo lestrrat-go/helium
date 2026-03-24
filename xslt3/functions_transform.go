@@ -342,14 +342,19 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	nestedCompiler := ec.stylesheet.newNestedCompiler()
 
 	// Apply static-params from the options map to the nested compiler.
+	// Static params affect both compile time (use-when, shadow attributes)
+	// and runtime (param default values), so we collect them for both paths.
+	var staticParamValues map[string]xpath3.Sequence
 	if staticParamsSeq != nil && sequence.Len(staticParamsSeq) > 0 {
 		if sm, ok := staticParamsSeq.Get(0).(xpath3.MapItem); ok {
+			staticParamValues = make(map[string]xpath3.Sequence, sm.Size())
 			_ = sm.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
 				name, sErr := xpath3.AtomicToString(key)
 				if sErr != nil {
 					return nil
 				}
 				nestedCompiler = nestedCompiler.SetStaticParameter(name, value)
+				staticParamValues[name] = value
 				return nil
 			})
 		}
@@ -508,6 +513,20 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 			return nil
 		})
 		*mp.target = params
+	}
+
+	// Merge static params as runtime params so the externally supplied
+	// values override the compiled select="..." defaults at runtime.
+	// Explicit stylesheet-params take precedence over static-params.
+	if len(staticParamValues) > 0 {
+		if fnTransformCfg.sequenceParams == nil {
+			fnTransformCfg.sequenceParams = make(map[string]xpath3.Sequence, len(staticParamValues))
+		}
+		for name, val := range staticParamValues {
+			if _, exists := fnTransformCfg.sequenceParams[name]; !exists {
+				fnTransformCfg.sequenceParams[name] = val
+			}
+		}
 	}
 
 	// Apply function-params (array of sequences) for initial-function.

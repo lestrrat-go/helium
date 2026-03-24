@@ -56,9 +56,7 @@ func TestFnTransformStylesheetParams(t *testing.T) {
 
 // TestFnTransformStaticParams verifies that static-params passed through
 // fn:transform() reach the inner stylesheet's static xsl:param.
-// BUG: SetStaticParameter on Compiler does not override the compiled default.
 func TestFnTransformStaticParams(t *testing.T) {
-	t.Skip("static parameter override not yet implemented in Compiler")
 	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
