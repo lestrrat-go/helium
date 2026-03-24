@@ -12,6 +12,31 @@ import (
 	"github.com/lestrrat-go/helium/xsd"
 )
 
+// cloneOutputDef returns a shallow copy of an OutputDef with deep-copied map
+// fields. Returns nil if src is nil.
+func cloneOutputDef(src *OutputDef) *OutputDef {
+	if src == nil {
+		return nil
+	}
+	cp := *src
+	if src.ResolvedCharMap != nil {
+		cp.ResolvedCharMap = make(map[rune]string, len(src.ResolvedCharMap))
+		for k, v := range src.ResolvedCharMap {
+			cp.ResolvedCharMap[k] = v
+		}
+	}
+	if src.UseCharacterMaps != nil {
+		cp.UseCharacterMaps = append([]string(nil), src.UseCharacterMaps...)
+	}
+	if src.CDATASections != nil {
+		cp.CDATASections = append([]string(nil), src.CDATASections...)
+	}
+	if src.SuppressIndentation != nil {
+		cp.SuppressIndentation = append([]string(nil), src.SuppressIndentation...)
+	}
+	return &cp
+}
+
 // executeTransform performs the XSLT transformation.
 func executeTransform(ctx context.Context, source *helium.Document, ss *Stylesheet, cfg *transformConfig) (*helium.Document, error) {
 	resultDoc := helium.NewDefaultDocument()
@@ -166,6 +191,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 
 	// Initial function invocation (XSLT 3.0 §2.4)
 	if cfg != nil && cfg.initialFunction != "" {
+		cfg.resolvedOutputDef = cloneOutputDef(ss.outputs[""])
 		return ec.invokeInitialFunction(ctx, cfg)
 	}
 
@@ -402,9 +428,11 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		}
 	}
 
-	// Resolve character maps for the default output definition.
+	// Build the per-invocation output definition for the primary result.
+	// Clone before mutating so the compiled stylesheet is never modified.
 	outDef := ss.outputs[""]
 	if outDef != nil {
+		outDef = cloneOutputDef(outDef)
 		allMapNames := outDef.UseCharacterMaps
 		allMapNames = append(allMapNames, ec.primaryCharacterMaps...)
 		if len(allMapNames) > 0 {
@@ -413,13 +441,11 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	} else if len(ec.primaryCharacterMaps) > 0 {
 		outDef = &OutputDef{Method: methodXML, Encoding: "UTF-8"}
 		outDef.ResolvedCharMap = resolveCharacterMaps(ss, ec.primaryCharacterMaps)
-		ss.outputs[""] = outDef
 	}
 	// Merge resolved character maps from parameter-document (xsl:output or format).
 	if len(ec.primaryResolvedCharMap) > 0 {
 		if outDef == nil {
 			outDef = &OutputDef{Method: methodXML, Encoding: "UTF-8"}
-			ss.outputs[""] = outDef
 		}
 		if outDef.ResolvedCharMap == nil {
 			outDef.ResolvedCharMap = make(map[rune]string)
@@ -435,7 +461,6 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	if ec.primaryOutputOverrides != nil {
 		if outDef == nil {
 			outDef = &OutputDef{Method: methodXML, Encoding: "UTF-8"}
-			ss.outputs[""] = outDef
 		}
 		ov := ec.primaryOutputOverrides
 		if ov.Method != "" {
@@ -498,6 +523,10 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if ov.BuildTree != nil {
 			outDef.BuildTree = ov.BuildTree
 		}
+	}
+
+	if cfg != nil {
+		cfg.resolvedOutputDef = outDef
 	}
 
 	// Deliver type annotations and schema declarations to the caller

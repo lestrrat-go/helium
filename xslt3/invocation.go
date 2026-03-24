@@ -89,6 +89,11 @@ type invocationCfg struct {
 	sourceSchemas      []*xsd.Schema
 	onMultipleMatch    OnMultipleMatchMode
 	traceWriter        io.Writer
+
+	// resolvedOutputDef is set after executeTransform completes.
+	// It contains the effective output definition for the primary result,
+	// including runtime overrides from xsl:result-document.
+	resolvedOutputDef *OutputDef
 }
 
 func newInvocation(ss *Stylesheet, kind InvocationKind) Invocation {
@@ -244,7 +249,17 @@ func (inv Invocation) Do(ctx context.Context) (*helium.Document, error) {
 		return nil, err
 	}
 	tcfg := inv.toTransformConfig()
-	return executeTransform(ctx, inv.cfg.source, inv.cfg.ss, tcfg)
+	doc, err := executeTransform(ctx, inv.cfg.source, inv.cfg.ss, tcfg)
+	inv.cfg.resolvedOutputDef = tcfg.resolvedOutputDef
+	return doc, err
+}
+
+// ResolvedOutputDef returns the effective output definition for the primary
+// result after Do has been called. It includes runtime overrides from
+// xsl:result-document targeting the primary output. Returns nil if Do has
+// not yet been called.
+func (inv Invocation) ResolvedOutputDef() *OutputDef {
+	return inv.cfg.resolvedOutputDef
 }
 
 // Serialize executes the transformation and returns the serialized result.
@@ -268,8 +283,7 @@ func (inv Invocation) WriteTo(ctx context.Context, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	outDef := inv.cfg.ss.outputs[""]
-	return SerializeResult(w, resultDoc, outDef)
+	return SerializeResult(w, resultDoc, tcfg.resolvedOutputDef)
 }
 
 // validate checks that the invocation config is valid for the entry kind.

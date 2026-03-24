@@ -447,7 +447,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	case "serialized":
 		// Serialized delivery: serialize the result document to a string.
 		if resultDoc != nil {
-			outDef := ss.outputs[""]
+			outDef := fnTransformCfg.resolvedOutputDef
 			var buf bytes.Buffer
 			if err := SerializeResult(&buf, resultDoc, outDef); err != nil {
 				return nil, dynamicError(errCodeFOXT0003, "fn:transform: serialization error: %v", err)

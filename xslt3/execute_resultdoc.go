@@ -11,6 +11,16 @@ import (
 	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
+// getParamDocOutputDef returns the effective parameter-document OutputDef for
+// a result-document instruction, checking the per-invocation cache on
+// execContext first, then falling back to the compiled instruction's field.
+func (ec *execContext) getParamDocOutputDef(inst *ResultDocumentInst) *OutputDef {
+	if od, ok := ec.paramDocOutputDefs[inst]; ok {
+		return od
+	}
+	return inst.ParameterDocOutputDef
+}
+
 // validateDocumentStructure checks that a document node has exactly one element
 // child, no text nodes (non-whitespace), and only comments/PIs otherwise.
 // Returns XTTE1550 on violation.
@@ -247,8 +257,8 @@ func (ec *execContext) resolveResultDocMethod(ctx context.Context, inst *ResultD
 		return inst.Method
 	}
 	// Parameter-document output definition.
-	if inst.ParameterDocOutputDef != nil && inst.ParameterDocOutputDef.Method != "" {
-		return inst.ParameterDocOutputDef.Method
+	if pd := ec.getParamDocOutputDef(inst); pd != nil && pd.Method != "" {
+		return pd.Method
 	}
 	// Named format.
 	format, _ := ec.resolveResultDocFormat(ctx, inst)
@@ -313,16 +323,20 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		}
 	}
 
-	// Resolve parameter-document if specified as AVT.
+	// Resolve parameter-document if specified as AVT. Store the resolved
+	// output def on execContext (not on the compiled instruction) to avoid
+	// mutating the stylesheet's instruction tree.
 	if inst.ParameterDocAVT != nil && inst.ParameterDocOutputDef == nil {
-		pdHref, pdErr := inst.ParameterDocAVT.evaluate(ctx, ec.contextNode)
-		if pdErr == nil && pdHref != "" {
-			outDef := &OutputDef{}
-			baseURI := ec.effectiveStaticBaseURI()
-			if loadErr := loadParameterDocumentFromFile(ctx, outDef, baseURI, pdHref); loadErr == nil {
-				inst.ParameterDocOutputDef = outDef
-				if outDef.Method != "" && inst.Method == "" {
-					inst.Method = outDef.Method
+		if _, cached := ec.paramDocOutputDefs[inst]; !cached {
+			pdHref, pdErr := inst.ParameterDocAVT.evaluate(ctx, ec.contextNode)
+			if pdErr == nil && pdHref != "" {
+				outDef := &OutputDef{}
+				baseURI := ec.effectiveStaticBaseURI()
+				if loadErr := loadParameterDocumentFromFile(ctx, outDef, baseURI, pdHref); loadErr == nil {
+					if ec.paramDocOutputDefs == nil {
+						ec.paramDocOutputDefs = make(map[*ResultDocumentInst]*OutputDef)
+					}
+					ec.paramDocOutputDefs[inst] = outDef
 				}
 			}
 		}
@@ -673,7 +687,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 		inst.CDATASectionElements != nil || inst.Encoding != nil || inst.OutputVersion != nil ||
 		inst.ByteOrderMark != nil || inst.EscapeURIAttributes != nil ||
 		inst.JSONNodeOutputMethodAVT != nil || inst.NormalizationForm != nil ||
-		inst.ParameterDocOutputDef != nil ||
+		ec.getParamDocOutputDef(inst) != nil ||
 		inst.ItemSeparatorSet || inst.BuildTree != nil
 	effectiveFormat, fmtErr := ec.resolveResultDocFormat(ctx, inst)
 	if fmtErr != nil {
@@ -685,15 +699,16 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 
 	// Start with parameter-document defaults (lowest priority).
 	var base OutputDef
-	if inst.ParameterDocOutputDef != nil {
-		base = *inst.ParameterDocOutputDef
+	paramDocOD := ec.getParamDocOutputDef(inst)
+	if paramDocOD != nil {
+		base = *paramDocOD
 	}
 	// Named format overrides parameter-document.
 	if effectiveFormat != "" {
 		if fmtDef, ok := ec.stylesheet.outputs[effectiveFormat]; ok {
 			base = *fmtDef
 		}
-	} else if inst.ParameterDocOutputDef == nil {
+	} else if paramDocOD == nil {
 		if defDef, ok := ec.stylesheet.outputs[""]; ok {
 			base = *defDef
 		}
@@ -865,8 +880,8 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *ResultDocumentInst, formatName, method string) (*OutputDef, error) {
 	var base OutputDef
 	// Start with parameter-document defaults (lowest priority).
-	if inst.ParameterDocOutputDef != nil {
-		base = *inst.ParameterDocOutputDef
+	if pd := ec.getParamDocOutputDef(inst); pd != nil {
+		base = *pd
 	}
 	// Named format overrides parameter-document.
 	if formatName != "" {
