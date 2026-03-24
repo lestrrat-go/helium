@@ -13,7 +13,7 @@ import (
 	"github.com/lestrrat-go/helium/xslt3"
 )
 
-// exampleMessageReceiver implements xslt3.MessageReceiver for examples.
+// exampleMessageReceiver implements xslt3.MessageHandler for examples.
 type exampleMessageReceiver struct{}
 
 func (r *exampleMessageReceiver) HandleMessage(msg string, terminate bool) error {
@@ -21,7 +21,7 @@ func (r *exampleMessageReceiver) HandleMessage(msg string, terminate bool) error
 	return nil
 }
 
-// examplePrimaryItemsReceiver implements xslt3.PrimaryItemsReceiver.
+// examplePrimaryItemsReceiver implements xslt3.PrimaryItemsHandler.
 type examplePrimaryItemsReceiver struct {
 	items xpath3.Sequence
 }
@@ -31,7 +31,7 @@ func (r *examplePrimaryItemsReceiver) HandlePrimaryItems(seq xpath3.Sequence) er
 	return nil
 }
 
-// exampleRawResultReceiver implements xslt3.RawResultReceiver.
+// exampleRawResultReceiver implements xslt3.RawResultHandler.
 type exampleRawResultReceiver struct {
 	result xpath3.Sequence
 }
@@ -41,8 +41,7 @@ func (r *exampleRawResultReceiver) HandleRawResult(seq xpath3.Sequence) error {
 	return nil
 }
 
-// exampleResultDocReceiver implements xslt3.ResultDocumentReceiver and
-// xslt3.ResultDocumentOutputReceiver.
+// exampleResultDocReceiver implements xslt3.ResultDocumentHandler.
 type exampleResultDocReceiver struct {
 	docs    map[string]*helium.Document
 	outDefs map[string]*xslt3.OutputDef
@@ -55,13 +54,11 @@ func newExampleResultDocReceiver() *exampleResultDocReceiver {
 	}
 }
 
-func (r *exampleResultDocReceiver) HandleResultDocument(href string, doc *helium.Document) error {
+func (r *exampleResultDocReceiver) HandleResultDocument(href string, doc *helium.Document, outDef *xslt3.OutputDef) error {
 	r.docs[href] = doc
-	return nil
-}
-
-func (r *exampleResultDocReceiver) HandleResultDocumentOutput(href string, outDef *xslt3.OutputDef) error {
-	r.outDefs[href] = outDef
+	if outDef != nil {
+		r.outDefs[href] = outDef
+	}
 	return nil
 }
 

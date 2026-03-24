@@ -41,8 +41,7 @@ func Example_xslt3_transform_with_result_document_handler() {
 		return
 	}
 
-	// Use a receiver that implements both ResultDocumentReceiver and
-	// ResultDocumentOutputReceiver to receive each secondary output as a DOM
+	// Use a ResultDocumentHandler to receive each secondary output as a DOM
 	// along with its output definition.
 	// This is useful when your application wants to decide where or how to store
 	// side outputs instead of letting the stylesheet write directly to disk.
@@ -53,7 +52,7 @@ func Example_xslt3_transform_with_result_document_handler() {
 	recv := newExampleResultDocReceiver()
 
 	resultDoc, err := stylesheet.Transform(sourceDoc).
-		Receiver(recv).
+		ResultDocumentHandler(recv).
 		Do(ctx)
 	if err != nil {
 		fmt.Printf("transform failed: %s\n", err)

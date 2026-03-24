@@ -45,7 +45,7 @@ func Example_xslt3_transform_with_raw_result_handler() {
 
 	resultDoc, err := stylesheet.CallTemplate("numbers").
 		SourceDocument(sourceDoc).
-		Receiver(recv).
+		RawResultHandler(recv).
 		Do(ctx)
 	if err != nil {
 		fmt.Printf("transform failed: %s\n", err)

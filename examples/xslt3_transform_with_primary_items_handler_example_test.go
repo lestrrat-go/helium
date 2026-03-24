@@ -52,7 +52,7 @@ func Example_xslt3_transform_with_primary_items_handler() {
 	recv := &examplePrimaryItemsReceiver{}
 
 	resultDoc, err := stylesheet.Transform(sourceDoc).
-		PrimaryItemsReceiver(recv).
+		PrimaryItemsHandler(recv).
 		Do(ctx)
 	if err != nil {
 		fmt.Printf("transform failed: %s\n", err)
