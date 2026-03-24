@@ -700,9 +700,10 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 	}
 
 	v := &Variable{
-		Name:       resolveQName(name, c.nsBindings),
-		As:         asAttr,
-		Visibility: getAttr(elem, "visibility"),
+		Name:           resolveQName(name, c.nsBindings),
+		As:             asAttr,
+		Visibility:     getAttr(elem, "visibility"),
+		XPathDefaultNS: c.xpathDefaultNS,
 	}
 	if c.stylesheet.isPackage {
 		v.OwnerPackage = c.stylesheet

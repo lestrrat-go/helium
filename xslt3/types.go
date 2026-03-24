@@ -769,6 +769,10 @@ func isAnyURIType(typeName string, ec ...*execContext) bool {
 func resolveSchemaQName(qname string, ec *execContext) (local, ns string) {
 	idx := strings.IndexByte(qname, ':')
 	if idx < 0 {
+		// Unprefixed: use xpath-default-namespace if set.
+		if ec != nil && ec.hasXPathDefaultNS {
+			return qname, ec.xpathDefaultNS
+		}
 		return qname, ""
 	}
 	prefix := qname[:idx]
