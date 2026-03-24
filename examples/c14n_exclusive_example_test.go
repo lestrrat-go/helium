@@ -32,7 +32,7 @@ func Example_c14n_exclusive() {
 	// In this example, only xmlns:a appears in the output because only
 	// the "a" prefix is visibly used (on <a:item>). The "b" and "c"
 	// declarations are omitted.
-	out, err := c14n.CanonicalizeTo(doc, c14n.ExclusiveC14N10)
+	out, err := c14n.NewCanonicalizer(c14n.ExclusiveC14N10).CanonicalizeTo(doc)
 	if err != nil {
 		fmt.Printf("failed to canonicalize: %s\n", err)
 		return
