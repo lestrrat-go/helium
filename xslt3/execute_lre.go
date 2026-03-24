@@ -248,7 +248,7 @@ func (ec *execContext) applyAttributeSetsGuarded(ctx context.Context, names []st
 		if asDef == nil {
 			continue
 		}
-		if asDef.Visibility == visAbstract {
+		if asDef.Visibility == visAbstract || asDef.Visibility == visHidden {
 			return dynamicError(errCodeXTDE3052,
 				"abstract attribute-set %q was invoked without being overridden", name)
 		}

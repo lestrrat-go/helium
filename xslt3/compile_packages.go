@@ -423,7 +423,9 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 			if len(acceptRules) > 0 {
 				acceptVis := applyAcceptRules(xslElemAttributeSet, name, acceptRules, pkgVis)
 				if acceptVis == visHidden {
-					continue
+					// Mark as hidden but still merge so that package-
+					// internal use-attribute-sets references resolve.
+					as.Visibility = visHidden
 				}
 			}
 			if _, overridden := overrideNames[xslElemAttributeSet+":"+name]; overridden {
