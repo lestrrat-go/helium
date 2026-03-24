@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/lestrrat-go/helium"
@@ -209,6 +210,24 @@ func (c resultDocCollector) HandleResultDocument(href string, doc *helium.Docume
 	return nil
 }
 
+// newNestedCompiler creates a Compiler pre-configured with the same
+// resolver, package resolver, and import schemas that were used to
+// compile this stylesheet, so that fn:transform nested compiles
+// behave consistently with top-level compilation.
+func (ss *Stylesheet) newNestedCompiler() Compiler {
+	c := NewCompiler()
+	if ss.uriResolver != nil {
+		c = c.URIResolver(ss.uriResolver)
+	}
+	if ss.packageResolver != nil {
+		c = c.PackageResolver(ss.packageResolver)
+	}
+	if len(ss.compilerImportSchemas) > 0 {
+		c = c.ImportSchemas(ss.compilerImportSchemas...)
+	}
+	return c
+}
+
 // fnTransform implements fn:transform() — dynamically compile and execute
 // an XSLT stylesheet.
 func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
@@ -260,9 +279,29 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	packageName := getStr("package-name")
 	packageVersion := getStr("package-version")
 	initialTemplate := getStr("initial-template")
+	initialMode := getStr("initial-mode")
 	deliveryFormat := getStr("delivery-format")
 	initialMatchSel := getSeq("initial-match-selection")
 	sourceNode := getSeq("source-node")
+	stylesheetParamsSeq := getSeq("stylesheet-params")
+	staticParamsSeq := getSeq("static-params")
+
+	// Build a compiler that inherits the outer stylesheet's configuration.
+	nestedCompiler := ec.stylesheet.newNestedCompiler()
+
+	// Apply static-params from the options map to the nested compiler.
+	if staticParamsSeq != nil && sequence.Len(staticParamsSeq) > 0 {
+		if sm, ok := staticParamsSeq.Get(0).(xpath3.MapItem); ok {
+			_ = sm.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
+				name, sErr := xpath3.AtomicToString(key)
+				if sErr != nil {
+					return nil
+				}
+				nestedCompiler = nestedCompiler.SetStaticParameter(name, value)
+				return nil
+			})
+		}
+	}
 
 	// Compile the stylesheet
 	var ss *Stylesheet
@@ -272,8 +311,20 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if ec.stylesheet.baseURI != "" && !filepath.IsAbs(loc) {
 			loc = filepath.Join(filepath.Dir(ec.stylesheet.baseURI), loc)
 		}
+		absPath, absErr := filepath.Abs(loc)
+		if absErr != nil {
+			absPath = loc
+		}
+		data, readErr := os.ReadFile(loc)
+		if readErr != nil {
+			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
+		}
+		doc, parseErr := parseStylesheetDocument(ctx, data, absPath)
+		if parseErr != nil {
+			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse stylesheet %q: %v", stylesheetLoc, parseErr)
+		}
 		var compileErr error
-		ss, compileErr = compileFile(ctx, loc)
+		ss, compileErr = nestedCompiler.BaseURI(absPath).Compile(ctx, doc)
 		if compileErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot compile stylesheet %q: %v", stylesheetLoc, compileErr)
 		}
@@ -297,7 +348,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if parseErr != nil {
 			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse package %q: %v", packageName, parseErr)
 		}
-		compiler := NewCompiler()
+		compiler := nestedCompiler
 		if location != "" {
 			compiler = compiler.BaseURI(location)
 		}
@@ -325,7 +376,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 					return nil, dynamicError(errCodeFOXT0003, "fn:transform: stylesheet-node is not part of a document")
 				}
 				var compileErr error
-				ss, compileErr = NewCompiler().Compile(ctx, doc)
+				ss, compileErr = nestedCompiler.Compile(ctx, doc)
 				if compileErr != nil {
 					return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot compile stylesheet: %v", compileErr)
 				}
@@ -356,7 +407,24 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	secondaryResults := make(map[string]*helium.Document)
 	fnTransformCfg := &transformConfig{
 		initialTemplate:   initialTemplate,
+		initialMode:       initialMode,
 		resultDocReceiver: resultDocCollector{results: secondaryResults},
+	}
+
+	// Apply stylesheet-params from the options map as runtime parameters.
+	if stylesheetParamsSeq != nil && sequence.Len(stylesheetParamsSeq) > 0 {
+		if sm, ok := stylesheetParamsSeq.Get(0).(xpath3.MapItem); ok {
+			params := make(map[string]xpath3.Sequence, sm.Size())
+			_ = sm.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
+				name, sErr := xpath3.AtomicToString(key)
+				if sErr != nil {
+					return nil
+				}
+				params[name] = value
+				return nil
+			})
+			fnTransformCfg.sequenceParams = params
+		}
 	}
 
 	// Execute the transform
