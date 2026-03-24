@@ -23,9 +23,8 @@ func (c *compiler) compileUsePackage(elem *helium.Element) error {
 	pkgVersion := getAttr(elem, "package-version")
 
 	if c.packageResolver == nil {
-		// No package resolver configured; try to ignore gracefully.
-		// This is a real limitation: without a resolver, xsl:use-package cannot work.
-		return nil
+		return staticError(errCodeXTSE3000,
+			"xsl:use-package requires a PackageResolver but none is configured (package %q)", pkgName)
 	}
 
 	rc, pkgBaseURI, err := c.packageResolver.ResolvePackage(pkgName, pkgVersion)

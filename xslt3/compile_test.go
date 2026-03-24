@@ -95,6 +95,22 @@ func TestCompilerPackageResolver(t *testing.T) {
 	require.Equal(t, "http://example.com/missing", r.calledName)
 }
 
+func TestUsePackageWithoutResolver(t *testing.T) {
+	pkgSheet := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:use-package name="http://example.com/some-package"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.Parse(t.Context(), []byte(pkgSheet))
+	require.NoError(t, err)
+
+	// Compile without a PackageResolver — must fail, not silently succeed.
+	_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "PackageResolver")
+}
+
 func TestCompilerStaticParameters(t *testing.T) {
 	// Static parameters affect compile-time use-when evaluation.
 	// When debug='yes', the use-when branch includes the debug template.
