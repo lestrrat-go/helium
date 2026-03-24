@@ -25,16 +25,7 @@ type resultDocumentAbortReceiver struct {
 	called bool
 }
 
-func (r *resultDocumentAbortReceiver) HandleResultDocument(href string, doc *helium.Document) error {
-	r.called = true
-	return errReceiverAborted
-}
-
-type resultDocumentOutputAbortReceiver struct {
-	called bool
-}
-
-func (r *resultDocumentOutputAbortReceiver) HandleResultDocumentOutput(href string, outDef *xslt3.OutputDef) error {
+func (r *resultDocumentAbortReceiver) HandleResultDocument(href string, doc *helium.Document, outDef *xslt3.OutputDef) error {
 	r.called = true
 	return errReceiverAborted
 }
@@ -93,22 +84,6 @@ func TestResultDocumentReceiverErrorAbortsTransform(t *testing.T) {
 
 	receiver := &resultDocumentAbortReceiver{}
 	_, err := ss.Transform(parseTransformSource(t)).ResultDocumentReceiver(receiver).Do(t.Context())
-
-	require.True(t, receiver.called)
-	require.ErrorIs(t, err, errReceiverAborted)
-}
-
-func TestResultDocumentOutputReceiverErrorAbortsTransform(t *testing.T) {
-	ss := compileStylesheetString(t, `
-<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:template match="/">
-    <xsl:result-document href="secondary.txt" method="text">secondary</xsl:result-document>
-    <out/>
-  </xsl:template>
-</xsl:stylesheet>`)
-
-	receiver := &resultDocumentOutputAbortReceiver{}
-	_, err := ss.Transform(parseTransformSource(t)).ResultDocumentOutputReceiver(receiver).Do(t.Context())
 
 	require.True(t, receiver.called)
 	require.ErrorIs(t, err, errReceiverAborted)

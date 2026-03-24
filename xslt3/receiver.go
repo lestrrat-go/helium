@@ -12,15 +12,11 @@ type MessageReceiver interface {
 }
 
 // ResultDocumentReceiver handles secondary result documents produced
-// by xsl:result-document. A non-nil error aborts the transform.
+// by xsl:result-document. The outDef contains the effective output
+// definition (method, encoding, indent, etc.) for this result document.
+// A non-nil error aborts the transform.
 type ResultDocumentReceiver interface {
-	HandleResultDocument(href string, doc *helium.Document) error
-}
-
-// ResultDocumentOutputReceiver receives the effective output definition
-// for each secondary result document. A non-nil error aborts the transform.
-type ResultDocumentOutputReceiver interface {
-	HandleResultDocumentOutput(href string, outDef *OutputDef) error
+	HandleResultDocument(href string, doc *helium.Document, outDef *OutputDef) error
 }
 
 // RawResultReceiver receives the raw XDM result sequence from the primary
@@ -46,12 +42,11 @@ type AnnotationReceiver interface {
 // receiverSet holds the extracted receiver implementations from a single
 // receiver object. All fields may be nil.
 type receiverSet struct {
-	message              MessageReceiver
-	resultDocument       ResultDocumentReceiver
-	resultDocumentOutput ResultDocumentOutputReceiver
-	rawResult            RawResultReceiver
-	primaryItems         PrimaryItemsReceiver
-	annotations          AnnotationReceiver
+	message        MessageReceiver
+	resultDocument ResultDocumentReceiver
+	rawResult      RawResultReceiver
+	primaryItems   PrimaryItemsReceiver
+	annotations    AnnotationReceiver
 }
 
 // extractReceivers type-asserts the receiver object against all known
@@ -66,9 +61,6 @@ func extractReceivers(r any) receiverSet {
 	}
 	if v, ok := r.(ResultDocumentReceiver); ok {
 		rs.resultDocument = v
-	}
-	if v, ok := r.(ResultDocumentOutputReceiver); ok {
-		rs.resultDocumentOutput = v
 	}
 	if v, ok := r.(RawResultReceiver); ok {
 		rs.rawResult = v

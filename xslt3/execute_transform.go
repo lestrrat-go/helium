@@ -379,16 +379,8 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	// Deliver secondary result documents to the receiver.
 	if cfg != nil && cfg.resultDocReceiver != nil {
 		for href, doc := range ec.resultDocuments {
-			if err := cfg.resultDocReceiver.HandleResultDocument(href, doc); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	// Deliver secondary result document output definitions to the receiver.
-	if cfg != nil && cfg.resultDocOutputReceiver != nil {
-		for href, outDef := range ec.resultDocOutputDefs {
-			if err := cfg.resultDocOutputReceiver.HandleResultDocumentOutput(href, outDef); err != nil {
+			outDef := ec.resultDocOutputDefs[href]
+			if err := cfg.resultDocReceiver.HandleResultDocument(href, doc, outDef); err != nil {
 				return nil, err
 			}
 		}

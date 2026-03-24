@@ -78,10 +78,9 @@ type invocationCfg struct {
 	initialTemplateParams *Parameters
 	initialModeParams     *Parameters
 
-	msgReceiver             MessageReceiver
-	resultDocReceiver       ResultDocumentReceiver
-	resultDocOutputReceiver ResultDocumentOutputReceiver
-	rawResultReceiver       RawResultReceiver
+	msgReceiver        MessageReceiver
+	resultDocReceiver  ResultDocumentReceiver
+	rawResultReceiver  RawResultReceiver
 	primaryItemsReceiver    PrimaryItemsReceiver
 	annotationReceiver      AnnotationReceiver
 	receiverErr             error
@@ -200,10 +199,10 @@ func (inv Invocation) SetInitialModeParameter(name string, value xpath3.Sequence
 
 // Receiver sets one or more receiver hooks by type-asserting r against the
 // known receiver interfaces (MessageReceiver, ResultDocumentReceiver,
-// ResultDocumentOutputReceiver, RawResultReceiver, PrimaryItemsReceiver,
-// AnnotationReceiver). For better discoverability, prefer the typed methods
-// MessageReceiver, ResultDocumentReceiver, ResultDocumentOutputReceiver,
-// RawResultReceiver, PrimaryItemsReceiver, and AnnotationReceiver.
+// RawResultReceiver, PrimaryItemsReceiver, AnnotationReceiver).
+// For better discoverability, prefer the typed methods
+// MessageReceiver, ResultDocumentReceiver, RawResultReceiver,
+// PrimaryItemsReceiver, and AnnotationReceiver.
 func (inv Invocation) Receiver(r any) Invocation {
 	inv = inv.clone()
 	if r == nil {
@@ -219,9 +218,6 @@ func (inv Invocation) Receiver(r any) Invocation {
 	}
 	if rs.resultDocument != nil {
 		inv.cfg.resultDocReceiver = rs.resultDocument
-	}
-	if rs.resultDocumentOutput != nil {
-		inv.cfg.resultDocOutputReceiver = rs.resultDocumentOutput
 	}
 	if rs.rawResult != nil {
 		inv.cfg.rawResultReceiver = rs.rawResult
@@ -247,14 +243,6 @@ func (inv Invocation) MessageReceiver(r MessageReceiver) Invocation {
 func (inv Invocation) ResultDocumentReceiver(r ResultDocumentReceiver) Invocation {
 	inv = inv.clone()
 	inv.cfg.resultDocReceiver = r
-	return inv
-}
-
-// ResultDocumentOutputReceiver sets the handler that receives the effective
-// output definition for each secondary result document.
-func (inv Invocation) ResultDocumentOutputReceiver(r ResultDocumentOutputReceiver) Invocation {
-	inv = inv.clone()
-	inv.cfg.resultDocOutputReceiver = r
 	return inv
 }
 
@@ -468,7 +456,6 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 	// Receivers
 	tcfg.msgReceiver = c.msgReceiver
 	tcfg.resultDocReceiver = c.resultDocReceiver
-	tcfg.resultDocOutputReceiver = c.resultDocOutputReceiver
 	tcfg.rawResultReceiver = c.rawResultReceiver
 	tcfg.primaryItemsReceiver = c.primaryItemsReceiver
 	tcfg.annotationReceiver = c.annotationReceiver
