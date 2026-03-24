@@ -54,11 +54,11 @@ func (m OnMultipleMatchMode) String() string {
 // and the original is never mutated. Terminal methods (Do, Serialize,
 // WriteTo) create an internal execCtx immediately.
 type Invocation struct {
-	cfg *invocationCfg
+	cfg *invocationConfig
 }
 
-// invocationCfg holds the configuration for an Invocation.
-type invocationCfg struct {
+// invocationConfig holds the configuration for an Invocation.
+type invocationConfig struct {
 	ss *Stylesheet
 
 	kind InvocationKind
@@ -96,12 +96,12 @@ type invocationCfg struct {
 }
 
 func newInvocation(ss *Stylesheet, kind InvocationKind) Invocation {
-	return Invocation{cfg: &invocationCfg{ss: ss, kind: kind}}
+	return Invocation{cfg: &invocationConfig{ss: ss, kind: kind}}
 }
 
 func (inv Invocation) clone() Invocation {
 	if inv.cfg == nil {
-		return Invocation{cfg: &invocationCfg{}}
+		return Invocation{cfg: &invocationConfig{}}
 	}
 	cp := *inv.cfg
 	return Invocation{cfg: &cp}
