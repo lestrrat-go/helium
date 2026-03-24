@@ -1176,6 +1176,13 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 	for k, v := range ec.globalVars {
 		vars[k] = v
 	}
+	// Overlay package-scoped variables when executing in a used package.
+	// Package variables may shadow global variables from the main
+	// stylesheet (e.g. when two packages override the same variable
+	// from a shared dependency with different values).
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		addPackageVars(ec, ec.currentPackage, vars, nil)
+	}
 	// Walk from outermost to innermost scope so inner scopes override
 	var scopes []*varScope
 	for s := ec.localVars; s != nil; s = s.parent {
@@ -1187,13 +1194,35 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 		}
 	}
 
-	// Cache the result when it's globals-only (no local scopes)
-	if ec.localVars == nil {
+	// Cache the result when it's globals-only (no local scopes and no package)
+	if ec.localVars == nil && (ec.currentPackage == nil || ec.currentPackage == ec.stylesheet) {
 		ec.cachedVarsMap = vars
 		ec.cachedVarsGen = ec.globalVarsGen
 	}
 
 	return vars
+}
+
+// addPackageVars eagerly evaluates and adds global variables from a
+// package (and its used packages recursively) to the variables map.
+func addPackageVars(ec *execContext, pkg *Stylesheet, vars map[string]xpath3.Sequence, visited map[*Stylesheet]struct{}) {
+	if visited == nil {
+		visited = make(map[*Stylesheet]struct{})
+	}
+	if _, seen := visited[pkg]; seen {
+		return
+	}
+	visited[pkg] = struct{}{}
+	for _, sub := range pkg.usedPackages {
+		addPackageVars(ec, sub, vars, visited)
+	}
+	// Package's own vars override used packages' vars
+	for _, v := range pkg.globalVars {
+		val, err := ec.evaluateGlobalVar(v)
+		if err == nil {
+			vars[v.Name] = val
+		}
+	}
 }
 
 // ResolveFunction implements xpath3.FunctionResolver. It resolves
@@ -1248,5 +1277,75 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 		}
 		return val, true, nil
 	}
+	// Check the current package's global variables (package-scoped isolation).
+	// Variables that are private within the package chain may not be in the
+	// main stylesheet's globalVars but are accessible to package code.
+	// Also check used packages recursively since variables may be in
+	// sub-packages that were not promoted to the main stylesheet.
+	//
+	// The name may be in prefixed form (e.g. "oupdtg:city") from the XPath
+	// variable resolver. Try to expand it using the stylesheet namespaces.
+	expandedName := name
+	if !strings.HasPrefix(name, "{") && strings.Contains(name, ":") {
+		parts := strings.SplitN(name, ":", 2)
+		if uri, ok := ec.stylesheet.namespaces[parts[0]]; ok {
+			expandedName = "{" + uri + "}" + parts[1]
+		}
+		// Also check the current package's namespaces
+		if expandedName == name && ec.currentPackage != nil {
+			if uri, ok := ec.currentPackage.namespaces[parts[0]]; ok {
+				expandedName = "{" + uri + "}" + parts[1]
+			}
+		}
+	}
+	// Re-check global vars with the expanded name
+	if expandedName != name {
+		if v, ok := ec.globalVars[expandedName]; ok {
+			return v, true, nil
+		}
+		if def, ok := ec.globalVarDefs[expandedName]; ok {
+			val, err := ec.evaluateGlobalVar(def)
+			if err != nil {
+				return nil, false, err
+			}
+			return val, true, nil
+		}
+	}
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		lookupName := expandedName
+		if v := findPackageVar(ec.currentPackage, lookupName, nil); v != nil {
+			val, err := ec.evaluateGlobalVar(v)
+			if err != nil {
+				return nil, false, err
+			}
+			return val, true, nil
+		}
+	}
 	return nil, false, nil
+}
+
+// findPackageVar searches for a global variable in a package and its
+// used packages recursively. This handles the case where a variable
+// from a sub-package was made private and thus not merged into the
+// top-level stylesheet, but is still accessible to code defined in
+// the package chain.
+func findPackageVar(pkg *Stylesheet, name string, visited map[*Stylesheet]struct{}) *variable {
+	if visited == nil {
+		visited = make(map[*Stylesheet]struct{})
+	}
+	if _, seen := visited[pkg]; seen {
+		return nil
+	}
+	visited[pkg] = struct{}{}
+	for _, v := range pkg.globalVars {
+		if v.Name == name {
+			return v
+		}
+	}
+	for _, sub := range pkg.usedPackages {
+		if v := findPackageVar(sub, name, visited); v != nil {
+			return v
+		}
+	}
+	return nil
 }
