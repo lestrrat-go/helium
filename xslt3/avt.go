@@ -242,8 +242,10 @@ func (a *avt) evaluateStatic(eval xpath3.Evaluator, node helium.Node) (string, e
 }
 
 // stringifyResult converts an xpath3.Result to its string representation.
+// Adjacent text nodes are merged before items are joined with spaces,
+// consistent with the XSLT 3.0 simple content construction rules (§5.7.2).
 func stringifyResult(r *xpath3.Result) string {
-	return stringifySequenceWithSep(r.Sequence(), " ")
+	return stringifySimpleContent(r.Sequence(), " ")
 }
 
 // stringifySequence converts a Sequence to its string representation
@@ -288,6 +290,20 @@ func stringifySequenceWithSep(seq xpath3.Sequence, sep string) string {
 		i++
 	}
 	return sb.String()
+}
+
+// stringifySimpleContent implements XSLT 3.0 §5.7.2 simple content
+// construction: adjacent text nodes are merged first, then all
+// remaining items are separated by the given separator string.
+func stringifySimpleContent(seq xpath3.Sequence, sep string) string {
+	seq = flattenArraysInSequence(seq)
+	if seq == nil || sequence.Len(seq) == 0 {
+		return ""
+	}
+	// Step 1: merge adjacent text nodes.
+	merged := mergeAdjacentTextNodes(seq)
+	// Step 2: stringify each item, separating with sep.
+	return stringifySequenceWithSep(merged, sep)
 }
 
 // flattenArraysInSequence recursively replaces any ArrayItem in the
