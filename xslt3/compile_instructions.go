@@ -351,6 +351,15 @@ func (c *compiler) compileInstruction(elem *helium.Element) (instruction, error)
 		}
 		si.setSourceInfo(elem.Line(), module)
 	}
+	// Wrap in collation scope if default-collation changed on this element.
+	// This ensures the runtime ec.defaultCollation is set correctly for
+	// XPath expressions evaluated by the wrapped instruction.
+	if c.defaultCollation != savedDefaultCollation {
+		inst = &collationScopeInst{
+			DefaultCollation: c.defaultCollation,
+			Inner:            inst,
+		}
+	}
 	return inst, nil
 }
 

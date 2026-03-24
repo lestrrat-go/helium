@@ -26,6 +26,15 @@ type xpathNS struct {
 func (x xpathNS) getXPathDefaultNS() string { return x.XPathDefaultNS }
 func (x xpathNS) xpathNSIsSet() bool        { return x.HasXPathDefaultNS }
 
+// collationScopeInst wraps an instruction with a default-collation override.
+// Emitted by the compiler when default-collation changes on an instruction element.
+type collationScopeInst struct {
+	DefaultCollation string
+	Inner            instruction
+}
+
+func (*collationScopeInst) instructionTag() {}
+
 // sourceInfo records the source location of an instruction in the stylesheet.
 // Embedded in instruction types to report location for xsl:catch error variables.
 type sourceInfo struct {

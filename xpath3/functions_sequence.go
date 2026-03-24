@@ -265,7 +265,7 @@ func deepEqualItem(a, b Item, opts deepEqualOptions) (bool, error) {
 		if !ok {
 			return false, nil
 		}
-		return deepEqualNode(av.Node, bv.Node), nil
+		return deepEqualNode(av.Node, bv.Node, opts), nil
 	case MapItem:
 		bv, ok := b.(MapItem)
 		if !ok {
@@ -312,13 +312,19 @@ func deepEqualAtomic(a, b AtomicValue, opts deepEqualOptions) (bool, error) {
 	return eq, nil
 }
 
-func deepEqualNode(a, b helium.Node) bool {
+func deepEqualNode(a, b helium.Node, opts deepEqualOptions) bool {
 	if a.Type() != b.Type() {
 		return false
 	}
+	strEq := func(sa, sb string) bool {
+		if opts.coll != nil {
+			return opts.coll.compare(sa, sb) == 0
+		}
+		return sa == sb
+	}
 	switch a.Type() {
 	case helium.DocumentNode:
-		return deepEqualChildren(a, b)
+		return deepEqualChildren(a, b, opts)
 	case helium.ElementNode:
 		ae, aOK := a.(*helium.Element)
 		be, bOK := b.(*helium.Element)
@@ -339,7 +345,7 @@ func deepEqualNode(a, b helium.Node) bool {
 			found := false
 			for _, ba := range bAttrs {
 				if aa.LocalName() == ba.LocalName() && aa.URI() == ba.URI() {
-					if aa.Value() != ba.Value() {
+					if !strEq(aa.Value(), ba.Value()) {
 						return false
 					}
 					found = true
@@ -351,18 +357,18 @@ func deepEqualNode(a, b helium.Node) bool {
 			}
 		}
 		// Compare children
-		return deepEqualChildren(a, b)
+		return deepEqualChildren(a, b, opts)
 	case helium.AttributeNode:
 		aa, aOK := a.(*helium.Attribute)
 		ba, bOK := b.(*helium.Attribute)
 		if !aOK || !bOK {
 			return false
 		}
-		return aa.LocalName() == ba.LocalName() && aa.URI() == ba.URI() && aa.Value() == ba.Value()
+		return aa.LocalName() == ba.LocalName() && aa.URI() == ba.URI() && strEq(aa.Value(), ba.Value())
 	case helium.NamespaceNode:
 		return a.Name() == b.Name() && string(a.Content()) == string(b.Content())
 	case helium.TextNode, helium.CDATASectionNode:
-		return string(a.Content()) == string(b.Content())
+		return strEq(string(a.Content()), string(b.Content()))
 	case helium.CommentNode:
 		return string(a.Content()) == string(b.Content())
 	case helium.ProcessingInstructionNode:
@@ -372,12 +378,11 @@ func deepEqualNode(a, b helium.Node) bool {
 	}
 }
 
-func deepEqualChildren(a, b helium.Node) bool {
-	// Collect significant children (skip whitespace-only text between elements? No — deep-equal compares all children)
+func deepEqualChildren(a, b helium.Node, opts deepEqualOptions) bool {
 	ac := a.FirstChild()
 	bc := b.FirstChild()
 	for ac != nil && bc != nil {
-		if !deepEqualNode(ac, bc) {
+		if !deepEqualNode(ac, bc, opts) {
 			return false
 		}
 		ac = ac.NextSibling()
@@ -468,7 +473,7 @@ func deepEqualArray(a, b ArrayItem, opts deepEqualOptions) (bool, error) {
 	return true, nil
 }
 
-func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
+func fnIndexOf(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "index-of: search value must not be empty sequence"}
 	}
@@ -476,21 +481,18 @@ func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Resolve optional collation argument (3rd arg)
-	var coll *collationImpl
-	if len(args) > 2 {
-		if seqLen(args[2]) == 0 {
-			return nil, &XPathError{Code: errCodeXPTY0004, Message: "collation argument must not be empty"}
-		}
-		collA, err := AtomizeItem(args[2].Get(0))
-		if err != nil {
-			return nil, err
-		}
-		collURI := collA.StringVal()
-		coll, err = resolveCollation(collURI, "")
-		if err != nil {
-			return nil, err
-		}
+	// Explicit 3rd arg with empty sequence is a type error (xs:string, not xs:string?)
+	if len(args) > 2 && seqLen(args[2]) == 0 {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "collation argument must not be empty"}
+	}
+	// Resolve collation: explicit 3rd arg, or default collation
+	coll, err := getCollation(ctx, args, 2)
+	if err != nil {
+		return nil, err
+	}
+	// codepointCollation is the default — treat as nil for fast path
+	if coll == codepointCollation {
+		coll = nil
 	}
 	// Per spec: untypedAtomic values are cast to xs:string for comparison
 	if search.TypeName == TypeUntypedAtomic {

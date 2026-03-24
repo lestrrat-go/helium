@@ -279,6 +279,11 @@ func instructionChildren(inst instruction) [][]instruction {
 		return [][]instruction{v.Body}
 	case *copyOfInst:
 		return nil
+	case *collationScopeInst:
+		if v.Inner != nil {
+			return [][]instruction{{v.Inner}}
+		}
+		return nil
 	default:
 		return nil
 	}
