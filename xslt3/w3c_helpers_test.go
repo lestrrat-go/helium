@@ -1463,6 +1463,13 @@ var w3cImplicitSkips = map[string]string{
 	"strip-space-022": "xsl:strip-space with xml:space=preserve interaction incorrect",
 	"strip-space-023": "XPDY0002 context-dependent expression in strip-space not detected",
 
+	// base-uri: external entity base URI tracking and xsl:copy base URI propagation
+	"base-uri-024": "xsl:copy does not preserve original node base URI on orphaned elements",
+	"base-uri-051":  "external entity base URI not tracked by parser",
+	"base-uri-051a": "external entity base URI not tracked by parser",
+	"base-uri-051b": "external entity base URI not tracked by parser",
+	"base-uri-052":  "external entity base URI not tracked by parser",
+	"base-uri-053":  "xsl:copy does not preserve original node base URI on orphaned elements",
 
 	// arrays: array construction and apply-templates on arrays
 	"square-array-019": "apply-templates on array members includes extra elements",

@@ -714,6 +714,11 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []instru
 // the body is a sequence constructor per the XSLT spec.
 func (ec *execContext) evaluateBodyAsSequence(ctx context.Context, body []instruction) (xpath3.Sequence, error) {
 	tmpDoc := helium.NewDefaultDocument()
+	// Set the document URL to the static base URI so that element nodes
+	// with xml:base can resolve against it (even when orphaned).
+	if baseURI := ec.effectiveStaticBaseURI(); baseURI != "" {
+		tmpDoc.SetURL(baseURI)
+	}
 	tmpRoot, err := tmpDoc.CreateElement("_tmp")
 	if err != nil {
 		return nil, err
@@ -725,7 +730,13 @@ func (ec *execContext) evaluateBodyAsSequence(ctx context.Context, body []instru
 	// Use sequenceMode to capture all nodes as separate items
 	frame := &outputFrame{doc: tmpDoc, current: tmpRoot, captureItems: true, sequenceMode: true}
 	ec.outputStack = append(ec.outputStack, frame)
+
+	// Temporarily set resultDoc to the temp document so that nodes
+	// created by copy-of belong to the correct document tree.
+	savedResultDoc := ec.resultDoc
+	ec.resultDoc = tmpDoc
 	defer func() {
+		ec.resultDoc = savedResultDoc
 		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 	}()
 
