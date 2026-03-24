@@ -285,3 +285,60 @@ func TestFnTransformCustomURIScheme(t *testing.T) {
 	require.Contains(t, resolver.calledWith, "mem://pkg/inner.xsl",
 		"resolver should receive properly resolved URI, got: %v", resolver.calledWith)
 }
+
+// TestFnTransformNamespacedInitialTemplate verifies that initial-template
+// with a namespace URI (via QName) correctly finds the named template.
+func TestFnTransformNamespacedInitialTemplate(t *testing.T) {
+	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:param name="inner-loc"/>
+  <xsl:template match="/">
+    <xsl:variable name="result" select="transform(map{
+      'stylesheet-location': $inner-loc,
+      'initial-template': QName('http://example.com/tpl','greet'),
+      'delivery-format': 'serialized'
+    })"/>
+    <result><xsl:value-of select="$result('output')"/></result>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	src, _ := helium.Parse(t.Context(), []byte(`<dummy/>`))
+	out, err := ss.Transform(src).
+		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-ns-template.xsl"))).
+		Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "ns-template-hello")
+}
+
+// TestFnTransformNamespacedInitialMode verifies that initial-mode
+// with a namespace URI (via QName) correctly selects the mode.
+func TestFnTransformNamespacedInitialMode(t *testing.T) {
+	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:param name="inner-loc"/>
+  <xsl:template match="/">
+    <xsl:variable name="src" as="document-node()">
+      <xsl:document><root/></xsl:document>
+    </xsl:variable>
+    <xsl:variable name="result" select="transform(map{
+      'stylesheet-location': $inner-loc,
+      'source-node': $src,
+      'initial-mode': QName('http://example.com/modes','highlight'),
+      'delivery-format': 'serialized'
+    })"/>
+    <result><xsl:value-of select="$result('output')"/></result>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	src, _ := helium.Parse(t.Context(), []byte(`<dummy/>`))
+	out, err := ss.Transform(src).
+		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-ns-modes.xsl"))).
+		Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "ns-mode-highlight")
+	require.NotContains(t, out, "default-mode")
+}
