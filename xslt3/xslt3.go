@@ -4,8 +4,6 @@ package xslt3
 import (
 	"context"
 	"io"
-	"os"
-	"path/filepath"
 
 	"github.com/lestrrat-go/helium"
 )
@@ -23,23 +21,6 @@ func parseStylesheetDocument(ctx context.Context, data []byte, baseURI string) (
 // This is a convenience wrapper over NewCompiler().Compile(ctx, doc).
 func CompileStylesheet(ctx context.Context, doc *helium.Document) (*Stylesheet, error) {
 	return NewCompiler().Compile(ctx, doc)
-}
-
-// compileFile parses and compiles an XSLT stylesheet from a file path.
-func compileFile(ctx context.Context, path string) (*Stylesheet, error) {
-	absPath, absErr := filepath.Abs(path)
-	if absErr != nil {
-		absPath = path
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	doc, err := parseStylesheetDocument(ctx, data, absPath)
-	if err != nil {
-		return nil, err
-	}
-	return NewCompiler().BaseURI(absPath).Compile(ctx, doc)
 }
 
 // Transform applies the compiled stylesheet to the source document.
