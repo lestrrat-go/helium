@@ -1315,37 +1315,6 @@ var w3cImplicitSkips = map[string]string{
 	"accept-912":  "xsl:accept package visibility control not implemented",
 	"accept-913":  "xsl:accept package visibility control not implemented",
 
-	// package: xsl:expose visibility control not implemented
-	"package-001j": "xsl:expose mode visibility control not implemented",
-
-	// package: unnamed mode on-no-match with xsl:import precedence
-	"package-013": "unnamed mode built-in on-no-match with import precedence incorrect",
-
-	// package: static error detection not implemented
-	"package-909":  "XTSE0020 package static error detection not implemented",
-	"package-910":  "XTSE0165 xsl:import in package static check not implemented",
-	"package-912":  "XPDY0002 absent context item in package not detected",
-	"package-913":  "XTSE3008 package use-package conflict detection not implemented",
-	"package-913a": "XTSE3008 package use-package conflict detection not implemented",
-	"package-913b": "XTSE3008 package use-package conflict detection not implemented",
-	"package-022err": "XTSE3050 package xsl:override static check not implemented",
-	"package-100":    "package cross-reference variable resolution not implemented",
-	"package-101":    "package cross-reference variable resolution not implemented",
-
-	// use-package: package-scoped component isolation not implemented
-	"use-package-101": "package-scoped decimal format isolation not implemented",
-	"use-package-102": "package-scoped key isolation not implemented",
-	"use-package-104": "package-scoped decimal format error isolation not implemented",
-	"use-package-105": "package-scoped key isolation not implemented",
-	"use-package-106": "package-scoped namespace-alias isolation not implemented",
-	"use-package-108": "package-scoped character map isolation not implemented",
-	"use-package-108b": "package-scoped character map isolation not implemented",
-	"use-package-150": "xml-to-json function argument handling incorrect",
-	"use-package-151": "xml-to-json function argument handling incorrect",
-	"use-package-152": "xml-to-json function argument handling incorrect",
-	"use-package-161": "package-scoped variable resolution not implemented",
-	"use-package-175": "package-scoped variable resolution not implemented",
-	"use-package-176": "package template override precedence incorrect",
 
 	// override: xsl:original and override static checks not implemented
 	"override-f-012":    "xsl:override function replacement not fully implemented",

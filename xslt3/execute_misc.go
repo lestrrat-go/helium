@@ -870,14 +870,15 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		eval = eval.DefaultCollation(ec.defaultCollation)
 	}
 
-	// Decimal formats
-	if len(ec.stylesheet.decimalFormats) > 0 {
-		for qn, df := range ec.stylesheet.decimalFormats {
+	// Decimal formats (package-scoped)
+	dfmts := ec.effectiveDecimalFormats()
+	if len(dfmts) > 0 {
+		for qn, df := range dfmts {
 			if qn == (xpath3.QualifiedName{}) {
 				eval = eval.DefaultDecimalFormat(df)
 			}
 		}
-		eval = eval.NamedDecimalFormats(ec.stylesheet.decimalFormats)
+		eval = eval.NamedDecimalFormats(dfmts)
 	}
 
 	// Set context item if it's an atomic value

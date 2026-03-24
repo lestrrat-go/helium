@@ -1457,9 +1457,6 @@ func checkDeclaredModes(ss *Stylesheet, usedModes map[string]struct{}) error {
 // checkCharacterMapRefs validates XTSE1590: all character map references
 // (in use-character-maps attributes) must resolve to defined character maps.
 func checkCharacterMapRefs(ss *Stylesheet) error {
-	if len(ss.characterMaps) == 0 {
-		return nil
-	}
 	// Check use-character-maps references within character map definitions
 	for _, cm := range ss.characterMaps {
 		for _, ref := range cm.UseCharacterMaps {

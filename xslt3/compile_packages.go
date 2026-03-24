@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // compileUsePackage handles xsl:use-package by resolving and compiling the
@@ -351,31 +350,14 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		c.stylesheet.globalParams = append(c.stylesheet.globalParams, p)
 	}
 
-	// Merge keys
-	for name, defs := range pkg.keys {
-		c.stylesheet.keys[name] = append(c.stylesheet.keys[name], defs...)
-	}
+	// Note: keys are package-scoped and NOT merged into the using
+	// stylesheet. Package code uses its own keys via effectiveKeys().
 
-	// Merge decimal formats
-	if pkg.decimalFormats != nil {
-		if c.stylesheet.decimalFormats == nil {
-			c.stylesheet.decimalFormats = make(map[xpath3.QualifiedName]xpath3.DecimalFormat)
-			c.stylesheet.decimalFmtPrec = make(map[xpath3.QualifiedName]int)
-			c.stylesheet.decimalFmtSet = make(map[xpath3.QualifiedName]map[string]struct{})
-		}
-		for qn, df := range pkg.decimalFormats {
-			if _, exists := c.stylesheet.decimalFormats[qn]; !exists {
-				c.stylesheet.decimalFormats[qn] = df
-			}
-		}
-	}
+	// Note: decimal formats are package-scoped and NOT merged into the
+	// using stylesheet. Package code uses its own formats via effectiveDecimalFormats().
 
-	// Merge outputs
-	for name, od := range pkg.outputs {
-		if _, exists := c.stylesheet.outputs[name]; !exists {
-			c.stylesheet.outputs[name] = od
-		}
-	}
+	// Note: named outputs are package-scoped and NOT merged into the using
+	// stylesheet. Package code references its own outputs via effectiveOutputs().
 
 	// Merge mode definitions
 	if pkg.modeDefs != nil {

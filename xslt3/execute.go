@@ -120,6 +120,7 @@ type execContext struct {
 	cachedBaseEvalXPathDefaultNS    string
 	cachedBaseEvalHasXPathDefaultNS bool
 	cachedBaseEvalBaseURI           string
+	cachedBaseEvalPackage           *Stylesheet
 }
 
 func (ec *execContext) setCurrentTemplate(tmpl *template) {
@@ -959,7 +960,8 @@ func (ec *execContext) baseXPathEvaluator() xpath3.Evaluator {
 	if ec.cachedBaseEvalValid &&
 		ec.cachedBaseEvalXPathDefaultNS == ec.xpathDefaultNS &&
 		ec.cachedBaseEvalHasXPathDefaultNS == ec.hasXPathDefaultNS &&
-		ec.cachedBaseEvalBaseURI == baseURI {
+		ec.cachedBaseEvalBaseURI == baseURI &&
+		ec.cachedBaseEvalPackage == ec.currentPackage {
 		return ec.cachedBaseEval
 	}
 
@@ -970,6 +972,7 @@ func (ec *execContext) baseXPathEvaluator() xpath3.Evaluator {
 	ec.cachedBaseEvalXPathDefaultNS = ec.xpathDefaultNS
 	ec.cachedBaseEvalHasXPathDefaultNS = ec.hasXPathDefaultNS
 	ec.cachedBaseEvalBaseURI = baseURI
+	ec.cachedBaseEvalPackage = ec.currentPackage
 	return eval
 }
 
@@ -1002,18 +1005,78 @@ func (ec *execContext) buildBaseXPathEvaluator(baseURI string) xpath3.Evaluator 
 	if baseURI != "" {
 		eval = eval.BaseURI(ensureFileURI(baseURI))
 	}
-	if len(ec.stylesheet.decimalFormats) > 0 {
-		for qn, df := range ec.stylesheet.decimalFormats {
+	dfmts := ec.effectiveDecimalFormats()
+	if len(dfmts) > 0 {
+		for qn, df := range dfmts {
 			if qn == (xpath3.QualifiedName{}) {
 				eval = eval.DefaultDecimalFormat(df)
 			}
 		}
-		eval = eval.NamedDecimalFormats(ec.stylesheet.decimalFormats)
+		eval = eval.NamedDecimalFormats(dfmts)
 	}
 	if resolver := ec.collectionResolver(); resolver != nil {
 		eval = eval.CollectionResolver(resolver)
 	}
 	return eval
+}
+
+// effectiveDecimalFormats returns the decimal formats for the current
+// execution scope. When executing code from a used package, the
+// package's own decimal formats are used (package-scoped isolation).
+func (ec *execContext) effectiveDecimalFormats() map[xpath3.QualifiedName]xpath3.DecimalFormat {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return ec.currentPackage.decimalFormats
+	}
+	return ec.stylesheet.decimalFormats
+}
+
+// effectiveKeys returns the key definitions for the current execution
+// scope. When executing code from a used package, the package's own
+// keys are used (package-scoped isolation).
+func (ec *execContext) effectiveKeys() map[string][]*keyDef {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return ec.currentPackage.keys
+	}
+	return ec.stylesheet.keys
+}
+
+// effectiveCharacterMaps returns the character maps for the current
+// execution scope. When executing code from a used package, the
+// package's own character maps are used (package-scoped isolation).
+func (ec *execContext) effectiveCharacterMaps() map[string]*characterMapDef {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return ec.currentPackage.characterMaps
+	}
+	return ec.stylesheet.characterMaps
+}
+
+// effectiveNamespaceAliases returns the namespace aliases for the
+// current execution scope. When executing code from a used package,
+// the package's own aliases are used (package-scoped isolation).
+func (ec *execContext) effectiveNamespaceAliases() []namespaceAlias {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return ec.currentPackage.namespaceAliases
+	}
+	return ec.stylesheet.namespaceAliases
+}
+
+// effectiveOutputs returns the output definitions for the current
+// execution scope. When executing code from a used package, the
+// package's own outputs are used (package-scoped isolation).
+func (ec *execContext) effectiveOutputs() map[string]*OutputDef {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return ec.currentPackage.outputs
+	}
+	return ec.stylesheet.outputs
+}
+
+// effectiveStylesheet returns the stylesheet for the current execution
+// scope. When executing code from a used package, the package is returned.
+func (ec *execContext) effectiveStylesheet() *Stylesheet {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return ec.currentPackage
+	}
+	return ec.stylesheet
 }
 
 // xpathEvaluator returns the base evaluator with per-call overlays
