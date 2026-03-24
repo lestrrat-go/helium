@@ -2,7 +2,6 @@ package xslt3
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -590,19 +589,3 @@ func cloneSequenceMap(in map[string]xpath3.Sequence) map[string]xpath3.Sequence 
 }
 
 // initGlobalVars registers global variables and parameters for lazy evaluation.
-// castParamValue casts a string param value to the declared XSD type.
-// Handles simple atomic types like "xs:integer", "xs:double", "xs:string".
-// Occurrence indicators (*, +, ?) are stripped.
-func castParamValue(s string, asType string) (xpath3.Sequence, error) {
-	// Strip occurrence indicator
-	t := strings.TrimRight(asType, "*+?")
-	t = strings.TrimSpace(t)
-	if t == "" {
-		return nil, fmt.Errorf("empty type")
-	}
-	av, err := xpath3.CastFromString(s, t)
-	if err != nil {
-		return nil, err
-	}
-	return xpath3.ItemSlice{av}, nil
-}

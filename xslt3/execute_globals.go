@@ -21,24 +21,6 @@ func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig)
 	// Register params — set immediately if caller provided a value
 	for _, p := range ec.stylesheet.globalParams {
 		if cfg != nil {
-			// Check typed params first (from WithParameterValue)
-			if cfg.typedParams != nil {
-				if av, ok := cfg.typedParams[p.Name]; ok {
-					var val xpath3.Sequence = xpath3.ItemSlice{av}
-					// Type-check against the declared as type
-					if p.As != "" {
-						st := parseSequenceType(p.As)
-						checked, err := checkSequenceType(val, st, errCodeXTTE0590, "param $"+p.Name, ec)
-						if err != nil {
-							return err
-						}
-						val = checked
-					}
-					ec.globalVars[p.Name] = val
-					continue
-				}
-			}
-			// Check sequence params (from WithParameterSequence)
 			if cfg.sequenceParams != nil {
 				if seq, ok := cfg.sequenceParams[p.Name]; ok {
 					if p.As != "" {
@@ -50,28 +32,6 @@ func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig)
 						seq = checked
 					}
 					ec.globalVars[p.Name] = seq
-					continue
-				}
-			}
-			// Check string params (from WithParameter)
-			if cfg.params != nil {
-				if sv, ok := cfg.params[p.Name]; ok {
-					// Cast to declared type if specified; otherwise use
-					// xs:untypedAtomic for externally-supplied values so
-					// that general comparisons promote correctly.
-					if p.As != "" {
-						castVal, err := castParamValue(sv, p.As)
-						if err == nil {
-							ec.globalVars[p.Name] = castVal
-						} else {
-							ec.globalVars[p.Name] = xpath3.SingleString(sv)
-						}
-					} else {
-						ec.globalVars[p.Name] = xpath3.ItemSlice{xpath3.AtomicValue{
-							TypeName: xpath3.TypeUntypedAtomic,
-							Value:    sv,
-						}}
-					}
 					continue
 				}
 			}
