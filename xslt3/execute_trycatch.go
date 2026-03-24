@@ -405,7 +405,34 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *TryCatc
 		errCode = xErr.Code
 		errDesc = xErr.Message
 		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
+		// Unwrap wrapper errors (same logic as rollback path) to find the
+		// most specific error code for catch clause matching.
+		if xErr.Cause != nil {
+			if innerXP, ok := errors.AsType[*xpath3.XPathError](xErr.Cause); ok {
+				errCode = innerXP.Code
+				errDesc = innerXP.Message
+				errQName = innerXP.CodeQName()
+			} else if innerXS, ok := errors.AsType[*XSLTError](xErr.Cause); ok {
+				errCode = innerXS.Code
+				errDesc = innerXS.Message
+				errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: innerXS.Code}
+			}
+		}
+	} else if xpErr, ok := errors.AsType[*xpath3.XPathError](tryErr); ok {
+		errCode = xpErr.Code
+		errDesc = xpErr.Message
+		errQName = xpErr.CodeQName()
 	}
+	if errQName.Local == "" {
+		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
+	}
+
+	// Build Clark-notation error code for matching against compiled catch patterns
+	errClark := errCode
+	if errQName.URI != "" {
+		errClark = "{" + errQName.URI + "}" + errQName.Local
+	}
+
 	errCodeSeq := xpath3.ItemSlice{xpath3.AtomicValue{
 		TypeName: xpath3.TypeQName,
 		Value:    errQName,
@@ -419,7 +446,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *TryCatc
 	ec.setVar("{"+errNS+"}column-number", xpath3.SingleInteger(0))
 
 	for _, c := range inst.Catches {
-		if catchMatches(c, errCode) {
+		if catchMatches(c, errClark) {
 			return ec.executeSequenceConstructor(ctx, c.Body)
 		}
 	}
