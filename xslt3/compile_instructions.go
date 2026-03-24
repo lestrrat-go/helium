@@ -351,6 +351,19 @@ func (c *compiler) compileInstruction(elem *helium.Element) (instruction, error)
 		}
 		si.setSourceInfo(elem.Line(), module)
 	}
+	// Compute effective static base URI from xml:base on the stylesheet element.
+	// This is set generically so that static-base-uri() returns the correct
+	// value for any XSLT instruction or LRE that carries xml:base.
+	if effectiveBase := stylesheetBaseURI(elem, c.baseURI); effectiveBase != c.baseURI {
+		if si, ok := inst.(interface{ getStaticBaseURI() string }); ok {
+			// Only set if not already set by a specific compile function
+			if si.getStaticBaseURI() == "" {
+				if setter, ok2 := inst.(interface{ setStaticBaseURI(string) }); ok2 {
+					setter.setStaticBaseURI(effectiveBase)
+				}
+			}
+		}
+	}
 	// Wrap in collation scope if default-collation changed on this element.
 	// This ensures the runtime ec.defaultCollation is set correctly for
 	// XPath expressions evaluated by the wrapped instruction.

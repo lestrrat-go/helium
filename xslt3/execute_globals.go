@@ -267,6 +267,17 @@ func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
 		ec.hasXPathDefaultNS = savedHasXPathDefaultNS
 	}()
 
+	// Always reset static base URI override for global variable evaluation
+	// so that the variable body is not affected by the caller's xml:base
+	// override (e.g. when evaluated lazily from within an LRE with xml:base).
+	savedBaseOverride := ec.staticBaseURIOverride
+	if v.StaticBaseURI != "" {
+		ec.staticBaseURIOverride = v.StaticBaseURI
+	} else {
+		ec.staticBaseURIOverride = ""
+	}
+	defer func() { ec.staticBaseURIOverride = savedBaseOverride }()
+
 	// Static variables use their pre-computed compile-time value.
 	if v.StaticValue != nil {
 		val = v.StaticValue
@@ -357,6 +368,12 @@ func (ec *execContext) evaluateGlobalParam(p *param) (xpath3.Sequence, error) {
 	savedMode := ec.currentMode
 	ec.currentMode = ec.stylesheet.defaultMode
 	defer func() { ec.currentMode = savedMode }()
+
+	// Reset static base URI override so global param evaluation is not
+	// affected by the caller's xml:base context.
+	savedBaseOverride := ec.staticBaseURIOverride
+	ec.staticBaseURIOverride = ""
+	defer func() { ec.staticBaseURIOverride = savedBaseOverride }()
 
 	// XTDE0050: required stylesheet parameter not supplied by the caller.
 	// If we reach here (not set in initGlobalVars), no external value was given.
