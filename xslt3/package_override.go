@@ -207,10 +207,11 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 	}
 
 	fn := &xslFunction{
-		Name:   qn,
-		Params: params,
-		Body:   body,
-		As:     getAttr(elem, "as"),
+		Name:       qn,
+		Params:     params,
+		Body:       body,
+		As:         getAttr(elem, "as"),
+		IsOverride: true,
 	}
 
 	// Link the original function for xsl:original() calls.

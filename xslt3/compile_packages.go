@@ -435,17 +435,26 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		}
 	}
 
-	// Merge override components (these replace the originals)
+	// Merge override components (these replace the originals).
+	// Override functions/templates/variables also replace the entries in the
+	// package's own maps so that package-internal calls dispatch to the
+	// override (XSLT 3.0 late-binding / virtual-dispatch semantics).
 	if oset != nil {
 		for qn, fn := range oset.functions {
-			fn.OwnerPackage = pkg
 			c.stylesheet.functions[qn] = fn
+			// Update the package's own function map for late binding.
+			// The override function keeps OwnerPackage=nil so it runs
+			// in the main stylesheet context (has access to both
+			// package functions and using-stylesheet functions).
+			pkg.functions[qn] = fn
 		}
 		for name, tmpl := range oset.namedTemplates {
 			tmpl.ImportPrec = c.importPrec - 1
 			tmpl.OwnerPackage = pkg
 			c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
 			c.stylesheet.namedTemplates[name] = tmpl
+			// Update the package's own named template map for late binding
+			pkg.namedTemplates[name] = tmpl
 		}
 		for _, tmpl := range oset.matchTemplates {
 			tmpl.ImportPrec = c.importPrec - 1
@@ -457,10 +466,19 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 			}
 			for _, mode := range modes {
 				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
+				// Update the package's mode template list for late binding
+				pkg.modeTemplates[mode] = append(pkg.modeTemplates[mode], tmpl)
 			}
 		}
 		for _, v := range oset.variables {
 			c.stylesheet.globalVars = append(c.stylesheet.globalVars, v)
+			// Update the package's own global vars for late binding
+			for i, pv := range pkg.globalVars {
+				if pv.Name == v.Name {
+					pkg.globalVars[i] = v
+					break
+				}
+			}
 		}
 		for _, p := range oset.params {
 			c.stylesheet.globalParams = append(c.stylesheet.globalParams, p)
@@ -470,6 +488,11 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 				c.stylesheet.attributeSets = make(map[string]*attributeSetDef)
 			}
 			c.stylesheet.attributeSets[name] = as
+			// Update the package's own attribute set map for late binding
+			if pkg.attributeSets == nil {
+				pkg.attributeSets = make(map[string]*attributeSetDef)
+			}
+			pkg.attributeSets[name] = as
 		}
 	}
 
