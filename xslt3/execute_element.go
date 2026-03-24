@@ -503,10 +503,10 @@ func (ec *execContext) validateConstructedElementWithIDCheck(ctx context.Context
 			ec.markNilled(nElem)
 		}
 		// NOTE: xs:ID uniqueness and xs:IDREF resolution (XTTE1555) are NOT
-		// checked here. Partial validation of a subtree (e.g., copy-of of a
-		// single element) cannot resolve IDREFs that reference IDs elsewhere
-		// in the source document. XTTE1555 is enforced at the result-document
-		// level instead (see execute_resultdoc.go).
+		// checked here at the element level, because partial validation of a
+		// subtree cannot resolve IDREFs that reference IDs elsewhere in the
+		// document. The caller (execCopyOf) performs the ID check when the
+		// copied content is a complete document node.
 		// Merge type annotations back to the live element.
 		if len(ann) > 0 {
 			ec.mapAnnotationsFromValidation(ann, copied, elem)

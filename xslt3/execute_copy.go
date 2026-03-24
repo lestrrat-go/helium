@@ -5,8 +5,9 @@ import (
 	"errors"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
@@ -587,6 +588,16 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
 					if err := ec.validateConstructedElementWithIDCheck(ctx, copiedElem, effectiveVal); err != nil {
 						return err
 					}
+					// XTTE1555: when copying a complete document node with
+					// validation="strict"|"lax", check ID uniqueness and
+					// IDREF resolution. Subtree copies (non-document sources)
+					// skip this because IDREFs may reference IDs outside the
+					// copied fragment.
+					if v.Node.Type() == helium.DocumentNode && (effectiveVal == validationStrict || effectiveVal == validationLax) {
+						if err := ec.checkIDConstraintsForCopiedDoc(out, pendingBefore, copiedElem); err != nil {
+							return err
+						}
+					}
 					// After validation, propagate any type annotations acquired
 					// during schema validation to the pending NodeItem so that
 					// instance-of checks on variable references work correctly.
@@ -674,6 +685,94 @@ func findCopiedElement(out *outputFrame, lastBefore helium.Node, pendingBefore i
 		}
 	}
 	return nil
+}
+
+// findPendingDocument returns the most recently added pending document node,
+// or nil if the last pending item is not a document.
+func findPendingDocument(out *outputFrame, pendingBefore int) *helium.Document {
+	if !out.sequenceMode || len(out.pendingItems) <= pendingBefore {
+		return nil
+	}
+	ni, ok := out.pendingItems[len(out.pendingItems)-1].(xpath3.NodeItem)
+	if !ok {
+		return nil
+	}
+	doc, _ := ni.Node.(*helium.Document)
+	return doc
+}
+
+// checkIDConstraintsForCopiedDoc checks xs:ID uniqueness and xs:IDREF
+// resolution for a copied document node. It finds the owning document of
+// copiedElem (either a pending document in sequence mode or the result
+// document) and validates ID constraints using the current type annotations.
+func (ec *execContext) checkIDConstraintsForCopiedDoc(out *outputFrame, pendingBefore int, copiedElem *helium.Element) error {
+	// In sequence mode, the document lives in pendingItems.
+	if pendingDoc := findPendingDocument(out, pendingBefore); pendingDoc != nil {
+		return ValidateDocIDConstraints(pendingDoc, ec.collectAnnotations(pendingDoc))
+	}
+	// In non-sequence mode, copiedElem was added directly to the output.
+	// Build a temporary document containing just this element for ID checking.
+	tmpDoc := helium.NewDefaultDocument()
+	copied, err := helium.CopyNode(copiedElem, tmpDoc)
+	if err != nil {
+		return nil // best effort
+	}
+	if err := tmpDoc.AddChild(copied); err != nil {
+		return nil
+	}
+	// Transfer annotations from the live tree to the copy.
+	ann := make(xsd.TypeAnnotations)
+	ec.transferAnnotationsToDoc(copiedElem, copied, ann)
+	return ValidateDocIDConstraints(tmpDoc, ann)
+}
+
+// transferAnnotationsToDoc recursively copies type annotations from src tree
+// to dst tree (which must have the same structure) into the annotation map.
+func (ec *execContext) transferAnnotationsToDoc(src, dst helium.Node, ann xsd.TypeAnnotations) {
+	if typeName, ok := ec.typeAnnotations[src]; ok {
+		ann[dst] = typeName
+	}
+	// Transfer attribute annotations
+	if srcElem, ok := src.(*helium.Element); ok {
+		if dstElem, ok := dst.(*helium.Element); ok {
+			srcAttrs := srcElem.Attributes()
+			dstAttrs := dstElem.Attributes()
+			for i, srcAttr := range srcAttrs {
+				if typeName, ok := ec.typeAnnotations[srcAttr]; ok && i < len(dstAttrs) {
+					ann[dstAttrs[i]] = typeName
+				}
+			}
+		}
+	}
+	srcChild := src.FirstChild()
+	dstChild := dst.FirstChild()
+	for srcChild != nil && dstChild != nil {
+		ec.transferAnnotationsToDoc(srcChild, dstChild, ann)
+		srcChild = srcChild.NextSibling()
+		dstChild = dstChild.NextSibling()
+	}
+}
+
+// collectAnnotations builds a TypeAnnotations map for nodes within the given
+// document by filtering ec.typeAnnotations to nodes belonging to that tree.
+func (ec *execContext) collectAnnotations(doc *helium.Document) xsd.TypeAnnotations {
+	ann := make(xsd.TypeAnnotations)
+	for node, typeName := range ec.typeAnnotations {
+		if nodeInDoc(node, doc) {
+			ann[node] = typeName
+		}
+	}
+	return ann
+}
+
+// nodeInDoc returns true when node belongs to the tree rooted at doc.
+func nodeInDoc(node helium.Node, doc *helium.Document) bool {
+	for n := node; n != nil; n = n.Parent() {
+		if n == doc {
+			return true
+		}
+	}
+	return false
 }
 
 // propagateAnnotationToPending sets the TypeAnnotation on the most recent
@@ -1053,7 +1152,14 @@ func (ec *execContext) validateAttributeValueForType(value, typeName string) err
 	}
 	// CastFromString only knows built-in types. For user-defined simple types
 	// (lists, unions, restrictions), delegate to the schema registry.
+	// Only fall back when CastFromString signals an unknown type (XPTY0004);
+	// if CastFromString recognised the type but the value is invalid
+	// (FORG0001 etc.), trust that verdict.
 	if ec.schemaRegistry == nil {
+		return castErr
+	}
+	var xe *xpath3.XPathError
+	if errors.As(castErr, &xe) && xe.Code != "XPTY0004" {
 		return castErr
 	}
 	return ec.schemaRegistry.ValidateCast(value, typeName)
