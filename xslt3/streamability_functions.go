@@ -553,7 +553,7 @@ func isAtomicTypeConstraint(as string) bool {
 	// Strip occurrence indicators
 	as = strings.TrimRight(as, "?*+")
 	// Common atomic types
-	return strings.HasPrefix(as, "xs:") || as == "item()" || as == ""
+	return strings.HasPrefix(as, "xs:")
 }
 
 // checkAscentFunction checks that an ascent function's body navigates
