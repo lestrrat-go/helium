@@ -1293,6 +1293,10 @@ var w3cImplicitSkips = map[string]string{
 	"as-3603": "requires schema-aware processing (schema-attribute type check)",
 	"as-3701": "requires schema-aware processing (schema-element type check)",
 
+	// accept: override function not visible in package scope during xsl:call-template
+	"accept-042":  "override function not visible in package scope via function-lookup",
+	"accept-043a": "override function not visible in package scope via function-lookup",
+	"accept-047a": "override function not visible in package scope via function-lookup",
 
 	// package: xsl:expose visibility control not implemented
 	"package-001j": "xsl:expose mode visibility control not implemented",

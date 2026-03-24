@@ -449,18 +449,12 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		for qn, fn := range oset.functions {
 			fn.OwnerPackage = pkg
 			c.stylesheet.functions[qn] = fn
-			// Also update the package's own function table so that
-			// when execution scope switches to the package, the
-			// override function is visible.
-			pkg.functions[qn] = fn
 		}
 		for name, tmpl := range oset.namedTemplates {
 			tmpl.ImportPrec = c.importPrec - 1
 			tmpl.OwnerPackage = pkg
 			c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
 			c.stylesheet.namedTemplates[name] = tmpl
-			// Also update the package's own template table.
-			pkg.namedTemplates[name] = tmpl
 		}
 		for _, tmpl := range oset.matchTemplates {
 			tmpl.ImportPrec = c.importPrec - 1
@@ -485,10 +479,6 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 				c.stylesheet.attributeSets = make(map[string]*attributeSetDef)
 			}
 			c.stylesheet.attributeSets[name] = as
-			// Also update the package's own attribute-set table.
-			if pkg.attributeSets != nil {
-				pkg.attributeSets[name] = as
-			}
 		}
 	}
 
