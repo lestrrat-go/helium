@@ -58,10 +58,6 @@ type Invocation struct {
 }
 
 // invocationCfg holds the configuration for an Invocation.
-// ss is always non-nil: all Invocation constructors are methods on
-// *Stylesheet (see stylesheet_entry.go), so a nil stylesheet can only
-// arise from a nil-pointer method call, which is a caller bug.
-// validate() intentionally does not check for nil ss.
 type invocationCfg struct {
 	ss *Stylesheet
 
@@ -101,6 +97,9 @@ func newInvocation(ss *Stylesheet, kind InvocationKind) Invocation {
 }
 
 func (inv Invocation) clone() Invocation {
+	if inv.cfg == nil {
+		return Invocation{cfg: &invocationCfg{}}
+	}
 	cp := *inv.cfg
 	return Invocation{cfg: &cp}
 }
@@ -289,6 +288,12 @@ func (inv Invocation) WriteTo(ctx context.Context, w io.Writer) error {
 // validate checks that the invocation config is valid for the entry kind.
 func (inv Invocation) validate() error {
 	c := inv.cfg
+	if c == nil {
+		return errZeroInvocation
+	}
+	if c.ss == nil {
+		return errNilStylesheet
+	}
 	if c.receiverErr != nil {
 		return c.receiverErr
 	}

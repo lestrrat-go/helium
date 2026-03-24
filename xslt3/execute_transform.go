@@ -39,6 +39,9 @@ func cloneOutputDef(src *OutputDef) *OutputDef {
 
 // executeTransform performs the XSLT transformation.
 func executeTransform(ctx context.Context, source *helium.Document, ss *Stylesheet, cfg *transformConfig) (*helium.Document, error) {
+	if ss == nil {
+		return nil, errNilStylesheet
+	}
 	resultDoc := helium.NewDefaultDocument()
 	effectiveSource := source
 	if ss.globalContextItem != nil && ss.globalContextItem.Use == ctxItemAbsent {
