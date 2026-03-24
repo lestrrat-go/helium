@@ -75,8 +75,6 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 	}
 
 	// Check if this is a composite key
-	expandedName := resolveQName(name, ec.stylesheet.namespaces)
-	_ = expandedName // name is already resolved above
 	isComposite := false
 	if defs, ok := ec.stylesheet.keys[name]; ok && len(defs) > 0 {
 		isComposite = defs[0].Composite

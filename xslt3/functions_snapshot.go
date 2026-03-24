@@ -281,25 +281,16 @@ func (ec *execContext) transferAccumulatorStates(orig, copy helium.Node) {
 func (ec *execContext) transferAccumulatorNode(orig, copy helium.Node) {
 	if ec.accumulatorBeforeByNode != nil {
 		if vals, ok := ec.accumulatorBeforeByNode[orig]; ok {
-			if ec.accumulatorBeforeByNode == nil {
-				ec.accumulatorBeforeByNode = make(map[helium.Node]map[string]xpath3.Sequence)
-			}
 			ec.accumulatorBeforeByNode[copy] = cloneAccumulatorSnapshot(vals)
 		}
 	}
 	if ec.accumulatorAfterByNode != nil {
 		if vals, ok := ec.accumulatorAfterByNode[orig]; ok {
-			if ec.accumulatorAfterByNode == nil {
-				ec.accumulatorAfterByNode = make(map[helium.Node]map[string]xpath3.Sequence)
-			}
 			ec.accumulatorAfterByNode[copy] = cloneAccumulatorSnapshot(vals)
 		}
 	}
 	if ec.accumulatorBeforeErrorByNode != nil {
 		if errs, ok := ec.accumulatorBeforeErrorByNode[orig]; ok {
-			if ec.accumulatorBeforeErrorByNode == nil {
-				ec.accumulatorBeforeErrorByNode = make(map[helium.Node]map[string]error)
-			}
 			cloned := make(map[string]error, len(errs))
 			for k, v := range errs {
 				cloned[k] = v
@@ -309,9 +300,6 @@ func (ec *execContext) transferAccumulatorNode(orig, copy helium.Node) {
 	}
 	if ec.accumulatorAfterErrorByNode != nil {
 		if errs, ok := ec.accumulatorAfterErrorByNode[orig]; ok {
-			if ec.accumulatorAfterErrorByNode == nil {
-				ec.accumulatorAfterErrorByNode = make(map[helium.Node]map[string]error)
-			}
 			cloned := make(map[string]error, len(errs))
 			for k, v := range errs {
 				cloned[k] = v

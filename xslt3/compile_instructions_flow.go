@@ -163,14 +163,13 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 
 	for child := range helium.Children(elem) {
 		// XTSE0010: xsl:choose must contain only xsl:when and xsl:otherwise elements
-		switch v := child.(type) {
+		switch child.(type) {
 		case *helium.Text, *helium.CDATASection:
-			if !isWhitespaceOnly(string(child.Content())) {
+			if !isXMLWhitespaceOnly(string(child.Content())) {
 				return nil, staticError(errCodeXTSE0010, "text is not allowed as a child of xsl:choose")
 			}
 			continue
 		case *helium.Element:
-			_ = v
 			// handled below
 		default:
 			continue
@@ -698,7 +697,7 @@ func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 			// XTSE3140: when select is present, non-whitespace text is not allowed.
 			if inst.Select != nil {
 				if tn, isText := child.(*helium.Text); isText {
-					if !isWhitespaceOnly(string(tn.Content())) {
+					if !isXMLWhitespaceOnly(string(tn.Content())) {
 						return nil, staticError(errCodeXTSE3140, "xsl:try with select attribute must not have non-catch/fallback children")
 					}
 				}

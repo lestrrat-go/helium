@@ -460,13 +460,11 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
 			}
 		}
-		for name, v := range oset.variables {
+		for _, v := range oset.variables {
 			c.stylesheet.globalVars = append(c.stylesheet.globalVars, v)
-			_ = name
 		}
-		for name, p := range oset.params {
+		for _, p := range oset.params {
 			c.stylesheet.globalParams = append(c.stylesheet.globalParams, p)
-			_ = name
 		}
 		for name, as := range oset.attributeSets {
 			if c.stylesheet.attributeSets == nil {
