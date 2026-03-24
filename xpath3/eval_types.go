@@ -127,6 +127,16 @@ func evalCastableExpr(evalFn exprEvaluator, ec *evalContext, e CastableExpr) (Se
 		_, castErr := castToQName(av, ec)
 		return SingleBoolean(castErr == nil), nil
 	}
+	// xs:ENTITIES, xs:IDREFS, xs:NMTOKENS are list types:
+	// castable returns true if the string is a whitespace-separated list of
+	// at least one valid member (NCName for ENTITIES/IDREFS, NMTOKEN for NMTOKENS).
+	if targetType == TypeENTITIES || targetType == TypeIDREFS || targetType == TypeNMTOKENS {
+		s, err := AtomicToString(av)
+		if err != nil {
+			return SingleBoolean(false), nil
+		}
+		return SingleBoolean(isValidListCastable(s, targetType)), nil
+	}
 	// xs:numeric is a union type
 	if targetType == TypeNumeric {
 		if av.IsNumeric() {
@@ -170,6 +180,31 @@ func evalCastableExpr(evalFn exprEvaluator, ec *evalContext, e CastableExpr) (Se
 		}
 	}
 	return SingleBoolean(castErr == nil), nil
+}
+
+// isValidListCastable checks whether a string value is castable to
+// a list type (xs:ENTITIES, xs:IDREFS, xs:NMTOKENS). The string must
+// contain at least one whitespace-separated token, and each token must
+// be valid for the list's member type (NCName for ENTITIES/IDREFS,
+// NMTOKEN for NMTOKENS).
+func isValidListCastable(s string, listType string) bool {
+	tokens := strings.Fields(s)
+	if len(tokens) == 0 {
+		return false
+	}
+	for _, tok := range tokens {
+		switch listType {
+		case TypeENTITIES, TypeIDREFS:
+			if !reNCName.MatchString(tok) {
+				return false
+			}
+		case TypeNMTOKENS:
+			if !reNMTOKEN.MatchString(tok) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func evalTreatAsExpr(evalFn exprEvaluator, ec *evalContext, e TreatAsExpr) (Sequence, error) {

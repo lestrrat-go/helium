@@ -1431,36 +1431,24 @@ var w3cImplicitSkips = map[string]string{
 	// castable tests: schema-aware union/list type casting
 	"castable-005": "requires schema-aware union type casting (import-schema)",
 	"castable-006": "requires schema-aware list type casting (import-schema)",
-	"castable-009": "xs:ENTITIES list type castable not implemented",
 
 	// attribute-set tests
-	"attribute-set-1003": "XTSE0710 circular attribute-set reference detection not implemented",
-	"attribute-set-1512": "attribute-set same-name merging override order incorrect",
-	"attribute-set-1814": "static-base-uri in attribute-set with xml:base not resolved",
 
 	// regex-090/091: regex-group#N function reference captures regex context as closure
-	"regex-090": "regex-group function reference closure not implemented",
-	"regex-091": "regex-group function reference closure not implemented",
+	// The closure implementation is correct per spec, but the test expects empty output.
+	// Likely an issue with how zero-length regex matches are handled by analyze-string.
+	"regex-090": "regex-group closure + zero-length match interaction",
+	"regex-091": "regex-group closure + zero-length match interaction",
 
 	// xpath-default-namespace: various namespace resolution issues
-	"xpath-default-namespace-0104": "xpath-default-namespace not applied to XPath in select/match",
-	"xpath-default-namespace-0201": "xsl:strip-space/preserve-space conflict with xpath-default-namespace",
-	"xpath-default-namespace-0202": "xsl:strip-space/preserve-space conflict with xpath-default-namespace",
-	"xpath-default-namespace-0401": "xpath-default-namespace not applied to key/accumulator patterns",
 	"xpath-default-namespace-0503": "schema-type validation with xpath-default-namespace not implemented",
-	"xpath-default-namespace-0601": "xpath-default-namespace scoping on xsl:for-each-group incorrect",
 	"xpath-default-namespace-0701": "schema-element with xpath-default-namespace not resolved",
 	"xpath-default-namespace-0703": "schema-element with xpath-default-namespace not resolved",
-	"xpath-default-namespace-1202": "xpath-default-namespace on xsl:template match pattern incorrect",
 
 
 	// strip-space: various whitespace stripping issues
-	"strip-space-002": "XTSE0280 undeclared prefix in strip-space not detected",
-	"strip-space-003": "xsl:strip-space with xml:space interaction incorrect",
-	"strip-space-004": "xsl:strip-space with *:NCName pattern not implemented",
 	"strip-space-007": "schema-aware whitespace stripping not implemented",
 	"strip-space-008": "schema-aware whitespace stripping not implemented",
-	"strip-space-022": "xsl:strip-space with xml:space=preserve interaction incorrect",
 	"strip-space-023": "XPDY0002 context-dependent expression in strip-space not detected",
 
 	// base-uri: static-base-uri and base URI propagation through includes
@@ -1490,8 +1478,6 @@ var w3cImplicitSkips = map[string]string{
 	"base-uri-053": "xsl:copy base-uri propagation incorrect",
 
 	// arrays: array construction and apply-templates on arrays
-	"square-array-019": "apply-templates on array members includes extra elements",
-	"square-array-201": "array construction sort order incorrect",
 
 	// schema-aware match tests: require full schema-aware pattern matching (xsl:import-schema)
 	"match-054": "schema-aware pattern matching not implemented",
@@ -1519,10 +1505,9 @@ var w3cImplicitSkips = map[string]string{
 	"evaluate-048": "requires network access to saxonica.com",
 
 	// snapshot: deep-equal mismatch between built-in and reference snapshot
-	"snapshot-0102a": "snapshot()/root() returns empty for some namespace nodes",
+	"snapshot-0102a": "snapshot()/root() returns empty for namespace nodes in snapshot tree",
 
 	// higher-order functions: nested for-each-group grouping bug
-	"higher-order-functions-076": "nested group-starting-with/group-ending-with produces wrong structure",
 }
 
 // promoteWrapperChildren takes a document parsed from "<_r>content</_r>"
