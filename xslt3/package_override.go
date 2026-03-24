@@ -486,12 +486,16 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 
 	asd := &attributeSetDef{Name: resolvedName}
 
+	var useAttrSets []string
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
 		for _, n := range strings.Fields(uas) {
-			asd.UseAttrSets = append(asd.UseAttrSets, resolveQName(n, c.nsBindings))
+			resolved := resolveQName(n, c.nsBindings)
+			asd.UseAttrSets = append(asd.UseAttrSets, resolved)
+			useAttrSets = append(useAttrSets, resolved)
 		}
 	}
 
+	var attrs []instruction
 	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
@@ -503,8 +507,10 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 				return nil, err
 			}
 			asd.Attrs = append(asd.Attrs, inst)
+			attrs = append(attrs, inst)
 		}
 	}
+	asd.Parts = []attributeSetPart{{UseAttrSets: useAttrSets, Attrs: attrs}}
 
 	return asd, nil
 }

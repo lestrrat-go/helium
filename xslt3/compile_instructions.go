@@ -248,12 +248,15 @@ func (c *compiler) compileInstruction(elem *helium.Element) (instruction, error)
 	defer func() { c.expandText = savedExpandText }()
 
 	// Handle per-instruction xpath-default-namespace
-	// Check both unprefixed (on XSLT elements) and xsl:-prefixed (on LREs)
+	// On XSLT elements: check unprefixed attribute.
+	// On LREs: only check xsl:-prefixed (in XSLT namespace).
 	savedXPathDefaultNS := c.xpathDefaultNS
 	hasLocalXPNS := false
-	if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
-		c.xpathDefaultNS = xdn
-		hasLocalXPNS = true
+	if elem.URI() == lexicon.NamespaceXSLT {
+		if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
+			c.xpathDefaultNS = xdn
+			hasLocalXPNS = true
+		}
 	} else if xdn, ok := elem.GetAttributeNS("xpath-default-namespace", lexicon.NamespaceXSLT); ok {
 		c.xpathDefaultNS = xdn
 		hasLocalXPNS = true

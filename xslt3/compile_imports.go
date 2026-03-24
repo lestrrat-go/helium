@@ -257,6 +257,13 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 	}
 	defer func() { c.defaultMode = savedDefaultMode }()
 
+	// Apply xpath-default-namespace from included module root
+	savedXPathDefaultNS := c.xpathDefaultNS
+	if xdn := getAttr(root, "xpath-default-namespace"); xdn != "" {
+		c.xpathDefaultNS = xdn
+	}
+	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
+
 	// XTSE0265: conflicting input-type-annotations across included modules.
 	if includedITA := getAttr(root, "input-type-annotations"); includedITA != "" && includedITA != validationUnspecified {
 		mainITA := c.stylesheet.inputTypeAnnotations
