@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Pi">
+      <match from="171" to="171"/>
+      <match from="8216" to="8216"/>
+      <match from="8219" to="8220"/>
+      <match from="8223" to="8223"/>
+      <match from="8249" to="8249"/>
+   </ranges>
+   <ranges complement="Pi">
+      <match from="9" to="170"/>
+      <match from="172" to="8215"/>
+      <match from="8217" to="8218"/>
+      <match from="8221" to="8222"/>
+      <match from="8224" to="8248"/>
+      <match from="8250" to="1114111"/>
+   </ranges>
+</out>

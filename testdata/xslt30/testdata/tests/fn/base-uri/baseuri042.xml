@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<doc xml:base="http://www.example.com/doc/">
+<!--Comment node-->
+<str1>string1
+	<substring1 attr="attribute1" xml:base="http://www.example.com/xml/">substring</substring1>
+</str1>
+<str2>string2</str2>
+<?PI name="processing" ?>
+</doc>

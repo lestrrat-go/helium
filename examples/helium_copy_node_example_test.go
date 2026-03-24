@@ -13,6 +13,10 @@ func Example_helium_copy_node() {
 		fmt.Printf("parse failed: %s\n", err)
 		return
 	}
+
+	// CopyNode performs a deep copy into the target document. Use it when you
+	// need to move or duplicate content across document boundaries, since nodes
+	// belong to the document that created them.
 	item := src.DocumentElement().FirstChild()
 
 	dst := helium.NewDefaultDocument()

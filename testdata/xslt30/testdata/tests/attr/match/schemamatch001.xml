@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<doc-match xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="match-builtin.xsd">
+	<elem-anyURI-match>http://www.example.org/ns/test</elem-anyURI-match>
+	<elem-base64Binary-match>PM24</elem-base64Binary-match>
+	<elem-boolean-match>true</elem-boolean-match>
+	<elem-date-match>-0012-12-03-05:00</elem-date-match>
+	<elem-dateTime-match>2000-01-16T00:00:00Z</elem-dateTime-match>
+	<elem-decimal-match>-3.420100</elem-decimal-match>
+	<elem-double-match>-0.0E0</elem-double-match>
+	<elem-duration-match>-P12M23DT0M59.123S</elem-duration-match>
+	<elem-float-match>1.1234E99</elem-float-match>
+	<elem-integer-match>3345</elem-integer-match>
+	<elem-QName-match>test</elem-QName-match>
+	<elem-string-match>hello</elem-string-match>
+	<elem-time-match>13:20:00-05:00</elem-time-match>
+	<elem-normalizedString-match>like,</elem-normalizedString-match>
+	<elem-token-match>two organizations</elem-token-match>
+	<elem-language-match>PT</elem-language-match>
+	<elem-Name-match>a:_underscore_</elem-Name-match>
+	<elem-NCName-match>vwxyz12</elem-NCName-match>
+	<elem-NMTOKEN-match>business-enforcement::link-chain.common</elem-NMTOKEN-match>
+	<elem-int-match>131072</elem-int-match>
+	<elem-nonPositiveInteger-match>-763246023412394</elem-nonPositiveInteger-match>
+	<elem-positiveInteger-match>18446744073709551617</elem-positiveInteger-match>
+	<elem-nonNegativeInteger-match>444444444444</elem-nonNegativeInteger-match>
+	<elem-negativeInteger-match>-74146434249484</elem-negativeInteger-match>
+	<elem-long-match>-9223372036854775808</elem-long-match>
+	<elem-unsignedLong-match>18446744073709551615</elem-unsignedLong-match>
+	<elem-unsignedInt-match>573231403</elem-unsignedInt-match>
+	<de1-decimal-enumeration-match>-1.0001</de1-decimal-enumeration-match>
+	<de2-decimal-maxExclusive-match>123.456788</de2-decimal-maxExclusive-match>
+	<de3-decimal-maxInclusive-minExclusive-match>1048.576</de3-decimal-maxInclusive-minExclusive-match>
+	<de4-decimal-minInclusive-pattern-match>1234.123</de4-decimal-minInclusive-pattern-match>
+	<de5-decimal-fractionDigits-totalDigits-match>8888888.8888</de5-decimal-fractionDigits-totalDigits-match>
+	<de6-decimal-whiteSpace-match>    1.1     </de6-decimal-whiteSpace-match>
+</doc-match>

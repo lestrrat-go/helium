@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Zp">
+      <match from="8233" to="8233"/>
+   </ranges>
+   <ranges complement="Zp">
+      <match from="9" to="8232"/>
+      <match from="8234" to="1114111"/>
+   </ranges>
+</out>

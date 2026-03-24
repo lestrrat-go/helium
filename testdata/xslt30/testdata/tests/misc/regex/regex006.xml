@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<doc>
+<str1>abracadabra</str1>
+<str2>aaaaaa</str2>
+<str3>kikikeriki!! Tak, tak, tak! - da kommen sie.</str3>
+<str4>123kikikeriki123</str4>
+<str5>Mary had a little lamb</str5>
+<str6>aaaaa bbbbb ccccc</str6>
+<str7>a</str7>
+<str8>^.a</str8>
+<str9>([0-9]+)([a-z]+)</str9>
+</doc>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsOriya">
+      <match from="2816" to="2943"/>
+   </ranges>
+   <ranges complement="IsOriya">
+      <match from="9" to="2815"/>
+      <match from="2944" to="1114111"/>
+   </ranges>
+</out>

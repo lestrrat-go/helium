@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.schemanodetest.example.com/ns/various variousTypesNodeTest.xsd"
+     xmlns:my="http://www.schemanodetest.example.com/ns/various"
+     my:specialPart="123-AB" my:listParts="000-SS 000-RR">
+     <my:simpleUserElem>123-AB</my:simpleUserElem>
+	 <my:simpleUserList>345-PT 675-RT 897-GB</my:simpleUserList>
+</my:userNode>

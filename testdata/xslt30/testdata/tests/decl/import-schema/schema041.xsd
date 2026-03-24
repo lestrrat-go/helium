@@ -1,0 +1,21 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema041.uri/"
+           elementFormDefault="qualified">
+
+
+
+<xs:simpleType name="string10">
+  <xs:restriction base="xs:token">
+    <xs:length value="10"/>  
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="string5-8">
+  <xs:restriction base="xs:token">
+    <xs:minLength value="5"/>
+    <xs:maxLength value="8"/>  
+  </xs:restriction>
+</xs:simpleType>
+
+</xs:schema>

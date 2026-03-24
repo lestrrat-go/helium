@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<xsd:schema	targetNamespace="http://ns.example.com/sch002"
+			xmlns:my="http://ns.example.com/sch002"
+			xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+
+	<xsd:element name="myTest" type="my:testType"/>
+	<xsd:element name="complexTest" type="my:complexTestType"/>
+	<xsd:attribute name="id" type="my:testType"/>
+	
+	<xsd:simpleType name="testType">
+		<xsd:restriction base="xsd:positiveInteger">
+			<xsd:minInclusive value="1"/>
+			<xsd:maxInclusive value="10000"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	
+	<xsd:complexType name="complexTestType">
+    <xsd:sequence>
+      <xsd:element name="subject" type="my:subjectNameType" />
+      <xsd:element name="questions" type="xsd:integer" />
+    </xsd:sequence>
+    <xsd:attribute ref="my:id"/>
+  </xsd:complexType>
+  
+  <xsd:simpleType name="subjectNameType">
+    <xsd:restriction base="xsd:token">
+      <xsd:enumeration value="math"/>
+      <xsd:enumeration value="english"/>
+      <xsd:enumeration value="chemistry"/>
+      <xsd:enumeration value="geography"/>
+      <xsd:enumeration value="german"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+
+</xsd:schema>

@@ -1,0 +1,1563 @@
+
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+   <xs:import namespace="http://www.w3.org/XML/1998/namespace"/>
+    <xs:element name="myroot"  type="myroot"/>
+    <xs:complexType name="myroot">
+        <xs:sequence>
+            <xs:element name="ACERequest" type="ACERequest" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:element name="ACERequest" type="ACERequest"/>
+    <xs:complexType name="ACERequest">
+        <xs:sequence>
+            <xs:element name="Deal" type="Deal" maxOccurs="unbounded"/>
+            <xs:element name="Message" type="Message" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="version" type="xs:decimal"/>
+    </xs:complexType>
+    <xs:complexType name="Address">
+        <xs:annotation>
+            <xs:documentation>A United States Postal Service (USPS) address with associated classifications from the United States Census Bureau.</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="AddressIdentifier" type="FmIdentifierInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The unique identifier for the specified mailing address.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="StreetPreDirectionalText" type="FmValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The directional symbol that represents the sector of a city where a street address is located. Example: E, W, N, S, NE, NW, SE, SW</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="StreetPostDirectionalText" type="FmValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The directional symbol that represents the sector of a city where a street address is located. Example: E, W, N, S, NE, NW, SE, SW</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="AddressLineText" type="FmText" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The first line of the unstructured (unparsed) street address. If only one street address is needed, use Address Line Text.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="AddressAdditionalLineText" type="FmText" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Line 2 of the unstructured (unparsed) street address. If only one street address is needed, use Address Line Text.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="StreetSuffixText" type="FmValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Mode or type of street found to the right of the street name.  i.e., street, avenue, drive, etc.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="StreetPrimaryNumberText" type="FmValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The number assigned to a building or land parcel along the street to identify location and ensure accurate mail delivery.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="AddressUnitIdentifier" type="FmValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The address designator af an individual unit within a building, such as an apartment or suite.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="AddressUnitDesignatorType" type="FmValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Designates the type of unit within a building, such as an apartment or suite.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="StreetName" type="FmName" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The official name of the street assigned by the local governing authority.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PostalCode" type="FmCodeChar" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The postal code (zip code in the US) for the address. Zip code may be either 5 or 9 digits.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="ZipPlusFourCode" type="FmCodeChar" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>This is the additional 4 digits of a 9 digit zip code.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="AddressType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Identifies how the useage of the address.  i.e., mailing, home, etc.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="CarrierRouteType" type="FmCodeChar" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Output location for 4-byte carrier route code, which is stored in one of the following formats:  Bnnn - Post Office box address ;  Cnnn - Street address ;  Gnnn - General delivery address ;  Hnnn - Highway contract route address ;  Rnnn - Rural route address.  A postal carrier route code is a part of the complete carrier route. The carrier route code is 4 characters consisting of 1 letter for the type of carrier route  and 3 digits for the carrier route. The complete carrier route identifies a group of addresses to which the USPS assigns the same code to aid in mail delivery.  The complete Carrier Route consists of 9 digits – 5 numbers for the ZIP Code and the 4 characters fo the carrier route code.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="UnderservedAreaEligibleFlag" type="FmIndicator" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>An indicator that the dwelling is eligible for underserved area goals.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="CountryFipsCode" type="FmCodeChar" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A unique two letter alpha code to identify each country.  These Country codes are part of the Federal Information Processing Standards (FIPS), an official coding system developed by the National Institute of Standards and Technology (NIST, formerly the National Bureau of Standards), U.S. Department of Commerce, and maintained by the U.S. Geological Survey (USGS).</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="DataSourceType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Code to uniquely identify internal and external sources of the record or data, such as First American, PE Sourcing, MIDAS, etc.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="City" type="FmName" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The name of the city.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="State" type="FmName" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The name of the state.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PoBoxIdentifier" type="FmValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The post office box address component of the address, it is normally part of a rural route address.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="RuralRouteIdentifier" type="FmValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The rural route or start route number component of an address.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="CountyLandUseDescription" type="FmDescription" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A free-form text field used to describe the land use designation if Other is selected as the Property Land Use Type.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="DeliveryPointCode" type="FmValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A code maintained by the USPS representing a delivery point (DP) which is a single mailbox or other place at which mail is delivered. This may be appended to the combination of zip code and zip+4 code for the purposes of creating a barcode.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="NfipCommunityIdentifier" type="FmIdentifierInt" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A unique idenetifier of FEMA.  This is a 6-digit NFIP community identifier. This can be determined by consulting the NFIP Community Status Book or can be found on the NFIP map.  This is the identifying number of a community  participating in the National Flood Insurance Program.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="MunicipalityIdentifier" type="FmIdentifierChar" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The unique identifier of a municipality.  an administrative entity composed of a clearly defined territory and its population and commonly denotes a city, town, or village, or a small grouping of them. A municipality is typically governed by a mayor and a city council or municipal council.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="TownshipIdentifier" type="FmIdentifierChar" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The unique identifier of a piece of land measuring 6 miles by 6 miles. It is measured North and South in rows. Commonly used in a grid along with Range and Section to describe an area of land at the county level.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="MasterIndicator" type="FmIndicator" minOccurs="0"/>
+            <xs:element name="PartyIdentifier" type="FmIdentifierInt" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The unique identifier for a counterparty or related organization.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="StateFipsNumericCode" type="FmCodeInt" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A unique two digit numeric code to identify each State and State equivalent entity.  These State codes are part of the Federal Information Processing Standards (FIPS), an official coding system developed by the National Institute of Standards and Technology (NIST, formerly the National Bureau of Standards), U.S. Department of Commerce, and maintained by the U.S. Geological Survey (USGS).</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="StateFipsAlphaType" type="FipsStateAlphaType" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A unique two character alphabetic code to identify each State and State equivalent entity.  These State codes are part of the Federal Information Processing Standards (FIPS), an official coding system developed by the National Institute of Standards and Technology (NIST, formerly the National Bureau of Standards), U.S. Department of Commerce, and maintained by the U.S. Geological Survey (USGS).</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="Deal">
+        <xs:annotation>
+            <xs:documentation>tbd</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="Pool" type="Pool" maxOccurs="unbounded"/>
+            <xs:element name="Message" type="Message" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="DealIdentifier" type="xs:integer">
+                <xs:annotation>
+                    <xs:documentation>A number that uniquely identifies the deal processing unit.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="DealNumber" type="xs:string" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Shorthand identifier for a resecuritization deal processing unit (such as an Intex CDI file), representing a specific collateral payment delay and product category plus an optional number suffix to uniquely identify and sequence the deal's processing u nits.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="DealExecutionType" type="xs:short" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Indicates the method of how the deal was executed. For example, the Seller gives mortgages in exchange for cash, participation certificates, or a REMIC. or the deal is retained by Freddie Mac.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="EstimatedSettllementDate" type="xs:date" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The date upon which the Freddie Mac expects to take ownership of the loan and expects to remit payment to the seler for the mortgage purchased.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="DealType" type="xs:short" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A code that describes the general category into which the Deal is classified (e.g., bulk purchase).</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="SeriesNumber" type="xs:string" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The publicly disclosed number of the security.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PartyIdentifier" type="xs:integer" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The unique identifier for a counterparty or related organization.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="QualifiedSpecialPurposeEntityIndicator" type="xs:string" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Captures whether the loan was originated by a qualified special purpose entity for FIN 46 accounting.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="SellerCreditClassificationType" type="FmCodeChar" minOccurs="0"/>
+            <xs:element name="ACERequestType" type="ACERequestType" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="Extension">
+        <xs:sequence>
+            <xs:element name="ExtensionText" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="Loan">
+        <xs:annotation>
+            <xs:documentation>An agreement, in writing, between a lender and a borrower where the borrower will be loaned a specific amount of money over a specific amount of time at a specific interest rate or rates. This class specifies the terms of the agreement and not the inherent value of the items participating in the agreement.  Examples of terms found in a loan contract are: interest (note) rate, amortization term, frequency of payment, frequency of rate or payment adjustments, prepayment fees, closing date, down-payment amount, points and closing fees, etc.</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="Extension" type="Extension" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="LoanStatus" type="LoanStatus" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="LoanToValueRatio" type="LoanToValueRatio" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="Message" type="Message" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="Property" type="Property" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="FinancialInstrumentIdentifier" type="FmIdentifierInt">
+                <xs:annotation>
+                    <xs:documentation>Internally generated integer that uniquely identifies a financial instrument within the system.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="MortgageProductIdentifier" type="FmCodeChar" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>An internal system generated id that uniquely identifies an instance of a product.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="AffordableCategoryType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A value that represents the affordable category comparing owner/occupant income or rent to the area median family income.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="GaapAmortizationMethodType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Defines the general rules concerning how amortization is applied over the life of a financial instrument. Amortization is the repayment of a loan debt with periodic payments of both principal and interest, calculated to retire the obligation at the end of a fixed period of time.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="TaxAmortizationMethodType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Defines the general rules concerning how amortization for tax purposes is applied over the life of a financial instrument. Amortization is the repayment of a loan debt with periodic payments of both principal and interest, calculated to retire the obligation at the end of a fixed period of time.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="DocumentationType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Indicates the level of documentation that the borrower(s) needed to provide to the originating lender during the loan origination and underwriting process.  Ex: Low, Full, None</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="EmulatorCreditRiskType" type="FmCodeChar" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A code based on the mortgage's recovery method, indicating whether Freddie Mac classifies the mortgage as a credit loss risk.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LateChargeMethodType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Indicates the method used to assess the late charges.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LoanDispositionType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A code that describes if the loan is retained or sold.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LoanPurposeType" type="LoanPurposeType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Specifies the purpose for which the loan proceeds will be used. Collected on the URLA in Section I (Purpose of Loan).  This is not exactly the same as the Form11/13 Loan Purpose - although it is derived from that field.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="DerivedLoanPurposeType" type="DerivedLoanPurposeType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Specifies the purpose for which the loan proceeds will be used.  The values are derived from the values for Loan Purpose Type, and are used for service communications.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="ConstructionPurposeType" type="FmType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Specifies the specific type of construction loan.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LoanOriginatorType" type="FmType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>This code defines the source of the mortgage. A home mortgage that an entity or individual other than a Seller that completed or partially originated, processes, underwrote, packaged, funded, or closed and subsequently sold to Freddie Mac is considered to be a Wholesale Mortgage. A wholesale origination owned or serviced by the Seller for at least 12 months immediately before the sale to Freddie Mac is not considered a wholesale origination for identifications on Form 11 or Form 13 SF.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LossRecoveryMethodType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Describes the type of recovery method for losses incurred by Freddie Mac in the event the mortgage defaults.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="MortgageType" type="FmType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Conventional, Farmers Home Administration, FHA, HELOC, Local Agency, Other, State Agency, VA</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PaymentGracePeriodType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The borrower's grace period for the loan payment.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PayoffRemittanceType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A code that describes the type of payoff remittance offering for the loan.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="RefinanceCashOutDeterminationType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Indicates the type of refinance.(e.g., cash out, non cash out).</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="AmortizationTermCount" type="FmCount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The number of periods a loan is amortized over.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="FreCashOutAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The amount of cash the borrower will receive at the closing of the loan on a refinance transaction based on Freddie Mac guidelines.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="BorrowerReservesMonthlyPaymentCount" type="FmCount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The number of loan payments that are available to the borrowers from financial reserves after closing.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="MaturityPeriodCount" type="FmCount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The scheduled number of periods (as defined by Loan Maturity Period Type) after which a debt will mature.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="MaturityPeriodType" type="FmType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The value that is being counted.i.e., year, month, week.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LateChargeGracePeriod" type="FmCount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The grace period in days for this loan before a late charge will be applied.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="ScheduledFirstPaymentDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The date of the first scheduled mortgage payment to be made by the borrower under the terms of the mortgage.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LoanMaturityDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The date when the loan is scheduled to be paid in full as reflected on the Note.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="ClosingDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The date the closing documents were fully executed.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="InterestOnlyEndDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The date on which the interest only period on the loan ends.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="NoteDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The date on the mortgage or note.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="InitialInterestRateDiscountPercent" type="FmPercent" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>For mortgages with an initial discounted rate, the difference in percentage points between the initial rate and the rate that would have been calculated based on the original index value plus the margin rate.  This equates to the difference between the initial margin and the final margin.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LoanFundingDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The date the original lender funds were released to the borrower.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LoanAcquisitionDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The date on which the loan was acquired by the investor.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LoanAllInPricePercent" type="FmPercent" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The price of the loan including all fees and adjustments, represented as a percent.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="MersMinNumber" type="FmIdentifierChar" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Number used by MERS to identify loans. Referred to as the MIN, Mortgage Identification Number.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="BorrowerFirstTimeHomeBuyerIndicator" type="FmIndicator" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Indicates that the loan qualifies under the first time home buyer treatment, as determined by the lender. (Note: The 3 year rule used in the URLA Declarations alone is not sufficient.)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PermanentBuydownIndicator" type="FmIndicator" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>An indicator that the interest rate on the loan was permanently bought down by paying points up front at the time of loan closing.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="RelocationIndicator" type="FmIndicator" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Indicates if the loan is part of a corporate relocation program.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LateChargeRate" type="FmRate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The percentage that a borrower is required to pay for failure to make a regular installment within the period specified on the note. This is the amount specified by the late charge code and is used when the late charge is not a flat dollar.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LoanLevelCreditScoreValue" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The one credit score value that represents the overall credit risk on the loan.   This value is determined using credit score values for each qualifying borrower.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="HmdaRateSpreadPercent" type="FmPercent" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The reported rate spread, or difference, between the annualized percentage rate (APR), including annualized points and fees, for the mortgage note rate and the market yield for the treasury security of comparable maturity to the mortgage, as of the time the mortgage note rate was locked.MISMO Def: The difference between the APR and the applicable Treasury yield that exceeds the threshold, as required for HMDA Reporting Requirements.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PropertyUsageType" type="FmType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Specifies intended use by the borrower of the property.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="AMinusIndicator" type="FmIndicator" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>This indicates whether the servicing released loan has an A-Minus condition.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="TotalLiabilitiesMonthlyPaymentAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Total monthly liabilities in dollars for all borrowers on the loan.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="TotalMonthlyIncomeAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Total monthly income in dollars for all borrowers on the loan.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="TotalReservesAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The actual dollar amount of remaining verified liquid assets after settlement.  CALCULATED RESULT FIELD</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="TotalPriorHousingExpenseAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Total monthly housing expense in dollars prior to closing across all occupying borrowers.  CALCULATED RESULT FIELD</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="CashOutAmount" type="xs:string" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The dollar amount of cash that was received by the borrower in a refinancing transaction.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="HmdaHoepaLoanStatusIndicator" type="FmIndicator" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Flag used to indicate that loan is to be reported as a HOEPA (Home Ownership and Equity Protection Act of 1994) loan for HMDA Reporting.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="NonOccupantCoborrowerIndicator" type="FmIndicator" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Describes whether or not a coborrower on the loan is not an occupant of the property.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="ProductIdentifier" type="FmIdentifierChar" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The providers unique identifier of a product, which is a provider-defined offering of goods or services, including mortgage loans.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:any namespace="##other" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute ref="xml:lang" use="optional"/>
+    </xs:complexType>
+    <xs:complexType name="LoanStatus">
+        <xs:sequence>
+            <xs:element name="AsOfDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The date for which information about the current state of the loan is represented.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="AggregateLoanCurtailmentAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The total amount of principal the borrower has made from origination to date over and above the scheduled principal amount.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="AccruedInterestAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The dollar amount of interest accrued on the loan between the last paid installment date and the date reported.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="BuyDownSubsidyAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Monthly buydown subsidy amount in effect with the next payment to be collected.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="CreditLineDrawnAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The dollar amount the borrower has drawn against the line of credit as of the date reported.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="CreditLineMaximumAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The total dollar amount of the line of credit as of the date reported.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="BankruptcyPetitionDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The date of the bankruptcy petition if the primary borrower is currently under bankruptcy protection.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="BankruptcyResolutionDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The date the bankruptcy was resovled.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="AssumedIndicator" type="FmIndicator" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Indicates if the loan has been assumed.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="BankruptcyChapterType" type="FmType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Chapter under which bankruptcy has been filed.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="ConvertibleStatusType" type="FmType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Denotes the convertibility status of the mortgage. May be used for convertible ARM or balloon resets.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LoanStatusType" type="LoanStatusType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A code that represents the point in the loan life cycle that the state represents, such as origination, acquisition, as of a date, default.  It facilitates the retrieval of information associated with important events.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="CombinedLtvRatioPercentDerived" type="FmPercent" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The result of dividing the combined current unpaid principal balance amounts of the first and all subordinate mortgages, excluding undrawn home equity lines of credit amounts, by the value of the subject property.  CALCULATED RESULT FIELD</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="HomeEquityCombinedLtvRatioPercentDerived" type="FmPercent" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The result of dividing the sum of the unpaid prinicipal balance (UPB) of the first mortgage, the full amount of any home equity line of credit (whether drawn or undrawn), and the balance of any other subordinate financing by the value of the subject property. CALCULATED RESULT FIELD</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LtvRatioPercentDerived" type="FmPercent" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The current unpaid principal balance (UPB) divided by the most recent value of the subject property.  CALCULATED RESULT FIELD</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LenderPaidPmiFeeAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The dollar amount of the lender paid private mortgage insurance fee (premium) that was paid during the reporting period.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="NegativeAmortizationBalanceAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The current balance of interest accumulated according to the note terms permitting  negative amortization for a loan or loan component.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="DelinquentPaymentCount" type="FmCount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The number of payments that are currently past due on the subject mortgage.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="DelinquentPaymentsOverPastTwelveMonthsCount" type="FmCount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The number of times during the past twelve months that the payment on the subject loan was delinquent.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="EscrowBalanceAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Escrow balance on the loan net of any escrow advances. May be a negative amount.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="EscrowHoldbackAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Amount held back at closing by the lender or escrow agent until a particular condition has been met.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="ConversionEffectiveDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The most recent date on which a change in the terms of the loan, as described in the note, became effective.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LoanAdvancedAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The dollar amount disbursed under a loan agreement in advance of full funding.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="RemainingMaturityTermMonthsCount" type="FmCount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The number of months remaining until the loan matures.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="TermExtensionMonthsCount" type="FmCount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The number of months by which the loan maturity term has been extended.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PaymentHistoryPatternDerived" type="FmText" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A representation of the history of last twelve payments.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="Late30DayCountDerived" type="FmCount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Indicates how many times the account was late 30 days during the Periodic Late Count Type specified.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="Late60DayCountDerived" type="FmCount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Indicates how many times the account was late 60 days during the Periodic Late Count Type specified.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="Late90DayCountDerived" type="FmCount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Indicates how many times the account was late 90 days during the Periodic Late Count Type specified.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="Late120DayCountDerived" type="FmCount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Indicates how many times the account was late 120 days during the Periodic Late Count Type specified.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="RemainingBuydownBalanceAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Current Remaining Buydown Balance.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="TotalDelinquentInterestAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Sum of all past due interest from the last paid installment due date (DDLPI) to current date. It is computed based on scheduled amortization.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="UnpaidPrincipalBalanceAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The current unpaid principal balance on the loan.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="LoanToValueRatio">
+        <xs:sequence>
+            <xs:element name="LoanToValueRule" type="LoanToValueRule" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="LoanToValueRatioPercent" type="FmPercent" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="LoanToValueRule">
+        <xs:sequence>
+            <xs:element name="LoanToValueRatioRuleIdentifier" type="FmIdentifierInt" minOccurs="0"/>
+            <xs:element name="LoanScopeType" type="LoanScopeType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Base, Total (Combined), Home Equity Combined</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="TimeType" type="TimeType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Original, Current, Amortized, Effective</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PercentIndicator" type="xs:string" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>An indicator that the loan to value ratio is represented as a percentage.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="RuleText" type="FmText" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="Message">
+        <xs:sequence>
+            <xs:element name="MessageCode" type="FmCodeChar" minOccurs="0"/>
+            <xs:element name="MessageText" type="FmText" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="Pool">
+        <xs:sequence>
+            <xs:element name="PoolIdentifier" type="FmIdentifierInt">
+                <xs:annotation>
+                    <xs:documentation>The unique identifier for a collection of financial instruments.  The pool may serve as collateral, be associated with a credit enhancement, or have other purposes.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="Loan" type="Loan" maxOccurs="unbounded"/>
+            
+            <xs:element name="CreationDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The date on which the pool of financial instruments was created.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:integer"/>
+    </xs:complexType>
+    <xs:complexType name="Property">
+        <xs:annotation>
+            <xs:documentation>Immovable property that encompasses land along with anything permanently affixed to the land, such as buildings.  Often considered synonymous with real property.  However, for technical purposes, some people prefer to distinguish real estate, referring to the land and fixtures themselves, from real property, referring to ownership rights over real estate.</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="Address" type="Address" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="PropertyCharacteristic" type="PropertyCharacteristic" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="PropertyPurchase" type="PropertyPurchase" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="PropertyValuation" type="PropertyValuation" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="PropertyIdentifier" type="FmIdentifierChar" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A system generated number used to differentiate between multiple occurrences of loan property.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="UnparsedLegalDescriptionTextDescription" type="FmDescription" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A free-form text field used to capture the legal description of the property. A long legal description would be used for metes and bounds descriptions.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="TaxExemptionDescription" type="FmDescription" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Describes the type of tax exemption (e.g. Homestead, Senior, Disabled, etc.) this property has for this tax year (Property Tax Year Identifier).</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PropertyConditionType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>A code that describes the the physical condition of a property.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PropertyOwnershipType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Describes the type of ownership associated with a property.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="FloodZoneIdentifier" type="FmIdentifierInt" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The unique identifier of the FEMA flood zone.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="ProjectIdentifier" type="FmIdentifierInt" nillable="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The unique identifier for a real estate development project.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PropertyCharacteristic">
+        <xs:annotation>
+            <xs:documentation>Descriptive information about the physical land associated with the Real Property.</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="PropertyCharacteristicType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Provides further details of the charactericstics of a property.  i.e., condo, manufactured housing, etc.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="DataSourceType" type="FmCodeInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Used to identify sources of data used in the description and analysis of the structure.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PropertyCharacteristicValue" type="FmValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The actual values used by the descriptive types and codes.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PropertyPurchase">
+        <xs:sequence>
+            <xs:element name="PurchasePriceAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The total dollar amount paid by the borrower for the property pledged as security for the mortgage. The purchase price is presented on the offer to purchase.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PurchaseDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The date on which a real estate property was purchased.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PropertyValuation">
+        <xs:annotation>
+            <xs:documentation>The assessed value of a property.</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="PropertyValuationIdentifier" type="FmIdentifierInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The unique identifier of the property valuation.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PartyIdentifier" type="FmIdentifierInt" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The unique identifier for a counterparty or related organization.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PropertyValuationMethodType" type="PropertyValuationMethodType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Specifies the method by which the property value was reported.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PropertyValuationAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Statement of property's value from a valid property valuation source</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PropertyAppraisedValueAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Statement of property's value from a valid property valuation source.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PropertyReplacementValueAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The dollar amount that would be needed to replace or restore the property to its original condition.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="AlternatePropertyValuationMethodAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Statement of the property's value from an alternate property valuation source.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="LandAppraisedValueAmount" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The value of the land as stated in the appraisal.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="PropertyValuationDate" type="FmDate" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Effective date of the property valuation on the subject property.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="HveCalibrationNumber" type="FmCount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The calebration coefficient describing the accuracy of the valuation produced by the HVE service.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="HveStandardDeviationNumber" type="FmAmount" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>The standard deviation of the valuation result set that was generated by the HVE service.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:simpleType name="PropertyValuationMethodType">
+        <xs:restriction base="xs:string">
+            <xs:annotation>
+                <xs:documentation>Specifies the method by which the property value was determined.</xs:documentation>
+            </xs:annotation>
+            <xs:enumeration value="AutomatedValuationModel">
+                <xs:annotation>
+                    <xs:documentation>Automated Valuation Model:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="BrokerPriceOpinion">
+                <xs:annotation>
+                    <xs:documentation>Broker Price Opinion:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="DriveBy">
+                <xs:annotation>
+                    <xs:documentation>Drive By:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="EmployeeRelocationCouncil2001">
+                <xs:annotation>
+                    <xs:documentation>Employee Relocation Council 2001:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FNM1004">
+                <xs:annotation>
+                    <xs:documentation>FNM 1004:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FNM1025">
+                <xs:annotation>
+                    <xs:documentation>FNM 1025:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FNM1073">
+                <xs:annotation>
+                    <xs:documentation>FNM 1073:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FNM2055Exterior">
+                <xs:annotation>
+                    <xs:documentation>FNM 2055 Exterior:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FNM2055InteriorAndExterior">
+                <xs:annotation>
+                    <xs:documentation>FNM 2055 Interior And Exterior:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FNM2065">
+                <xs:annotation>
+                    <xs:documentation>FNM 2065:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FNM2070Exterior">
+                <xs:annotation>
+                    <xs:documentation>FNM 2070 Exterior:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FNM2070Interior">
+                <xs:annotation>
+                    <xs:documentation>FNM 2070 Interior:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FNM2075">
+                <xs:annotation>
+                    <xs:documentation>FNM 2075:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FNM2095Exterior">
+                <xs:annotation>
+                    <xs:documentation>FNM 2095 Exterior:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FNM2095InteriorAndExterior">
+                <xs:annotation>
+                    <xs:documentation>FNM 2095 Interior And Exterior:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Form261805UsedforVAloans">
+                <xs:annotation>
+                    <xs:documentation>Form 26 1805: Used for VA loans</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Form268712">
+                <xs:annotation>
+                    <xs:documentation>Form 26 8712:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FullAppraisal">
+                <xs:annotation>
+                    <xs:documentation>Full Appraisal:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="None">
+                <xs:annotation>
+                    <xs:documentation>None:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Other">
+                <xs:annotation>
+                    <xs:documentation>Other:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="PriorAppraisalUsed">
+                <xs:annotation>
+                    <xs:documentation>Prior Appraisal Used:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="TaxValuation">
+                <xs:annotation>
+                    <xs:documentation>Tax Valuation:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="LoanStatusType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Origination">
+                <xs:annotation>
+                    <xs:documentation>The loan values and status as of loan origination</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Acquisition">
+                <xs:annotation>
+                    <xs:documentation>The loan values and status as of the time of loan acquisition</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Default">
+                <xs:annotation>
+                    <xs:documentation>The loan values and status as of the time of borrower default on the loan</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="CurrentAsOfDate">
+                <xs:annotation>
+                    <xs:documentation>The loan values and status as of the associated date</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="TimeType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Origination">
+                <xs:annotation>
+                    <xs:documentation>Data is as of the time of Loan Origination</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Acqjuisition">
+                <xs:annotation>
+                    <xs:documentation>Data is as of the time of Loan Acquisition</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Current">
+                <xs:annotation>
+                    <xs:documentation>Data is as of the associated date</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Estimated">
+                <xs:annotation>
+                    <xs:documentation>Data is as of the associated date, using estimated values as necessary</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Amortized">
+                <xs:annotation>
+                    <xs:documentation>Current Loan UPB is used, Original Property Value is used</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="LoanScopeType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="FirstLienOnly">
+                <xs:annotation>
+                    <xs:documentation>LTV based on the UPB of the first lien mortgage only.</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Combined">
+                <xs:annotation>
+                    <xs:documentation>LTV based on total of UPBs of first and all subordinate lien mortgages on the subject property.</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="HomeEquityCombined">
+                <xs:annotation>
+                    <xs:documentation>LTV based on all loans on the subject property, using the maximum permitted amount for the Home Equity loan(s)</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="LoanPurposeType">
+        <xs:restriction base="xs:string">
+            <xs:annotation>
+                <xs:documentation>Specifies the purpose for which the loan proceeds will be used.</xs:documentation>
+            </xs:annotation>
+            <xs:enumeration value="Other">
+                <xs:annotation>
+                    <xs:documentation>Other:</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Purchase">
+                <xs:annotation>
+                    <xs:documentation>Purchase: A loan made in association with the original purchase of a piece of property.</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Refinance">
+                <xs:annotation>
+                    <xs:documentation>Refinance: The repayment of a debt from proceeds of a new loan using the same property as security.</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="RefinanceHomeImprovement">
+                <xs:annotation>
+                    <xs:documentation>Refinance Home Improvement: The repayment of a debt from proceeds of a new loan using the same property as security, with additional cash out to be used for improvements to the property.</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="CashOutRefinance">
+                <xs:annotation>
+                    <xs:documentation>Cash Out Refinance: The repayment of a debt from proceeds of a new loan using the same property as security, with additional cash from equity extraction going to the borrower.</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Construction">
+                <xs:annotation>
+                    <xs:documentation>Construction: A loan for financing the cost of construction. Of indeterminate type</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Unknown">
+                <xs:annotation>
+                    <xs:documentation>Unknown: Loan Purpose has not been reported or is not known.</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="FmValue">
+        <xs:restriction base="xs:string"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmType">
+        <xs:restriction base="xs:string"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmText">
+        <xs:restriction base="xs:string"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmRate">
+        <xs:restriction base="xs:decimal"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmPercent">
+        <xs:restriction base="xs:decimal"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmName">
+        <xs:restriction base="xs:string"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmIndicator">
+        <xs:restriction base="xs:string"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmIdentifierInt">
+        <xs:restriction base="xs:integer"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmIdentifierChar">
+        <xs:restriction base="xs:string"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmDescription">
+        <xs:restriction base="xs:string"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmDate">
+        <xs:restriction base="xs:date"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmCount">
+        <xs:restriction base="xs:short"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmCodeInt">
+        <xs:restriction base="xs:string"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmCodeChar">
+        <xs:restriction base="xs:string"/>
+    </xs:simpleType>
+    <xs:simpleType name="FmAmount">
+        <xs:restriction base="xs:decimal"/>
+    </xs:simpleType>
+    <xs:simpleType name="FipsStateAlphaType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="AK">
+                <xs:annotation>
+                    <xs:documentation>Alaska</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="AL">
+                <xs:annotation>
+                    <xs:documentation>Alabama</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="AR">
+                <xs:annotation>
+                    <xs:documentation>Arkansas</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="AZ">
+                <xs:annotation>
+                    <xs:documentation>Arizona</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="CA">
+                <xs:annotation>
+                    <xs:documentation>California</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="CO">
+                <xs:annotation>
+                    <xs:documentation>Colorado</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="CT">
+                <xs:annotation>
+                    <xs:documentation>Connecticut</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="DC">
+                <xs:annotation>
+                    <xs:documentation>District of Columbia</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="DE">
+                <xs:annotation>
+                    <xs:documentation>Delaware</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FL">
+                <xs:annotation>
+                    <xs:documentation>Florida</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="GA">
+                <xs:annotation>
+                    <xs:documentation>Georgia</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="GU">
+                <xs:annotation>
+                    <xs:documentation>Guam</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="HI">
+                <xs:annotation>
+                    <xs:documentation>Hawaii</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="IA">
+                <xs:annotation>
+                    <xs:documentation>Iowa</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="ID">
+                <xs:annotation>
+                    <xs:documentation>Idaho</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="IL">
+                <xs:annotation>
+                    <xs:documentation>Illinois</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="IN">
+                <xs:annotation>
+                    <xs:documentation>Indiana</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="KS">
+                <xs:annotation>
+                    <xs:documentation>Kansas</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="KY">
+                <xs:annotation>
+                    <xs:documentation>Kentucky</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="LA">
+                <xs:annotation>
+                    <xs:documentation>Louisiana</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="MA">
+                <xs:annotation>
+                    <xs:documentation>Massachusetts</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="MD">
+                <xs:annotation>
+                    <xs:documentation>Maryland</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="ME">
+                <xs:annotation>
+                    <xs:documentation>Maine</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="MI">
+                <xs:annotation>
+                    <xs:documentation>Michigan</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="MN">
+                <xs:annotation>
+                    <xs:documentation>Minnesota</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="MO">
+                <xs:annotation>
+                    <xs:documentation>Missouri</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="MS">
+                <xs:annotation>
+                    <xs:documentation>Mississippi</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="MT">
+                <xs:annotation>
+                    <xs:documentation>Montana</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="NC">
+                <xs:annotation>
+                    <xs:documentation>North Carolina</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="ND">
+                <xs:annotation>
+                    <xs:documentation>North Dakota</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="NE">
+                <xs:annotation>
+                    <xs:documentation>Nebraska</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="NH">
+                <xs:annotation>
+                    <xs:documentation>New Hampshire</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="NJ">
+                <xs:annotation>
+                    <xs:documentation>New Jersey</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="NM">
+                <xs:annotation>
+                    <xs:documentation>New Mexico</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="NV">
+                <xs:annotation>
+                    <xs:documentation>Nevada</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="NY">
+                <xs:annotation>
+                    <xs:documentation>New York</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="OH">
+                <xs:annotation>
+                    <xs:documentation>Ohio</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="OK">
+                <xs:annotation>
+                    <xs:documentation>Oklahoma</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="OR">
+                <xs:annotation>
+                    <xs:documentation>Oregon</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="PA">
+                <xs:annotation>
+                    <xs:documentation>Pennsylvania</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="PR">
+                <xs:annotation>
+                    <xs:documentation>Puerto Rico</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="RI">
+                <xs:annotation>
+                    <xs:documentation>Rhode Island</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="SC">
+                <xs:annotation>
+                    <xs:documentation>South Carolina</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="SD">
+                <xs:annotation>
+                    <xs:documentation>South Dakota</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="TN">
+                <xs:annotation>
+                    <xs:documentation>Tennessee</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="TX">
+                <xs:annotation>
+                    <xs:documentation>Texas</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="UT">
+                <xs:annotation>
+                    <xs:documentation>Utah</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="VA">
+                <xs:annotation>
+                    <xs:documentation>Virginia</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="VI">
+                <xs:annotation>
+                    <xs:documentation>Virgin Islands</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="VT">
+                <xs:annotation>
+                    <xs:documentation>Vermont</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="WA">
+                <xs:annotation>
+                    <xs:documentation>Washington</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="WI">
+                <xs:annotation>
+                    <xs:documentation>Wisconsin</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="WV">
+                <xs:annotation>
+                    <xs:documentation>West Virginia</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="WY">
+                <xs:annotation>
+                    <xs:documentation>Wyoming</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="AS">
+                <xs:annotation>
+                    <xs:documentation>American Samoa</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="FM">
+                <xs:annotation>
+                    <xs:documentation>Federated States of Micronesia</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="MH">
+                <xs:annotation>
+                    <xs:documentation>Marshall Islands</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="MP">
+                <xs:annotation>
+                    <xs:documentation>Northern Mariana Islands</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="PW">
+                <xs:annotation>
+                    <xs:documentation>Palau</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="UM">
+                <xs:annotation>
+                    <xs:documentation>U.S. Minor Outlying Islands</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="XX">
+                <xs:annotation>
+                    <xs:documentation>All US States and Territories</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="NX">
+                <xs:annotation>
+                    <xs:documentation>New York City</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Unknown">
+                <xs:annotation>
+                    <xs:documentation>Unknown</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="DerivedPropertyType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="TownHouse">
+                <xs:annotation>
+                    <xs:documentation>Town House</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Condominium">
+                <xs:annotation>
+                    <xs:documentation>Condominium</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="PUD">
+                <xs:annotation>
+                    <xs:documentation>Planned Unit Development</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Manufactured">
+                <xs:annotation>
+                    <xs:documentation>Manufactured</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="W">
+                <xs:annotation>
+                    <xs:documentation>?</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="1Unit">
+                <xs:annotation>
+                    <xs:documentation>One Dwelling Unit</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="2Unit">
+                <xs:annotation>
+                    <xs:documentation>Two Dwelling Units</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="3Unit">
+                <xs:annotation>
+                    <xs:documentation>Three Dwelling Units</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="4Unit">
+                <xs:annotation>
+                    <xs:documentation>Four Dwelling Units</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="DerivedLoanPurposeType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Purchase">
+                <xs:annotation>
+                    <xs:documentation>Purchase</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Refinance">
+                <xs:annotation>
+                    <xs:documentation>Refinance</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="NotPurchase">
+                <xs:annotation>
+                    <xs:documentation>Not a Purchase Transaction</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="NotRefinance">
+                <xs:annotation>
+                    <xs:documentation>Not a Refinance Transaction</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="ACERequestType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Quarterly_Standard_WRSI_Model">
+                <xs:annotation>
+                    <xs:documentation>Quarterly Standard WRSI Model (Quarterly code 1)</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Quarterly_Expanded_WRSI_Model">
+                <xs:annotation>
+                    <xs:documentation>Quarterly Expanded WRSI Model (Quarterly code 2)</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Quarterly_ARIMA_WRSI_Model">
+                <xs:annotation>
+                    <xs:documentation>Quarterly ARIMA WRSI Model (Quarterly code 3)</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Monthly_Standard_WRSI_Model">
+                <xs:annotation>
+                    <xs:documentation>Monthly Standard WRSI Model (Monthly code 1)</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Monthly_Expanded_WRSI_Model">
+                <xs:annotation>
+                    <xs:documentation>Monthly Expanded WRSI Model (Monthly code 2)</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Monthly_ARIMA_3_WRSI_Model">
+                <xs:annotation>
+                    <xs:documentation>Monthly ARIMA 3-Month Ahead WRSI Model (Monthly code 3)</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="Monthly_ARIMA_1_WRSI_Model">
+                <xs:annotation>
+                    <xs:documentation>Monthly ARIMA 1-Month Ahead WRSI Model (Monthly code 4)</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:element name="processingDate" type="xs:date"/>
+</xs:schema>

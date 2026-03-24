@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsMathematicalOperators">
+      <match from="8704" to="8959"/>
+   </ranges>
+   <ranges complement="IsMathematicalOperators">
+      <match from="9" to="8703"/>
+      <match from="8960" to="1114111"/>
+   </ranges>
+</out>

@@ -729,7 +729,7 @@ func (r *elementTokenReader) emitElement(elem *helium.Element) {
 	}
 	r.tokens = append(r.tokens, se)
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch v := child.(type) {
 		case *helium.Element:
 			r.emitElement(v)
@@ -1189,7 +1189,7 @@ func elementText(elem *helium.Element) string {
 		return ""
 	}
 	var b strings.Builder
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch v := child.(type) {
 		case *helium.Text:
 			b.Write(v.Content())
@@ -1206,7 +1206,7 @@ func innerXML(elem *helium.Element) string {
 	}
 	var b bytes.Buffer
 	w := helium.NewWriter(helium.WithNoDecl())
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		_ = w.WriteNode(&b, child)
 	}
 	return b.String()
@@ -1217,7 +1217,7 @@ func elementComment(elem *helium.Element) string {
 		return ""
 	}
 	var b strings.Builder
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if comment, ok := child.(*helium.Comment); ok {
 			b.Write(comment.Content())
 		}
@@ -1230,7 +1230,7 @@ func childElements(elem *helium.Element) []*helium.Element {
 	if elem == nil {
 		return result
 	}
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() == helium.ElementNode {
 			result = append(result, child.(*helium.Element))
 		}
@@ -1349,7 +1349,7 @@ func findPath(children []*helium.Element, consumed map[int]bool, path []string) 
 }
 
 func firstChildByTag(elem *helium.Element, tag string) *helium.Element {
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}

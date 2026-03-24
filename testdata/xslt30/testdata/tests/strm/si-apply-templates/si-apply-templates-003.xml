@@ -1,0 +1,16 @@
+<Report>
+  <Document>
+     <documentType>E</documentType>
+     <person>
+        <firstname>John</firstname>
+        <lastname>Smith</lastname>
+     </person>
+  </Document>
+  <Document>
+     <documentType>F</documentType>
+     <person>
+        <firstname>Joe</firstname>
+        <lastname>Doe</lastname>
+     </person>
+  </Document>
+</Report>

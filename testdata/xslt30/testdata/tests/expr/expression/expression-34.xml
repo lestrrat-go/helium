@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+ <doc>
+    <book>
+       <author>
+          <name real="na">David Marston</name>
+          <chapters>Seven</chapters>
+          <bibliography></bibliography>
+       </author>
+    </book>
+    <book>
+       <author>
+          <name real="yes">Mary Brady</name>
+          <chapters>Ten</chapters>
+          <bibliography></bibliography>            
+       </author>
+    </book>
+ </doc>

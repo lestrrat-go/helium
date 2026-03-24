@@ -29,18 +29,23 @@ func Example_xpath3_resolver_options() {
 		return
 	}
 
-	ctx := context.Background()
-	ctx = xpath3.WithBaseURI(ctx, "mem://docs/")
-	ctx = xpath3.WithURIResolver(ctx, exampleXPath3MemoryResolver{
-		files: map[string]string{
-			"mem://docs/greeting.txt": "hello from resolver",
-		},
-	})
-	ctx = xpath3.WithVariables(ctx, map[string]xpath3.Sequence{
-		"file": xpath3.SingleString("greeting.txt"),
-	})
+	compiled, err := xpath3.NewCompiler().Compile(`upper-case(unparsed-text($file))`)
+	if err != nil {
+		fmt.Printf("compile error: %s\n", err)
+		return
+	}
 
-	r, err := xpath3.Evaluate(ctx, doc, `upper-case(unparsed-text($file))`)
+	r, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		BaseURI("mem://docs/").
+		URIResolver(exampleXPath3MemoryResolver{
+			files: map[string]string{
+				"mem://docs/greeting.txt": "hello from resolver",
+			},
+		}).
+		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
+			"file": xpath3.SingleString("greeting.txt"),
+		})).
+		Evaluate(context.Background(), compiled, doc)
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return

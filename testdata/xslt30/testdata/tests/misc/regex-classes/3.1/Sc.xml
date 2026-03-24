@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Sc">
+      <match from="36" to="36"/>
+      <match from="162" to="165"/>
+      <match from="2546" to="2547"/>
+      <match from="2801" to="2801"/>
+      <match from="3065" to="3065"/>
+      <match from="3647" to="3647"/>
+      <match from="6107" to="6107"/>
+      <match from="8352" to="8369"/>
+      <match from="65020" to="65020"/>
+      <match from="65129" to="65129"/>
+      <match from="65284" to="65284"/>
+      <match from="65504" to="65505"/>
+      <match from="65509" to="65510"/>
+   </ranges>
+   <ranges complement="Sc">
+      <match from="9" to="35"/>
+      <match from="37" to="161"/>
+      <match from="166" to="2545"/>
+      <match from="2548" to="2800"/>
+      <match from="2802" to="3064"/>
+      <match from="3066" to="3646"/>
+      <match from="3648" to="6106"/>
+      <match from="6108" to="8351"/>
+      <match from="8370" to="65019"/>
+      <match from="65021" to="65128"/>
+      <match from="65130" to="65283"/>
+      <match from="65285" to="65503"/>
+      <match from="65506" to="65508"/>
+      <match from="65511" to="1114111"/>
+   </ranges>
+</out>

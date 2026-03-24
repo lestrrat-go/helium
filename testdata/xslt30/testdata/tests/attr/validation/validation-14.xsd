@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://schvalid016.uri/" 
+xmlns:t="http://schvalid016.uri/"
+elementFormDefault="qualified">
+
+<xs:element name="test" type="t:testType">
+
+</xs:element>
+
+<xs:complexType name="testType">
+  <xs:sequence>
+    <xs:element name="content" type="xs:integer"/>
+  </xs:sequence>
+</xs:complexType>
+
+</xs:schema>

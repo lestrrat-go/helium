@@ -24,7 +24,7 @@ func TestQT3CaseblindCollation(t *testing.T) {
 				want: func(t *testing.T, seq xpath3.Sequence) {
 					t.Helper()
 					require.Len(t, seq, 1)
-					require.Equal(t, int64(0), seq[0].(xpath3.AtomicValue).IntegerVal())
+					require.Equal(t, int64(0), seq.Get(0).(xpath3.AtomicValue).IntegerVal())
 				},
 			},
 			{
@@ -33,7 +33,7 @@ func TestQT3CaseblindCollation(t *testing.T) {
 				want: func(t *testing.T, seq xpath3.Sequence) {
 					t.Helper()
 					require.Len(t, seq, 1)
-					require.True(t, seq[0].(xpath3.AtomicValue).BooleanVal())
+					require.True(t, seq.Get(0).(xpath3.AtomicValue).BooleanVal())
 				},
 			},
 			{
@@ -42,7 +42,7 @@ func TestQT3CaseblindCollation(t *testing.T) {
 				want: func(t *testing.T, seq xpath3.Sequence) {
 					t.Helper()
 					require.Len(t, seq, 1)
-					require.Equal(t, "nana", seq[0].(xpath3.AtomicValue).StringVal())
+					require.Equal(t, "nana", seq.Get(0).(xpath3.AtomicValue).StringVal())
 				},
 			},
 			{
@@ -51,7 +51,7 @@ func TestQT3CaseblindCollation(t *testing.T) {
 				want: func(t *testing.T, seq xpath3.Sequence) {
 					t.Helper()
 					require.Len(t, seq, 1)
-					require.Equal(t, "b", seq[0].(xpath3.AtomicValue).StringVal())
+					require.Equal(t, "b", seq.Get(0).(xpath3.AtomicValue).StringVal())
 				},
 			},
 		}
@@ -64,9 +64,10 @@ func TestQT3CaseblindCollation(t *testing.T) {
 	})
 
 	t.Run("default collation", func(t *testing.T) {
-		ctx := xpath3.WithDefaultCollation(t.Context(), qt3CaseblindCollationURI)
-		seq := evalExprCtx(t, ctx, doc, `compare("a", "A")`)
+		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			DefaultCollation(qt3CaseblindCollationURI)
+		seq := evalExprWithEval(t, eval, doc, `compare("a", "A")`)
 		require.Len(t, seq, 1)
-		require.Equal(t, int64(0), seq[0].(xpath3.AtomicValue).IntegerVal())
+		require.Equal(t, int64(0), seq.Get(0).(xpath3.AtomicValue).IntegerVal())
 	})
 }

@@ -37,15 +37,16 @@ type Node interface {
 
 // docnode is responsible for handling the basic tree-ish operations
 type docnode struct {
-	name       string
-	etype      ElementType
-	firstChild Node
-	lastChild  Node
-	parent     Node
-	next       Node
-	prev       Node
-	doc        *Document
-	line       int
+	name          string
+	etype         ElementType
+	firstChild    Node
+	lastChild     Node
+	parent        Node
+	next          Node
+	prev          Node
+	doc           *Document
+	line          int
+	entityBaseURI string // non-empty when this node originates from an external parsed entity
 }
 
 // node represents a node in a XML tree.
@@ -141,6 +142,13 @@ func setLastChild(n Node, cur Node) {
 	n.baseDocNode().lastChild = cur
 }
 
+// SetLastChild updates the last-child pointer of a parent node.
+// This is needed when manually splicing nodes into a sibling list
+// without going through AddChild/AddSibling.
+func SetLastChild(n Node, cur Node) {
+	setLastChild(n, cur)
+}
+
 func (n *docnode) SetOwnerDocument(doc *Document) {
 	n.doc = doc
 }
@@ -162,16 +170,37 @@ func (n docnode) Content() []byte {
 }
 
 func appendText(n Node, b []byte) error {
+	// Fast path: if last child is already a text node, append directly
+	// without allocating a new Text node.
+	if last := n.LastChild(); last != nil && last.Type() == TextNode {
+		return last.(*Text).AppendText(b)
+	}
+	// Use slab allocator when the node belongs to a document.
+	if doc := n.OwnerDocument(); doc != nil {
+		t, _ := doc.CreateText(b)
+		return n.AddChild(t)
+	}
 	t := newText(b)
 	return n.AddChild(t)
 }
 
-type WalkFunc func(Node) error
+// NodeWalker visits nodes during tree traversal.
+type NodeWalker interface {
+	Visit(Node) error
+}
+
+// NodeWalkerFunc is an adapter to allow use of ordinary functions as NodeWalker.
+// Similar to http.HandlerFunc.
+type NodeWalkerFunc func(Node) error
+
+func (f NodeWalkerFunc) Visit(n Node) error {
+	return f(n)
+}
 
 // Walk performs a depth-first traversal of the node tree rooted at n,
-// calling f for each node. There is no direct libxml2 equivalent; callers
+// calling w.Visit for each node. There is no direct libxml2 equivalent; callers
 // typically write manual tree traversal loops in C.
-func Walk(n Node, f WalkFunc) error {
+func Walk(n Node, w NodeWalker) error {
 	if n == nil {
 		return errors.New("nil node")
 	}
@@ -186,7 +215,7 @@ func Walk(n Node, f WalkFunc) error {
 	for len(stack) > 0 {
 		top := &stack[len(stack)-1]
 		if !top.entered {
-			if err := f(top.node); err != nil {
+			if err := w.Visit(top.node); err != nil {
 				return err
 			}
 			top.entered = true
@@ -248,8 +277,18 @@ func addChild(n Node, cur Node) error {
 		return nil
 	}
 
+	// Fast path: when lastChild has no next sibling (the normal case),
+	// link directly without virtual dispatch through AddSibling.
+	if l.NextSibling() == nil && (cur.Type() != TextNode || l.Type() != TextNode) {
+		l.SetNextSibling(cur)
+		cur.SetPrevSibling(l)
+		cur.SetParent(n)
+		setLastChild(n, cur)
+		return nil
+	}
+
 	// AddSibling handles setting the parent, and the
-	// lastChild pointer
+	// lastChild pointer (also merges adjacent text nodes)
 	if err := l.AddSibling(cur); err != nil {
 		return err
 	}
@@ -361,6 +400,18 @@ func (n node) Namespaces() []*Namespace {
 	return n.nsDefs
 }
 
+// RemoveNamespaceByPrefix removes a namespace declaration with the given prefix.
+// Returns true if a declaration was removed.
+func (n *node) RemoveNamespaceByPrefix(prefix string) bool {
+	for i, ns := range n.nsDefs {
+		if ns.Prefix() == prefix {
+			n.nsDefs = append(n.nsDefs[:i], n.nsDefs[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
 // DeclareNamespace declares a namespace on this node without making it the
 // node's active namespace (libxml2: xmlNewNs).
 func (n *node) DeclareNamespace(prefix, uri string) error {
@@ -381,6 +432,12 @@ func (n *node) SetActiveNamespace(prefix, uri string) error {
 	}
 	n.ns = ns
 	return nil
+}
+
+// SetNs sets the node's active namespace to an existing Namespace object
+// without creating a new declaration.
+func (n *node) SetNs(ns *Namespace) {
+	n.ns = ns
 }
 
 func (n node) Prefix() string {

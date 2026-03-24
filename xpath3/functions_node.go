@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -79,7 +80,8 @@ func fnNilled(ctx context.Context, args []Sequence) (Sequence, error) {
 	if n == nil {
 		return nil, nil
 	}
-	// Helium doesn't support schema-validated nilled; always false for elements.
+	// Schema-validated nilled checking is handled by the XSLT engine
+	// override. This default implementation returns false for elements.
 	if n.Type() == helium.ElementNode {
 		return SingleBoolean(false), nil
 	}
@@ -93,9 +95,9 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "data() requires a context item"}
 		}
 		if fc.contextItem != nil {
-			args = []Sequence{{fc.contextItem}}
+			args = []Sequence{ItemSlice{fc.contextItem}}
 		} else if fc.node != nil {
-			args = []Sequence{{NodeItem{Node: fc.node}}}
+			args = []Sequence{ItemSlice{nodeItemFor(fc, fc.node)}}
 		} else {
 			return nil, &XPathError{Code: errCodeXPDY0002, Message: "data() requires a context item"}
 		}
@@ -104,7 +106,7 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := make(Sequence, len(atoms))
+	result := make(ItemSlice, len(atoms))
 	for i, a := range atoms {
 		result[i] = a
 	}
@@ -119,11 +121,27 @@ func fnBaseURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	if n == nil {
 		return nil, nil
 	}
+	// Namespace nodes have no base URI per the XPath data model.
+	if n.Type() == helium.NamespaceNode {
+		return nil, nil
+	}
+	// Walk up the parent chain to find the actual document the node lives
+	// in. OwnerDocument() may return a different document when nodes are
+	// created in one document and then moved to another (e.g. in XSLT
+	// xsl:result-document).
 	var doc *helium.Document
 	if d, ok := n.(*helium.Document); ok {
 		doc = d
 	} else {
-		doc = n.OwnerDocument()
+		cur := helium.Node(n)
+		for cur.Parent() != nil {
+			cur = cur.Parent()
+		}
+		if d, ok := cur.(*helium.Document); ok {
+			doc = d
+		} else {
+			doc = n.OwnerDocument()
+		}
 	}
 	base := helium.NodeGetBase(doc, n)
 	if base == "" {
@@ -177,11 +195,16 @@ func fnPath(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func buildNodePath(n helium.Node) string {
+	const fnRoot = "Q{http://www.w3.org/2005/xpath-functions}root()"
 	if n.Type() == helium.DocumentNode {
 		return "/"
 	}
 	var parts []string
 	for cur := n; cur != nil && cur.Type() != helium.DocumentNode; cur = cur.Parent() {
+		// Skip the root of a non-document tree — it is represented by Q{...}root()
+		if cur.Parent() == nil {
+			break
+		}
 		switch cur.Type() {
 		case helium.ElementNode:
 			local := ixpath.LocalNameOf(cur)
@@ -216,7 +239,20 @@ func buildNodePath(n helium.Node) string {
 	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
 		parts[i], parts[j] = parts[j], parts[i]
 	}
-	return "/" + strings.Join(parts, "/")
+	// Check if the node is rooted in a document node.
+	// Per XPath 3.1: document root → path starts with "/",
+	// non-document root (orphan tree) → path starts with "Q{...}root()".
+	root := n
+	for root.Parent() != nil {
+		root = root.Parent()
+	}
+	if root.Type() == helium.DocumentNode {
+		return "/" + strings.Join(parts, "/")
+	}
+	if len(parts) == 0 {
+		return fnRoot
+	}
+	return fnRoot + "/" + strings.Join(parts, "/")
 }
 
 func elementPosition(n helium.Node) int {
@@ -419,11 +455,16 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		return SingleDouble(a.DoubleVal()), nil
 	}
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return SingleDouble(math.NaN()), nil
 	}
-	a, err := AtomizeItem(args[0][0])
+	a, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
+		// FOTY0013 (atomizing function items) must propagate per XPath 3.1 §2.7.2
+		var xpErr *XPathError
+		if errors.As(err, &xpErr) && xpErr.Code == "FOTY0013" {
+			return nil, err
+		}
 		return SingleDouble(math.NaN()), nil
 	}
 	dbl, err := CastAtomic(a, TypeDouble)
@@ -441,11 +482,11 @@ func fnGenerateID(ctx context.Context, args []Sequence) (Sequence, error) {
 	if n == nil {
 		return SingleString(""), nil
 	}
-	return SingleString(stableNodeID(n)), nil
+	return SingleString(StableNodeID(n)), nil
 }
 
 func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	s, err := coerceArgToString(args[0])
@@ -461,11 +502,11 @@ func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml: %v", err)}
 	}
 	doc.SetProperties(doc.Properties() | helium.DocInternal)
-	return Sequence{NodeItem{Node: doc}}, nil
+	return ItemSlice{NodeItem{Node: doc}}, nil
 }
 
 func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	s, err := coerceArgToString(args[0])
@@ -499,7 +540,7 @@ func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) 
 		cur = next
 	}
 
-	return Sequence{NodeItem{Node: doc}}, nil
+	return ItemSlice{NodeItem{Node: doc}}, nil
 }
 
 func stripXMLTextDeclaration(s string) (string, error) {
@@ -629,7 +670,103 @@ func fnID(ctx context.Context, args []Sequence) (Sequence, error) {
 			nodes = append(nodes, elem)
 		}
 	}
+	nodes = append(nodes, idElementsFromTypeAnnotations(doc, tokens, getFnContext(ctx))...)
 	return sequenceFromDocOrderedNodes(ctx, nodes)
+}
+
+func idElementsFromTypeAnnotations(doc *helium.Document, tokens []string, ec *evalContext) []helium.Node {
+	if ec == nil || len(tokens) == 0 {
+		return nil
+	}
+	if ec.typeAnnotations == nil && ec.preservedIDAnnotations == nil {
+		return nil
+	}
+
+	wanted := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
+		wanted[token] = struct{}{}
+	}
+
+	seen := make(map[helium.Node]struct{})
+	var nodes []helium.Node
+
+	// Check both regular type annotations and preserved ID annotations
+	// (the latter are kept when input-type-annotations="strip" removes
+	// regular annotations but preserves is-id/is-idref properties).
+	for _, annMap := range []map[helium.Node]string{ec.typeAnnotations, ec.preservedIDAnnotations} {
+		for node, typeName := range annMap {
+			if !annotationMatchesIDType(typeName, ec) {
+				continue
+			}
+			if ixpath.DocumentRoot(node) != doc {
+				continue
+			}
+
+			switch typed := node.(type) {
+			case *helium.Attribute:
+				if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; !ok {
+					continue
+				}
+				parent, ok := typed.Parent().(*helium.Element)
+				if !ok {
+					continue
+				}
+				if _, dup := seen[parent]; dup {
+					continue
+				}
+				seen[parent] = struct{}{}
+				nodes = append(nodes, parent)
+			case *helium.Element:
+				if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; ok {
+					if _, dup := seen[typed]; dup {
+						continue
+					}
+					seen[typed] = struct{}{}
+					nodes = append(nodes, typed)
+				}
+			}
+		}
+	}
+	return nodes
+}
+
+func annotationMatchesIDType(typeName string, ec *evalContext) bool {
+	if typeName == "" {
+		return false
+	}
+	if isSubtypeOf(typeName, TypeID) {
+		return true
+	}
+	if ec == nil || ec.schemaDeclarations == nil {
+		return false
+	}
+	return ec.schemaDeclarations.IsSubtypeOf(typeName, TypeID)
+}
+
+// annotationMatchesIDRefType checks if an attribute node has an IDREF/IDREFS
+// type annotation in either typeAnnotations or preservedIDAnnotations.
+func annotationMatchesIDRefType(ec *evalContext, attr *helium.Attribute) bool {
+	for _, annMap := range []map[helium.Node]string{ec.typeAnnotations, ec.preservedIDAnnotations} {
+		if ann, ok := annMap[attr]; ok && isIDRefAnnotation(ann, ec) {
+			return true
+		}
+	}
+	return false
+}
+
+// isIDRefAnnotation returns true if the type name is xs:IDREF, xs:IDREFS, or
+// a subtype thereof.
+func isIDRefAnnotation(typeName string, ec *evalContext) bool {
+	if typeName == "" {
+		return false
+	}
+	if isSubtypeOf(typeName, TypeIDREF) || isSubtypeOf(typeName, TypeIDREFS) {
+		return true
+	}
+	if ec != nil && ec.schemaDeclarations != nil {
+		return ec.schemaDeclarations.IsSubtypeOf(typeName, TypeIDREF) || ec.schemaDeclarations.IsSubtypeOf(typeName, TypeIDREFS)
+	}
+	return false
 }
 
 func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -638,27 +775,41 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	tokens, err := idLookupTokens(args[0])
+	// Unlike fn:id, fn:idref does NOT tokenize its argument strings.
+	// Each string in the input sequence is matched as-is against individual
+	// IDREF/IDREFS tokens in the document.
+	atoms, err := AtomizeSequence(args[0])
 	if err != nil {
 		return nil, err
 	}
-	if len(tokens) == 0 {
+	if len(atoms) == 0 {
 		return nil, nil
 	}
 
-	wanted := make(map[string]struct{}, len(tokens))
-	for _, token := range tokens {
-		wanted[token] = struct{}{}
+	wanted := make(map[string]struct{}, len(atoms))
+	for _, atom := range atoms {
+		s, sErr := atomicToString(atom)
+		if sErr != nil {
+			return nil, sErr
+		}
+		if s != "" {
+			wanted[s] = struct{}{}
+		}
 	}
 
+	ec := getFnContext(ctx)
 	var nodes []helium.Node
-	_ = helium.Walk(doc, func(n helium.Node) error {
+	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		elem, ok := n.(*helium.Element)
 		if !ok {
 			return nil
 		}
 		for _, attr := range elem.Attributes() {
-			if attr.AType() != enum.AttrIDRef && attr.AType() != enum.AttrIDRefs {
+			isIDRef := attr.AType() == enum.AttrIDRef || attr.AType() == enum.AttrIDRefs
+			if !isIDRef && ec != nil {
+				isIDRef = annotationMatchesIDRefType(ec, attr)
+			}
+			if !isIDRef {
 				continue
 			}
 			for _, token := range strings.Fields(attr.Value()) {
@@ -668,8 +819,26 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 				}
 			}
 		}
+		// Also check element content for IDREF type annotations.
+		if ec != nil {
+			isIDRef := false
+			for _, annMap := range []map[helium.Node]string{ec.typeAnnotations, ec.preservedIDAnnotations} {
+				if ann, ok := annMap[elem]; ok && isIDRefAnnotation(ann, ec) {
+					isIDRef = true
+					break
+				}
+			}
+			if isIDRef {
+				for _, token := range strings.Fields(strings.TrimSpace(ixpath.StringValue(elem))) {
+					if _, ok := wanted[token]; ok {
+						nodes = append(nodes, elem)
+						break
+					}
+				}
+			}
+		}
 		return nil
-	})
+	}))
 	return sequenceFromDocOrderedNodes(ctx, nodes)
 }
 
@@ -725,7 +894,7 @@ func fnURICollection(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:uri-collection: cannot resolve collection: %v", err)}
 	}
 
-	result := make(Sequence, 0, len(uris))
+	result := make(ItemSlice, 0, len(uris))
 	for _, uri := range uris {
 		result = append(result, AtomicValue{TypeName: TypeAnyURI, Value: uri})
 	}
@@ -733,7 +902,7 @@ func fnURICollection(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnDoc(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	uri, err := docURIArg(args[0], "fn:doc")
@@ -748,7 +917,7 @@ func fnDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnDocAvailable(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return SingleBoolean(false), nil
 	}
 	uri, err := docURIArg(args[0], "fn:doc-available")
@@ -791,14 +960,14 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 }
 
 func docURIArg(seq Sequence, fnName string) (string, error) {
-	if len(seq) > 1 {
+	if seqLen(seq) > 1 {
 		return "", &XPathError{Code: errCodeXPTY0004, Message: fnName + ": expected xs:string?, got sequence of length > 1"}
 	}
 	return coerceArgToString(seq)
 }
 
 func collectionURIArg(args []Sequence, fnName string) (string, bool, error) {
-	if len(args) == 0 || len(args[0]) == 0 {
+	if len(args) == 0 || seqLen(args[0]) == 0 {
 		return "", false, nil
 	}
 	uri, err := docURIArg(args[0], fnName)
@@ -837,6 +1006,10 @@ func resolveCollectionURI(ctx context.Context, uri, fnName string) (string, erro
 
 func resolveDocURI(ctx context.Context, uri string) (string, error) {
 	if uri == "" {
+		// doc("") returns the document at the base URI (XSLT §14.1, XPath §14.1.1)
+		if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
+			return ec.baseURI, nil
+		}
 		return "", &XPathError{Code: errCodeFODC0002, Message: "fn:doc: empty URI"}
 	}
 
@@ -870,10 +1043,10 @@ func resolveDocURI(ctx context.Context, uri string) (string, error) {
 func resolveIDLookupDocument(ctx context.Context, args []Sequence) (*helium.Document, error) {
 	var node helium.Node
 	if len(args) > 1 {
-		if len(args[1]) != 1 {
+		if seqLen(args[1]) != 1 {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:id second argument must be a single node"}
 		}
-		ni, ok := args[1][0].(NodeItem)
+		ni, ok := args[1].Get(0).(NodeItem)
 		if !ok {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:id second argument must be a node"}
 		}
@@ -926,7 +1099,8 @@ func sequenceFromDocOrderedNodes(ctx context.Context, nodes []helium.Node) (Sequ
 
 	cache := &ixpath.DocOrderCache{}
 	maxNodes := maxNodeSetLength
-	if fc := getFnContext(ctx); fc != nil {
+	fc := getFnContext(ctx)
+	if fc != nil {
 		cache = fc.docOrder
 		maxNodes = fc.maxNodes
 	}
@@ -936,9 +1110,9 @@ func sequenceFromDocOrderedNodes(ctx context.Context, nodes []helium.Node) (Sequ
 		return nil, err
 	}
 
-	result := make(Sequence, 0, len(deduped))
+	result := make(ItemSlice, 0, len(deduped))
 	for _, node := range deduped {
-		result = append(result, NodeItem{Node: node})
+		result = append(result, nodeItemFor(fc, node))
 	}
 	return result, nil
 }
@@ -955,13 +1129,13 @@ func nodeArgOrCtx(ctx context.Context, args []Sequence) (helium.Node, error) {
 		}
 		return fc.node, nil
 	}
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
-	if len(args[0]) > 1 {
+	if seqLen(args[0]) > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected single node, got sequence of length > 1"}
 	}
-	ni, ok := args[0][0].(NodeItem)
+	ni, ok := args[0].Get(0).(NodeItem)
 	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "expected node"}
 	}

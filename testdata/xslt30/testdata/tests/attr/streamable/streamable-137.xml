@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<r>
+    <a id="i1"/>
+    <b id="i2">
+        <c id="i3">e</c>d<c id="i4">f</c>
+    </b>
+</r>
+

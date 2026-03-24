@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsSmallFormVariants">
+      <match from="65104" to="65135"/>
+   </ranges>
+   <ranges complement="IsSmallFormVariants">
+      <match from="9" to="65103"/>
+      <match from="65136" to="1114111"/>
+   </ranges>
+</out>

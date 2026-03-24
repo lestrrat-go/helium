@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsBraillePatterns">
+      <match from="10240" to="10495"/>
+   </ranges>
+   <ranges complement="IsBraillePatterns">
+      <match from="9" to="10239"/>
+      <match from="10496" to="1114111"/>
+   </ranges>
+</out>

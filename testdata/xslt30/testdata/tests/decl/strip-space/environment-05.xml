@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<doc xmlns:one="http://www.test1.example.org" 
+	 xmlns:two="http://www.test2.example.org"
+	 xmlns:three="http://www.test3.example.org">
+<one:el>
+   		<a>el1</a>
+   		
+</one:el>
+<one:elem>   <a>elem2</a>   </one:elem>
+<two:elem>
+   <a>elem3</a></two:elem>
+<three:elem><a>elem4</a>			</three:elem>
+<one:item>
+   	<a>item5</a>
+</one:item>
+<two:elem> <a>elem6</a> </two:elem>
+</doc>

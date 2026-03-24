@@ -1,0 +1,2 @@
+<!ENTITY value SYSTEM "xinc01e.xsl">
+<!ENTITY child SYSTEM "xinc01c.xsl">

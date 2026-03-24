@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsArrows">
+      <match from="8592" to="8703"/>
+   </ranges>
+   <ranges complement="IsArrows">
+      <match from="9" to="8591"/>
+      <match from="8704" to="1114111"/>
+   </ranges>
+</out>

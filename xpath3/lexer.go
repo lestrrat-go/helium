@@ -9,19 +9,30 @@ import (
 
 // lexer tokenizes an XPath 3.1 expression string.
 type lexer struct {
-	input  string
-	pos    int
-	tokens []Token
-	idx    int // read cursor into tokens
+	input    string
+	pos      int
+	tokens   []Token
+	idx      int  // read cursor into tokens
+	hadSpace bool // true if whitespace was skipped before current token
 }
 
 // newLexer creates a lexer and tokenizes the entire input.
 func newLexer(input string) (*lexer, error) {
-	l := &lexer{input: input}
+	l := &lexer{
+		input:  input,
+		tokens: make([]Token, 0, estimateTokenCapacity(input)),
+	}
 	if err := l.tokenize(); err != nil {
 		return nil, err
 	}
 	return l, nil
+}
+
+func estimateTokenCapacity(input string) int {
+	if len(input) < 8 {
+		return 8
+	}
+	return len(input)/2 + 1
 }
 
 // Next returns the next token and advances the cursor.
@@ -117,7 +128,9 @@ var alwaysKeywords = map[string]TokenType{
 
 func (l *lexer) tokenize() error {
 	for l.pos < len(l.input) {
+		posBefore := l.pos
 		l.skipWhitespace()
+		l.hadSpace = l.pos > posBefore
 		if l.pos >= len(l.input) {
 			break
 		}
@@ -311,7 +324,7 @@ func (l *lexer) advanceRune(r rune) {
 }
 
 func (l *lexer) emit(typ TokenType, value string) {
-	l.tokens = append(l.tokens, Token{Type: typ, Value: value})
+	l.tokens = append(l.tokens, Token{Type: typ, Value: value, SpaceBefore: l.hadSpace})
 }
 
 func (l *lexer) skipWhitespace() {
@@ -440,6 +453,12 @@ func (l *lexer) scanNameOrKeyword() {
 		}
 		uri := collapseWhitespace(l.input[braceStart:l.pos])
 		l.pos++ // consume '}'
+		// Check for wildcard: Q{uri}*
+		if l.pos < len(l.input) && l.input[l.pos] == '*' {
+			l.pos++
+			l.emit(TokenName, "Q{"+uri+"}*")
+			return
+		}
 		local := l.scanNCName()
 		l.emit(TokenName, "Q{"+uri+"}"+local)
 		return
@@ -460,7 +479,7 @@ func (l *lexer) scanNameOrKeyword() {
 	// EXCEPT after '/' or '//' where they must be treated as element name tests,
 	// unless immediately followed by '{' (curly array/map constructor).
 	if tokType, ok := alwaysKeywords[name]; ok {
-		if !l.isAfterSlash() {
+		if !l.isNameTestContext() {
 			l.emit(tokType, name)
 			return
 		}
@@ -474,14 +493,16 @@ func (l *lexer) scanNameOrKeyword() {
 	l.emit(TokenName, name)
 }
 
-// isAfterSlash returns true if the previous token is '/' or '//'.
-// In this context, keywords must be treated as element name tests.
-func (l *lexer) isAfterSlash() bool {
+// isNameTestContext returns true if the previous token indicates that the
+// next name should be treated as a name test rather than a keyword.
+// This occurs after '/', '//', '@', and '::'.
+func (l *lexer) isNameTestContext() bool {
 	if len(l.tokens) == 0 {
 		return false
 	}
 	prev := l.tokens[len(l.tokens)-1]
-	return prev.Type == TokenSlash || prev.Type == TokenSlashSlash
+	return prev.Type == TokenSlash || prev.Type == TokenSlashSlash ||
+		prev.Type == TokenAt || prev.Type == TokenColonColon
 }
 
 // isOperatorContext returns true if an operator keyword is expected at
@@ -536,15 +557,29 @@ func (l *lexer) PrettyTokens() string {
 	return b.String()
 }
 
-// isNCNameStart returns true if r is a valid start of an NCName.
+// isNCNameStart returns true if r is a valid start of an NCName per the XML spec.
+// NCName ::= Name - (Char* ':' Char*), so NameStartChar minus ':'.
+// NameStartChar ::= ":" | [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6] |
+//
+//	[#xF8-#x2FF] | [#x370-#x37D] | [#x37F-#x1FFF] | [#x200C-#x200D] |
+//	[#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] |
+//	[#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
 func isNCNameStart(r rune) bool {
-	return unicode.IsLetter(r) || r == '_'
+	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || r == '_' ||
+		(r >= 0xC0 && r <= 0xD6) || (r >= 0xD8 && r <= 0xF6) ||
+		(r >= 0xF8 && r <= 0x2FF) || (r >= 0x370 && r <= 0x37D) ||
+		(r >= 0x37F && r <= 0x1FFF) || (r >= 0x200C && r <= 0x200D) ||
+		(r >= 0x2070 && r <= 0x218F) || (r >= 0x2C00 && r <= 0x2FEF) ||
+		(r >= 0x3001 && r <= 0xD7FF) || (r >= 0xF900 && r <= 0xFDCF) ||
+		(r >= 0xFDF0 && r <= 0xFFFD) || (r >= 0x10000 && r <= 0xEFFFF)
 }
 
-// isNCNameChar returns true if r is a valid NCName continuation character.
+// isNCNameChar returns true if r is a valid NCName continuation character per the XML spec.
+// NameChar ::= NameStartChar | "-" | "." | [0-9] | #xB7 | [#x0300-#x036F] | [#x203F-#x2040]
 func isNCNameChar(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r) ||
-		r == '.' || r == '-' || r == '_'
+	return isNCNameStart(r) ||
+		(r >= '0' && r <= '9') || r == '-' || r == '.' ||
+		r == 0xB7 || (r >= 0x0300 && r <= 0x036F) || (r >= 0x203F && r <= 0x2040)
 }
 
 // isValidNCName checks whether s is a valid XML NCName (non-empty, starts with

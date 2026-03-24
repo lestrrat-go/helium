@@ -1,0 +1,3 @@
+<!ELEMENT iddata (el*)>
+<!ELEMENT el EMPTY>
+<!ATTLIST el id ID #REQUIRED>

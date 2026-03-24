@@ -1,0 +1,9 @@
+<!ELEMENT Section1 (Heading, Para*)>
+<!ATTLIST Section1 xml:lang CDATA #IMPLIED>
+<!ELEMENT Heading (#PCDATA)>
+<!ELEMENT Para (#PCDATA | MediaObject)*>
+<!ELEMENT MediaObject EMPTY>
+<!ATTLIST MediaObject src CDATA #REQUIRED>
+<!NOTATION jpeg SYSTEM "image/jpeg">
+<!ENTITY dgr-08sdexample06 SYSTEM "dgr-en-08sdexample06-a.jpg" NDATA jpeg>
+<!ENTITY dgr-08sdexample06 SYSTEM "dgr-en-08sdexample06-b.jpg" NDATA jpeg>

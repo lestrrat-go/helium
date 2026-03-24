@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?><output>
+<out1>g:h</out1>
+<out2>http://a/b/c/g</out2>
+<out3>http://a/b/c/g</out3>
+<out4>http://a/b/c/g/</out4>
+<out5>http://a/g</out5>
+<out6>http://g</out6>
+<out8>http://a/b/c/g?y</out8>
+<out9>http://a/b/c/d;p?q#g</out9>
+<out10>http://a/b/c/g#s</out10>
+<out11>http://a/b/c/g?y#s</out11>
+<out12>http://a/b/c/;x</out12>
+<out13>http://a/b/c/g;x</out13>
+<out14>http://a/b/c/g;x?y#s</out14>
+<out15>http://a/b/c/</out15>
+<out16>http://a/b/c/</out16>
+<out17>http://a/b/</out17>
+<out18>http://a/b/</out18>
+<out19>http://a/b/g</out19>
+<out20>http://a/</out20>
+<out21>http://a/</out21>
+<out22>http://a/g</out22></output>

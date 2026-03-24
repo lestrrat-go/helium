@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<my:doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.schemanodetest.example.com/ns/subgroup subgroupTypeNodeTest.xsd"
+     xmlns:my="http://www.schemanodetest.example.com/ns/subgroup">
+	 <my:elem-INT>
+		<my:elem-anyURI>5</my:elem-anyURI>
+	 </my:elem-INT>
+	<my:elem-anyURI>http://test3.org</my:elem-anyURI>
+</my:doc>

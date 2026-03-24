@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding="ISO-8859-1"?>
+<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='2.0'>
+
+  <!-- Purpose: Create attribute with NCName and newly-introduced namespace. -->
+  <!-- Processor will have to invent a prefix because none has been established for that namespace. -->
+  <!-- Test modified by MHK to produce processor-independent results (bug 680) -->
+
+<xsl:output method="xml"/>
+
+<xsl:template match="/">
+  <xsl:variable name="temp">
+    <xsl:apply-templates/>
+  </xsl:variable>
+  <out elements="{count($temp//*)}" attributes="{count($temp//@*)}" fiscus-attributes="{count($temp//@fiscus:*)}"
+       xmlns:fiscus="http://www.fiscus.de" xsl:exclude-result-prefixes="fiscus"/>  
+</xsl:template>
+
+<xsl:template match="*">
+  <xsl:copy>
+    <xsl:attribute name="objectID" namespace="http://www.fiscus.de">
+      <xsl:number level="any" count="*"/>
+    </xsl:attribute>
+    <xsl:apply-templates select="@*|node()|comment()|processing-instruction()"/>
+  </xsl:copy>
+</xsl:template>
+
+</xsl:stylesheet>

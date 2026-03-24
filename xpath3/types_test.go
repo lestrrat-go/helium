@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -33,6 +34,28 @@ func TestAtomicValueAccessors(t *testing.T) {
 		v := xpath3.AtomicValue{TypeName: xpath3.TypeBoolean, Value: true}
 		require.True(t, v.BooleanVal())
 	})
+
+	t.Run("schema-derived fallback atomization", func(t *testing.T) {
+		doc, err := helium.Parse(t.Context(), []byte(`<root>-0</root>`))
+		require.NoError(t, err)
+
+		root := doc.FirstChild()
+		require.NotNil(t, root)
+
+		av, err := xpath3.AtomizeItem(xpath3.NodeItem{
+			Node:           root,
+			TypeAnnotation: "Q{urn:test}derived-float",
+			AtomizedType:   xpath3.TypeFloat,
+		})
+		require.NoError(t, err)
+		// Atomization preserves the user-defined type annotation so that
+		// "instance of" checks match the original schema type.
+		require.Equal(t, "Q{urn:test}derived-float", av.TypeName)
+
+		s, err := xpath3.AtomicToString(av)
+		require.NoError(t, err)
+		require.Equal(t, "-0", s)
+	})
 }
 
 func TestMapItem(t *testing.T) {
@@ -53,7 +76,7 @@ func TestMapItem(t *testing.T) {
 		v, ok := m.Get(strKey("a"))
 		require.True(t, ok)
 		require.Len(t, v, 1)
-		av := v[0].(xpath3.AtomicValue)
+		av := v.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, int64(1), av.IntegerVal())
 	})
 
@@ -87,7 +110,7 @@ func TestMapItem(t *testing.T) {
 		require.Equal(t, 1, m2.Size())
 		v, ok := m2.Get(strKey("a"))
 		require.True(t, ok)
-		require.Equal(t, int64(99), v[0].(xpath3.AtomicValue).IntegerVal())
+		require.Equal(t, int64(99), v.Get(0).(xpath3.AtomicValue).IntegerVal())
 	})
 
 	t.Run("remove", func(t *testing.T) {
@@ -126,7 +149,7 @@ func TestMapItem(t *testing.T) {
 		// t2 is the same instant as t1 in UTC, so lookup should succeed
 		v, ok := m.Get(k2)
 		require.True(t, ok)
-		require.Equal(t, "found", v[0].(xpath3.AtomicValue).StringVal())
+		require.Equal(t, "found", v.Get(0).(xpath3.AtomicValue).StringVal())
 	})
 
 	t.Run("constructor clones value sequences", func(t *testing.T) {
@@ -135,11 +158,11 @@ func TestMapItem(t *testing.T) {
 			{Key: strKey("a"), Value: value},
 		})
 
-		value[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+		value.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
 
 		got, ok := m.Get(strKey("a"))
 		require.True(t, ok)
-		require.Equal(t, "original", got[0].(xpath3.AtomicValue).StringVal())
+		require.Equal(t, "original", got.Get(0).(xpath3.AtomicValue).StringVal())
 	})
 
 	t.Run("get returns cloned value sequence", func(t *testing.T) {
@@ -149,11 +172,11 @@ func TestMapItem(t *testing.T) {
 
 		got, ok := m.Get(strKey("a"))
 		require.True(t, ok)
-		got[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+		got.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
 
 		again, ok := m.Get(strKey("a"))
 		require.True(t, ok)
-		require.Equal(t, "original", again[0].(xpath3.AtomicValue).StringVal())
+		require.Equal(t, "original", again.Get(0).(xpath3.AtomicValue).StringVal())
 	})
 }
 
@@ -176,14 +199,14 @@ func TestMergeMaps(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 3, merged.Size())
 		v, _ := merged.Get(strKey("b"))
-		require.Equal(t, int64(2), v[0].(xpath3.AtomicValue).IntegerVal())
+		require.Equal(t, int64(2), v.Get(0).(xpath3.AtomicValue).IntegerVal())
 	})
 
 	t.Run("use last", func(t *testing.T) {
 		merged, err := xpath3.MergeMaps([]xpath3.MapItem{m1, m2}, xpath3.MergeUseLast)
 		require.NoError(t, err)
 		v, _ := merged.Get(strKey("b"))
-		require.Equal(t, int64(20), v[0].(xpath3.AtomicValue).IntegerVal())
+		require.Equal(t, int64(20), v.Get(0).(xpath3.AtomicValue).IntegerVal())
 	})
 
 	t.Run("reject", func(t *testing.T) {
@@ -203,11 +226,11 @@ func TestArrayItem(t *testing.T) {
 
 		v, err := a.Get(1)
 		require.NoError(t, err)
-		require.Equal(t, int64(10), v[0].(xpath3.AtomicValue).IntegerVal())
+		require.Equal(t, int64(10), v.Get(0).(xpath3.AtomicValue).IntegerVal())
 
 		v, err = a.Get(3)
 		require.NoError(t, err)
-		require.Equal(t, int64(30), v[0].(xpath3.AtomicValue).IntegerVal())
+		require.Equal(t, int64(30), v.Get(0).(xpath3.AtomicValue).IntegerVal())
 	})
 
 	t.Run("out of bounds", func(t *testing.T) {
@@ -226,10 +249,10 @@ func TestArrayItem(t *testing.T) {
 		a2, err := a.Put(2, xpath3.SingleInteger(99))
 		require.NoError(t, err)
 		v, _ := a2.Get(2)
-		require.Equal(t, int64(99), v[0].(xpath3.AtomicValue).IntegerVal())
+		require.Equal(t, int64(99), v.Get(0).(xpath3.AtomicValue).IntegerVal())
 		// Original unchanged
 		v, _ = a.Get(2)
-		require.Equal(t, int64(2), v[0].(xpath3.AtomicValue).IntegerVal())
+		require.Equal(t, int64(2), v.Get(0).(xpath3.AtomicValue).IntegerVal())
 	})
 
 	t.Run("append", func(t *testing.T) {
@@ -250,9 +273,9 @@ func TestArrayItem(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 2, sub.Size())
 		v, _ := sub.Get(1)
-		require.Equal(t, int64(20), v[0].(xpath3.AtomicValue).IntegerVal())
+		require.Equal(t, int64(20), v.Get(0).(xpath3.AtomicValue).IntegerVal())
 		v, _ = sub.Get(2)
-		require.Equal(t, int64(30), v[0].(xpath3.AtomicValue).IntegerVal())
+		require.Equal(t, int64(30), v.Get(0).(xpath3.AtomicValue).IntegerVal())
 	})
 
 	t.Run("flatten", func(t *testing.T) {
@@ -263,23 +286,23 @@ func TestArrayItem(t *testing.T) {
 		a := xpath3.NewArray([]xpath3.Sequence{
 			xpath3.SingleInteger(1),
 			xpath3.SingleInteger(2),
-			{inner},
+			xpath3.ItemSlice{inner},
 		})
 		flat := a.Flatten()
-		require.Len(t, flat, 4)
-		require.Equal(t, int64(1), flat[0].(xpath3.AtomicValue).IntegerVal())
-		require.Equal(t, int64(4), flat[3].(xpath3.AtomicValue).IntegerVal())
+		require.Equal(t, 4, flat.Len())
+		require.Equal(t, int64(1), flat.Get(0).(xpath3.AtomicValue).IntegerVal())
+		require.Equal(t, int64(4), flat.Get(3).(xpath3.AtomicValue).IntegerVal())
 	})
 
 	t.Run("constructor clones member sequences", func(t *testing.T) {
 		member := xpath3.SingleString("original")
 		a := xpath3.NewArray([]xpath3.Sequence{member})
 
-		member[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+		member.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
 
 		got, err := a.Get(1)
 		require.NoError(t, err)
-		require.Equal(t, "original", got[0].(xpath3.AtomicValue).StringVal())
+		require.Equal(t, "original", got.Get(0).(xpath3.AtomicValue).StringVal())
 	})
 
 	t.Run("get returns cloned member sequence", func(t *testing.T) {
@@ -287,29 +310,29 @@ func TestArrayItem(t *testing.T) {
 
 		got, err := a.Get(1)
 		require.NoError(t, err)
-		got[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+		got.(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
 
 		again, err := a.Get(1)
 		require.NoError(t, err)
-		require.Equal(t, "original", again[0].(xpath3.AtomicValue).StringVal())
+		require.Equal(t, "original", again.Get(0).(xpath3.AtomicValue).StringVal())
 	})
 
 	t.Run("members returns cloned sequences", func(t *testing.T) {
 		a := xpath3.NewArray([]xpath3.Sequence{xpath3.SingleString("original")})
 
 		members := a.Members()
-		members[0][0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
+		members[0].(xpath3.ItemSlice)[0] = xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "mutated"}
 
 		again, err := a.Get(1)
 		require.NoError(t, err)
-		require.Equal(t, "original", again[0].(xpath3.AtomicValue).StringVal())
+		require.Equal(t, "original", again.Get(0).(xpath3.AtomicValue).StringVal())
 	})
 }
 
 func TestSequenceHelpers(t *testing.T) {
 	t.Run("empty sequence", func(t *testing.T) {
 		seq := xpath3.EmptySequence()
-		require.Len(t, seq, 0)
+		require.Nil(t, seq)
 	})
 
 	t.Run("single constructors", func(t *testing.T) {
@@ -351,7 +374,7 @@ func TestEBV(t *testing.T) {
 }
 
 func TestAtomizeSequence(t *testing.T) {
-	seq := xpath3.Sequence{
+	seq := xpath3.ItemSlice{
 		xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "hello"},
 		xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: big.NewInt(42)},
 	}
@@ -363,7 +386,7 @@ func TestAtomizeSequence(t *testing.T) {
 }
 
 func TestAtomizeFunction(t *testing.T) {
-	seq := xpath3.Sequence{xpath3.FunctionItem{Arity: 0, Name: "test"}}
+	seq := xpath3.ItemSlice{xpath3.FunctionItem{Arity: 0, Name: "test"}}
 	_, err := xpath3.AtomizeSequence(seq)
 	require.Error(t, err)
 }

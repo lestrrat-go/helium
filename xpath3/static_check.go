@@ -38,14 +38,28 @@ type prefixValidationPlan struct {
 	atomicTypes []atomicTypeRequirement
 }
 
-func (p prefixValidationPlan) Validate(namespaces map[string]string) error {
+func newPrefixPlanBuilder() prefixPlanBuilder {
+	return prefixPlanBuilder{}
+}
+
+func (p prefixValidationPlan) Validate(namespaces map[string]string, strict bool, decls SchemaDeclarations) error {
 	for _, prefix := range p.prefixes {
-		if err := validatePrefix(prefix, namespaces); err != nil {
+		if err := validatePrefix(prefix, namespaces, strict); err != nil {
 			return err
 		}
 	}
 	for _, req := range p.atomicTypes {
 		if req.prefix == "" {
+			// Unprefixed type names are allowed when schema declarations
+			// are available (XSLT schema-aware mode) and the type exists.
+			if decls != nil {
+				// Schema declarations present — allow unprefixed names.
+				// They may be resolved via default namespace or as
+				// no-namespace schema types at evaluation time.
+				continue
+			}
+			// No schema declarations: unprefixed non-builtin names are
+			// an error (XPST0081) in pure XPath mode.
 			if namespaces == nil || namespaces[""] == "" {
 				return &XPathError{
 					Code:    errCodeXPST0081,
@@ -69,22 +83,18 @@ func (p prefixValidationPlan) Validate(namespaces map[string]string) error {
 				}
 			}
 		}
-		if err := validatePrefix(req.prefix, namespaces); err != nil {
+		if err := validatePrefix(req.prefix, namespaces, strict); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func buildPrefixValidationPlan(node Expr) prefixValidationPlan {
-	builder := prefixPlanBuilder{
-		seenPrefixes:    make(map[string]struct{}),
-		seenAtomicTypes: make(map[atomicTypeRequirement]struct{}),
-	}
-	appendPrefixChecks(&builder, node)
+
+func (b prefixPlanBuilder) plan() prefixValidationPlan {
 	return prefixValidationPlan{
-		prefixes:    builder.prefixes,
-		atomicTypes: builder.atomicTypes,
+		prefixes:    b.prefixes,
+		atomicTypes: b.atomicTypes,
 	}
 }
 
@@ -100,39 +110,23 @@ func appendPrefixChecks(plan *prefixPlanBuilder, node Expr) {
 		return
 	}
 
+	appendExprLocalPrefixChecks(plan, node)
+
 	switch n := node.(type) {
-	case VariableExpr:
-		addPrefixCheck(plan, n.Prefix)
 	case FunctionCall:
-		addPrefixCheck(plan, n.Prefix)
 		for _, arg := range n.Args {
 			appendPrefixChecks(plan, arg)
 		}
-	case NamedFunctionRef:
-		addPrefixCheck(plan, n.Prefix)
 	case CastExpr:
-		addPrefixCheck(plan, n.Type.Prefix)
 		appendPrefixChecks(plan, n.Expr)
 	case CastableExpr:
-		addPrefixCheck(plan, n.Type.Prefix)
 		appendPrefixChecks(plan, n.Expr)
 	case InstanceOfExpr:
-		appendSequenceTypePrefixChecks(plan, n.Type)
 		appendPrefixChecks(plan, n.Expr)
 	case TreatAsExpr:
-		appendSequenceTypePrefixChecks(plan, n.Type)
 		appendPrefixChecks(plan, n.Expr)
-	case LocationPath:
-		for i := range n.Steps {
-			appendStepPrefixChecks(plan, &n.Steps[i])
-		}
 	case PathExpr:
 		appendPrefixChecks(plan, n.Filter)
-		if n.Path != nil {
-			for i := range n.Path.Steps {
-				appendStepPrefixChecks(plan, &n.Path.Steps[i])
-			}
-		}
 	case PathStepExpr:
 		appendPrefixChecks(plan, n.Left)
 		appendPrefixChecks(plan, n.Right)
@@ -172,16 +166,12 @@ func appendPrefixChecks(plan *prefixPlanBuilder, node Expr) {
 		appendPrefixChecks(plan, n.Return)
 	case QuantifiedExpr:
 		for _, b := range n.Bindings {
-			addVarNamePrefixCheck(plan, b.Var)
 			appendPrefixChecks(plan, b.Domain)
 		}
 		appendPrefixChecks(plan, n.Satisfies)
 	case TryCatchExpr:
 		appendPrefixChecks(plan, n.Try)
 		for _, c := range n.Catches {
-			for _, code := range c.Codes {
-				addCatchCodePrefixCheck(plan, code)
-			}
 			appendPrefixChecks(plan, c.Expr)
 		}
 	case DynamicFunctionCall:
@@ -190,15 +180,6 @@ func appendPrefixChecks(plan *prefixPlanBuilder, node Expr) {
 			appendPrefixChecks(plan, arg)
 		}
 	case InlineFunctionExpr:
-		for _, param := range n.Params {
-			addVarNamePrefixCheck(plan, param.Name)
-			if param.TypeHint != nil {
-				appendSequenceTypePrefixChecks(plan, *param.TypeHint)
-			}
-		}
-		if n.ReturnType != nil {
-			appendSequenceTypePrefixChecks(plan, *n.ReturnType)
-		}
 		appendPrefixChecks(plan, n.Body)
 	case LookupExpr:
 		appendPrefixChecks(plan, n.Expr)
@@ -221,9 +202,90 @@ func appendPrefixChecks(plan *prefixPlanBuilder, node Expr) {
 	}
 }
 
-func appendStepPrefixChecks(plan *prefixPlanBuilder, s *Step) {
+func appendExprLocalPrefixChecks(plan *prefixPlanBuilder, node Expr) {
+	switch n := node.(type) {
+	case VariableExpr:
+		addPrefixCheck(plan, n.Prefix)
+	case FunctionCall:
+		addPrefixCheck(plan, n.Prefix)
+	case NamedFunctionRef:
+		addPrefixCheck(plan, n.Prefix)
+	case CastExpr:
+		addPrefixCheck(plan, n.Type.Prefix)
+	case CastableExpr:
+		addPrefixCheck(plan, n.Type.Prefix)
+	case InstanceOfExpr:
+		appendSequenceTypePrefixChecks(plan, n.Type)
+	case TreatAsExpr:
+		appendSequenceTypePrefixChecks(plan, n.Type)
+	case vmLocationPathExpr:
+		for i := range n.Steps {
+			appendNodeTestPrefixChecks(plan, n.Steps[i].NodeTest)
+			for _, pred := range n.Steps[i].Predicates {
+				appendVMPredicatePrefixChecks(plan, pred)
+			}
+		}
+	case *LocationPath:
+		for i := range n.Steps {
+			appendStepLocalPrefixChecks(plan, &n.Steps[i])
+		}
+	case vmPathExpr:
+		if n.Path != nil {
+			for i := range n.Path.Steps {
+				appendNodeTestPrefixChecks(plan, n.Path.Steps[i].NodeTest)
+				for _, pred := range n.Path.Steps[i].Predicates {
+					appendVMPredicatePrefixChecks(plan, pred)
+				}
+			}
+		}
+	case PathExpr:
+		if n.Path != nil {
+			for i := range n.Path.Steps {
+				appendStepLocalPrefixChecks(plan, &n.Path.Steps[i])
+			}
+		}
+	case FLWORExpr:
+		for _, clause := range n.Clauses {
+			appendFLWORClauseLocalPrefixChecks(plan, clause)
+		}
+	case QuantifiedExpr:
+		for _, b := range n.Bindings {
+			addVarNamePrefixCheck(plan, b.Var)
+		}
+	case TryCatchExpr:
+		for _, c := range n.Catches {
+			for _, code := range c.Codes {
+				addCatchCodePrefixCheck(plan, code)
+			}
+		}
+	case InlineFunctionExpr:
+		for _, param := range n.Params {
+			addVarNamePrefixCheck(plan, param.Name)
+			if param.TypeHint != nil {
+				appendSequenceTypePrefixChecks(plan, *param.TypeHint)
+			}
+		}
+		if n.ReturnType != nil {
+			appendSequenceTypePrefixChecks(plan, *n.ReturnType)
+		}
+	}
+}
+
+func appendStepLocalPrefixChecks(plan *prefixPlanBuilder, s *Step) {
 	appendNodeTestPrefixChecks(plan, s.NodeTest)
-	for _, pred := range s.Predicates {
+}
+
+
+func appendVMPredicatePrefixChecks(plan *prefixPlanBuilder, pred Expr) {
+	switch p := pred.(type) {
+	case vmPositionPredicateExpr:
+		return
+	case vmAttributeExistsPredicateExpr:
+		appendNodeTestPrefixChecks(plan, p.NodeTest)
+	case vmAttributeEqualsStringPredicateExpr:
+		appendNodeTestPrefixChecks(plan, p.NodeTest)
+		appendPrefixChecks(plan, p.Fallback)
+	default:
 		appendPrefixChecks(plan, pred)
 	}
 }
@@ -267,22 +329,33 @@ func appendSequenceTypePrefixChecks(plan *prefixPlanBuilder, st SequenceType) {
 }
 
 func appendFLWORClausePrefixChecks(plan *prefixPlanBuilder, clause FLWORClause) {
+	appendFLWORClauseLocalPrefixChecks(plan, clause)
+	switch c := clause.(type) {
+	case ForClause:
+		appendPrefixChecks(plan, c.Expr)
+	case LetClause:
+		appendPrefixChecks(plan, c.Expr)
+	}
+}
+
+func appendFLWORClauseLocalPrefixChecks(plan *prefixPlanBuilder, clause FLWORClause) {
 	switch c := clause.(type) {
 	case ForClause:
 		addVarNamePrefixCheck(plan, c.Var)
 		if c.PosVar != "" {
 			addVarNamePrefixCheck(plan, c.PosVar)
 		}
-		appendPrefixChecks(plan, c.Expr)
 	case LetClause:
 		addVarNamePrefixCheck(plan, c.Var)
-		appendPrefixChecks(plan, c.Expr)
 	}
 }
 
 func addPrefixCheck(plan *prefixPlanBuilder, prefix string) {
 	if prefix == "" || prefix == "*" {
 		return
+	}
+	if plan.seenPrefixes == nil {
+		plan.seenPrefixes = make(map[string]struct{}, 4)
 	}
 	if _, ok := plan.seenPrefixes[prefix]; ok {
 		return
@@ -328,6 +401,9 @@ func addCatchCodePrefixCheck(plan *prefixPlanBuilder, code string) {
 
 func addAtomicOrUnionTypeCheck(plan *prefixPlanBuilder, t AtomicOrUnionType) {
 	req := atomicTypeRequirement{prefix: t.Prefix, name: t.Name}
+	if plan.seenAtomicTypes == nil {
+		plan.seenAtomicTypes = make(map[atomicTypeRequirement]struct{}, 4)
+	}
 	if _, ok := plan.seenAtomicTypes[req]; ok {
 		return
 	}
@@ -336,7 +412,8 @@ func addAtomicOrUnionTypeCheck(plan *prefixPlanBuilder, t AtomicOrUnionType) {
 }
 
 // validatePrefix checks if a non-empty prefix is bound in user namespaces or defaultPrefixNS.
-func validatePrefix(prefix string, namespaces map[string]string) error {
+// When strict is true, the defaultPrefixNS fallback is skipped (XSLT mode).
+func validatePrefix(prefix string, namespaces map[string]string, strict bool) error {
 	if prefix == "" || prefix == "*" {
 		return nil
 	}
@@ -345,8 +422,10 @@ func validatePrefix(prefix string, namespaces map[string]string) error {
 			return nil
 		}
 	}
-	if _, ok := defaultPrefixNS[prefix]; ok {
-		return nil
+	if !strict {
+		if _, ok := defaultPrefixNS[prefix]; ok {
+			return nil
+		}
 	}
 	if prefix == "xml" || prefix == "xmlns" {
 		return nil

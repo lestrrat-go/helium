@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <tag id="1">
+        <itemA  id="930" dummyAttr1="nine" dummyAttr2="three" dummyAttr3="zero" />
+        <itemA  id="931" dummyAttr1="nine" dummyAttr3="one" />
+        <itemA  id="932" dummyAttr2="three" dummyAttr3="two" />
+        <itemA  id="933" dummyAttr4="point" dummyAttr3="three" />
+    </tag>
+    <tag id="2">
+        <itemA  id="940" dummyAttr1="lorem" dummyAttr2="ipsum" />
+        <itemA  id="941" dummyAttr1="dolor" dummyAttr3="sit" />
+        <itemA  id="942" dummyAttr3="amet" />
+    </tag>
+</root>

@@ -1,0 +1,20 @@
+<?xml version="1.0"?> 
+<chapter>
+   <section>
+      <footnote>hello</footnote>
+      <footnote>ahoy</footnote>
+   </section>
+   <section>
+      <footnote>goodbye</footnote>
+      <footnote>sayonara</footnote>
+      <footnote>adios</footnote>
+   </section>
+   <section>
+      <footnote>aloha</footnote>
+      <subsection>
+        <footnote>shalom</footnote>
+        <footnote>yo</footnote>
+      </subsection>
+      <footnote>ciao</footnote>
+   </section>
+</chapter>

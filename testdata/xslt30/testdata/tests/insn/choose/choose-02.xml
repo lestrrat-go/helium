@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<doc>
+  <critter type="dog"><name>Lassie</name></critter>
+  <critter type="dog"><name>Wishbone</name></critter>
+  <critter type="cat"><name>Felix</name></critter>
+  <critter type="cat"><name>Silvester</name></critter>
+</doc>

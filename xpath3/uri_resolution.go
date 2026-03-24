@@ -32,7 +32,7 @@ func isSupportedResourceScheme(scheme string) bool {
 func resolveURIReference(base, ref string) (string, error) {
 	encodedBase := iriToURI(base)
 	encodedRef := iriToURI(ref)
-	hadNonASCII := encodedBase != base || encodedRef != ref
+	needDecode := encodedBase != base || encodedRef != ref
 
 	origScheme := ""
 	if idx := indexScheme(encodedBase); idx > 0 {
@@ -53,7 +53,7 @@ func resolveURIReference(base, ref string) (string, error) {
 	if origScheme != "" && resolved.Scheme != origScheme {
 		result = origScheme + result[len(resolved.Scheme):]
 	}
-	if hadNonASCII {
+	if needDecode {
 		result = uriToIRI(result)
 	}
 	return result, nil

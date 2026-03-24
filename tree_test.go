@@ -380,6 +380,27 @@ func TestCopyNode(t *testing.T) {
 		elem := copied.(*helium.Element)
 		require.Equal(t, "http://example.com", elem.URI())
 	})
+
+	t.Run("element with inherited default namespace", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<article xmlns="http://docbook.org/ns/docbook"><section xml:id="frag"><title>Tools</title></section></article>`))
+		require.NoError(t, err)
+
+		section := doc.GetElementByID("frag")
+		require.NotNil(t, section)
+
+		dst := helium.NewDefaultDocument()
+		copied, err := helium.CopyNode(section, dst)
+		require.NoError(t, err)
+		require.NoError(t, dst.AddChild(copied))
+
+		root := dst.DocumentElement()
+		require.NotNil(t, root)
+		require.Equal(t, "http://docbook.org/ns/docbook", root.URI())
+
+		xml, err := dst.XMLString()
+		require.NoError(t, err)
+		require.Contains(t, xml, `xmlns="http://docbook.org/ns/docbook"`)
+	})
 }
 
 func TestCopyDoc(t *testing.T) {

@@ -121,6 +121,33 @@ func atomicToString(v AtomicValue) (string, error) {
 		}
 		return q.Local, nil
 	}
+	// User-defined types: format based on the underlying Go value type.
+	switch val := v.Value.(type) {
+	case string:
+		return val, nil
+	case *big.Int:
+		return val.String(), nil
+	case *big.Rat:
+		return DecimalToString(val), nil
+	case *FloatValue:
+		return formatXPathDouble(val.Float64()), nil
+	case float64:
+		return formatXPathDouble(val), nil
+	case bool:
+		if val {
+			return "true", nil
+		}
+		return "false", nil
+	case time.Time:
+		return fmt.Sprintf("%v", val), nil
+	case Duration:
+		return formatDuration(val, TypeDuration), nil
+	case QNameValue:
+		if val.Prefix != "" {
+			return val.Prefix + ":" + val.Local, nil
+		}
+		return val.Local, nil
+	}
 	return fmt.Sprintf("%v", v.Value), nil
 }
 

@@ -1,0 +1,33 @@
+<contents>
+    <unnumbered type="PT">
+        <title>Title one</title>
+    </unnumbered>
+    <unnumbered type="chapter" manid="01"/>
+    <unnumbered type="chapter" manid="02">
+        <subtitle>Chapter Two</subtitle>
+    </unnumbered>
+    <unnumbered type="chapter" manid="03"/>
+    <unnumbered type="PT">
+        <title>Title Two</title>
+    </unnumbered>
+    <unnumbered type="chapter" manid="04"/>
+    <unnumbered type="chapter" manid="05"/>
+    <unnumbered type="chapter" manid="06"/>
+    <unnumbered type="PT">
+        <title>Title Three</title>
+    </unnumbered>
+    <unnumbered type="chapter" manid="07"/>
+    <unnumbered type="chapter" manid="08">
+        <subtitle>Chapter Eight</subtitle>
+    </unnumbered>
+    <unnumbered type="chapter" manid="09"/>
+    <unnumbered type="chapter" manid="10"/>
+    <unnumbered type="PT">
+        <title>Title Four</title>
+    </unnumbered>
+    <unnumbered type="chapter" manid="11"/>
+    <unnumbered type="chapter" manid="12"/>
+    <unnumbered type="chapter" manid="13"/>
+    <unnumbered type="chapter" manid="14"/>
+    <unnumbered type="chapter" manid="15"/>
+</contents>

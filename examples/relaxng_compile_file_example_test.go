@@ -10,6 +10,9 @@ import (
 )
 
 func Example_relaxng_compile_file() {
+	// CompileFile is the convenient RELAX NG entry point when the grammar
+	// already lives on disk, for example as part of an application's fixtures
+	// or configuration bundle.
 	f, err := os.CreateTemp("", "helium-relaxng-*.rng")
 	if err != nil {
 		fmt.Printf("create temp file failed: %s\n", err)
@@ -38,6 +41,8 @@ func Example_relaxng_compile_file() {
 		return
 	}
 
+	// Successful validation is intentionally quiet here: nil means the document
+	// matched the grammar, which is the common "all good" path in callers.
 	if err := relaxng.Validate(doc, grammar, relaxng.WithFilename("doc.xml")); err != nil {
 		fmt.Println(err)
 	}

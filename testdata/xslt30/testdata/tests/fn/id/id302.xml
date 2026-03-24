@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!DOCTYPE t04 [
+  <!ELEMENT t04 (a*)>
+  <!ELEMENT a EMPTY>
+  <!ATTLIST a id ID #REQUIRED>
+  <!ATTLIST a ref IDREFS #IMPLIED>
+]>
+<t04>  
+  <a id="a"/>
+  <a id="b" ref="c d"/>
+  <a id="c" ref="d a"/>
+  <a id="d" ref="a b"/>
+</t04>

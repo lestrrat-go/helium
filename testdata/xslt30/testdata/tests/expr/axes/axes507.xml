@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+    <!DOCTYPE data [
+    <!ELEMENT data (events,participants)>
+    <!ELEMENT events (event+)>
+    <!ELEMENT participants (participant+)>
+    <!ELEMENT event EMPTY>
+    <!ELEMENT participant EMPTY>
+    <!ATTLIST event
+    id   ID #REQUIRED
+    name CDATA #REQUIRED >
+    <!ATTLIST participant
+    name CDATA #REQUIRED
+    events IDREFS #REQUIRED >
+    ]>
+    <data>
+        <events>
+            <event id="e01" name="Amsterdam"/>
+            <event id="e02" name="Baltimore"/>
+            <event id="e03" name="Casablanca"/>
+        </events>
+        <participants>
+            <participant events="e01 e03" name="Alpha"/>
+            <participant events="e02" name="Bravo"/>
+            <participant events="e02 e03" name="Charlie"/>
+        </participants>
+    </data>

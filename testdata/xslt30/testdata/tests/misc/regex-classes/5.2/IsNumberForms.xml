@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsNumberForms">
+      <match from="8528" to="8591"/>
+   </ranges>
+   <ranges complement="IsNumberForms">
+      <match from="9" to="8527"/>
+      <match from="8592" to="1114111"/>
+   </ranges>
+</out>

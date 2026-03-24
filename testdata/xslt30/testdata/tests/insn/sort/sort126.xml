@@ -1,0 +1,207 @@
+<?xml version="1.0"?>
+<!-- Test for xsl:sort -->
+<w3cgroup group="xsl" group-name="W3C XSL Working Group">
+
+  <chair>
+  <name><first>Sharon</first><last>Adler</last></name>
+  <affiliation>Inso Corporation</affiliation>
+  </chair>
+
+  <chair>
+  <name><first>Steve</first><last>Zilles</last></name>
+  <affiliation>Adobe Systems</affiliation>
+  </chair>
+
+  <w3c-contact>
+  <name><first>Vincent</first><last>Quint</last></name>
+  <affiliation>Adobe Systems</affiliation>
+  </w3c-contact>
+
+  <member>
+  <primary><name><first>Alex</first><last>Milowski</last></name></primary>
+  <alternate><name><first>Murray</first><last>Maloney</last></name></alternate>
+  <affiliation>Veo Systems, Inc.</affiliation>
+  <date-joined>Tue, 20 Jan 1998</date-joined> 
+  </member>
+
+  <member>
+  <primary><name><first>Jeff</first><last>Caruso</last></name></primary>
+  <alternate><name><first>Andrew</first><last>Greene</last></name></alternate>
+  <affiliation>Bitstream</affiliation>
+  <date-joined>Thu, 26 Mar 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Boris</first><last>Moore</last></name></primary>
+  <alternate><name><first>Daniel</first><last>Rivers-Moore</last></name></alternate>
+  <affiliation>RivCom</affiliation>
+  <date-joined>Thu, 26 March 1998</date-joined> 
+  </member>
+
+  <member>
+  <primary><name><first>Chris</first><last>Maden</last></name></primary>
+  <affiliation>O'Reilly &amp; Associates, Inc.</affiliation> 
+  <date-joined>Tue, 20 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Doug</first><last>Rand</last></name></primary>
+  <affiliation>Silicon Graphics</affiliation> 
+  <date-joined>Thu, 15 Jan 1998</date-joined> 
+  </member>
+
+  <member>
+  <primary><name><first>Dwayne</first><last>Dicks</last></name></primary>
+  <alternate><name><first>Lauren</first><last>Wood</last></name></alternate>
+  <affiliation>SoftQuad, Inc.</affiliation> 
+  <date-joined>Fri, 23 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Eduardo</first><last>Gutentag</last></name></primary>
+  <alternate><name><first>Jon</first><last>Bosak</last></name></alternate>
+  <affiliation>Sun Microsystems Inc.</affiliation> 
+  <date-joined>Fri, 16 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Henry</first><last>Thompson</last></name></primary>
+  <affiliation>HCRC Language Technology Group, University of Edinburgh</affiliation> 
+  <date-joined>Wed, 28 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>James</first><last>Clark</last></name></primary>
+  <affiliation>Invited Expert</affiliation> 
+  <date-joined>Wed, 28 Jan 1998</date-joined> 
+  </member>
+
+  <member>
+  <primary><name><first>Jonathan</first><last>Marsh</last></name></primary>
+  <alternate><name><first>Chris</first><last>Wilson</last></name></alternate>
+  <affiliation>Microsoft Corporation</affiliation> 
+  <date-joined>Sun, 18 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Jonathan</first><last>Cdef</last></name></primary>
+  <alternate><name><first>Chris</first><last>Wilson</last></name></alternate>
+  <affiliation>Bubba Corporation</affiliation> 
+  <date-joined>Sun, 18 Jan 1998</date-joined>
+  </member>
+  
+  <member>
+  <primary><name><first>Jonathan</first><last>Efgh</last></name></primary>
+  <alternate><name><first>Chris</first><last>Wilson</last></name></alternate>
+  <affiliation>Bubba Corporation</affiliation> 
+  <date-joined>Sun, 18 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Jonathan</first><last>Abcde</last></name></primary>
+  <alternate><name><first>Chris</first><last>Wilson</last></name></alternate>
+  <affiliation>Bubba Corporation</affiliation> 
+  <date-joined>Sun, 18 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Jonathan</first><last>Defg</last></name></primary>
+  <alternate><name><first>Chris</first><last>Wilson</last></name></alternate>
+  <affiliation>Bubba Corporation</affiliation> 
+  <date-joined>Sun, 18 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Jonathan</first><last>Ghij</last></name></primary>
+  <alternate><name><first>Chris</first><last>Wilson</last></name></alternate>
+  <affiliation>Bubba Corporation</affiliation> 
+  <date-joined>Sun, 18 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Jonathan</first><last>Fghi</last></name></primary>
+  <alternate><name><first>Chris</first><last>Wilson</last></name></alternate>
+  <affiliation>Bubba Corporation</affiliation> 
+  <date-joined>Sun, 18 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Mickey</first><last>Kimchi</last></name></primary>
+  <alternate><name><first>Ronnen</first><last>Armon</last></name></alternate>
+  <affiliation>Enigma, Inc.</affiliation> 
+  <date-joined>Fri, 23 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Nisheeth</first><last>Ranjan</last></name></primary>
+  <alternate><name><first>Vidur</first><last>Apparao</last></name></alternate>
+  <affiliation>Netscape Corporation</affiliation> 
+  <date-joined>Sat, 21 Feb 1998</date-joined> 
+  </member>
+
+  <member>
+  <primary><name><first>Paul</first><last>Grosso</last></name></primary>
+  <alternate><name><first>Norm</first><last>Walsh</last></name></alternate>
+  <affiliation>ArborText</affiliation> 
+  <date-joined>Sun, 18 Jan 1998</date-joined> 
+  </member>
+
+  <member>
+  <primary><name><first>Don</first><last>Day</last></name></primary>
+  <alternate><name><first>Sanjiva</first><last>Weerawarana</last></name></alternate>
+  <affiliation>IBM</affiliation>
+  <date-joined>Sat, 21 Feb 1998</date-joined> 
+  </member>
+
+  <member>
+  <primary><name><first>Scott</first><last>Boag</last></name></primary>
+  <alternate><name><first>Robert</first><last>Pernett</last></name></alternate>
+  <affiliation>Lotus Development Corporation</affiliation> 
+  <date-joined>Fri, 16 Jan 1998</date-joined> 
+  </member>
+
+  <member>
+  <primary><name><first>Anders</first><last>Berglund</last></name></primary>
+  <affiliation>Inso Corporation</affiliation> 
+  <date-joined>Sun, 18 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Stephen</first><last>Deach</last></name></primary>
+  <alternate><name><first>Steve</first><last>Zilles</last></name></alternate>
+  <affiliation>Adobe Systems Inc.</affiliation>
+  <date-joined>Sun, 18 Jan 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Vincent</first><last>Quint</last></name></primary>
+  <alternate><name><first>Chris</first><last>Lilley</last></name></alternate>
+  <affiliation>W3C Mon, 5 Jan 1998</affiliation>
+  </member>
+
+  <member>
+  <primary><name><first>Joe</first><last>Lapp</last></name></primary>
+  <affiliation>webMethods</affiliation> 
+  <date-joined>Wed 9 Sep 1998</date-joined> 
+  </member>
+
+  <member>
+  <primary><name><first>Randy</first><last>Waki</last></name></primary>
+  <affiliation>Novell</affiliation> 
+  <date-joined>Wed 9 Sep 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Gregg</first><last>Reynolds</last></name></primary>
+  <affiliation>Datalogics</affiliation> 
+  <date-joined>Wed 9 Sep 1998</date-joined>
+  </member>
+
+  <member>
+  <primary><name><first>Jonathan</first><last>Robie</last></name></primary>
+  <affiliation>Texcel</affiliation> 
+  <date-joined>Tue 10 Nov 1998</date-joined> 
+  </member>
+    
+</w3cgroup>
+

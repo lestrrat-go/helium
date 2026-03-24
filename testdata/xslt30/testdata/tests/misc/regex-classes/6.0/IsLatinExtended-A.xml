@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsLatinExtended-A">
+      <match from="256" to="383"/>
+   </ranges>
+   <ranges complement="IsLatinExtended-A">
+      <match from="9" to="255"/>
+      <match from="384" to="1114111"/>
+   </ranges>
+</out>

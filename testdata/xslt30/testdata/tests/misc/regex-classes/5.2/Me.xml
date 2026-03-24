@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Me">
+      <match from="1160" to="1161"/>
+      <match from="1758" to="1758"/>
+      <match from="8413" to="8416"/>
+      <match from="8418" to="8420"/>
+      <match from="42608" to="42610"/>
+   </ranges>
+   <ranges complement="Me">
+      <match from="9" to="1159"/>
+      <match from="1162" to="1757"/>
+      <match from="1759" to="8412"/>
+      <match from="8417" to="8417"/>
+      <match from="8421" to="42607"/>
+      <match from="42611" to="1114111"/>
+   </ranges>
+</out>

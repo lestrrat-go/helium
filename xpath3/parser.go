@@ -6,14 +6,38 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 const maxParseDepth = 200
 
+type tokenStream interface {
+	Next() Token
+	Peek() Token
+	PeekAt(offset int) Token
+	Backup()
+}
+
+// isNameLikeToken returns true if the token type can be used as a local name
+// after a prefix ':' in a QName. XPath 3.1 keywords are context-sensitive:
+// e.g. "my:function()" is a valid prefixed function call, not a keyword.
+func isNameLikeToken(t TokenType) bool {
+	switch t {
+	case TokenName, TokenFunction, TokenMap, TokenArray,
+		TokenIf, TokenThen, TokenElse,
+		TokenFor, TokenLet, TokenSome, TokenEvery, TokenReturn,
+		TokenIn, TokenSatisfies,
+		TokenIs, TokenAs, TokenOf,
+		TokenTry, TokenCatch:
+		return true
+	}
+	return false
+}
+
 // parser builds an AST from a token stream.
 type parser struct {
-	lexer *lexer
+	lexer tokenStream
 	depth int
 }
 
@@ -23,15 +47,22 @@ func Parse(expr string) (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &parser{lexer: l}
-	e, err := p.parseExpression()
+	return parseWithLexer(l)
+}
+
+// ParseSequenceType parses a standalone sequence type expression such as
+// "xs:integer?", "element(e)*", or "function(xs:string) as xs:boolean".
+func ParseSequenceType(s string) (SequenceType, error) {
+	l, err := newLexer(s)
 	if err != nil {
-		return nil, err
+		return SequenceType{}, err
 	}
-	if tok := p.lexer.Peek(); tok.Type != TokenEOF {
-		return nil, fmt.Errorf("%w: %s after expression", ErrUnexpectedToken, tok)
+	p := &parser{lexer: l}
+	st, err := p.parseSequenceType()
+	if err != nil {
+		return SequenceType{}, err
 	}
-	return e, nil
+	return st, nil
 }
 
 // parseExpression parses → ExprSingle (',' ExprSingle)* (sequence constructor).
@@ -51,7 +82,8 @@ func (p *parser) parseExpression() (Expr, error) {
 		return first, nil
 	}
 
-	items := []Expr{first}
+	items := make([]Expr, 0, 4)
+	items = append(items, first)
 	for p.lexer.Peek().Type == TokenComma {
 		p.lexer.Next()
 		item, err := p.parseExprSingle()
@@ -391,14 +423,14 @@ func (p *parser) parseArrowTarget() (Expr, string, string, error) {
 		}
 		return expr, "", "", nil
 	}
-	if tok.Type == TokenName || tok.Type == TokenMap || tok.Type == TokenArray {
+	if isNameLikeToken(tok.Type) {
 		p.lexer.Next()
 		prefix := ""
 		name := tok.Value
-		if p.lexer.Peek().Type == TokenColon {
+		if colonTok := p.lexer.Peek(); colonTok.Type == TokenColon && !colonTok.SpaceBefore {
 			p.lexer.Next() // consume ':'
 			localTok := p.lexer.Next()
-			if localTok.Type != TokenName {
+			if !isNameLikeToken(localTok.Type) {
 				return nil, "", "", fmt.Errorf("%w: name after '%s:' in arrow but got %s", ErrExpectedToken, name, localTok)
 			}
 			prefix = name
@@ -687,8 +719,13 @@ func (p *parser) parsePrimaryExpr() (Expr, error) {
 		return UnaryLookupExpr{Key: key, All: all}, nil
 
 	case TokenFunction:
-		// Could be inline function or function(*)
-		return p.parseFunctionKeyword()
+		// "function" followed by "(" is an inline function or function test.
+		// Otherwise it's a name test (e.g., child::function or xs:QName(function)).
+		if p.lexer.PeekAt(1).Type == TokenLParen {
+			return p.parseFunctionKeyword()
+		}
+		// Treat as a regular name (name test / path step).
+		return p.parseNamePrimary()
 
 	case TokenMap:
 		// map:func(...) is a namespace-prefixed function call, not a constructor
@@ -725,11 +762,11 @@ func (p *parser) parseNamePrimary() (Expr, error) {
 	prefix := ""
 	name := tok.Value
 
-	// Check for QName: prefix:name
-	if p.lexer.Peek().Type == TokenColon {
+	// Check for QName: prefix:name (no whitespace around colon per XPath 3.1 A.2.1)
+	if colonTok := p.lexer.Peek(); colonTok.Type == TokenColon && !colonTok.SpaceBefore {
 		p.lexer.Next() // consume ':'
 		localTok := p.lexer.Peek()
-		if localTok.Type == TokenName {
+		if isNameLikeToken(localTok.Type) && !localTok.SpaceBefore {
 			p.lexer.Next()
 			prefix = name
 			name = localTok.Value
@@ -842,8 +879,8 @@ func (p *parser) parseArgumentList() ([]Expr, error) {
 		return nil, fmt.Errorf("%w: '(' but got %s", ErrExpectedToken, p.lexer.Peek())
 	}
 	p.lexer.Next() // consume '('
-	var args []Expr
 	if p.lexer.Peek().Type != TokenRParen {
+		args := make([]Expr, 0, 4)
 		for {
 			if p.lexer.Peek().Type == TokenQMark {
 				// Disambiguate: ? followed by a key specifier (NCName, integer, *, '(')
@@ -871,12 +908,17 @@ func (p *parser) parseArgumentList() ([]Expr, error) {
 			}
 			p.lexer.Next() // consume ','
 		}
+		if p.lexer.Peek().Type != TokenRParen {
+			return nil, fmt.Errorf("%w: ')' in argument list but got %s", ErrExpectedToken, p.lexer.Peek())
+		}
+		p.lexer.Next()
+		return args, nil
 	}
 	if p.lexer.Peek().Type != TokenRParen {
 		return nil, fmt.Errorf("%w: ')' in argument list but got %s", ErrExpectedToken, p.lexer.Peek())
 	}
 	p.lexer.Next()
-	return args, nil
+	return nil, nil
 }
 
 // parseLookupKey parses the key after '?': NCName, integer, '*', or '(' expr ')'.
@@ -1002,29 +1044,28 @@ func (p *parser) parseRelativeLocationPath() ([]Step, error) {
 	if err != nil {
 		return nil, err
 	}
-	steps := []Step{step}
+	steps := make([]Step, 0, 4)
+	steps = append(steps, step)
 
 loop:
 	for {
 		tok := p.lexer.Peek()
 		switch tok.Type {
 		case TokenSlash:
-			p.lexer.Next()
-			if !p.looksLikeStep() {
-				p.lexer.Backup() // put / back — caller handles non-step continuation
+			if !p.looksLikeStepOffset(1) {
 				break loop
 			}
+			p.lexer.Next()
 			s, err := p.parseStep()
 			if err != nil {
 				return nil, err
 			}
 			steps = append(steps, s)
 		case TokenSlashSlash:
-			p.lexer.Next()
-			if !p.looksLikeStep() {
-				p.lexer.Backup() // put // back — caller handles non-step continuation
+			if !p.looksLikeStepOffset(1) {
 				break loop
 			}
+			p.lexer.Next()
 			steps = append(steps, Step{
 				Axis:     AxisDescendantOrSelf,
 				NodeTest: TypeTest{Kind: NodeKindNode},
@@ -1069,17 +1110,15 @@ func (p *parser) parseStep() (Step, error) {
 	case TokenAt:
 		axis = AxisAttribute
 		p.lexer.Next()
-	case TokenName:
-		p.lexer.Next()
-		if p.lexer.Peek().Type == TokenColonColon {
+	case TokenName, TokenFunction, TokenMap, TokenArray:
+		if p.lexer.PeekAt(1).Type == TokenColonColon {
 			if a, ok := ixpath.AxisFromName(tok.Value); ok {
 				axis = a
+				p.lexer.Next()
 				p.lexer.Next() // consume '::'
 			} else {
 				return Step{}, fmt.Errorf("%w: %q", ErrUnknownAxis, tok.Value)
 			}
-		} else {
-			p.lexer.Backup() // not an axis, put name back
 		}
 	}
 
@@ -1088,12 +1127,18 @@ func (p *parser) parseStep() (Step, error) {
 		return Step{}, err
 	}
 	if axis == AxisChild {
-		if _, ok := nodeTest.(NamespaceNodeTest); ok {
+		switch nodeTest.(type) {
+		case NamespaceNodeTest:
 			axis = AxisNamespace
+		case AttributeTest, SchemaAttributeTest:
+			axis = AxisAttribute
 		}
 	}
 
 	var predicates []Expr
+	if p.lexer.Peek().Type == TokenLBracket {
+		predicates = make([]Expr, 0, 2)
+	}
 	for p.lexer.Peek().Type == TokenLBracket {
 		pred, err := p.parsePredicate()
 		if err != nil {
@@ -1128,7 +1173,7 @@ func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 		return NameTest{Local: "*"}, nil
 	}
 
-	if tok.Type != TokenName {
+	if !isNameLikeToken(tok.Type) {
 		return nil, fmt.Errorf("%w: node test but got %s", ErrExpectedToken, tok)
 	}
 
@@ -1148,7 +1193,7 @@ func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 		if idx := strings.Index(tok.Value, "}"); idx >= 0 {
 			uri := tok.Value[2:idx]
 			local := tok.Value[idx+1:]
-			if uri == "http://www.w3.org/2000/xmlns/" {
+			if uri == lexicon.NamespaceXMLNS {
 				return nil, &XPathError{Code: errCodeXPST0081, Message: "the xmlns namespace URI cannot be used in name tests"}
 			}
 			return NameTest{URI: uri, Local: local}, nil
@@ -1156,7 +1201,10 @@ func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 	}
 
 	// Check for QName: prefix:local or prefix:*
-	if p.lexer.Peek().Type == TokenColon {
+	// Per XPath 3.1 A.2.1: a QName has no whitespace around the colon.
+	// If whitespace precedes ':', this name stands alone (the ':' is a
+	// map-entry separator or similar context-dependent delimiter).
+	if colonTok := p.lexer.Peek(); colonTok.Type == TokenColon && !colonTok.SpaceBefore {
 		return p.parseQNameTest(tok.Value)
 	}
 
@@ -1260,17 +1308,28 @@ func (p *parser) parseElementOrAttributeTest(isElement bool) (NodeTest, bool, er
 	return AttributeTest{Name: name, TypeName: typeName}, true, nil
 }
 
-// parseDocumentNodeTest parses document-node(element(...)?) or document-node().
+// parseDocumentNodeTest parses document-node(element(...)?) or document-node(schema-element(...)) or document-node().
 func (p *parser) parseDocumentNodeTest() (NodeTest, bool, error) {
 	p.lexer.Next() // consume '('
 	var inner NodeTest
-	if p.lexer.Peek().Type == TokenName && p.lexer.Peek().Value == "element" {
-		p.lexer.Next() // consume 'element'
-		nt, _, err := p.parseElementOrAttributeTest(true)
-		if err != nil {
-			return nil, true, err
+	tok := p.lexer.Peek()
+	if tok.Type == TokenName {
+		switch tok.Value {
+		case "element":
+			p.lexer.Next() // consume 'element'
+			nt, _, err := p.parseElementOrAttributeTest(true)
+			if err != nil {
+				return nil, true, err
+			}
+			inner = nt
+		case "schema-element":
+			p.lexer.Next() // consume 'schema-element'
+			nt, _, err := p.parseSchemaTest(true)
+			if err != nil {
+				return nil, true, err
+			}
+			inner = nt
 		}
-		inner = nt
 	}
 	if err := p.expectToken(TokenRParen); err != nil {
 		return nil, true, fmt.Errorf("%w: ')' after document-node(", ErrExpectedToken)
@@ -1302,7 +1361,7 @@ func (p *parser) parseQNameTest(prefix string) (NodeTest, error) {
 		p.lexer.Next()
 		return NameTest{Prefix: prefix, Local: "*"}, nil
 	}
-	if next.Type == TokenName {
+	if isNameLikeToken(next.Type) {
 		p.lexer.Next()
 		return NameTest{Prefix: prefix, Local: next.Value}, nil
 	}
@@ -1584,7 +1643,7 @@ func (p *parser) parseCatchCode() (string, error) {
 	if tok.Type == TokenName {
 		p.lexer.Next()
 		name := tok.Value
-		if p.lexer.Peek().Type == TokenColon {
+		if colonTok := p.lexer.Peek(); colonTok.Type == TokenColon && !colonTok.SpaceBefore {
 			p.lexer.Next()
 			next := p.lexer.Peek()
 			if next.Type == TokenStar {
@@ -1908,6 +1967,13 @@ func (p *parser) parseItemType() (NodeTest, error) {
 				return nil, err
 			}
 			returnType = rt
+		} else if len(paramTypes) > 0 {
+			// Per XPath 3.1 §3.1.5.4: when parameter types are present,
+			// "as SequenceType" is required.
+			return nil, &XPathError{
+				Code:    errCodeXPST0003,
+				Message: "function type with parameter types requires 'as ReturnType'",
+			}
 		}
 		return FunctionTest{ParamTypes: paramTypes, ReturnType: returnType}, nil
 	}
@@ -2010,16 +2076,38 @@ func (p *parser) scanQName() string {
 	}
 	p.lexer.Next()
 	name := tok.Value
-	if p.lexer.Peek().Type == TokenColon {
+	if colonTok := p.lexer.Peek(); colonTok.Type == TokenColon && !colonTok.SpaceBefore {
 		p.lexer.Next()
 		localTok := p.lexer.Peek()
-		if localTok.Type == TokenName {
+		// Accept both plain names and keywords (map, array, etc.)
+		// as the local part of a prefixed QName.
+		if localTok.Type == TokenName || isKeywordToken(localTok.Type) {
 			p.lexer.Next()
 			return name + ":" + localTok.Value
 		}
 		p.lexer.Backup() // put ':' back
 	}
 	return name
+}
+
+// isKeywordToken returns true if the token type is an XPath keyword
+// that can still be used as a local name in a QName (e.g., prefix:map).
+func isKeywordToken(t TokenType) bool {
+	switch t {
+	case TokenMap, TokenArray, TokenFunction,
+		TokenAs, TokenOf, TokenIn,
+		TokenReturn, TokenFor, TokenLet,
+		TokenSome, TokenEvery, TokenIf, TokenThen, TokenElse,
+		TokenInstanceOf, TokenCastAs, TokenCastableAs, TokenTreatAs,
+		TokenAnd, TokenOr, TokenDiv, TokenMod, TokenIdiv,
+		TokenTo, TokenUnion, TokenIntersect, TokenExcept,
+		TokenEq, TokenNe, TokenLt, TokenLe, TokenGt, TokenGe,
+		TokenIs, TokenSatisfies, TokenWhere, TokenBy,
+		TokenAscending, TokenDescending, TokenStable,
+		TokenTry, TokenCatch:
+		return true
+	}
+	return false
 }
 
 // splitQName splits "prefix:local" into (prefix, local) or ("", name).
@@ -2054,14 +2142,16 @@ func (p *parser) expectToken(expected TokenType) error {
 
 // looksLikeStep returns true if the next token(s) look like the start of a location step.
 func (p *parser) looksLikeStep() bool {
-	tok := p.lexer.Peek()
+	return p.looksLikeStepOffset(0)
+}
+
+func (p *parser) looksLikeStepOffset(offset int) bool {
+	tok := p.lexer.PeekAt(offset)
 	switch tok.Type {
 	case TokenDotDot, TokenAt, TokenStar:
 		return true
-	case TokenName:
-		p.lexer.Next()
-		next := p.lexer.Peek()
-		p.lexer.Backup()
+	case TokenName, TokenFunction, TokenMap, TokenArray:
+		next := p.lexer.PeekAt(offset + 1)
 
 		if next.Type == TokenColonColon {
 			return true // axis::
@@ -2079,17 +2169,17 @@ func (p *parser) looksLikeStep() bool {
 			return false // function call
 		}
 		if next.Type == TokenColon {
+			// Per XPath 3.1 A.2.1: a QName is Name:Name with NO whitespace
+			// around the colon. If whitespace precedes ':', this is a plain
+			// name test (the ':' is a map-entry separator, not a QName colon).
+			if next.SpaceBefore {
+				return true // plain name test; ':' is map entry separator
+			}
 			// prefix:local (name test) vs prefix:name( (QName function call)
 			// vs prefix:name# (named function ref)
-			p.lexer.Next() // consume prefix
-			p.lexer.Next() // consume ':'
-			localTok := p.lexer.Peek()
-			if localTok.Type == TokenName {
-				p.lexer.Next()
-				afterLocal := p.lexer.Peek()
-				p.lexer.Backup() // local name
-				p.lexer.Backup() // ':'
-				p.lexer.Backup() // prefix
+			localTok := p.lexer.PeekAt(offset + 2)
+			if isNameLikeToken(localTok.Type) {
+				afterLocal := p.lexer.PeekAt(offset + 3)
 				if afterLocal.Type == TokenLParen {
 					return false // QName function call
 				}
@@ -2098,12 +2188,14 @@ func (p *parser) looksLikeStep() bool {
 				}
 				return true // QName step
 			}
-			p.lexer.Backup() // ':'
-			p.lexer.Backup() // prefix
 			return true
 		}
 		if next.Type == TokenHash {
 			return false // named function ref: name#arity
+		}
+		// map{} and array{} are constructors, not name tests
+		if next.Type == TokenLBrace && (tok.Type == TokenMap || tok.Type == TokenArray) {
+			return false
 		}
 		return true // plain name test
 	}

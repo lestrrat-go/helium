@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<doc-one xmlns="http://xsl.lotus.com/ns2" xmlns:ns1="http://xsl.lotus.com/ns1">
+	<ns1:a-two attrib1="Goodbye" xmlns="http://xsl.lotus.com/ns2" xmlns:ns1="http://xsl.lotus.com/ns1">Hello</ns1:a-two>
+	<b-three ns1:attrib2="Ciao">
+		<c-four/>
+	</b-three>
+</doc-one>

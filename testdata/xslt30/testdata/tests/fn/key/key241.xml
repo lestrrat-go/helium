@@ -1,0 +1,19 @@
+<?xml version="1.0"?><doc>
+  <div xml:id="id1">
+    <title>Introduction</title>
+    <p>For more information see the <divref>Expressions</divref> section.</p>
+    <p>(alternate id link: <keydivref>id3</keydivref>)</p>
+  </div>
+  
+  <div xml:id="id2">
+    <title>Stylesheet Structure</title>
+    <p>For more information see the <divref>Introduction</divref> section.</p>
+    <p>(alternate id link: <keydivref>id1</keydivref>)</p>
+  </div>
+  
+  <div xml:id="id3 ">
+    <title>Expressions</title>
+    <p>For more information see the <divref>Stylesheet Structure</divref> section.</p>
+    <p>(alternate id link: <keydivref>id2</keydivref>)</p>
+  </div>
+</doc>

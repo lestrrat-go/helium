@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Company Name="Company A">
+    <Person>
+        <Name Title="Mr." Gender="male">
+            <Firstname>John</Firstname>
+            <Surname>Doe</Surname>
+        </Name>
+    </Person>
+</Company>

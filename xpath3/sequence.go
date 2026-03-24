@@ -4,53 +4,68 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/sequence"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
+
+// NewRangeSequence creates a lazy integer range sequence from start to end (inclusive).
+// If start > end, returns nil (empty sequence per XPath spec).
+func NewRangeSequence(start, end int64) Sequence {
+	if start > end {
+		return nil
+	}
+	n := int(end - start + 1)
+	return sequence.NewRange(n, func(i int) Item {
+		return AtomicValue{TypeName: TypeInteger, Value: big.NewInt(start + int64(i))}
+	})
+}
 
 // SingleNode creates a Sequence containing a single NodeItem.
 func SingleNode(n helium.Node) Sequence {
-	return Sequence{NodeItem{Node: n}}
+	return ItemSlice{NodeItem{Node: n}}
 }
 
 // SingleAtomic creates a Sequence containing a single AtomicValue.
 func SingleAtomic(v AtomicValue) Sequence {
-	return Sequence{v}
+	return ItemSlice{v}
 }
 
 // SingleBoolean creates a Sequence containing a single xs:boolean.
 func SingleBoolean(b bool) Sequence {
-	return Sequence{AtomicValue{TypeName: TypeBoolean, Value: b}}
+	return ItemSlice{AtomicValue{TypeName: TypeBoolean, Value: b}}
 }
 
 // SingleInteger creates a Sequence containing a single xs:integer from int64.
 func SingleInteger(n int64) Sequence {
-	return Sequence{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(n)}}
+	return ItemSlice{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(n)}}
 }
 
 // SingleIntegerBig creates a Sequence containing a single xs:integer from *big.Int.
 func SingleIntegerBig(n *big.Int) Sequence {
-	return Sequence{AtomicValue{TypeName: TypeInteger, Value: n}}
+	return ItemSlice{AtomicValue{TypeName: TypeInteger, Value: n}}
 }
 
 // SingleDecimal creates a Sequence containing a single xs:decimal from *big.Rat.
 func SingleDecimal(r *big.Rat) Sequence {
-	return Sequence{AtomicValue{TypeName: TypeDecimal, Value: r}}
+	return ItemSlice{AtomicValue{TypeName: TypeDecimal, Value: r}}
 }
 
 // SingleDouble creates a Sequence containing a single xs:double.
 func SingleDouble(f float64) Sequence {
-	return Sequence{AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}}
+	return ItemSlice{AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}}
 }
 
 // SingleFloat creates a Sequence containing a single xs:float.
 func SingleFloat(f float64) Sequence {
-	return Sequence{AtomicValue{TypeName: TypeFloat, Value: NewFloat(f)}}
+	return ItemSlice{AtomicValue{TypeName: TypeFloat, Value: NewFloat(f)}}
 }
 
 // SingleString creates a Sequence containing a single xs:string.
 func SingleString(s string) Sequence {
-	return Sequence{AtomicValue{TypeName: TypeString, Value: s}}
+	return ItemSlice{AtomicValue{TypeName: TypeString, Value: s}}
 }
 
 // EmptySequence returns an empty Sequence.
@@ -61,11 +76,11 @@ func EmptySequence() Sequence {
 // NodesFrom extracts all helium.Node values from a sequence.
 // Returns (nodes, true) if all items are NodeItems, or (nil, false) if any are not.
 func NodesFrom(seq Sequence) ([]helium.Node, bool) {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return nil, true
 	}
-	nodes := make([]helium.Node, 0, len(seq))
-	for _, item := range seq {
+	nodes := make([]helium.Node, 0, seq.Len())
+	for item := range seqItems(seq) {
 		ni, ok := item.(NodeItem)
 		if !ok {
 			return nil, false
@@ -77,8 +92,11 @@ func NodesFrom(seq Sequence) ([]helium.Node, bool) {
 
 // AtomizeSequence atomizes all items in a sequence per XPath 3.1 Section 2.6.2.
 func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
-	result := make([]AtomicValue, 0, len(seq))
-	for _, item := range seq {
+	if seq == nil {
+		return nil, nil
+	}
+	result := make([]AtomicValue, 0, seq.Len())
+	for item := range seqItems(seq) {
 		// XPath 3.1: atomizing an array flattens its members
 		if arr, ok := item.(ArrayItem); ok {
 			for _, member := range arr.members0() {
@@ -90,6 +108,32 @@ func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
 			}
 			continue
 		}
+		// List types: split whitespace-separated tokens and atomize each.
+		if ni, ok := item.(NodeItem); ok {
+			listItem := ni.ListItemType
+			if listItem == "" {
+				listItem = builtinListItemType(ni.TypeAnnotation)
+			}
+			if listItem != "" {
+				s := ixpath.StringValue(ni.Node)
+				tokens := strings.Fields(s)
+				for _, tok := range tokens {
+					cast, err := CastFromString(tok, listItem)
+					if err != nil {
+						// For user-defined schema types (Q{ns}local),
+						// the value was already validated during
+						// construction; store as string with the type name.
+						if strings.HasPrefix(listItem, "Q{") {
+							cast = AtomicValue{TypeName: listItem, Value: tok}
+						} else {
+							return nil, err
+						}
+					}
+					result = append(result, cast)
+				}
+				continue
+			}
+		}
 		av, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
@@ -99,19 +143,34 @@ func AtomizeSequence(seq Sequence) ([]AtomicValue, error) {
 	return result, nil
 }
 
+// builtinListItemType returns the item type for built-in XSD list types.
+func builtinListItemType(typeName string) string {
+	switch typeName {
+	case TypeNMTOKENS:
+		return TypeNMTOKEN
+	case TypeIDREFS:
+		return TypeIDREF
+	case TypeENTITIES:
+		return TypeENTITY
+	}
+	return ""
+}
+
 // EBV computes the Effective Boolean Value of a sequence per XPath 3.1 Section 2.4.3.
 func EBV(seq Sequence) (bool, error) {
-	if len(seq) == 0 {
+	n := seqLen(seq)
+	if n == 0 {
 		return false, nil
 	}
 
+	first := seq.Get(0)
 	// Sequence starting with a node → true
-	if _, ok := seq[0].(NodeItem); ok {
+	if _, ok := first.(NodeItem); ok {
 		return true, nil
 	}
 
-	if len(seq) == 1 {
-		return ebvSingle(seq[0])
+	if n == 1 {
+		return ebvSingle(first)
 	}
 
 	return false, &XPathError{

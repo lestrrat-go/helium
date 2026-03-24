@@ -1,8 +1,21 @@
 package xpath
 
 import (
+	"reflect"
+
 	helium "github.com/lestrrat-go/helium"
 )
+
+// isNilNode checks for both interface nil and typed nil (Go interface nil trap).
+// IsNilNode returns true if n is nil or a nil pointer wrapped in a
+// non-nil interface.
+func IsNilNode(n helium.Node) bool {
+	if n == nil {
+		return true
+	}
+	v := reflect.ValueOf(n)
+	return v.Kind() == reflect.Pointer && v.IsNil()
+}
 
 // AxisType identifies one of the 13 XPath axes.
 type AxisType int
@@ -62,6 +75,9 @@ func AxisFromName(name string) (AxisType, bool) {
 // in the order defined by the XPath spec. maxNodes limits the result size
 // for unbounded axes; use DefaultMaxNodeSetLength if unsure.
 func TraverseAxis(axis AxisType, node helium.Node, maxNodes int) ([]helium.Node, error) {
+	if IsNilNode(node) {
+		return nil, nil
+	}
 	switch axis {
 	case AxisDescendant:
 		return axisDescendant(node, maxNodes)
@@ -77,6 +93,9 @@ func TraverseAxis(axis AxisType, node helium.Node, maxNodes int) ([]helium.Node,
 
 // TraverseAxisSimple handles axes that cannot fail (bounded result size).
 func TraverseAxisSimple(axis AxisType, node helium.Node) []helium.Node {
+	if IsNilNode(node) {
+		return nil
+	}
 	switch axis {
 	case AxisChild:
 		return axisChild(node)
@@ -100,14 +119,31 @@ func TraverseAxisSimple(axis AxisType, node helium.Node) []helium.Node {
 	return nil
 }
 
+// IsXDMChild returns true if the node is a valid child in the XPath Data
+// Model.  DTD, entity declarations, notation nodes, and other non-XDM
+// node types that may appear in the DOM tree are excluded.
+func IsXDMChild(n helium.Node) bool {
+	switch n.Type() {
+	case helium.ElementNode,
+		helium.TextNode,
+		helium.CDATASectionNode,
+		helium.CommentNode,
+		helium.ProcessingInstructionNode:
+		return true
+	}
+	return false
+}
+
 func axisChild(node helium.Node) []helium.Node {
 	// In XPath, attributes have no children
 	if _, ok := node.(*helium.Attribute); ok {
 		return nil
 	}
 	var result []helium.Node
-	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
-		result = append(result, c)
+	for c := range helium.Children(node) {
+		if IsXDMChild(c) {
+			result = append(result, c)
+		}
 	}
 	return result
 }
@@ -135,7 +171,9 @@ func collectDescendants(node helium.Node, result *[]helium.Node, maxNodes int) e
 	}
 	var stack []helium.Node
 	for c := node.LastChild(); c != nil; c = c.PrevSibling() {
-		stack = append(stack, c)
+		if IsXDMChild(c) {
+			stack = append(stack, c)
+		}
 	}
 	for len(stack) > 0 {
 		last := len(stack) - 1
@@ -146,7 +184,9 @@ func collectDescendants(node helium.Node, result *[]helium.Node, maxNodes int) e
 			return err
 		}
 		for child := cur.LastChild(); child != nil; child = child.PrevSibling() {
-			stack = append(stack, child)
+			if IsXDMChild(child) {
+				stack = append(stack, child)
+			}
 		}
 	}
 	return nil
@@ -179,6 +219,9 @@ func axisAncestor(node helium.Node) []helium.Node {
 }
 
 func axisAncestorOrSelf(node helium.Node) []helium.Node {
+	if IsNilNode(node) {
+		return nil
+	}
 	result := []helium.Node{node}
 	for p := node.Parent(); p != nil; p = p.Parent() {
 		result = append(result, p)
@@ -187,24 +230,77 @@ func axisAncestorOrSelf(node helium.Node) []helium.Node {
 }
 
 func axisFollowingSibling(node helium.Node) []helium.Node {
+	// Per XPath spec: if the context node is an attribute or namespace node,
+	// the following-sibling axis is empty.
+	switch node.(type) {
+	case *helium.Attribute, *helium.NamespaceNodeWrapper:
+		return nil
+	}
 	var result []helium.Node
 	for s := node.NextSibling(); s != nil; s = s.NextSibling() {
-		result = append(result, s)
+		if IsXDMChild(s) {
+			result = append(result, s)
+		}
 	}
 	return result
 }
 
 func axisPrecedingSibling(node helium.Node) []helium.Node {
+	// Per XPath spec: if the context node is an attribute or namespace node,
+	// the preceding-sibling axis is empty.
+	switch node.(type) {
+	case *helium.Attribute, *helium.NamespaceNodeWrapper:
+		return nil
+	}
 	var result []helium.Node
 	for s := node.PrevSibling(); s != nil; s = s.PrevSibling() {
-		result = append(result, s)
+		if IsXDMChild(s) {
+			result = append(result, s)
+		}
 	}
 	return result
 }
 
 func axisFollowing(node helium.Node, maxNodes int) ([]helium.Node, error) {
+	// Per XPath data model: attribute and namespace nodes are ordered after
+	// their parent element and before the parent's children.  Therefore the
+	// following axis from an attribute/namespace node includes the parent's
+	// descendants, then the parent's following siblings (+ their descendants),
+	// and so on up the ancestor chain.
+	switch node.(type) {
+	case *helium.Attribute, *helium.NamespaceNodeWrapper:
+		parent := node.Parent()
+		if IsNilNode(parent) {
+			return nil, nil
+		}
+		var result []helium.Node
+		// Parent's descendants come first (they follow attrs in document order).
+		if err := collectDescendants(parent, &result, maxNodes); err != nil {
+			return nil, err
+		}
+		// Then the parent's following siblings + their descendants, and up
+		// through ancestors — same as the normal following axis from the parent.
+		for p := parent; p != nil; p = p.Parent() {
+			for s := p.NextSibling(); s != nil; s = s.NextSibling() {
+				if !IsXDMChild(s) {
+					continue
+				}
+				if err := appendAxisNode(&result, s, maxNodes); err != nil {
+					return nil, err
+				}
+				if err := collectDescendants(s, &result, maxNodes); err != nil {
+					return nil, err
+				}
+			}
+		}
+		return result, nil
+	}
+
 	var result []helium.Node
 	for s := node.NextSibling(); s != nil; s = s.NextSibling() {
+		if !IsXDMChild(s) {
+			continue
+		}
 		if err := appendAxisNode(&result, s, maxNodes); err != nil {
 			return nil, err
 		}
@@ -214,6 +310,9 @@ func axisFollowing(node helium.Node, maxNodes int) ([]helium.Node, error) {
 	}
 	for p := node.Parent(); p != nil; p = p.Parent() {
 		for s := p.NextSibling(); s != nil; s = s.NextSibling() {
+			if !IsXDMChild(s) {
+				continue
+			}
 			if err := appendAxisNode(&result, s, maxNodes); err != nil {
 				return nil, err
 			}
@@ -226,8 +325,51 @@ func axisFollowing(node helium.Node, maxNodes int) ([]helium.Node, error) {
 }
 
 func axisPreceding(node helium.Node, maxNodes int) ([]helium.Node, error) {
+	// Per XPath data model: attribute and namespace nodes are ordered after
+	// their parent element and before the parent's children.  Therefore the
+	// preceding axis from an attribute/namespace node contains the same nodes
+	// as the preceding axis from the parent element (the parent's preceding
+	// siblings + their descendants, and up the ancestor chain).  The parent
+	// element itself is excluded because it is an ancestor.
+	switch node.(type) {
+	case *helium.Attribute, *helium.NamespaceNodeWrapper:
+		parent := node.Parent()
+		if IsNilNode(parent) {
+			return nil, nil
+		}
+		var result []helium.Node
+		for s := parent.PrevSibling(); s != nil; s = s.PrevSibling() {
+			if !IsXDMChild(s) {
+				continue
+			}
+			if err := collectDescendantsReverse(s, &result, maxNodes); err != nil {
+				return nil, err
+			}
+			if err := appendAxisNode(&result, s, maxNodes); err != nil {
+				return nil, err
+			}
+		}
+		for p := parent.Parent(); p != nil; p = p.Parent() {
+			for s := p.PrevSibling(); s != nil; s = s.PrevSibling() {
+				if !IsXDMChild(s) {
+					continue
+				}
+				if err := collectDescendantsReverse(s, &result, maxNodes); err != nil {
+					return nil, err
+				}
+				if err := appendAxisNode(&result, s, maxNodes); err != nil {
+					return nil, err
+				}
+			}
+		}
+		return result, nil
+	}
+
 	var result []helium.Node
 	for s := node.PrevSibling(); s != nil; s = s.PrevSibling() {
+		if !IsXDMChild(s) {
+			continue
+		}
 		if err := collectDescendantsReverse(s, &result, maxNodes); err != nil {
 			return nil, err
 		}
@@ -237,6 +379,9 @@ func axisPreceding(node helium.Node, maxNodes int) ([]helium.Node, error) {
 	}
 	for p := node.Parent(); p != nil; p = p.Parent() {
 		for s := p.PrevSibling(); s != nil; s = s.PrevSibling() {
+			if !IsXDMChild(s) {
+				continue
+			}
 			if err := collectDescendantsReverse(s, &result, maxNodes); err != nil {
 				return nil, err
 			}
@@ -255,8 +400,10 @@ func collectDescendantsReverse(node helium.Node, result *[]helium.Node, maxNodes
 	}
 
 	var stack []frame
-	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
-		stack = append(stack, frame{node: c})
+	for c := range helium.Children(node) {
+		if IsXDMChild(c) {
+			stack = append(stack, frame{node: c})
+		}
 	}
 	for len(stack) > 0 {
 		last := len(stack) - 1
@@ -272,7 +419,9 @@ func collectDescendantsReverse(node helium.Node, result *[]helium.Node, maxNodes
 
 		stack = append(stack, frame{node: cur.node, expanded: true})
 		for child := cur.node.FirstChild(); child != nil; child = child.NextSibling() {
-			stack = append(stack, frame{node: child})
+			if IsXDMChild(child) {
+				stack = append(stack, frame{node: child})
+			}
 		}
 	}
 	return nil
@@ -283,11 +432,13 @@ func axisAttribute(node helium.Node) []helium.Node {
 	if !ok {
 		return nil
 	}
-	attrs := elem.Attributes()
-	result := make([]helium.Node, len(attrs))
-	for i, a := range attrs {
-		result[i] = a
-	}
+	// Keep the zero-attribute case allocation-free; the small append growth
+	// cost for the common 1-3 attribute case is an acceptable tradeoff here.
+	var result []helium.Node
+	elem.ForEachAttribute(func(attr *helium.Attribute) bool {
+		result = append(result, attr)
+		return true
+	})
 	return result
 }
 
@@ -325,16 +476,39 @@ func NamespacePrefixesInScope(ancestors []helium.Node) map[string]bool {
 
 // CollectNamespaceNodes builds the namespace node list for an element, adding
 // the xml prefix first and then ancestor-declared prefixes in document order.
+// For each prefix, the innermost (closest ancestor) declaration provides the
+// URI, but the output order follows document order (outermost first).
 func CollectNamespaceNodes(ancestors []helium.Node, inScope map[string]bool, elem *helium.Element) []helium.Node {
 	type nser interface{ Namespaces() []*helium.Namespace }
-	seen := map[string]bool{}
+
+	// First pass: find the correct namespace for each prefix (innermost wins).
+	// ancestors[0] is the element itself (innermost), ancestors[len-1] outermost.
+	winner := map[string]*helium.Namespace{}
+	for _, anc := range ancestors {
+		ns, ok := anc.(nser)
+		if !ok {
+			continue
+		}
+		for _, n := range ns.Namespaces() {
+			prefix := n.Prefix()
+			if _, found := winner[prefix]; found {
+				continue // innermost already recorded
+			}
+			if !inScope[prefix] || n.URI() == "" {
+				continue
+			}
+			winner[prefix] = n
+		}
+	}
+
 	var result []helium.Node
 
 	xmlNS := helium.NewNamespace("xml", "http://www.w3.org/XML/1998/namespace")
 	result = append(result, helium.NewNamespaceNodeWrapper(xmlNS, elem))
-	seen["xml"] = true
 
-	// Second pass: collect from outermost to innermost, matching libxml2 order.
+	// Second pass: output in document order (outermost to innermost), but
+	// use the innermost URI for each prefix.
+	emitted := map[string]struct{}{"xml": {}}
 	for i := len(ancestors) - 1; i >= 0; i-- {
 		ns, ok := ancestors[i].(nser)
 		if !ok {
@@ -342,11 +516,15 @@ func CollectNamespaceNodes(ancestors []helium.Node, inScope map[string]bool, ele
 		}
 		for _, n := range ns.Namespaces() {
 			prefix := n.Prefix()
-			if seen[prefix] || !inScope[prefix] || n.URI() == "" {
+			if _, done := emitted[prefix]; done {
 				continue
 			}
-			seen[prefix] = true
-			result = append(result, helium.NewNamespaceNodeWrapper(n, elem))
+			w := winner[prefix]
+			if w == nil {
+				continue
+			}
+			emitted[prefix] = struct{}{}
+			result = append(result, helium.NewNamespaceNodeWrapper(w, elem))
 		}
 	}
 

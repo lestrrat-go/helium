@@ -55,8 +55,7 @@ func CompileFile(ctx context.Context, path string, opts ...CompileOption) (*Gram
 	}
 	doc, err := helium.Parse(ctx, data)
 	if err != nil {
-		var pe helium.ErrParseError
-		if errors.As(err, &pe) {
+		if pe, ok := errors.AsType[helium.ErrParseError](err); ok {
 			filename := cfg.filename
 			if filename == "" {
 				filename = path

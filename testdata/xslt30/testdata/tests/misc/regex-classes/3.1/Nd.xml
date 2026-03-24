@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Nd">
+      <match from="48" to="57"/>
+      <match from="1632" to="1641"/>
+      <match from="1776" to="1785"/>
+      <match from="2406" to="2415"/>
+      <match from="2534" to="2543"/>
+      <match from="2662" to="2671"/>
+      <match from="2790" to="2799"/>
+      <match from="2918" to="2927"/>
+      <match from="3047" to="3055"/>
+      <match from="3174" to="3183"/>
+      <match from="3302" to="3311"/>
+      <match from="3430" to="3439"/>
+      <match from="3664" to="3673"/>
+      <match from="3792" to="3801"/>
+      <match from="3872" to="3881"/>
+      <match from="4160" to="4169"/>
+      <match from="4969" to="4977"/>
+      <match from="6112" to="6121"/>
+      <match from="6160" to="6169"/>
+      <match from="6470" to="6479"/>
+      <match from="65296" to="65305"/>
+      <match from="66720" to="66729"/>
+      <match from="120782" to="120831"/>
+   </ranges>
+   <ranges complement="Nd">
+      <match from="9" to="47"/>
+      <match from="58" to="1631"/>
+      <match from="1642" to="1775"/>
+      <match from="1786" to="2405"/>
+      <match from="2416" to="2533"/>
+      <match from="2544" to="2661"/>
+      <match from="2672" to="2789"/>
+      <match from="2800" to="2917"/>
+      <match from="2928" to="3046"/>
+      <match from="3056" to="3173"/>
+      <match from="3184" to="3301"/>
+      <match from="3312" to="3429"/>
+      <match from="3440" to="3663"/>
+      <match from="3674" to="3791"/>
+      <match from="3802" to="3871"/>
+      <match from="3882" to="4159"/>
+      <match from="4170" to="4968"/>
+      <match from="4978" to="6111"/>
+      <match from="6122" to="6159"/>
+      <match from="6170" to="6469"/>
+      <match from="6480" to="65295"/>
+      <match from="65306" to="66719"/>
+      <match from="66730" to="120781"/>
+      <match from="120832" to="1114111"/>
+   </ranges>
+</out>

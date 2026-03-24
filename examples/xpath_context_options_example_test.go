@@ -16,6 +16,9 @@ func Example_xpath_context_options() {
 	}
 
 	ctx := context.Background()
+
+	// Context options are how you inject external values into XPath evaluation.
+	// Here we bind a variable and a custom function before running the queries.
 	ctx = xpath1.WithVariables(ctx, map[string]any{
 		"minPrice": float64(40),
 	})
@@ -26,6 +29,7 @@ func Example_xpath_context_options() {
 		}, nil
 	}))
 
+	// The first expression reads the caller-supplied variable.
 	r, err := xpath1.Evaluate(ctx, doc, `count(/catalog/book[number(@price) >= $minPrice])`)
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
@@ -33,6 +37,7 @@ func Example_xpath_context_options() {
 	}
 	fmt.Printf("eligible: %.0f\n", r.Number)
 
+	// The second expression calls the custom XPath function registered above.
 	r, err = xpath1.Evaluate(ctx, doc, `discount(number(/catalog/book[1]/@price))`)
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)

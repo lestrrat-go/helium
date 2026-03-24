@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<root-tag>
+	 <one-tag>Text of one-tag</one-tag>
+	 <two-tag>Text of two-tag</two-tag>
+	 <xsl:stylesheet
+	    xmlns:xsl="http://www.w3.org/1999/XSL/Transform" 
+	    version="2.0"
+	    xml:id="embedded" xml:base="x/"
+	    >
+	 <xsl:include href="include-0103b.xsl"/>
+	 </xsl:stylesheet> 		 
+</root-tag>

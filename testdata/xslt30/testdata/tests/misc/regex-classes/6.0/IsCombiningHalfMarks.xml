@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsCombiningHalfMarks">
+      <match from="65056" to="65071"/>
+   </ranges>
+   <ranges complement="IsCombiningHalfMarks">
+      <match from="9" to="65055"/>
+      <match from="65072" to="1114111"/>
+   </ranges>
+</out>

@@ -7,6 +7,8 @@ import (
 	"os"
 	"sort"
 	"time"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 var qt3EnvironmentVariables = map[string]string{
@@ -41,7 +43,7 @@ func fnStaticBaseURI(ctx context.Context, _ []Sequence) (Sequence, error) {
 }
 
 func fnDefaultCollation(ctx context.Context, _ []Sequence) (Sequence, error) {
-	uri := codepointCollationURI
+	uri := lexicon.CollationCodepoint
 	if ec := getFnContext(ctx); ec != nil && ec.defaultCollation != "" {
 		uri = ec.defaultCollation
 	}
@@ -73,7 +75,7 @@ func fnAvailableEnvVars(_ context.Context, _ []Sequence) (Sequence, error) {
 	}
 	sort.Strings(keys)
 
-	result := make(Sequence, len(keys))
+	result := make(ItemSlice, len(keys))
 	for i, name := range keys {
 		result[i] = AtomicValue{TypeName: TypeString, Value: name}
 	}
@@ -120,8 +122,8 @@ func currentTimeFromCtx(ctx context.Context) time.Time {
 
 func fnRandomNumberGenerator(ctx context.Context, args []Sequence) (Sequence, error) {
 	var seed int64
-	if len(args) > 0 && len(args[0]) > 0 {
-		a, err := AtomizeItem(args[0][0])
+	if len(args) > 0 && seqLen(args[0]) > 0 {
+		a, err := AtomizeItem(args[0].Get(0))
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +135,7 @@ func fnRandomNumberGenerator(ctx context.Context, args []Sequence) (Sequence, er
 	} else {
 		seed = currentTimeFromCtx(ctx).UnixNano()
 	}
-	return Sequence{makeRNGMap(seed)}, nil
+	return ItemSlice{makeRNGMap(seed)}, nil
 }
 
 func makeRNGMap(seed int64) MapItem {
@@ -145,7 +147,7 @@ func makeRNGMap(seed int64) MapItem {
 		Name:  "next",
 		Invoke: func(_ context.Context, _ []Sequence) (Sequence, error) {
 			nextSeed := rng.Int63()
-			return Sequence{makeRNGMap(nextSeed)}, nil
+			return ItemSlice{makeRNGMap(nextSeed)}, nil
 		},
 	}
 
@@ -154,8 +156,8 @@ func makeRNGMap(seed int64) MapItem {
 		Name:  "permute",
 		Invoke: func(_ context.Context, callArgs []Sequence) (Sequence, error) {
 			seq := callArgs[0]
-			perm := make(Sequence, len(seq))
-			copy(perm, seq)
+			perm := make(ItemSlice, seqLen(seq))
+			copy(perm, seqMaterialize(seq))
 			localRng := rand.New(rand.NewSource(seed))
 			sort.SliceStable(perm, func(i, j int) bool {
 				return localRng.Intn(2) == 0
@@ -165,9 +167,9 @@ func makeRNGMap(seed int64) MapItem {
 	}
 
 	return NewMap([]MapEntry{
-		{Key: AtomicValue{TypeName: TypeString, Value: "number"}, Value: Sequence{AtomicValue{TypeName: TypeDouble, Value: NewDouble(number)}}},
-		{Key: AtomicValue{TypeName: TypeString, Value: "next"}, Value: Sequence{nextFn}},
-		{Key: AtomicValue{TypeName: TypeString, Value: "permute"}, Value: Sequence{permuteFn}},
+		{Key: AtomicValue{TypeName: TypeString, Value: "number"}, Value: ItemSlice{AtomicValue{TypeName: TypeDouble, Value: NewDouble(number)}}},
+		{Key: AtomicValue{TypeName: TypeString, Value: "next"}, Value: ItemSlice{nextFn}},
+		{Key: AtomicValue{TypeName: TypeString, Value: "permute"}, Value: ItemSlice{permuteFn}},
 	})
 }
 

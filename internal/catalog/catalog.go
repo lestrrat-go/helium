@@ -4,9 +4,6 @@
 package catalog
 
 const (
-	// CatalogNamespace is the OASIS XML Catalog namespace.
-	CatalogNamespace = "urn:oasis:names:tc:entity:xmlns:xml:catalog"
-
 	// MaxDepth is the maximum recursion depth for catalog resolution.
 	MaxDepth = 50
 
@@ -65,10 +62,10 @@ type visitedKey struct {
 
 // Catalog holds parsed catalog entries and provides resolution.
 type Catalog struct {
-	Entries       []Entry
-	Prefer        Prefer
-	BaseURI       string
-	Depth         int // recursion guard (shared across resolution chain)
+	Entries []Entry
+	Prefer  Prefer
+	BaseURI string
+	Depth   int // recursion guard (shared across resolution chain)
 	Loader  Loader
 	visited map[visitedKey]struct{}
 }

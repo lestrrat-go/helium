@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsDevanagari">
+      <match from="2304" to="2431"/>
+   </ranges>
+   <ranges complement="IsDevanagari">
+      <match from="9" to="2303"/>
+      <match from="2432" to="1114111"/>
+   </ranges>
+</out>

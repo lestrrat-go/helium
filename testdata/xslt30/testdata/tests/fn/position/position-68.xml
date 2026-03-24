@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<far-north>Item-1A
+  <north-north-west/>Item-1B
+  <north>Item-2A
+    <near-north>Item-3A
+      <west/>Item-3B
+      <center>Item-4A
+        <near-south-west/>Item-4B
+        <near-south>Item-5A
+          <south>Item-6A
+            <far-south/>Item-6B
+          </south>Item-5B
+        </near-south>Item-4C
+        <near-south-east/>Item-4D
+      </center>Item-3C
+      <east/>Item-3D
+    </near-north>Item-2B
+  </north>Item-1C
+  <north-north-east/>Item-1D
+</far-north>

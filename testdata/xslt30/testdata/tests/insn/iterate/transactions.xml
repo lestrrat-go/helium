@@ -1,0 +1,22 @@
+<account nr="76543210">
+  <account-number>01234567</account-number>
+  <transaction value="13.24" date="2006-02-13"/>
+  <transaction value="8.12" date="2006-02-13"/>
+  <transaction value="-15.00" date="2006-02-15"/>
+  <transaction value="6.00" date="2006-02-16"/>
+  <transaction value="0.50" date="2006-02-17"/>
+  <transaction value="2.33" date="2006-02-17"/>
+  <transaction value="4.44" date="2006-02-17"/>
+  <transaction value="-5.00" date="2006-02-20"/>
+  <transaction value="8.99" date="2006-02-21"/>                
+  <transaction value="16.00" date="2006-02-22"/>
+  <transaction value="-2.33" date="2006-02-23"/>
+  <transaction value="5.60" date="2006-02-23"/>
+  <transaction value="4.32" date="2006-02-23"/>
+  <transaction value="6.78" date="2006-02-24"/>
+  <transaction value="12.20" date="2006-02-24"/>
+  <transaction value="-248.05" date="2006-02-24"/>
+  <transaction value="12.00" date="2006-02-25"/>
+  <transaction value="13.99" date="2006-02-25"/>
+  <transaction value="14.20" date="2006-02-26"/>
+</account>                      

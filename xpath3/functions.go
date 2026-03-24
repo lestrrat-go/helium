@@ -2,9 +2,12 @@ package xpath3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // Function is the interface for XPath 3.1 functions, both built-in and user-defined.
@@ -14,14 +17,40 @@ type Function interface {
 	Call(ctx context.Context, args []Sequence) (Sequence, error)
 }
 
+// DynamicRefRestricted marks a Function that must not be used via
+// named function reference (e.g. current-group#0). When the XPath
+// evaluator encounters a NamedFunctionRef for such a function, it
+// creates a function item that raises the specified error on call.
+type DynamicRefRestricted interface {
+	NoDynamicRef() bool
+	DynRefErrorCode() string
+}
+
+// TypedFunction extends Function with type signature information.
+// Implementations that expose parameter and return types enable
+// correct instance-of checks and function coercion for user-defined functions.
+type TypedFunction interface {
+	Function
+	FuncParamTypes() []SequenceType
+	FuncReturnType() *SequenceType
+}
+
+// TypedFunctionByArity is like TypedFunction but for multi-arity functions
+// that have different type signatures per arity.
+type TypedFunctionByArity interface {
+	Function
+	FuncParamTypesForArity(arity int) []SequenceType
+	FuncReturnTypeForArity(arity int) *SequenceType
+}
+
 // Namespace URIs for standard XPath 3.1 function namespaces.
 const (
-	NSFn    = "http://www.w3.org/2005/xpath-functions"
-	NSMath  = "http://www.w3.org/2005/xpath-functions/math"
-	NSMap   = "http://www.w3.org/2005/xpath-functions/map"
-	NSArray = "http://www.w3.org/2005/xpath-functions/array"
-	NSErr   = "http://www.w3.org/2005/xqt-errors"
-	NSXS    = "http://www.w3.org/2001/XMLSchema"
+	NSFn    = lexicon.NamespaceFn
+	NSMath  = lexicon.NamespaceMath
+	NSMap   = lexicon.NamespaceMap
+	NSArray = lexicon.NamespaceArray
+	NSErr   = lexicon.NamespaceErr
+	NSXS    = lexicon.NamespaceXSD
 )
 
 // Default prefix → URI mappings.
@@ -104,6 +133,15 @@ func resolveFunctionByURI(ec *evalContext, uri, name string, arity int) (Functio
 		return fn, nil
 	}
 
+	// Check function resolver (not visible to function-lookup)
+	if ec.functionResolver != nil {
+		if fn, ok, err := ec.functionResolver.ResolveFunction(ec.goCtx, uri, name, arity); err != nil {
+			return nil, err
+		} else if ok {
+			return fn, nil
+		}
+	}
+
 	return nil, fmt.Errorf("%w: %s#%d", ErrUnknownFunction, name, arity)
 }
 
@@ -150,6 +188,28 @@ func (f *builtinFunc) Call(ctx context.Context, args []Sequence) (Sequence, erro
 	return f.fn(ctx, args)
 }
 
+// IsBuiltinFunction returns true if name is a registered XPath built-in function.
+func IsBuiltinFunction(name string) bool {
+	_, ok := builtinFunctions3[QualifiedName{URI: NSFn, Name: name}]
+	return ok
+}
+
+// IsBuiltinFunctionNS returns true if name in the given namespace is a registered built-in function.
+func IsBuiltinFunctionNS(uri, name string) bool {
+	_, ok := builtinFunctions3[QualifiedName{URI: uri, Name: name}]
+	return ok
+}
+
+// BuiltinFunctionAcceptsArity returns true if a built-in function accepts
+// the given arity.
+func BuiltinFunctionAcceptsArity(uri, name string, arity int) bool {
+	fn, ok := builtinFunctions3[QualifiedName{URI: uri, Name: name}]
+	if !ok {
+		return false
+	}
+	return arity >= fn.MinArity() && (fn.MaxArity() < 0 || arity <= fn.MaxArity())
+}
+
 // registerFn is a convenience for registering a built-in function in the fn: namespace.
 func registerFn(name string, min, max int, fn func(context.Context, []Sequence) (Sequence, error)) {
 	builtinFunctions3[QualifiedName{URI: NSFn, Name: name}] = &builtinFunc{
@@ -164,22 +224,29 @@ func registerNS(uri, name string, min, max int, fn func(context.Context, []Seque
 	}
 }
 
-// seqToStringErr atomizes the first item to a string, propagating errors.
+// seqToStringErr atomizes the argument to a string, propagating errors.
+// For list-typed nodes, atomization may produce multiple items → XPTY0004.
 func seqToStringErr(seq Sequence) (string, error) {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return "", nil
 	}
-	a, err := AtomizeItem(seq[0])
+	atoms, err := AtomizeSequence(seq)
 	if err != nil {
 		return "", err
 	}
-	return atomicToString(a)
+	if len(atoms) == 0 {
+		return "", nil
+	}
+	if len(atoms) > 1 {
+		return "", &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected single string, got sequence of length %d", len(atoms))}
+	}
+	return atomicToString(atoms[0])
 }
 
 // coerceArgToStringRequired applies XPath 3.1 function coercion rules for xs:string params.
 // Like coerceArgToString but rejects empty sequences (for non-optional string parameters).
 func coerceArgToStringRequired(seq Sequence) (string, error) {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string, got empty sequence"}
 	}
 	return coerceArgToString(seq)
@@ -189,14 +256,27 @@ func coerceArgToStringRequired(seq Sequence) (string, error) {
 // Accepts: empty sequence → "", xs:string/xs:anyURI → as-is, xs:untypedAtomic → cast.
 // Rejects all other types with XPTY0004.
 func coerceArgToString(seq Sequence) (string, error) {
-	switch len(seq) {
+	switch seqLen(seq) {
 	case 0:
 		return "", nil
 	case 1:
 	default:
 		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
 	}
-	a, err := AtomizeItem(seq[0])
+	// Use AtomizeSequence (not AtomizeItem) to properly expand list types.
+	// For nodes with list type annotations, atomization produces multiple
+	// items which must raise XPTY0004 for xs:string? parameters.
+	atoms, err := AtomizeSequence(seq)
+	if err != nil {
+		return "", err
+	}
+	if len(atoms) == 0 {
+		return "", nil
+	}
+	if len(atoms) > 1 {
+		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
+	}
+	a := atoms[0]
 	if err != nil {
 		return "", err
 	}
@@ -210,6 +290,10 @@ func coerceArgToString(seq Sequence) (string, error) {
 		}
 		return s, nil
 	default:
+		// User-defined types: check if the underlying value is a string.
+		if s, ok := a.Value.(string); ok {
+			return s, nil
+		}
 		return "", &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected xs:string?, got %s", a.TypeName)}
 	}
 }
@@ -218,14 +302,14 @@ func coerceArgToString(seq Sequence) (string, error) {
 // Accepts: xs:integer (and subtypes), xs:untypedAtomic (cast to integer).
 // Rejects all other types with XPTY0004.
 func coerceArgToInteger(seq Sequence) (int64, error) {
-	switch len(seq) {
+	switch seqLen(seq) {
 	case 0:
 		return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:integer, got empty sequence"}
 	case 1:
 	default:
 		return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:integer, got sequence of length > 1"}
 	}
-	a, err := AtomizeItem(seq[0])
+	a, err := AtomizeItem(seq.Get(0))
 	if err != nil {
 		return 0, err
 	}
@@ -251,7 +335,7 @@ func coerceArgToInteger(seq Sequence) (int64, error) {
 func coerceArgToDoubleRequired(seq Sequence) (float64, error) {
 	a, err := extractSingleAtomicArg(seq, "xs:double")
 	if err != nil {
-		if xpErr, ok := err.(*XPathError); ok {
+		if xpErr, ok := errors.AsType[*XPathError](err); ok {
 			switch {
 			case strings.Contains(xpErr.Message, "empty sequence"):
 				return 0, &XPathError{Code: errCodeXPTY0004, Message: "expected xs:double, got empty sequence"}
@@ -268,20 +352,21 @@ func coerceArgToDoubleRequired(seq Sequence) (float64, error) {
 		}
 		a = casted
 	}
-	if !isSubtypeOf(a.TypeName, TypeNumeric) {
+	if !a.IsNumeric() {
 		return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected xs:double, got %s", a.TypeName)}
 	}
+	a = PromoteSchemaType(a)
 	return a.ToFloat64(), nil
 }
 
 // extractSingleAtomicArg enforces that seq contains exactly one item and atomizes it.
 // Used for function parameters typed as xs:anyAtomicType (not optional).
 func extractSingleAtomicArg(seq Sequence, fnName string) (AtomicValue, error) {
-	switch len(seq) {
+	switch seqLen(seq) {
 	case 0:
 		return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fnName + ": expected single atomic value, got empty sequence"}
 	case 1:
-		return AtomizeItem(seq[0])
+		return AtomizeItem(seq.Get(0))
 	default:
 		return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fnName + ": expected single atomic value, got sequence of length > 1"}
 	}
@@ -306,10 +391,10 @@ func coerceToInteger(a AtomicValue) (AtomicValue, error) {
 
 // seqToDouble atomizes the first item to a float64.
 func seqToDouble(seq Sequence) float64 {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return 0
 	}
-	a, err := AtomizeItem(seq[0])
+	a, err := AtomizeItem(seq.Get(0))
 	if err != nil {
 		return 0
 	}

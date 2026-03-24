@@ -1,0 +1,15 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema050.uri/"
+           elementFormDefault="qualified">
+
+<xs:complexType name="abf">
+    <xs:sequence>
+      <xs:element name="a" minOccurs="1"/>
+      <xs:element name="b" minOccurs="0" maxOccurs="2"/>
+      <xs:element name="f" minOccurs="1" maxOccurs="unbounded"/>
+    </xs:sequence>
+</xs:complexType>
+
+
+</xs:schema>

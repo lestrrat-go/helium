@@ -30,7 +30,7 @@ func TestFnImplicitTimezoneUsesEvaluationSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, seq, 1)
 
-	av, ok := seq[0].(AtomicValue)
+	av, ok := seq.Get(0).(AtomicValue)
 	require.True(t, ok)
 	require.Equal(t, TypeDayTimeDuration, av.TypeName)
 

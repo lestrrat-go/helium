@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE document SYSTEM "id164.dtd">
+<document>
+  <people>
+    <person id="id1" name="John"/>
+    <person id="id2" name="Peter"/>
+    <person id="id3" name="Anne"/>
+  </people>
+  <departaments>
+    <departament nam="Computer" people="id1 id2"/>
+    <departament nam="Business" people="id2 id3"/>
+  </departaments>
+</document>

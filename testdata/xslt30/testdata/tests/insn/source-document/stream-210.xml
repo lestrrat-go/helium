@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <product type="product-1">
+        <foo>BOOT</foo>
+    </product>
+    <product type="product-2">
+        <foo>SHOE</foo>
+    </product>
+    <product type="product-2">
+        <foo>GLOVE</foo>
+    </product>
+    <product type="product-3">
+        <foo>SCARF</foo>
+    </product>
+    <product type="product-1">
+        <foo>HAT</foo>
+    </product>
+</root>

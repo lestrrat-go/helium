@@ -4,31 +4,32 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"time"
 )
 
-func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := eval(ec, e.Left)
+func evalArithmetic(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := eval(ec, e.Right)
+	right, err := evalFn(ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
-	if len(left) == 0 || len(right) == 0 {
+	if seqLen(left) == 0 || seqLen(right) == 0 {
 		return nil, nil // empty sequence
 	}
-	if len(left) > 1 {
+	if left.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "arithmetic operand must be a single item"}
 	}
-	if len(right) > 1 {
+	if right.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "arithmetic operand must be a single item"}
 	}
-	la, err := AtomizeItem(left[0])
+	la, err := AtomizeItem(left.Get(0))
 	if err != nil {
 		return nil, err
 	}
-	ra, err := AtomizeItem(right[0])
+	ra, err := AtomizeItem(right.Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -64,6 +65,10 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "arithmetic operand must be numeric, got " + ra.TypeName}
 	}
 
+	// Promote user-defined schema types to their built-in numeric base.
+	la = promoteSchemaNumeric(la)
+	ra = promoteSchemaNumeric(ra)
+
 	// Tier 1: both integer → big.Int arithmetic
 	if isIntegerDerived(la.TypeName) && isIntegerDerived(ra.TypeName) {
 		return integerArith(e.Op, la.BigInt(), ra.BigInt())
@@ -74,6 +79,48 @@ func evalArithmetic(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	}
 	// Tier 3: float/double → float64 arithmetic
 	return floatArith(e.Op, la, ra)
+}
+
+// promoteSchemaNumeric promotes a user-defined numeric type to its built-in base.
+func promoteSchemaNumeric(a AtomicValue) AtomicValue {
+	return PromoteSchemaType(a)
+}
+
+// PromoteSchemaType promotes a user-defined schema type to its built-in base
+// type, based on the underlying Go value type. If the type is already a known
+// XSD type, the value is returned unchanged.
+func PromoteSchemaType(a AtomicValue) AtomicValue {
+	if IsKnownXSDType(a.TypeName) {
+		return a
+	}
+	// If the value carries a known built-in base type, use it directly.
+	if a.BaseType != "" && IsKnownXSDType(a.BaseType) {
+		return AtomicValue{TypeName: a.BaseType, Value: a.Value}
+	}
+	switch v := a.Value.(type) {
+	case *big.Int:
+		return AtomicValue{TypeName: TypeInteger, Value: v}
+	case *big.Rat:
+		return AtomicValue{TypeName: TypeDecimal, Value: v}
+	case *FloatValue:
+		return AtomicValue{TypeName: TypeDouble, Value: v}
+	case float64:
+		return AtomicValue{TypeName: TypeDouble, Value: v}
+	case bool:
+		return AtomicValue{TypeName: TypeBoolean, Value: v}
+	case string:
+		return AtomicValue{TypeName: TypeString, Value: v}
+	case time.Time:
+		// Default to xs:dateTime — callers can narrow further
+		return AtomicValue{TypeName: TypeDateTime, Value: v}
+	case Duration:
+		return AtomicValue{TypeName: TypeDuration, Value: v}
+	case []byte:
+		return AtomicValue{TypeName: TypeBase64Binary, Value: v}
+	case QNameValue:
+		return AtomicValue{TypeName: TypeQName, Value: v}
+	}
+	return a
 }
 
 func integerArith(op TokenType, a, b *big.Int) (Sequence, error) {
@@ -88,18 +135,18 @@ func integerArith(op TokenType, a, b *big.Int) (Sequence, error) {
 	case TokenDiv:
 		// integer / integer → decimal
 		if b.Sign() == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0002, Message: "division by zero"}
+			return nil, &XPathError{Code: errCodeFOAR0001, Message: "division by zero"}
 		}
 		r := new(big.Rat).SetFrac(new(big.Int).Set(a), new(big.Int).Set(b))
 		return SingleDecimal(r), nil
 	case TokenIdiv:
 		if b.Sign() == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0002, Message: "integer division by zero"}
+			return nil, &XPathError{Code: errCodeFOAR0001, Message: "integer division by zero"}
 		}
 		result.Quo(a, b) // truncates toward zero
 	case TokenMod:
 		if b.Sign() == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0002, Message: "modulo by zero"}
+			return nil, &XPathError{Code: errCodeFOAR0001, Message: "modulo by zero"}
 		}
 		result.Rem(a, b)
 	default:
@@ -119,12 +166,12 @@ func decimalArith(op TokenType, a, b *big.Rat) (Sequence, error) {
 		result.Mul(a, b)
 	case TokenDiv:
 		if b.Sign() == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0002, Message: "division by zero"}
+			return nil, &XPathError{Code: errCodeFOAR0001, Message: "division by zero"}
 		}
 		result.Quo(a, b)
 	case TokenIdiv:
 		if b.Sign() == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0002, Message: "integer division by zero"}
+			return nil, &XPathError{Code: errCodeFOAR0001, Message: "integer division by zero"}
 		}
 		// Truncate quotient toward zero
 		q := new(big.Rat).Quo(a, b)
@@ -135,7 +182,7 @@ func decimalArith(op TokenType, a, b *big.Rat) (Sequence, error) {
 		return SingleIntegerBig(intPart), nil
 	case TokenMod:
 		if b.Sign() == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0002, Message: "modulo by zero"}
+			return nil, &XPathError{Code: errCodeFOAR0001, Message: "modulo by zero"}
 		}
 		// a mod b = a - (a idiv b) * b
 		q := new(big.Rat).Quo(a, b)
@@ -179,7 +226,7 @@ func floatArith(op TokenType, la, ra AtomicValue) (Sequence, error) {
 			return nil, &XPathError{Code: errCodeFOAR0002, Message: "idiv with infinite dividend"}
 		}
 		if rn == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0002, Message: "integer division by zero"}
+			return nil, &XPathError{Code: errCodeFOAR0001, Message: "integer division by zero"}
 		}
 		// Per F&O §6.2.4: finite idiv ±INF = 0 (math.Trunc(finite/Inf) = 0).
 		truncated := math.Trunc(ln / rn)
@@ -197,18 +244,18 @@ func floatArith(op TokenType, la, ra AtomicValue) (Sequence, error) {
 	return SingleAtomic(AtomicValue{TypeName: TypeDouble, Value: NewDouble(result)}), nil
 }
 
-func evalUnaryExpr(ec *evalContext, e UnaryExpr) (Sequence, error) {
-	r, err := eval(ec, e.Operand)
+func evalUnaryExpr(evalFn exprEvaluator, ec *evalContext, e UnaryExpr) (Sequence, error) {
+	r, err := evalFn(ec, e.Operand)
 	if err != nil {
 		return nil, err
 	}
-	if len(r) == 0 {
+	if seqLen(r) == 0 {
 		return nil, nil
 	}
-	if len(r) > 1 {
+	if r.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "unary minus operand must be a single item"}
 	}
-	a, err := AtomizeItem(r[0])
+	a, err := AtomizeItem(r.Get(0))
 	if err != nil {
 		return nil, err
 	}

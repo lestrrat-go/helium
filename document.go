@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -49,6 +50,14 @@ type Document struct {
 	intSubset *DTD
 	extSubset *DTD
 	ids       map[string]*Element
+
+	// Slab allocators for high-frequency node types.
+	// These reduce per-node heap allocation overhead by allocating
+	// nodes in chunks and handing them out one at a time.
+	elemSlab  []Element
+	textSlab  []Text
+	nsSlab    []Namespace
+	attrSlab  []Attribute
 }
 
 // NewDefaultDocument creates a minimal user-built document with version "1.0",
@@ -241,7 +250,11 @@ func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Att
 		}()
 	}
 	var n Node
-	attr = newAttribute(name, ns)
+	if d != nil {
+		attr = d.allocAttribute(name, ns)
+	} else {
+		attr = newAttribute(name, ns)
+	}
 	if value != "" {
 		n, err = d.stringToNodeList(value)
 		if err != nil {
@@ -263,9 +276,38 @@ func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Att
 }
 
 func (d *Document) CreateNamespace(prefix, uri string) (*Namespace, error) {
-	ns := newNamespace(prefix, uri)
+	var ns *Namespace
+	if d != nil {
+		ns = d.allocNamespace()
+	} else {
+		ns = &Namespace{}
+	}
+	ns.prefix = prefix
+	ns.href = uri
+	ns.etype = NamespaceNode
 	ns.context = d
 	return ns, nil
+}
+
+func (d *Document) allocNamespace() *Namespace {
+	if len(d.nsSlab) == 0 {
+		d.nsSlab = make([]Namespace, slabSize)
+	}
+	ns := &d.nsSlab[0]
+	d.nsSlab = d.nsSlab[1:]
+	return ns
+}
+
+func (d *Document) allocAttribute(name string, ns *Namespace) *Attribute {
+	if len(d.attrSlab) == 0 {
+		d.attrSlab = make([]Attribute, slabSize)
+	}
+	attr := &d.attrSlab[0]
+	d.attrSlab = d.attrSlab[1:]
+	attr.etype = AttributeNode
+	attr.name = name
+	attr.ns = ns
+	return attr
 }
 
 func (d *Document) CreatePI(target, data string) (*ProcessingInstruction, error) {
@@ -340,16 +382,52 @@ func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD
 	return cur, nil
 }
 
+const slabSize = 64
+
 func (d *Document) CreateElement(name string) (*Element, error) {
-	e := newElement(name)
+	var e *Element
+	if d != nil {
+		e = d.allocElement()
+	} else {
+		e = newElement(name)
+	}
+	e.name = name
+	e.etype = ElementNode
 	e.doc = d
 	return e, nil
 }
 
+func (d *Document) allocElement() *Element {
+	if len(d.elemSlab) == 0 {
+		d.elemSlab = make([]Element, slabSize)
+	}
+	e := &d.elemSlab[0]
+	d.elemSlab = d.elemSlab[1:]
+	return e
+}
+
 func (d *Document) CreateText(value []byte) (*Text, error) {
-	e := newText(value)
+	var e *Text
+	if d != nil {
+		e = d.allocText()
+	} else {
+		e = &Text{}
+	}
+	e.etype = TextNode
+	e.content = make([]byte, len(value))
+	copy(e.content, value)
+	e.name = textNodeName
 	e.doc = d
 	return e, nil
+}
+
+func (d *Document) allocText() *Text {
+	if len(d.textSlab) == 0 {
+		d.textSlab = make([]Text, slabSize)
+	}
+	t := &d.textSlab[0]
+	d.textSlab = d.textSlab[1:]
+	return t
 }
 
 func (d *Document) CreateComment(value []byte) (*Comment, error) {
@@ -678,6 +756,10 @@ func (d *Document) RegisterID(id string, elem *Element) {
 	if d.ids == nil {
 		d.ids = make(map[string]*Element)
 	}
+	// Normalize the ID value: xs:ID is derived from xs:NCName which
+	// collapses whitespace. Strip leading/trailing whitespace so that
+	// xml:id="id3 " is findable as "id3".
+	id = strings.TrimSpace(id)
 	d.ids[id] = elem
 }
 
@@ -692,14 +774,14 @@ func (d *Document) GetElementByID(id string) *Element {
 
 	// Fallback: O(n) tree walk for documents not built via parser.
 	var found *Element
-	_ = Walk(d, func(n Node) error {
+	_ = Walk(d, NodeWalkerFunc(func(n Node) error {
 		if n.Type() != ElementNode {
 			return nil
 		}
 		elem := n.(*Element)
 		for _, a := range elem.Attributes() {
-			// Check xml:id
-			if a.Name() == "xml:id" && a.Value() == id {
+			// Check xml:id (normalize value — xs:ID collapses whitespace)
+			if a.Name() == lexicon.QNameXMLID && strings.TrimSpace(a.Value()) == id {
 				found = elem
 				return errors.New("found")
 			}
@@ -722,7 +804,7 @@ func (d *Document) GetElementByID(id string) *Element {
 			}
 		}
 		return nil
-	})
+	}))
 	return found
 }
 

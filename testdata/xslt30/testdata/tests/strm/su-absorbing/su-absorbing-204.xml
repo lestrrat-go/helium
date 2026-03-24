@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<a name="a1">
+  <b name="b1"/>
+  <b name="b2"/>
+  <b name="b3">
+    <c name="c1"/>
+    <c name="c2"/>
+  </b>
+</a>

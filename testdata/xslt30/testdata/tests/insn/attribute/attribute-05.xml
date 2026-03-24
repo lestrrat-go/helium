@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<!DOCTYPE page [
+<!ELEMENT page (#PCDATA)>
+<!ATTLIST page attfixed CDATA #FIXED "default">
+<!ATTLIST page attimplied CDATA #IMPLIED>
+]>
+
+<page>source</page>

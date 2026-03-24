@@ -27,7 +27,28 @@ func (ec *evalContext) withVar(name string, val Sequence) *evalContext  // new m
 
 ## Dispatch
 
-`eval(ec, expr) (Sequence, error)` — main recursive dispatch with depth check.
+- `Compile()` lowers AST to `vmProgram` and collects prefix-validation requirements during the same pass
+- The string-based `Compile()` path can reuse parsed slices during lowering because the compiled expression keeps `source` + `vmProgram` and reparses AST only for AST/streamability access
+- `Expression.Evaluate()` executes `vmProgram` when present
+- `evalWith()` enforces recursion depth for raw eval + VM eval
+- `dispatchExpr()` contains shared Expr-type dispatch
+- Raw `eval(ec, expr)` remains fallback for unlowered AST execution
+
+### VM Shape
+
+```go
+type vmProgram struct {
+    root int
+    instructions []vmInstruction
+}
+type vmInstruction struct {
+    op      vmOpcode
+    payload any
+}
+type compiledExprRef struct { index int }
+```
+
+Lowering is structural for non-trivial nodes: recursive children usually become `compiledExprRef` indexes, trivial leaves such as literals or variable refs can stay inline in the parent payload, and hot path forms now use VM-specific payloads instead of AST nodes. `LocationPath` / `PathExpr` lower to `vmLocationPathExpr` / `vmPathExpr` with `vmLocationStep` slices, and the direct-compile fast path can emit `vmLocationPathExpr` directly before lowering child predicate expressions. Common predicates on VM location steps also lower to inline VM predicate payloads for `[N]`, `[position() = N]`, `[@attr]`, and `[@attr = "literal"]`; other predicates stay as lowered `Expr`s. VM execution switches on `vmOpcode` for compiled refs, then reuses existing `eval_*` helpers for language semantics.
 
 ## Evaluation Rules by Expr Type
 
@@ -36,8 +57,9 @@ Evaluate each item, concatenate sequences.
 
 ### LocationPath
 1. Start: root node (absolute) or context node (relative)
-2. Per step: `ixpath.TraverseAxis` → filter by NodeTest → apply predicates → dedup doc order
-3. Return merged node-set
+2. Per step: traverse axis → filter by NodeTest → apply predicates → dedup doc order
+3. Hot axes (`child`, `attribute`, `self`, `parent`) fuse traversal and node-test filtering directly in `xpath3`, avoiding the generic `TraverseAxis` + extra filtered-slice path
+4. Return merged node-set
 
 ### Predicates
 - Numeric atomic → compare to position (1-based)
@@ -89,9 +111,12 @@ Check each item against SequenceType at runtime → boolean.
 
 ### CastExpr
 Atomize → `CastAtomic(src, targetType)`. `AllowEmpty` allows empty sequence.
+Disallowed targets such as `xs:anyAtomicType`, `xs:anySimpleType`, `xs:anyType`,
+and `xs:NOTATION` raise `XPST0080` before operand cardinality is considered.
 
 ### CastableExpr
-Same as CastExpr but return boolean; never errors.
+Same as CastExpr but return boolean for castability checks.
+Disallowed targets such as `xs:NOTATION` still raise `XPST0080`.
 
 ### TreatAsExpr
 Check instance-of → error `XPDY0050` if not.
@@ -157,9 +182,10 @@ Supported casts per XPath 3.1 Section 18. All atomic types in `xpath3-types.md`.
 
 - Stateless between `Expression.Evaluate` calls
 - `evalContext` created fresh per call, discarded after
+- Hot-path node/item rebinding during predicates, path steps, and simple-map evaluation mutates the current `evalContext` temporarily and restores it afterward instead of allocating copied child contexts
 - Default language comes from `WithDefaultLanguage`; built-ins fall back to `"en"` when unset
 - `DocOrderCache` lazy, O(n) build, O(1) lookup
-- Inline function closures capture variable map snapshot (value semantics)
+- Inline functions and named function refs snapshot the dynamic context they close over, so later focus rebinding does not change captured behavior
 
 ## Safety Limits
 

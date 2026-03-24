@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsCombiningDiacriticalMarks">
+      <match from="768" to="879"/>
+   </ranges>
+   <ranges complement="IsCombiningDiacriticalMarks">
+      <match from="9" to="767"/>
+      <match from="880" to="1114111"/>
+   </ranges>
+</out>

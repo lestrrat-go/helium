@@ -9,6 +9,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // loader implements icatalog.Loader using helium's parser.
@@ -75,9 +76,9 @@ func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.E
 		return nil, fmt.Errorf("catalog: no root element in %q", baseURI)
 	}
 
-	if root.URI() != icatalog.CatalogNamespace {
+	if root.URI() != lexicon.NamespaceCatalog {
 		return nil, fmt.Errorf("catalog: root element namespace %q is not %q in %q",
-			root.URI(), icatalog.CatalogNamespace, baseURI)
+			root.URI(), lexicon.NamespaceCatalog, baseURI)
 	}
 
 	cat := &icatalog.Catalog{
@@ -86,7 +87,7 @@ func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.E
 		Loader:  loader{ctx: ctx, errorHandler: eh},
 	}
 
-	if v := getAttr(root, "prefer"); v != "" {
+	if v := getAttr(root, lexicon.AttrPrefer); v != "" {
 		cat.Prefer = icatalog.ParsePrefer(v)
 	}
 
@@ -97,7 +98,7 @@ func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.E
 
 // parseEntries walks child elements of parent and appends catalog entries.
 func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.Prefer, baseURI string, entries *[]icatalog.Entry, eh helium.ErrorHandler) {
-	if v := getAttrNS(parent, "base", "http://www.w3.org/XML/1998/namespace"); v != "" {
+	if v := getAttrNS(parent, lexicon.AttrBase, lexicon.NamespaceXML); v != "" {
 		baseURI = icatalog.ResolveURI(baseURI, v)
 	}
 
@@ -107,28 +108,28 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 		}
 		elem := child.(*helium.Element)
 
-		if elem.URI() != icatalog.CatalogNamespace {
+		if elem.URI() != lexicon.NamespaceCatalog {
 			continue
 		}
 
 		localName := elem.LocalName()
 
 		elemBase := baseURI
-		if v := getAttrNS(elem, "base", "http://www.w3.org/XML/1998/namespace"); v != "" {
+		if v := getAttrNS(elem, lexicon.AttrBase, lexicon.NamespaceXML); v != "" {
 			elemBase = icatalog.ResolveURI(baseURI, v)
 		}
 
 		elemPrefer := prefer
-		if v := getAttr(elem, "prefer"); v != "" {
+		if v := getAttr(elem, lexicon.AttrPrefer); v != "" {
 			elemPrefer = icatalog.ParsePrefer(v)
 		}
 
 		switch localName {
-		case "public":
-			pubID := icatalog.NormalizePublicID(getAttr(elem, "publicId"))
-			uri := icatalog.ResolveURI(elemBase, getAttr(elem, "uri"))
+		case lexicon.ElemPublic:
+			pubID := icatalog.NormalizePublicID(getAttr(elem, lexicon.AttrPublicID))
+			uri := icatalog.ResolveURI(elemBase, getAttr(elem, lexicon.AttrURI))
 			if pubID == "" || uri == "" {
-				catalogMissingAttr(ctx, eh, localName, pubID, "publicId", uri, "uri")
+				catalogMissingAttr(ctx, eh, localName, pubID, lexicon.AttrPublicID, uri, lexicon.AttrURI)
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type:   icatalog.EntryPublic,
@@ -137,11 +138,11 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 					Prefer: elemPrefer,
 				})
 			}
-		case "system":
-			sysID := getAttr(elem, "systemId")
-			uri := icatalog.ResolveURI(elemBase, getAttr(elem, "uri"))
+		case lexicon.ElemSystem:
+			sysID := getAttr(elem, lexicon.AttrSystemID)
+			uri := icatalog.ResolveURI(elemBase, getAttr(elem, lexicon.AttrURI))
 			if sysID == "" || uri == "" {
-				catalogMissingAttr(ctx, eh, localName, sysID, "systemId", uri, "uri")
+				catalogMissingAttr(ctx, eh, localName, sysID, lexicon.AttrSystemID, uri, lexicon.AttrURI)
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type: icatalog.EntrySystem,
@@ -149,11 +150,11 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 					URL:  uri,
 				})
 			}
-		case "rewriteSystem":
-			startString := getAttr(elem, "systemIdStartString")
-			prefix := icatalog.ResolveURI(elemBase, getAttr(elem, "rewritePrefix"))
+		case lexicon.ElemRewriteSystem:
+			startString := getAttr(elem, lexicon.AttrSystemIDStartString)
+			prefix := icatalog.ResolveURI(elemBase, getAttr(elem, lexicon.AttrRewritePrefix))
 			if startString == "" || prefix == "" {
-				catalogMissingAttr(ctx, eh, localName, startString, "systemIdStartString", prefix, "rewritePrefix")
+				catalogMissingAttr(ctx, eh, localName, startString, lexicon.AttrSystemIDStartString, prefix, lexicon.AttrRewritePrefix)
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type: icatalog.EntryRewriteSystem,
@@ -161,11 +162,11 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 					URL:  prefix,
 				})
 			}
-		case "delegatePublic":
-			startString := icatalog.NormalizePublicID(getAttr(elem, "publicIdStartString"))
-			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
+		case lexicon.ElemDelegatePublic:
+			startString := icatalog.NormalizePublicID(getAttr(elem, lexicon.AttrPublicIDStartString))
+			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, lexicon.AttrCatalog))
 			if startString == "" || catFile == "" {
-				catalogMissingAttr(ctx, eh, localName, startString, "publicIdStartString", catFile, "catalog")
+				catalogMissingAttr(ctx, eh, localName, startString, lexicon.AttrPublicIDStartString, catFile, lexicon.AttrCatalog)
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type:   icatalog.EntryDelegatePublic,
@@ -174,11 +175,11 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 					Prefer: elemPrefer,
 				})
 			}
-		case "delegateSystem":
-			startString := getAttr(elem, "systemIdStartString")
-			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
+		case lexicon.ElemDelegateSystem:
+			startString := getAttr(elem, lexicon.AttrSystemIDStartString)
+			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, lexicon.AttrCatalog))
 			if startString == "" || catFile == "" {
-				catalogMissingAttr(ctx, eh, localName, startString, "systemIdStartString", catFile, "catalog")
+				catalogMissingAttr(ctx, eh, localName, startString, lexicon.AttrSystemIDStartString, catFile, lexicon.AttrCatalog)
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type: icatalog.EntryDelegateSystem,
@@ -186,11 +187,11 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 					URL:  catFile,
 				})
 			}
-		case "uri":
-			name := getAttr(elem, "name")
-			uri := icatalog.ResolveURI(elemBase, getAttr(elem, "uri"))
+		case lexicon.ElemURI:
+			name := getAttr(elem, lexicon.AttrName)
+			uri := icatalog.ResolveURI(elemBase, getAttr(elem, lexicon.AttrURI))
 			if name == "" || uri == "" {
-				catalogMissingAttr(ctx, eh, localName, name, "name", uri, "uri")
+				catalogMissingAttr(ctx, eh, localName, name, lexicon.AttrName, uri, lexicon.AttrURI)
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type: icatalog.EntryURI,
@@ -198,11 +199,11 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 					URL:  uri,
 				})
 			}
-		case "rewriteURI":
-			startString := getAttr(elem, "uriStartString")
-			prefix := icatalog.ResolveURI(elemBase, getAttr(elem, "rewritePrefix"))
+		case lexicon.ElemRewriteURI:
+			startString := getAttr(elem, lexicon.AttrURIStartString)
+			prefix := icatalog.ResolveURI(elemBase, getAttr(elem, lexicon.AttrRewritePrefix))
 			if startString == "" || prefix == "" {
-				catalogMissingAttr(ctx, eh, localName, startString, "uriStartString", prefix, "rewritePrefix")
+				catalogMissingAttr(ctx, eh, localName, startString, lexicon.AttrURIStartString, prefix, lexicon.AttrRewritePrefix)
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type: icatalog.EntryRewriteURI,
@@ -210,11 +211,11 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 					URL:  prefix,
 				})
 			}
-		case "delegateURI":
-			startString := getAttr(elem, "uriStartString")
-			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
+		case lexicon.ElemDelegateURI:
+			startString := getAttr(elem, lexicon.AttrURIStartString)
+			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, lexicon.AttrCatalog))
 			if startString == "" || catFile == "" {
-				catalogMissingAttr(ctx, eh, localName, startString, "uriStartString", catFile, "catalog")
+				catalogMissingAttr(ctx, eh, localName, startString, lexicon.AttrURIStartString, catFile, lexicon.AttrCatalog)
 			} else {
 				*entries = append(*entries, icatalog.Entry{
 					Type: icatalog.EntryDelegateURI,
@@ -222,10 +223,10 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 					URL:  catFile,
 				})
 			}
-		case "nextCatalog":
-			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, "catalog"))
+		case lexicon.ElemNextCatalog:
+			catFile := icatalog.ResolveURI(elemBase, getAttr(elem, lexicon.AttrCatalog))
 			if catFile == "" {
-				eh.Handle(ctx, fmt.Errorf("%s entry missing catalog attribute", localName))
+				eh.Handle(ctx, fmt.Errorf("%s entry missing %s attribute", localName, lexicon.AttrCatalog))
 			} else {
 				if !icatalog.HasNextCatalog(*entries, catFile) {
 					*entries = append(*entries, icatalog.Entry{
@@ -234,7 +235,7 @@ func parseEntries(ctx context.Context, parent *helium.Element, prefer icatalog.P
 					})
 				}
 			}
-		case "group":
+		case lexicon.ElemGroup:
 			parseEntries(ctx, elem, elemPrefer, elemBase, entries, eh)
 		}
 	}
@@ -269,21 +270,19 @@ func closeHandler(eh helium.ErrorHandler) {
 
 // getAttr returns the value of the attribute with the given local name.
 func getAttr(elem *helium.Element, name string) string {
-	for _, a := range elem.Attributes() {
-		if a.LocalName() == name {
-			return a.Value()
-		}
+	attr, ok := elem.FindAttribute(helium.LocalNamePredicate(name))
+	if !ok {
+		return ""
 	}
-	return ""
+	return attr.Value()
 }
 
 // getAttrNS returns the value of the attribute with the given local name
 // and namespace URI.
 func getAttrNS(elem *helium.Element, name, nsURI string) string {
-	for _, a := range elem.Attributes() {
-		if a.LocalName() == name && a.URI() == nsURI {
-			return a.Value()
-		}
+	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: nsURI})
+	if !ok {
+		return ""
 	}
-	return ""
+	return attr.Value()
 }

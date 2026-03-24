@@ -45,7 +45,11 @@ func WithNoWarning() ParseOption {
 
 // dumpConfig holds configuration for HTML serialization.
 type dumpConfig struct {
-	noDefaultDTD bool
+	noDefaultDTD          bool
+	noFormat              bool
+	preserveCase          bool
+	noEscapeURIAttributes bool
+	escapeControlChars    bool
 }
 
 // WriteOption configures HTML serialization behavior.
@@ -56,5 +60,38 @@ type WriteOption func(*dumpConfig)
 func WithNoDefaultDTD() WriteOption {
 	return func(c *dumpConfig) {
 		c.noDefaultDTD = true
+	}
+}
+
+// WithNoFormat suppresses formatting whitespace (newlines) in HTML output.
+func WithNoFormat() WriteOption {
+	return func(c *dumpConfig) {
+		c.noFormat = true
+	}
+}
+
+// WithPreserveCase preserves the original case of element and attribute names
+// instead of lowercasing them. Used by XSLT HTML output method.
+func WithPreserveCase() WriteOption {
+	return func(c *dumpConfig) {
+		c.preserveCase = true
+	}
+}
+
+// WithNoEscapeURIAttributes disables percent-encoding of non-ASCII characters
+// in URI attributes (href, src, action, etc.). Corresponds to
+// escape-uri-attributes="no" in the XSLT serialization spec.
+func WithNoEscapeURIAttributes() WriteOption {
+	return func(c *dumpConfig) {
+		c.noEscapeURIAttributes = true
+	}
+}
+
+// WithEscapeControlChars causes characters in the U+007F-U+009F range to be
+// emitted as numeric character references (e.g. &#x9F;). HTML5 serialization
+// requires this instead of raising SERE0014.
+func WithEscapeControlChars() WriteOption {
+	return func(c *dumpConfig) {
+		c.escapeControlChars = true
 	}
 }

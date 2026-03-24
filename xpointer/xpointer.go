@@ -266,7 +266,7 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 // and HTMLDocumentNode.
 func nthElementChild(n helium.Node, index int) helium.Node {
 	count := 0
-	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(n) {
 		switch c.Type() {
 		case helium.ElementNode, helium.DocumentNode, helium.HTMLDocumentNode:
 			count++

@@ -1,0 +1,15 @@
+    <data>
+        <events>
+            <event id="e01" name="Amsterdam"/>
+            <event id="e02" name="Baltimore"/>
+            <event id="e03" name="Casablanca"/>
+            <event id="e04" name="Delaware"/>
+            <event id="e05" name="Edinburgh"/>
+        </events>
+        <participants>
+            <participant events="e01 e03" name="Alpha"/>
+            <participant events="e02" name="Bravo"/>
+            <participant events="e02 e03" name="Charlie"/>
+            <participant events="e04 e04 e04" name="Delta"/>
+        </participants>
+    </data>

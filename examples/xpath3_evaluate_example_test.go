@@ -15,7 +15,17 @@ func Example_xpath3_evaluate() {
 		return
 	}
 
-	r, err := xpath3.Evaluate(context.Background(), doc, "string(//item[1])")
+	// Compile expressions individually and evaluate with a reusable evaluator.
+	// The Result wrapper exposes typed accessors that match the expression you ran.
+	compiler := xpath3.NewCompiler()
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
+
+	expr, err := compiler.Compile("string(//item[1])")
+	if err != nil {
+		fmt.Printf("compile error: %s\n", err)
+		return
+	}
+	r, err := eval.Evaluate(context.Background(), expr, doc)
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return
@@ -27,7 +37,13 @@ func Example_xpath3_evaluate() {
 	}
 	fmt.Printf("string: %s\n", s)
 
-	r, err = xpath3.Evaluate(context.Background(), doc, "sum(//item)")
+	// The same document can be queried again for a numeric result.
+	expr, err = compiler.Compile("sum(//item)")
+	if err != nil {
+		fmt.Printf("compile error: %s\n", err)
+		return
+	}
+	r, err = eval.Evaluate(context.Background(), expr, doc)
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return
@@ -39,7 +55,13 @@ func Example_xpath3_evaluate() {
 	}
 	fmt.Printf("sum: %.0f\n", n)
 
-	r, err = xpath3.Evaluate(context.Background(), doc, "count(//item) > 2")
+	// And again for a boolean result.
+	expr, err = compiler.Compile("count(//item) > 2")
+	if err != nil {
+		fmt.Printf("compile error: %s\n", err)
+		return
+	}
+	r, err = eval.Evaluate(context.Background(), expr, doc)
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return

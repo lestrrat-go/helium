@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsHangulCompatibilityJamo">
+      <match from="12592" to="12687"/>
+   </ranges>
+   <ranges complement="IsHangulCompatibilityJamo">
+      <match from="9" to="12591"/>
+      <match from="12688" to="1114111"/>
+   </ranges>
+</out>

@@ -2,11 +2,12 @@ package xpath3
 
 import (
 	"context"
-	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -46,7 +47,15 @@ type evalContext struct {
 	// indirection. It is pointer-sized and nil when unused, so copies via
 	// withNode/withContextItem are negligible. The net/http dependency is
 	// already transitively required by golang.org/x/text.
-	httpClient *http.Client
+	httpClient         *http.Client
+	typeAnnotations        map[helium.Node]string // node → xs:... type (from xslt3 schema awareness)
+	preservedIDAnnotations map[helium.Node]string // ID/IDREF annotations preserved after input-type-annotations="strip"
+	variableResolver       VariableResolver       // lazy resolver for variables not in static scope
+	functionResolver   FunctionResolver       // lazy resolver for functions (not visible to function-lookup)
+	strictPrefixes     bool                   // skip defaultPrefixNS fallback in prefix validation
+	schemaDeclarations SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
+	allowXML11Chars    bool                   // when true, codepoints-to-string allows XML 1.1 restricted characters (0x01-0x1F)
+	traceWriter        io.Writer              // destination for fn:trace output (nil = os.Stderr)
 }
 
 type variableScope struct {
@@ -101,59 +110,46 @@ func (s *variableScope) Lookup(name string) (Sequence, bool) {
 	return nil, false
 }
 
-func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
-	opCount := 0
-	now := time.Now()
-	ec := &evalContext{
-		goCtx:       ctx,
-		node:        node,
-		position:    1,
-		size:        1,
-		opCount:     &opCount,
-		docOrder:    &ixpath.DocOrderCache{},
-		maxNodes:    maxNodeSetLength,
-		currentTime: &now,
-		docCache:    make(map[string]helium.Node),
-	}
-	if cfg := getEvalConfig(ctx); cfg != nil {
-		ec.namespaces = cfg.namespaces
-		ec.vars = cfg.varScope
-		ec.opLimit = cfg.opLimit
-		ec.functions = cfg.functions
-		ec.fnsNS = cfg.functionsNS
-		ec.implicitTimezone = cfg.implicitTimezone
-		ec.defaultLanguage = cfg.defaultLanguage
-		ec.defaultCollation = cfg.defaultCollation
-		if cfg.defaultDecimal != nil {
-			df := *cfg.defaultDecimal
-			ec.defaultDecimalFormat = &df
-		}
-		ec.decimalFormats = cfg.decimalFormats
-		ec.baseURI = cfg.baseURI
-		ec.uriResolver = cfg.uriResolver
-		ec.collectionResolver = cfg.collectionResolver
-		ec.httpClient = cfg.httpClient
-	}
-	return ec
+type evalContextFrame struct {
+	node        helium.Node
+	contextItem Item
+	position    int
+	size        int
 }
 
-func (ec *evalContext) withNode(n helium.Node, pos, size int) *evalContext {
-	cp := *ec
-	cp.node = n
-	cp.contextItem = nil
-	cp.position = pos
-	cp.size = size
-	return &cp
+func (ec *evalContext) pushNodeContext(n helium.Node, pos, size int) evalContextFrame {
+	frame := evalContextFrame{
+		node:        ec.node,
+		contextItem: ec.contextItem,
+		position:    ec.position,
+		size:        ec.size,
+	}
+	ec.node = n
+	ec.contextItem = nil
+	ec.position = pos
+	ec.size = size
+	return frame
 }
 
-// withContextItem sets a non-node context item (for simple map, etc.)
-func (ec *evalContext) withContextItem(item Item, pos, size int) *evalContext {
-	cp := *ec
-	cp.contextItem = item
-	cp.node = nil // clear node so functions don't accidentally use an outer node
-	cp.position = pos
-	cp.size = size
-	return &cp
+func (ec *evalContext) pushContextItem(item Item, pos, size int) evalContextFrame {
+	frame := evalContextFrame{
+		node:        ec.node,
+		contextItem: ec.contextItem,
+		position:    ec.position,
+		size:        ec.size,
+	}
+	ec.contextItem = item
+	ec.node = nil
+	ec.position = pos
+	ec.size = size
+	return frame
+}
+
+func (ec *evalContext) restoreContext(frame evalContextFrame) {
+	ec.node = frame.node
+	ec.contextItem = frame.contextItem
+	ec.position = frame.position
+	ec.size = frame.size
 }
 
 // contextStringValue returns the string value of the current context item.
@@ -191,6 +187,20 @@ func (ec *evalContext) getImplicitTimezone() *time.Location {
 	return time.Local
 }
 
+// resolveDefaultCollation returns the collation implementation for the
+// dynamic context's default collation URI.  Returns nil when the default
+// is the codepoint collation (the XPath default), so callers can fast-path.
+func (ec *evalContext) resolveDefaultCollation() *collationImpl {
+	if ec.defaultCollation == "" || ec.defaultCollation == lexicon.CollationCodepoint {
+		return nil
+	}
+	coll, err := resolveCollation(ec.defaultCollation, "")
+	if err != nil {
+		return nil
+	}
+	return coll
+}
+
 func (ec *evalContext) getDefaultLanguage() string {
 	if ec.defaultLanguage != "" {
 		return ec.defaultLanguage
@@ -226,90 +236,3 @@ func (ec *evalContext) countOps(n int) error {
 }
 
 // eval dispatches to the appropriate evaluator for each AST node type.
-// Depth tracking: withNode/withContextItem copy the parent's depth into the
-// new context, so each nested eval chain inherits and increments correctly.
-func eval(ec *evalContext, expr Expr) (Sequence, error) {
-	ec.depth++
-	if ec.depth > maxRecursionDepth {
-		return nil, ErrRecursionLimit
-	}
-	defer func() { ec.depth-- }()
-
-	switch e := expr.(type) {
-	case LiteralExpr:
-		return evalLiteral(e)
-	case VariableExpr:
-		return evalVariable(ec, e)
-	case ContextItemExpr:
-		if ec.contextItem != nil {
-			return Sequence{ec.contextItem}, nil
-		}
-		if ec.node == nil {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
-		}
-		return Sequence{NodeItem{Node: ec.node}}, nil
-	case RootExpr:
-		if ec.node == nil {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
-		}
-		return Sequence{NodeItem{Node: ixpath.DocumentRoot(ec.node)}}, nil
-	case SequenceExpr:
-		return evalSequenceExpr(ec, e)
-	case *LocationPath:
-		return evalLocationPath(ec, e)
-	case BinaryExpr:
-		return evalBinaryExpr(ec, e)
-	case UnaryExpr:
-		return evalUnaryExpr(ec, e)
-	case ConcatExpr:
-		return evalConcatExpr(ec, e)
-	case SimpleMapExpr:
-		return evalSimpleMapExpr(ec, e)
-	case RangeExpr:
-		return evalRangeExpr(ec, e)
-	case UnionExpr:
-		return evalUnionExpr(ec, e)
-	case IntersectExceptExpr:
-		return evalIntersectExceptExpr(ec, e)
-	case FilterExpr:
-		return evalFilterExpr(ec, e)
-	case PathExpr:
-		return evalPathExpr(ec, e)
-	case PathStepExpr:
-		return evalPathStepExpr(ec, e)
-	case LookupExpr:
-		return evalLookupExpr(ec, e)
-	case UnaryLookupExpr:
-		return evalUnaryLookupExpr(ec, e)
-	case FLWORExpr:
-		return evalFLWOR(ec, e)
-	case QuantifiedExpr:
-		return evalQuantifiedExpr(ec, e)
-	case IfExpr:
-		return evalIfExpr(ec, e)
-	case TryCatchExpr:
-		return evalTryCatchExpr(ec, e)
-	case InstanceOfExpr:
-		return evalInstanceOfExpr(ec, e)
-	case CastExpr:
-		return evalCastExpr(ec, e)
-	case CastableExpr:
-		return evalCastableExpr(ec, e)
-	case TreatAsExpr:
-		return evalTreatAsExpr(ec, e)
-	case FunctionCall:
-		return evalFunctionCall(ec, e)
-	case DynamicFunctionCall:
-		return evalDynamicFunctionCall(ec, e)
-	case NamedFunctionRef:
-		return evalNamedFunctionRef(ec, e)
-	case InlineFunctionExpr:
-		return evalInlineFunctionExpr(ec, e)
-	case MapConstructorExpr:
-		return evalMapConstructorExpr(ec, e)
-	case ArrayConstructorExpr:
-		return evalArrayConstructorExpr(ec, e)
-	default:
-		return nil, fmt.Errorf("%w: %T", ErrUnsupportedExpr, expr)
-	}
-}

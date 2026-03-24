@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsBopomofo">
+      <match from="12544" to="12591"/>
+   </ranges>
+   <ranges complement="IsBopomofo">
+      <match from="9" to="12543"/>
+      <match from="12592" to="1114111"/>
+   </ranges>
+</out>

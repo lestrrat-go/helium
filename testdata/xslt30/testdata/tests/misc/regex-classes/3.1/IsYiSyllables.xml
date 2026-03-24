@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsYiSyllables">
+      <match from="40960" to="42127"/>
+   </ranges>
+   <ranges complement="IsYiSyllables">
+      <match from="9" to="40959"/>
+      <match from="42128" to="1114111"/>
+   </ranges>
+</out>

@@ -167,6 +167,21 @@ func (n *Element) addProperty(attr *Attribute) {
 	attr.SetParent(n)
 }
 
+// SetLiteralAttributeNS creates or replaces an attribute with a literal text
+// value and namespace. Unlike SetAttributeNS, the value is not parsed for
+// entity references. This is useful when the parser has already resolved
+// entities in attribute values.
+func (n *Element) SetLiteralAttributeNS(localname, value string, ns *Namespace) {
+	attr := newAttribute(localname, ns)
+	attr.doc = n.doc
+	t := newText([]byte(value))
+	t.doc = n.doc
+	setFirstChild(attr, t)
+	setLastChild(attr, t)
+	t.SetParent(attr)
+	n.addProperty(attr)
+}
+
 // SetAttributeNS creates an attribute with the given local name, value, and namespace.
 func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) error {
 	attr, err := n.doc.CreateAttribute(localname, value, ns)
@@ -196,32 +211,77 @@ func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) error {
 	return nil
 }
 
-// GetAttribute returns the value of the attribute with the given name,
-// or empty string and false if not found.
-func (n *Element) GetAttribute(name string) (string, bool) {
+// AttributePredicate reports whether an attribute matches a lookup.
+// Implementations are used by FindAttribute to support alternate
+// matching semantics without exposing the property list layout.
+type AttributePredicate interface {
+	Match(*Attribute) bool
+}
+
+// QNamePredicate matches an attribute by QName as returned by Attribute.Name.
+type QNamePredicate string
+
+func (p QNamePredicate) Match(a *Attribute) bool {
+	return a.Name() == string(p)
+}
+
+// LocalNamePredicate matches an attribute by local name only.
+// If multiple attributes share the same local name, FindAttribute returns
+// the first match in property order.
+type LocalNamePredicate string
+
+func (p LocalNamePredicate) Match(a *Attribute) bool {
+	return a.LocalName() == string(p)
+}
+
+// NSPredicate matches an attribute by local name + namespace URI.
+type NSPredicate struct {
+	Local        string
+	NamespaceURI string
+}
+
+func (p NSPredicate) Match(a *Attribute) bool {
+	return a.LocalName() == p.Local && a.URI() == p.NamespaceURI
+}
+
+// FindAttribute returns the first attribute that matches ap in property order.
+// A nil predicate matches nothing and returns nil, false.
+func (n *Element) FindAttribute(ap AttributePredicate) (*Attribute, bool) {
+	if ap == nil {
+		return nil, false
+	}
 	for p := n.properties; p != nil; p = p.NextAttribute() {
-		if p.Name() == name {
-			return p.Value(), true
+		if ap.Match(p) {
+			return p, true
 		}
 	}
-	return "", false
+	return nil, false
+}
+
+// GetAttribute returns the value of the attribute with the given QName,
+// or empty string and false if not found.
+func (n *Element) GetAttribute(name string) (string, bool) {
+	attr, ok := n.FindAttribute(QNamePredicate(name))
+	if !ok {
+		return "", false
+	}
+	return attr.Value(), true
 }
 
 // HasAttribute reports whether the element has an attribute with the given name.
 func (n *Element) HasAttribute(name string) bool {
-	_, ok := n.GetAttribute(name)
+	_, ok := n.FindAttribute(QNamePredicate(name))
 	return ok
 }
 
 // GetAttributeNS returns the value of the attribute with the given
 // local name and namespace URI, or empty string and false if not found.
 func (n *Element) GetAttributeNS(localName, nsURI string) (string, bool) {
-	for p := n.properties; p != nil; p = p.NextAttribute() {
-		if p.LocalName() == localName && p.URI() == nsURI {
-			return p.Value(), true
-		}
+	attr, ok := n.FindAttribute(NSPredicate{Local: localName, NamespaceURI: nsURI})
+	if !ok {
+		return "", false
 	}
-	return "", false
+	return attr.Value(), true
 }
 
 // GetAttributeNodeNS returns the Attribute node with the given local name and
@@ -229,36 +289,33 @@ func (n *Element) GetAttributeNS(localName, nsURI string) (string, bool) {
 // xmlHasNsProp, returning the node itself for further inspection (e.g.,
 // checking atype or whether it is a default attribute).
 func (n *Element) GetAttributeNodeNS(localName, nsURI string) *Attribute {
-	for p := n.properties; p != nil; p = p.NextAttribute() {
-		if p.LocalName() == localName && p.URI() == nsURI {
-			return p
-		}
+	attr, ok := n.FindAttribute(NSPredicate{Local: localName, NamespaceURI: nsURI})
+	if !ok {
+		return nil
 	}
-	return nil
+	return attr
 }
 
-// RemoveAttribute removes the attribute with the given name from the element.
+// RemoveAttribute removes the attribute with the given QName from the element.
 // Returns true if an attribute was removed.
 func (n *Element) RemoveAttribute(name string) bool {
-	for p := n.properties; p != nil; p = p.NextAttribute() {
-		if p.Name() == name {
-			n.spliceOutAttribute(p)
-			return true
-		}
+	attr, ok := n.FindAttribute(QNamePredicate(name))
+	if !ok {
+		return false
 	}
-	return false
+	n.spliceOutAttribute(attr)
+	return true
 }
 
 // RemoveAttributeNS removes the attribute with the given local name and
 // namespace URI. Returns true if an attribute was removed.
 func (n *Element) RemoveAttributeNS(localName, nsURI string) bool {
-	for p := n.properties; p != nil; p = p.NextAttribute() {
-		if p.LocalName() == localName && p.URI() == nsURI {
-			n.spliceOutAttribute(p)
-			return true
-		}
+	attr, ok := n.FindAttribute(NSPredicate{Local: localName, NamespaceURI: nsURI})
+	if !ok {
+		return false
 	}
-	return false
+	n.spliceOutAttribute(attr)
+	return true
 }
 
 // spliceOutAttribute removes an attribute from the element's property linked list.
@@ -289,4 +346,29 @@ func (n Element) Attributes() []*Attribute {
 	}
 
 	return attrs
+}
+
+// ForEachAttribute calls fn for each attribute on the element.
+// If fn returns false, iteration stops early.
+// This avoids the slice allocation of Attributes().
+//
+// No dedicated unit tests: iteration order and early-stop semantics
+// are exercised transitively by XPath attribute-axis and doc-order tests.
+// All current callers always return true; the early-stop path exists as
+// a natural consequence of the iterator pattern.
+//
+// The unchecked type assertion on NextSibling is safe: the properties
+// chain is attribute-only by construction (field typed *Attribute,
+// only *Attribute nodes are ever linked in).
+func (n Element) ForEachAttribute(fn func(*Attribute) bool) {
+	for attr := n.properties; attr != nil; {
+		if !fn(attr) {
+			return
+		}
+		if a := attr.NextSibling(); a != nil {
+			attr = a.(*Attribute)
+		} else {
+			attr = nil
+		}
+	}
 }

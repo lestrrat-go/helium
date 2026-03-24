@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsControlPictures">
+      <match from="9216" to="9279"/>
+   </ranges>
+   <ranges complement="IsControlPictures">
+      <match from="9" to="9215"/>
+      <match from="9280" to="1114111"/>
+   </ranges>
+</out>

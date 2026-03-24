@@ -1,0 +1,33 @@
+<?xml version="1.0"?> 
+<directions>
+	<north>
+		<dup1/>
+		<dup2/>
+		<south/>
+		<east/>
+		<west/>
+	</north>
+	<north1/>
+	<north2>
+		<dup1/>
+		<dup2/>
+		<dup3/>
+		<dup4/>
+	</north2>
+	<north3>
+		<dup1/>
+		<dup2/>
+		<south-north/>
+		<east-north/>
+		<west-north/>
+	</north3>
+	<south/>
+	<east>
+		<dup1/>
+		<dup2/>
+		<north-east/>
+		<south-east/>
+		<west-east/>
+	</east>
+	<west/>
+</directions>

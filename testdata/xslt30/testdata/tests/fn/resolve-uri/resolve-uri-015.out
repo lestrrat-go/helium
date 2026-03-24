@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<out>
+   <a>http://some.other/home/</a>
+   <a>http://some.other/home/banana.xml</a>
+   <a>http://some.other/banana.xml</a>
+   <a>http://some.other/</a>
+   <a>http://www.wrox.com/</a>
+</out>

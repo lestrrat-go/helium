@@ -23,7 +23,7 @@ func Compile(ctx context.Context, doc *helium.Document, opts ...CompileOption) (
 	for _, o := range opts {
 		o(cfg)
 	}
-	schema, err := compileSchema(ctx, doc, "", cfg)
+	schema, err := compileSchema(ctx, doc, cfg.baseDir, cfg)
 	if cfg.errorHandler != nil {
 		if cl, ok := cfg.errorHandler.(io.Closer); ok {
 			_ = cl.Close()

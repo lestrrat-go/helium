@@ -14,6 +14,8 @@ func Example_helium_node_get_base() {
 		return
 	}
 
+	// NodeGetBase resolves the effective base URI for a node by walking
+	// xml:base declarations up the ancestor chain and resolving relative values.
 	child := doc.DocumentElement().FirstChild()
 	fmt.Println(helium.NodeGetBase(doc, child))
 	// Output:

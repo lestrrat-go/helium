@@ -1,0 +1,11 @@
+             <root xmlns:xhtml="http://www.w3.org/1999/xhtml">
+                 <test>
+                     <xhtml:html>
+                         <xhtml:form xhtml:id="test">
+                             <a>
+                                 <xhtml:br/>
+                             </a>
+                         </xhtml:form>
+                     </xhtml:html>
+                 </test>
+             </root>

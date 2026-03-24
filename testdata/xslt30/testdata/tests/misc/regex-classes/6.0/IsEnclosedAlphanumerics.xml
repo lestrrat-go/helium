@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsEnclosedAlphanumerics">
+      <match from="9312" to="9471"/>
+   </ranges>
+   <ranges complement="IsEnclosedAlphanumerics">
+      <match from="9" to="9311"/>
+      <match from="9472" to="1114111"/>
+   </ranges>
+</out>

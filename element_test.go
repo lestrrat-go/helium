@@ -127,6 +127,48 @@ func TestGetAttributeNS(t *testing.T) {
 	require.False(t, ok)
 }
 
+func TestFindAttribute(t *testing.T) {
+	doc := helium.NewDefaultDocument()
+	e, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, e.SetAttribute("id", "123"))
+
+	ns := helium.NewNamespace("x", "http://example.com")
+	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
+
+	attr, ok := e.FindAttribute(helium.QNamePredicate("id"))
+	require.True(t, ok)
+	require.NotNil(t, attr)
+	require.Equal(t, "123", attr.Value())
+
+	attr, ok = e.FindAttribute(helium.QNamePredicate("x:attr"))
+	require.True(t, ok)
+	require.NotNil(t, attr)
+	require.Equal(t, "val", attr.Value())
+
+	attr, ok = e.FindAttribute(helium.LocalNamePredicate("attr"))
+	require.True(t, ok)
+	require.NotNil(t, attr)
+	require.Equal(t, "x:attr", attr.Name())
+
+	attr, ok = e.FindAttribute(helium.NSPredicate{Local: "attr", NamespaceURI: "http://example.com"})
+	require.True(t, ok)
+	require.NotNil(t, attr)
+	require.Equal(t, "x:attr", attr.Name())
+}
+
+func TestFindAttributeNil(t *testing.T) {
+	doc := helium.NewDefaultDocument()
+	e, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, e.SetAttribute("id", "123"))
+
+	var pred helium.AttributePredicate
+	attr, ok := e.FindAttribute(pred)
+	require.False(t, ok)
+	require.Nil(t, attr)
+}
+
 func TestGetAttributeNodeNS(t *testing.T) {
 	doc := helium.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
@@ -193,4 +235,29 @@ func TestRemoveAttributeNS(t *testing.T) {
 
 	ok = e.RemoveAttributeNS("attr", "http://example.com")
 	require.False(t, ok)
+}
+
+func TestForEachAttribute(t *testing.T) {
+	doc := helium.NewDefaultDocument()
+	e, err := doc.CreateElement("root")
+	require.NoError(t, err)
+
+	require.NoError(t, e.SetAttribute("a", "1"))
+	require.NoError(t, e.SetAttribute("b", "2"))
+	require.NoError(t, e.SetAttribute("c", "3"))
+
+	expected := e.Attributes()
+	var iterated []*helium.Attribute
+	e.ForEachAttribute(func(attr *helium.Attribute) bool {
+		iterated = append(iterated, attr)
+		return true
+	})
+	require.Equal(t, expected, iterated)
+
+	var stopped []*helium.Attribute
+	e.ForEachAttribute(func(attr *helium.Attribute) bool {
+		stopped = append(stopped, attr)
+		return len(stopped) < 2
+	})
+	require.Equal(t, expected[:2], stopped)
 }

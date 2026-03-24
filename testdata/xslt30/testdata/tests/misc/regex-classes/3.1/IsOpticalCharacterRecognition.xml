@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsOpticalCharacterRecognition">
+      <match from="9280" to="9311"/>
+   </ranges>
+   <ranges complement="IsOpticalCharacterRecognition">
+      <match from="9" to="9279"/>
+      <match from="9312" to="1114111"/>
+   </ranges>
+</out>

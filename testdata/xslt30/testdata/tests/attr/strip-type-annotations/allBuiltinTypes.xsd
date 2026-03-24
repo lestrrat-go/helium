@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+
+	<xsd:annotation>
+		<xsd:documentation>
+      		One-of-each approach for constructing a test schema for primitive types
+		</xsd:documentation>
+	</xsd:annotation>
+
+<!-- Begin definitions -->
+	<xsd:element name="doc-striptype" type="docType-striptype" />
+	
+	<xsd:complexType name="docType-striptype">
+		<xsd:sequence>
+			<xsd:element name="elem-anyURI" type="xsd:anyURI" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-base64Binary" type="xsd:base64Binary" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-boolean" type="xsd:boolean" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-date" type="xsd:date" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-dateTime" type="xsd:dateTime" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-decimal" type="xsd:decimal" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-double" type="xsd:double" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-duration" type="xsd:duration" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-float" type="xsd:float" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-gDay" type="xsd:gDay" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-gMonth" type="xsd:gMonth" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-gMonthDay" type="xsd:gMonthDay" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-gYear" type="xsd:gYear" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-gYearMonth" type="xsd:gYearMonth" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-hexBinary" type="xsd:hexBinary" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-integer" type="xsd:integer" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-QName" type="xsd:QName" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-string" type="xsd:string" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-time" type="xsd:time" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-normalizedString" type="xsd:normalizedString" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-token" type="xsd:token" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-language" type="xsd:language" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-Name" type="xsd:Name" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-NCName" type="xsd:NCName" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-NMTOKEN" type="xsd:NMTOKEN" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-int" type="xsd:int" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-nonPositiveInteger" type="xsd:nonPositiveInteger" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-positiveInteger" type="xsd:positiveInteger" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-nonNegativeInteger" type="xsd:nonNegativeInteger" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-negativeInteger" type="xsd:negativeInteger" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-long" type="xsd:long" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-unsignedLong" type="xsd:unsignedLong" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-unsignedInt" type="xsd:unsignedInt" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-short" type="xsd:short" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-unsignedShort" type="xsd:unsignedShort" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-byte" type="xsd:byte" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-unsignedByte" type="xsd:unsignedByte" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-ID-attr" minOccurs="0" maxOccurs="1">
+				<xsd:complexType>
+    				<xsd:attribute name="attr1" type="xsd:ID"/>
+    				<xsd:attribute name="attr2" type="xsd:integer"/>
+  				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="elem-IDREF-attr" minOccurs="0" maxOccurs="1">
+				<xsd:complexType>
+    				<xsd:attribute name="attr1" type="xsd:IDREF"/>
+    				<xsd:attribute name="attr2" type="xsd:byte"/>
+  				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="elem-ALL-attr-Types" minOccurs="0" maxOccurs="1">
+				<xsd:complexType>
+    				<xsd:attribute name="attr-anyURI" type="xsd:anyURI" />
+					<xsd:attribute name="attr-base64Binary" type="xsd:base64Binary" />
+					<xsd:attribute name="attr-boolean" type="xsd:boolean" />
+					<xsd:attribute name="attr-date" type="xsd:date" />
+					<xsd:attribute name="attr-dateTime" type="xsd:dateTime" />
+					<xsd:attribute name="attr-decimal" type="xsd:decimal" />
+					<xsd:attribute name="attr-double" type="xsd:double" />
+					<xsd:attribute name="attr-duration" type="xsd:duration" />
+					<xsd:attribute name="attr-float" type="xsd:float" />
+					<xsd:attribute name="attr-gDay" type="xsd:gDay" />
+					<xsd:attribute name="attr-gMonth" type="xsd:string" />
+					<xsd:attribute name="attr-gMonthDay" type="xsd:gMonthDay" />
+					<xsd:attribute name="attr-gYear" type="xsd:gYear" />
+					<xsd:attribute name="attr-gYearMonth" type="xsd:gYearMonth" />
+					<xsd:attribute name="attr-hexBinary" type="xsd:hexBinary" />
+					<xsd:attribute name="attr-integer" type="xsd:integer" />
+					<xsd:attribute name="attr-QName" type="xsd:QName" />
+					<xsd:attribute name="attr-string" type="xsd:string" />
+					<xsd:attribute name="attr-time" type="xsd:time" />
+					<xsd:attribute name="attr-normalizedString" type="xsd:normalizedString" />
+					<xsd:attribute name="attr-token" type="xsd:token" />
+					<xsd:attribute name="attr-language" type="xsd:language" />
+					<xsd:attribute name="attr-Name" type="xsd:Name" />
+					<xsd:attribute name="attr-NCName" type="xsd:NCName" />
+					<xsd:attribute name="attr-NMTOKEN" type="xsd:NMTOKEN" />
+					<xsd:attribute name="attr-int" type="xsd:int" />
+					<xsd:attribute name="attr-nonPositiveInteger" type="xsd:nonPositiveInteger" />
+					<xsd:attribute name="attr-positiveInteger" type="xsd:positiveInteger" />
+					<xsd:attribute name="attr-nonNegativeInteger" type="xsd:nonNegativeInteger" />
+					<xsd:attribute name="attr-negativeInteger" type="xsd:negativeInteger" />
+					<xsd:attribute name="attr-long" type="xsd:long" />
+					<xsd:attribute name="attr-unsignedLong" type="xsd:unsignedLong" />
+					<xsd:attribute name="attr-unsignedInt" type="xsd:unsignedInt" />
+					<xsd:attribute name="attr-short" type="xsd:short" />
+					<xsd:attribute name="attr-unsignedShort" type="xsd:unsignedShort" />
+					<xsd:attribute name="attr-byte" type="xsd:byte" />
+					<xsd:attribute name="attr-unsignedByte" type="xsd:unsignedByte" />
+  				</xsd:complexType>
+			</xsd:element>
+   		</xsd:sequence>
+	</xsd:complexType>
+</xsd:schema>

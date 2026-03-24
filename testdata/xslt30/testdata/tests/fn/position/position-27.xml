@@ -1,0 +1,8 @@
+<?xml version="1.0"?> 
+<doc xmlns:test="http://www.test.org">
+  <inner att2="blob">1</inner>
+  <inner blat="bar">2</inner>
+  <test:inner blat="barr">3</test:inner>
+  <inner blat="baarr">4</inner>
+  <test:inner blat="bdaarr">5</test:inner>
+</doc>

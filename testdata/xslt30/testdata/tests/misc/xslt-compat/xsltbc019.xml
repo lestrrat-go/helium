@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc>
+  <item name="test_key" as="aaaa" n="4.0">test key a</item>
+  <item name="test_key" as="bb" n="4.00">test key b</item>
+  <item name="test_key" as="ccc" n="4.">test key c</item>
+  <item name="test_key" as="dddd" n="4.1">test key d</item>
+  <item name="test_key" as="eeeee" n="4">test key</item>
+</doc>

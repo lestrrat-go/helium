@@ -60,12 +60,12 @@ func LoadText(cfg *Config, href, encoding string) (string, error) {
 		return "", err
 	}
 
-	data, err := ReadURI(cfg, resolvedURI)
+	data, httpEncoding, err := readURIWithEncoding(cfg, resolvedURI)
 	if err != nil {
 		return "", &Error{Code: ErrCodeRetrieval, Message: fmt.Sprintf("cannot retrieve resource: %v", err)}
 	}
 
-	text, err := DecodeText(data, encoding)
+	text, err := DecodeText(data, encoding, httpEncoding)
 	if err != nil {
 		return "", err
 	}
@@ -137,6 +137,74 @@ func ResolveURI(cfg *Config, href string) (string, error) {
 	return "", &Error{Code: ErrCodeRetrieval, Message: fmt.Sprintf("cannot resolve relative URI without base URI: %s", href)}
 }
 
+// readURIWithEncoding reads the content at the resolved URI and returns
+// an optional encoding hint from HTTP Content-Type headers.
+func readURIWithEncoding(cfg *Config, uri string) ([]byte, string, error) {
+	if cfg != nil && cfg.URIResolver != nil {
+		rc, err := cfg.URIResolver.ResolveURI(uri)
+		if err != nil {
+			return nil, "", err
+		}
+		defer func() { _ = rc.Close() }()
+		data, err := io.ReadAll(rc)
+		return data, "", err
+	}
+
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if parsed.Scheme == "http" || parsed.Scheme == "https" {
+		client := http.DefaultClient
+		if cfg != nil && cfg.HTTPClient != nil {
+			client = cfg.HTTPClient
+		}
+		resp, err := client.Get(uri)
+		if err != nil {
+			return nil, "", err
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != 200 {
+			return nil, "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, uri)
+		}
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, "", err
+		}
+		// Extract charset from Content-Type header.
+		enc := extractHTTPCharset(resp.Header.Get("Content-Type"))
+		return data, enc, nil
+	}
+
+	switch parsed.Scheme {
+	case "file":
+		data, err := os.ReadFile(parsed.Path)
+		return data, "", err
+	case "":
+		data, err := os.ReadFile(uri)
+		return data, "", err
+	default:
+		return nil, "", fmt.Errorf("unsupported URI scheme: %s", parsed.Scheme)
+	}
+}
+
+// extractHTTPCharset parses the charset parameter from a Content-Type header value.
+func extractHTTPCharset(contentType string) string {
+	if contentType == "" {
+		return ""
+	}
+	for _, part := range strings.Split(contentType, ";") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(strings.ToLower(part), "charset=") {
+			charset := part[len("charset="):]
+			charset = strings.Trim(charset, "\"' ")
+			return charset
+		}
+	}
+	return ""
+}
+
 // ReadURI reads the content at the resolved URI.
 func ReadURI(cfg *Config, uri string) ([]byte, error) {
 	if cfg != nil && cfg.URIResolver != nil {
@@ -179,10 +247,13 @@ func ReadURI(cfg *Config, uri string) ([]byte, error) {
 	}
 }
 
-// DecodeText decodes raw bytes to a string, handling BOM detection and
-// encoding conversion. If encoding is empty, UTF-8 is assumed unless a
-// BOM indicates otherwise.
-func DecodeText(data []byte, encoding string) (string, error) {
+// DecodeText decodes raw bytes to a string, handling BOM detection,
+// XML declaration sniffing, and encoding conversion. encoding is the
+// user-specified encoding (from the function argument); transportHints
+// are optional transport-level encoding hints (e.g. from HTTP Content-Type).
+// BOM overrides transport hints but conflicts with explicit encoding.
+// If all are empty, defaults to UTF-8.
+func DecodeText(data []byte, encoding string, transportHints ...string) (string, error) {
 	if encoding != "" {
 		enc := iencoding.Load(encoding)
 		if enc == nil {
@@ -191,6 +262,25 @@ func DecodeText(data []byte, encoding string) (string, error) {
 	}
 
 	detectedEncoding, cleanData := detectBOM(data)
+
+	// When no BOM is found and no explicit encoding is given, try to
+	// detect encoding from an XML declaration (<?xml ... encoding="..."?>).
+	if detectedEncoding == "" && encoding == "" {
+		if xmlEnc := detectXMLDeclEncoding(data); xmlEnc != "" {
+			detectedEncoding = xmlEnc
+		}
+	}
+
+	// If we still have no detected encoding and no explicit encoding,
+	// use the transport hint as a fallback.
+	if detectedEncoding == "" && encoding == "" {
+		for _, hint := range transportHints {
+			if hint != "" {
+				detectedEncoding = hint
+				break
+			}
+		}
+	}
 
 	effectiveEncoding := resolveEncoding(encoding, detectedEncoding)
 	if effectiveEncoding == "" {
@@ -213,6 +303,47 @@ func detectBOM(data []byte) (string, []byte) {
 		return "utf-16be", data[2:]
 	}
 	return "", data
+}
+
+// detectXMLDeclEncoding looks for an XML declaration at the beginning of
+// data and extracts the encoding attribute value if present.
+// It works on raw bytes assuming the declaration is in ASCII-compatible encoding.
+func detectXMLDeclEncoding(data []byte) string {
+	// XML declaration must start at the very beginning.
+	if len(data) < 5 || string(data[:5]) != "<?xml" {
+		return ""
+	}
+	// Find the end of the declaration.
+	end := bytes.Index(data, []byte("?>"))
+	if end < 0 || end > 200 {
+		return ""
+	}
+	decl := string(data[:end])
+	// Look for encoding="..." or encoding='...'.
+	idx := strings.Index(decl, "encoding")
+	if idx < 0 {
+		return ""
+	}
+	rest := decl[idx+len("encoding"):]
+	rest = strings.TrimLeft(rest, " \t\r\n")
+	if len(rest) == 0 || rest[0] != '=' {
+		return ""
+	}
+	rest = rest[1:]
+	rest = strings.TrimLeft(rest, " \t\r\n")
+	if len(rest) == 0 {
+		return ""
+	}
+	quote := rest[0]
+	if quote != '"' && quote != '\'' {
+		return ""
+	}
+	rest = rest[1:]
+	endQ := strings.IndexByte(rest, quote)
+	if endQ < 0 {
+		return ""
+	}
+	return rest[:endQ]
 }
 
 // resolveEncoding determines the effective encoding from the user-specified
@@ -284,7 +415,7 @@ func SplitLines(text string) []string {
 	normalized := b.String()
 
 	if normalized == "" {
-		return []string{""}
+		return nil
 	}
 	lines := strings.Split(normalized, "\n")
 	if len(lines) > 0 && lines[len(lines)-1] == "" {

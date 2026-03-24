@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <items>
+    <item cat="foo">
+      <value>item 1</value>
+    </item>        
+    <item cat="foo">
+      <value>item 2</value>
+    </item>
+    <item cat="foo">
+      <value>item 3</value>
+    </item>
+    <item cat="foo">
+      <value>item 4</value>
+    </item>
+    <item cat="foo">
+      <value>item 5</value>
+    </item>
+    <item cat="bar">
+      <value>item 6</value>
+    </item>
+    <item cat="bar">
+      <value>item 7</value>
+    </item>
+    <item cat="bar">
+      <value>item 8</value>
+    </item>
+    <item cat="bar">
+      <value>item 9</value>
+    </item>
+  </items>
+</root>

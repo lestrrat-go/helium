@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+ <LinearFeatureModel name="Light Poles">
+  <Composite name="Composite">
+   <OffsetPath name="Offset to the Left" offset="-3.6">
+    <RegPopLinear name="Regularly place the poles" spacing="6">
+     <Point name="Pole" relative="1" model="pole.flt" />
+    </RegPopLinear>
+   </OffsetPath>
+   <OffsetPath name="Offset to the Right" offset="3.6">
+    <RegPopLinear name="Regularly place the poles" spacing="6">
+     <Point name="Pole" relative="1" model="pole.flt" />
+    </RegPopLinear>
+   </OffsetPath>
+  </Composite>
+ </LinearFeatureModel>

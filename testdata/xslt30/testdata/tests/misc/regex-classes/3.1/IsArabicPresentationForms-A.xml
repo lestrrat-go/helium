@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsArabicPresentationForms-A">
+      <match from="64336" to="65023"/>
+   </ranges>
+   <ranges complement="IsArabicPresentationForms-A">
+      <match from="9" to="64335"/>
+      <match from="65024" to="1114111"/>
+   </ranges>
+</out>

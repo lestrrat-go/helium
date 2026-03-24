@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<far-north>
+ <north-west1/>
+ <north-west2/>
+ <north>
+  <near-north>
+   <far-west/>
+   <west/>
+   <near-west/>
+   <center>
+    <near-south>
+     <south>
+      <far-south/>
+     </south>
+    </near-south>
+   </center>
+   <near-east/>
+   <east/>
+   <far-east/>
+  </near-north>
+ </north>
+ <north-east1/>
+ <north-east2/>
+</far-north>

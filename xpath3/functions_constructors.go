@@ -53,13 +53,14 @@ func init() {
 		{"unsignedInt", TypeUnsignedInt, 0, 4294967295},
 		{"unsignedShort", TypeUnsignedShort, 0, 65535},
 		{"unsignedByte", TypeUnsignedByte, 0, 255},
-		{"nonNegativeInteger", TypeNonNegativeInteger, 0, math.MaxInt64},
-		{"nonPositiveInteger", TypeNonPositiveInteger, math.MinInt64, 0},
-		{"positiveInteger", TypePositiveInteger, 1, math.MaxInt64},
-		{"negativeInteger", TypeNegativeInteger, math.MinInt64, -1},
 	} {
 		registerNS(NSXS, entry.name, 1, 1, makeXSIntegerRange(entry.typeName, entry.min, entry.max))
 	}
+	// Unbounded integer subtypes need big.Int constructor (no fixed max/min)
+	registerNS(NSXS, "nonNegativeInteger", 1, 1, makeXSIntegerRangeBig(TypeNonNegativeInteger, big.NewInt(0), nil))
+	registerNS(NSXS, "nonPositiveInteger", 1, 1, makeXSIntegerRangeBig(TypeNonPositiveInteger, nil, big.NewInt(0)))
+	registerNS(NSXS, "positiveInteger", 1, 1, makeXSIntegerRangeBig(TypePositiveInteger, big.NewInt(1), nil))
+	registerNS(NSXS, "negativeInteger", 1, 1, makeXSIntegerRangeBig(TypeNegativeInteger, nil, big.NewInt(-1)))
 
 	// xs:unsignedLong needs big.Int max since MaxUint64 exceeds int64
 	registerNS(NSXS, "unsignedLong", 1, 1, makeXSIntegerRangeBig(TypeUnsignedLong, big.NewInt(0), new(big.Int).SetUint64(math.MaxUint64)))
@@ -170,7 +171,7 @@ func makeXSIntegerRangeBig(typeName string, minBig, maxBig *big.Int) func(contex
 			return nil, err
 		}
 		n := iv.BigInt()
-		if n.Cmp(minBig) < 0 || n.Cmp(maxBig) > 0 {
+		if (minBig != nil && n.Cmp(minBig) < 0) || (maxBig != nil && n.Cmp(maxBig) > 0) {
 			return nil, &XPathError{
 				Code:    errCodeFORG0001,
 				Message: fmt.Sprintf("value %s out of range for %s", n.String(), typeName),
@@ -221,10 +222,10 @@ func makeXSStringRestriction(typeName string, validate *regexp.Regexp) func(cont
 // makeXSTokenList returns a constructor for xs:NMTOKENS or xs:IDREFS (whitespace-separated list).
 func makeXSTokenList(itemType string, tokenRe *regexp.Regexp) func(context.Context, []Sequence) (Sequence, error) {
 	return func(_ context.Context, args []Sequence) (Sequence, error) {
-		if len(args[0]) == 0 {
+		if seqLen(args[0]) == 0 {
 			return nil, nil
 		}
-		a, err := AtomizeItem(args[0][0])
+		a, err := AtomizeItem(args[0].Get(0))
 		if err != nil {
 			return nil, err
 		}
@@ -240,7 +241,7 @@ func makeXSTokenList(itemType string, tokenRe *regexp.Regexp) func(context.Conte
 			}
 		}
 		tokens := strings.Fields(s)
-		result := make(Sequence, len(tokens))
+		result := make(ItemSlice, len(tokens))
 		for i, tok := range tokens {
 			if !tokenRe.MatchString(tok) {
 				return nil, &XPathError{
@@ -436,16 +437,16 @@ func makeXSDateTimeStamp() func(context.Context, []Sequence) (Sequence, error) {
 }
 
 func atomizeConstructorArg(seq Sequence, typeName string) (AtomicValue, bool, error) {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return AtomicValue{}, true, nil
 	}
-	if len(seq) > 1 {
+	if seq.Len() > 1 {
 		return AtomicValue{}, false, &XPathError{
 			Code:    errCodeXPTY0004,
 			Message: fmt.Sprintf("%s constructor requires a singleton argument", typeName),
 		}
 	}
-	a, err := AtomizeItem(seq[0])
+	a, err := AtomizeItem(seq.Get(0))
 	if err != nil {
 		return AtomicValue{}, false, err
 	}
@@ -453,7 +454,7 @@ func atomizeConstructorArg(seq Sequence, typeName string) (AtomicValue, bool, er
 }
 
 func fnXSError(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	return nil, &XPathError{

@@ -6,11 +6,13 @@ import (
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
+const errCodeXPST0003 = "XPST0003"
 const errCodeXPTY0004 = "XPTY0004"
 const errCodeXPDY0002 = "XPDY0002"
 const errCodeXPDY0050 = "XPDY0050"
 const errCodeXPST0080 = "XPST0080"
 const errCodeXPST0081 = "XPST0081"
+const errCodeFOAR0001 = "FOAR0001"
 const errCodeFOAR0002 = "FOAR0002"
 const errCodeFOAP0001 = "FOAP0001"
 const errCodeFOCA0002 = "FOCA0002"
@@ -21,6 +23,7 @@ const errCodeFODC0002 = "FODC0002"
 const errCodeFODC0004 = "FODC0004"
 const errCodeFODC0005 = "FODC0005"
 const errCodeFODC0006 = "FODC0006"
+const errCodeFODT0001 = "FODT0001"
 const errCodeFODT0002 = "FODT0002"
 const errCodeFODF1280 = "FODF1280"
 const errCodeFODF1310 = "FODF1310"
@@ -103,6 +106,11 @@ func (e *XPathError) Is(target error) bool {
 		return actual.Local == want.Local
 	}
 	return false
+}
+
+// CodeQName returns the error code as a QNameValue.
+func (e *XPathError) CodeQName() QNameValue {
+	return e.qname()
 }
 
 func (e *XPathError) qname() QNameValue {

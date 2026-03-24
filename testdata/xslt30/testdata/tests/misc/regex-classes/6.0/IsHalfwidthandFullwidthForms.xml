@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsHalfwidthandFullwidthForms">
+      <match from="65280" to="65519"/>
+   </ranges>
+   <ranges complement="IsHalfwidthandFullwidthForms">
+      <match from="9" to="65279"/>
+      <match from="65520" to="1114111"/>
+   </ranges>
+</out>

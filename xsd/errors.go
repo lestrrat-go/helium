@@ -1,6 +1,10 @@
 package xsd
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
+)
 
 // validityError formats a validation error in libxml2 format:
 //
@@ -20,21 +24,21 @@ func validityErrorAttr(file string, line int, elemName, attrName, msg string) st
 //
 //	{file}:{line}: element {elemLocal}: Schemas parser error : Element '{xsdNS}{xsdElem}': {msg}\n
 func schemaParserError(file string, line int, elemLocal, xsdElem, msg string) string {
-	return fmt.Sprintf("%s:%d: element %s: Schemas parser error : Element '{%s}%s': %s\n", file, line, elemLocal, xsdNS, xsdElem, msg)
+	return fmt.Sprintf("%s:%d: element %s: Schemas parser error : Element '{%s}%s': %s\n", file, line, elemLocal, lexicon.NamespaceXSD, xsdElem, msg)
 }
 
 // schemaParserErrorAttr formats a schema compilation error for a specific attribute:
 //
 //	{file}:{line}: element {elemLocal}: Schemas parser error : Element '{xsdNS}{xsdElem}', attribute '{attr}': {msg}\n
 func schemaParserErrorAttr(file string, line int, elemLocal, xsdElem, attr, msg string) string {
-	return fmt.Sprintf("%s:%d: element %s: Schemas parser error : Element '{%s}%s', attribute '%s': %s\n", file, line, elemLocal, xsdNS, xsdElem, attr, msg)
+	return fmt.Sprintf("%s:%d: element %s: Schemas parser error : Element '{%s}%s', attribute '%s': %s\n", file, line, elemLocal, lexicon.NamespaceXSD, xsdElem, attr, msg)
 }
 
 // schemaParserWarning formats a schema compilation warning in libxml2 format:
 //
 //	{file}:{line}: element {elemLocal}: Schemas parser warning : Element '{xsdNS}{xsdElem}': {msg}\n
 func schemaParserWarning(file string, line int, elemLocal, xsdElem, msg string) string {
-	return fmt.Sprintf("%s:%d: element %s: Schemas parser warning : Element '{%s}%s': %s\n", file, line, elemLocal, xsdNS, xsdElem, msg)
+	return fmt.Sprintf("%s:%d: element %s: Schemas parser warning : Element '{%s}%s': %s\n", file, line, elemLocal, lexicon.NamespaceXSD, xsdElem, msg)
 }
 
 // schemaComponentError formats a schema compilation error for a component (e.g. "local complex type"):

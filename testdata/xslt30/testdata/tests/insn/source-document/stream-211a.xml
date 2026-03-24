@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <item id="i1">
+        <foo>original 1</foo>
+    </item>
+    <item id="i2">
+        <foo>original 2</foo>
+    </item>
+    <item id="i3">
+        <foo>original 3</foo>
+    </item>
+</root>

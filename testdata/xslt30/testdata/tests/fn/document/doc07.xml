@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!-- DOCTYPE market.participant SYSTEM "urn:x-veosystems:dtd:cbl:1.1:markpart:1.0" -->
+
+<market.participant>
+<business.identity.group>
+  <business.name>CompUSA Inc.</business.name>
+</business.identity.group>
+	
+<address.set>
+<address.physical>
+  <location.in.street>14951</location.in.street>
+  <street>N. Dallas Pkwy</street>
+  <city>Dallas</city>
+  <country.subentity>TX</country.subentity>
+  <postcode>75240</postcode>
+</address.physical>
+<telephone>
+  <telephone.number>1-800-666-2000</telephone.number>
+</telephone>
+</address.set>
+
+</market.participant>

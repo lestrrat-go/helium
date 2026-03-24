@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<doc nr="2">
+  <section nr="1"/>
+  <section nr="2"/>
+  <section nr="3"/>
+  <section nr="4"/>
+  <section nr="10">
+    <para code="A" ref="10"/>
+    <para code="B" ref="20"/>
+    <para code="C" ref="30"/>
+  </section>
+  <section nr="20"/>
+  <section nr="30"/>
+  <section nr="40"/>            
+</doc>

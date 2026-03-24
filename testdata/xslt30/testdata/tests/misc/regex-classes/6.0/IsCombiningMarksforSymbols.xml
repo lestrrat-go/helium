@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsCombiningMarksforSymbols">
+      <match from="8400" to="8447"/>
+   </ranges>
+   <ranges complement="IsCombiningMarksforSymbols">
+      <match from="9" to="8399"/>
+      <match from="8448" to="1114111"/>
+   </ranges>
+</out>

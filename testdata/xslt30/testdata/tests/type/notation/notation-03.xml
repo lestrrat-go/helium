@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<one:NOTATION-enumeration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://notation.example.com namespaceNotationTest.xsd"
+     xmlns="http://notation.example.com"
+     xmlns:one="http://notation.example.com"
+     xmlns:first="http://notation.example.com"
+     xmlns:two="http://different.notation.example.com">
+     
+	<NOTATION-element NOTATION-attribute="one:mp3" name="a">
+		<NOTATION-subelement>notation mp3 test1</NOTATION-subelement>
+	</NOTATION-element>
+	
+	<NOTATION-element NOTATION-attribute="one:mp3" name="b">
+		<NOTATION-subelement>notation mp3 test2</NOTATION-subelement>
+	</NOTATION-element>
+	
+	<NOTATION-element NOTATION-attribute="first:mp3" name="c">
+		<NOTATION-subelement>notation mp3 test3</NOTATION-subelement>
+	</NOTATION-element>
+	
+	<NOTATION-element NOTATION-attribute="two:mp3" name="d">
+		<NOTATION-subelement>notation mp3 test4</NOTATION-subelement>
+	</NOTATION-element>
+	
+	<NOTATION-element NOTATION-attribute="one:wav" name="e">
+		<NOTATION-subelement>notation wav test</NOTATION-subelement>
+	</NOTATION-element>
+	
+	<NOTATION-element NOTATION-attribute="mp3" name="f">
+		<NOTATION-subelement>notation mp3 test5</NOTATION-subelement>
+	</NOTATION-element>
+	
+</one:NOTATION-enumeration>

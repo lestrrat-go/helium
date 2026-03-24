@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc>
+	<version>xsl:version</version>
+  	<vendor>xsl:vendor</vendor>
+  	<ven-url>xsl:vendor-url</ven-url>
+  	<name>xsl:product-name</name>
+  	<pr-version>xsl:product-version</pr-version>
+  	<is-SA>xsl:is-schema-aware</is-SA>
+	<serial>xsl:supports-serialization</serial>
+  	<bc>xsl:supports-backwards-compatibility</bc>
+</doc>

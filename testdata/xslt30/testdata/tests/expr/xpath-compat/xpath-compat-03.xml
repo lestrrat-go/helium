@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc>
+  <a z="1">one</a>
+  <a z="2">two</a>
+  <b z="1" y="1" x="14.4">b1</b>
+  <a z="3">three</a>
+  <a z="4">four</a>
+  <a z="5">five</a>
+  <b z="1" y="2" x="7.7">b2</b>
+  <a z="6">six</a>
+  <a z="7">seven</a>
+</doc>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsSuperscriptsandSubscripts">
+      <match from="8304" to="8351"/>
+   </ranges>
+   <ranges complement="IsSuperscriptsandSubscripts">
+      <match from="9" to="8303"/>
+      <match from="8352" to="1114111"/>
+   </ranges>
+</out>

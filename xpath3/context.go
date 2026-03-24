@@ -3,17 +3,30 @@ package xpath3
 import (
 	"context"
 	"io"
-	"maps"
-	"net/http"
-	"time"
-)
 
-type contextKey struct{}
+	"github.com/lestrrat-go/helium"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
+)
 
 // fnContextKey is used exclusively by the unexported withFnContext/getFnContext
 // pair to pass evalContext to built-in function implementations. It is never
 // exposed to external callers.
 type fnContextKey struct{}
+
+// dynamicCallKey marks a function call as originating from a dynamic
+// function reference (e.g. $f(args) where $f holds a named function ref).
+type dynamicCallKey struct{}
+
+func withDynamicCall(ctx context.Context) context.Context {
+	return context.WithValue(ctx, dynamicCallKey{}, true)
+}
+
+// IsDynamicCall returns true if the current function call was dispatched
+// through a dynamic function reference (NamedFunctionRef → FunctionItem).
+func IsDynamicCall(ctx context.Context) bool {
+	v, _ := ctx.Value(dynamicCallKey{}).(bool)
+	return v
+}
 
 // QualifiedName identifies a function in a specific namespace.
 type QualifiedName struct {
@@ -34,236 +47,46 @@ type CollectionResolver interface {
 	ResolveURICollection(uri string) ([]string, error)
 }
 
-type evalConfig struct {
-	namespaces         map[string]string
-	variables          map[string]Sequence
-	varScope           *variableScope // prebuilt from variables, reused across evaluations
-	functions          map[string]Function
-	functionsNS        map[QualifiedName]Function
-	opLimit            int
-	implicitTimezone   *time.Location
-	defaultLanguage    string
-	defaultCollation   string
-	defaultDecimal     *DecimalFormat
-	decimalFormats     map[QualifiedName]DecimalFormat
-	baseURI            string
-	uriResolver        URIResolver
-	collectionResolver CollectionResolver
-	httpClient         *http.Client
+// VariableResolver provides lazy variable resolution for variables not found
+// in the static variable scope. This is used by the XSLT executor to lazily
+// evaluate global variables on demand.
+type VariableResolver interface {
+	ResolveVariable(ctx context.Context, name string) (Sequence, bool, error)
 }
 
-func getEvalConfig(ctx context.Context) *evalConfig {
-	if ctx == nil {
-		return nil
-	}
-	cfg, _ := ctx.Value(contextKey{}).(*evalConfig)
-	return cfg
+// FunctionResolver provides lazy function resolution for functions not found
+// in the static function scope. Unlike fnsNS, functions registered via this
+// interface are NOT discoverable via fn:function-lookup — they are only
+// resolved for direct function calls. This is used by xslt3 to resolve
+// xsl:original() without exposing it to function-lookup.
+type FunctionResolver interface {
+	ResolveFunction(ctx context.Context, uri, name string, arity int) (Function, bool, error)
 }
 
-func deriveEvalConfig(ctx context.Context) *evalConfig {
-	if cfg := getEvalConfig(ctx); cfg != nil {
-		return cfg.clone()
-	}
-	return &evalConfig{}
-}
-
-func withEvalConfig(ctx context.Context, cfg *evalConfig) context.Context {
-	cfg.rebuildVariableScope()
-	return context.WithValue(ctx, contextKey{}, cfg)
-}
-
-func updateEvalConfig(ctx context.Context, fn func(*evalConfig)) context.Context {
-	cfg := deriveEvalConfig(ctx)
-	fn(cfg)
-	return withEvalConfig(ctx, cfg)
-}
-
-func (c *evalConfig) clone() *evalConfig {
-	if c == nil {
-		return &evalConfig{}
-	}
-	cp := *c
-	cp.namespaces = maps.Clone(c.namespaces)
-	cp.variables = cloneVariableMap(c.variables)
-	cp.functions = maps.Clone(c.functions)
-	cp.functionsNS = maps.Clone(c.functionsNS)
-	if c.defaultDecimal != nil {
-		df := *c.defaultDecimal
-		cp.defaultDecimal = &df
-	}
-	cp.decimalFormats = maps.Clone(c.decimalFormats)
-	return &cp
-}
-
-func (c *evalConfig) rebuildVariableScope() {
-	if len(c.variables) == 0 {
-		c.varScope = nil
-		return
-	}
-	c.varScope = newVariableScope(c.variables)
-}
-
-// WithNamespaces binds namespace prefixes to URIs for the evaluation.
-// The map is defensively copied to prevent caller mutation from affecting evaluation.
-func WithNamespaces(ctx context.Context, ns map[string]string) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.namespaces = maps.Clone(ns)
-	})
-}
-
-// WithAdditionalNamespaces merges namespace prefixes into the returned context.
-func WithAdditionalNamespaces(ctx context.Context, ns map[string]string) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		if c.namespaces == nil {
-			c.namespaces = make(map[string]string, len(ns))
-		}
-		for k, v := range ns {
-			c.namespaces[k] = v
-		}
-	})
-}
-
-// WithVariables binds variable names to pre-constructed Sequence values.
-// The map is defensively copied to prevent caller mutation from affecting evaluation.
-func WithVariables(ctx context.Context, vars map[string]Sequence) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.variables = cloneVariableMap(vars)
-	})
-}
-
-// WithAdditionalVariables merges variable bindings into the returned context.
-func WithAdditionalVariables(ctx context.Context, vars map[string]Sequence) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		if c.variables == nil {
-			c.variables = make(map[string]Sequence, len(vars))
-		}
-		for name, seq := range vars {
-			c.variables[name] = append(Sequence(nil), seq...)
-		}
-	})
-}
-
-// WithOpLimit sets the maximum number of operations before the evaluator
-// returns ErrOpLimit. Zero means unlimited.
-func WithOpLimit(ctx context.Context, limit int) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.opLimit = limit
-	})
-}
-
-// WithFunctions registers user-defined functions by local name.
-// The map is defensively copied to prevent caller mutation from affecting evaluation.
-func WithFunctions(ctx context.Context, fns map[string]Function) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.functions = maps.Clone(fns)
-	})
-}
-
-// WithFunction registers a single user-defined function by local name.
-func WithFunction(ctx context.Context, name string, fn Function) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		if c.functions == nil {
-			c.functions = make(map[string]Function)
-		}
-		c.functions[name] = fn
-	})
-}
-
-// WithFunctionsNS registers user-defined functions by qualified name.
-// The map is defensively copied to prevent caller mutation from affecting evaluation.
-func WithFunctionsNS(ctx context.Context, fns map[QualifiedName]Function) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.functionsNS = maps.Clone(fns)
-	})
-}
-
-// WithFunctionNS registers a single user-defined function by qualified name.
-func WithFunctionNS(ctx context.Context, uri, name string, fn Function) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		if c.functionsNS == nil {
-			c.functionsNS = make(map[QualifiedName]Function)
-		}
-		c.functionsNS[QualifiedName{URI: uri, Name: name}] = fn
-	})
-}
-
-// WithImplicitTimezone sets the implicit timezone for the dynamic context.
-// This is used by functions like fn:adjust-dateTime-to-timezone when called
-// with a single argument. If not set, the system local timezone is used.
-func WithImplicitTimezone(ctx context.Context, loc *time.Location) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.implicitTimezone = loc
-	})
-}
-
-// WithDefaultLanguage sets the dynamic default language used by
-// fn:default-language and formatting functions when no language argument
-// is supplied.
-func WithDefaultLanguage(ctx context.Context, lang string) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.defaultLanguage = lang
-	})
-}
-
-// WithDefaultCollation sets the default collation URI used by string
-// comparison and ordering operations when no explicit collation argument is
-// supplied. Use a URI understood by the evaluator's collation registry.
-func WithDefaultCollation(ctx context.Context, uri string) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.defaultCollation = uri
-	})
-}
-
-// WithDefaultDecimalFormat sets the unnamed decimal format used by
-// fn:format-number and related formatting features when no named decimal
-// format is requested. The DecimalFormat value is copied before storage.
-func WithDefaultDecimalFormat(ctx context.Context, df DecimalFormat) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		cp := df
-		c.defaultDecimal = &cp
-	})
-}
-
-// WithNamedDecimalFormats registers named decimal formats keyed by expanded
-// QName. These formats are used when a formatting expression references a
-// specific decimal format name. The map is defensively copied before storage.
-func WithNamedDecimalFormats(ctx context.Context, dfs map[QualifiedName]DecimalFormat) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.decimalFormats = maps.Clone(dfs)
-	})
-}
-
-// WithBaseURI sets the static base URI for the evaluation context.
-// This is used for resolving relative URIs in fn:unparsed-text, fn:doc, etc.
-func WithBaseURI(ctx context.Context, uri string) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.baseURI = uri
-	})
-}
-
-// WithURIResolver sets a custom URI resolver for functions that load external
-// resources such as fn:unparsed-text and fn:doc.
-func WithURIResolver(ctx context.Context, r URIResolver) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.uriResolver = r
-	})
-}
-
-// WithCollectionResolver sets a custom resolver for fn:collection and
-// fn:uri-collection.
-func WithCollectionResolver(ctx context.Context, r CollectionResolver) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.collectionResolver = r
-	})
-}
-
-// WithHTTPClient sets the HTTP client used for fetching http:// and https://
-// resources in fn:unparsed-text and similar functions. If not set, HTTP URIs
-// are not supported (unless a URIResolver handles them).
-func WithHTTPClient(ctx context.Context, client *http.Client) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.httpClient = client
-	})
+// SchemaDeclarations provides schema element/attribute/type lookup for
+// schema-element(), schema-attribute() node tests and schema-aware casting.
+type SchemaDeclarations interface {
+	LookupSchemaElement(local, ns string) (typeName string, ok bool)
+	LookupSchemaAttribute(local, ns string) (typeName string, ok bool)
+	LookupSchemaType(local, ns string) (baseType string, ok bool)
+	// IsSubtypeOf returns true if typeName is the same as or a subtype of baseTypeName.
+	// Both names use the annotation format: "xs:localName" for XSD built-ins,
+	// "Q{ns}localName" for user-defined types.
+	IsSubtypeOf(typeName, baseTypeName string) bool
+	// ValidateCast checks whether a string value is valid for a user-defined
+	// schema type (including facet constraints). Returns nil if valid or the
+	// type is not found; returns an error if the value violates facets.
+	ValidateCast(value, typeName string) error
+	// ValidateCastWithNS validates a string value against a schema type that
+	// requires namespace context for QName/NOTATION resolution. The nsMap
+	// provides prefix-to-URI bindings for resolving prefixes in the value.
+	ValidateCastWithNS(value, typeName string, nsMap map[string]string) error
+	// ListItemType returns the item type name for a list type. If the type
+	// is not a list, returns ("", false).
+	ListItemType(typeName string) (itemType string, ok bool)
+	// UnionMemberTypes returns the member type names for a union type.
+	// If the type is not a union, returns nil.
+	UnionMemberTypes(typeName string) []string
 }
 
 // withFnContext stores the evalContext in a context.Context so built-in
@@ -279,13 +102,24 @@ func getFnContext(ctx context.Context) *evalContext {
 	return ec
 }
 
-func cloneVariableMap(vars map[string]Sequence) map[string]Sequence {
-	if vars == nil {
+// FnContextNode returns the current XPath context node from a function call
+// context. This is the context.Context passed to Function.Call by the evaluator.
+// Returns nil if the context does not carry an evaluation state or the context
+// item is not a node.
+func FnContextNode(ctx context.Context) helium.Node {
+	ec := getFnContext(ctx)
+	if ec == nil {
 		return nil
 	}
-	cloned := make(map[string]Sequence, len(vars))
-	for name, seq := range vars {
-		cloned[name] = append(Sequence(nil), seq...)
-	}
-	return cloned
+	return ec.node
 }
+
+// DocOrderCache is a shared document-order cache that can be passed
+// across evaluations to ensure consistent cross-document ordering.
+type DocOrderCache = ixpath.DocOrderCache
+
+// NewDocOrderCache creates a new shared document-order cache.
+func NewDocOrderCache() *DocOrderCache {
+	return &ixpath.DocOrderCache{}
+}
+

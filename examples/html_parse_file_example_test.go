@@ -10,6 +10,8 @@ import (
 )
 
 func Example_html_parse_file() {
+	// ParseFile is the convenient entry point when your HTML already lives on
+	// disk and you want a normal helium DOM back.
 	f, err := os.CreateTemp("", "helium-html-*.html")
 	if err != nil {
 		fmt.Printf("create temp file failed: %s\n", err)
@@ -26,6 +28,8 @@ func Example_html_parse_file() {
 		return
 	}
 
+	// After parsing, you can query the document with the same XPath helpers used
+	// for XML documents.
 	doc, err := html.ParseFile(context.Background(), f.Name())
 	if err != nil {
 		fmt.Printf("parse file failed: %s\n", err)

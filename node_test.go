@@ -21,7 +21,7 @@ func TestWalkSeesSiblingReplacementDuringTraversal(t *testing.T) {
 	require.NoError(t, root.AddChild(c))
 
 	var visited []string
-	err = helium.Walk(doc, func(n helium.Node) error {
+	err = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
@@ -33,7 +33,7 @@ func TestWalkSeesSiblingReplacementDuringTraversal(t *testing.T) {
 			require.NoError(t, c.Replace(b))
 		}
 		return nil
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"root", "a", "b"}, visited)
 }
@@ -52,7 +52,7 @@ func TestWalkSkipsSiblingRemovedDuringTraversal(t *testing.T) {
 	require.NoError(t, root.AddChild(c))
 
 	var visited []string
-	err = helium.Walk(doc, func(n helium.Node) error {
+	err = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
@@ -62,7 +62,7 @@ func TestWalkSkipsSiblingRemovedDuringTraversal(t *testing.T) {
 			helium.UnlinkNode(c)
 		}
 		return nil
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"root", "a"}, visited)
 }

@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+			targetNamespace="http://ns.example.com/strip-type"
+			xmlns:my="http://ns.example.com/strip-type">
+
+	<xsd:annotation>
+		<xsd:documentation>
+      		One-of-each approach for constructing a test schema for built-in and user-defined types
+		</xsd:documentation>
+	</xsd:annotation>
+
+<!-- Begin definitions -->
+	<xsd:element name="doc" type="my:docType"/>
+	
+	<xsd:element name="userNode" type="my:userType" nillable="true" />
+	 
+	<xsd:complexType name="docType">
+		<xsd:sequence>
+			<xsd:element name="elem-anyURI" type="xsd:anyURI" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-boolean" type="xsd:boolean" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-date" type="xsd:date" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-double" type="xsd:double" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-duration" type="xsd:duration" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-QName" type="xsd:QName" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-string" type="xsd:string" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-NCName" type="xsd:NCName" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-NMTOKEN" type="xsd:NMTOKEN" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-int" type="xsd:int" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-nonPositiveInteger" type="xsd:nonPositiveInteger" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-long" type="xsd:long" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="elem-unsignedLong" type="xsd:unsignedLong" minOccurs="0" maxOccurs="1"/>
+			<xsd:element name="simple-derived" type="my:partNumberType" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="complex-derived" type="my:personType" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="list-builtin" type="xsd:NMTOKENS" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="list-derived" type="my:myListType" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="union-derived" type="my:partIntegerUnion" minOccurs="0" maxOccurs="unbounded"/>
+   		</xsd:sequence>
+	</xsd:complexType>
+	
+	<xsd:simpleType name="partNumberType">
+    <xsd:restriction base="xsd:string">
+      <xsd:pattern value="\d{3}-[A-Z]{2}"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  
+  <xsd:complexType name="personType">
+    <xsd:sequence>
+      <xsd:element name="firstName"  type="xsd:string"/>
+      <xsd:element name="familyName" type="xsd:string"/>
+    </xsd:sequence>
+    <xsd:attribute name="age" type="xsd:integer"/>
+  </xsd:complexType>
+  
+  <xsd:complexType name="mixedPersonType">
+    <xsd:sequence>
+      <xsd:element name="description" type="my:DescriptionType" />
+      <xsd:element name="company" type="my:CompanyType" />
+    </xsd:sequence>
+    <xsd:attribute name="age" type="xsd:integer"/>
+  </xsd:complexType>
+  
+  <xsd:complexType name="DescriptionType" mixed="true">
+     <xsd:sequence>
+       <xsd:element name="name" type="xsd:string"/>
+     </xsd:sequence>
+  </xsd:complexType>
+        
+  <xsd:complexType name="CompanyType" mixed="true">
+     <xsd:sequence>
+        <xsd:element name="name" type="xsd:string"/>
+     </xsd:sequence>
+  </xsd:complexType>
+  
+  <xsd:simpleType name="myListType">
+  	<xsd:list itemType="my:partNumberType"/>
+  </xsd:simpleType>
+
+  <xsd:simpleType name="partIntegerUnion">
+  	<xsd:union memberTypes="my:partNumberType xsd:integer"/>
+  </xsd:simpleType>
+  
+  <xsd:complexType name="onlyAttributesType">
+    <xsd:attribute name="colors" type="xsd:NMTOKENS"/>
+    <xsd:attribute name="specialPart" type="my:partNumberType"/>
+  </xsd:complexType>
+  
+  <xsd:complexType name="userType">
+		<xsd:sequence>
+			<xsd:element name="simpleUserElem" type="my:partNumberType" />
+			<xsd:element name="simpleUserList" type="my:myListType" />
+			<xsd:element name="simpleUserUnion" type="my:partIntegerUnion" />
+			<xsd:element name="complexMixedUserElem" type="my:mixedPersonType" />
+			<xsd:element name="complexUserElem" type="my:personType" />
+			<xsd:element name="onlyAttributes" type="my:onlyAttributesType" />
+		</xsd:sequence>
+			<xsd:attribute name="specialPart" type="my:partNumberType"/>
+			<xsd:attribute name="listParts" type="my:myListType"/>
+  </xsd:complexType>
+</xsd:schema>

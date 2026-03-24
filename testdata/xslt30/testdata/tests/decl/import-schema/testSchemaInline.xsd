@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<xsd:schema	targetNamespace="http://www.schemainline.ibm.com/test"
+			xmlns:my="http://www.schemainline.ibm.com/test"
+			xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+
+	<xsd:element name="myTest" type="my:testType"/>
+	<xsd:element name="complexTest" type="my:complexTestType"/>
+	<xsd:attribute name="type" type="my:testType"/>
+	
+	<xsd:simpleType name="testType">
+		<xsd:restriction base="xsd:positiveInteger">
+			<xsd:minInclusive value="1"/>
+			<xsd:maxInclusive value="10000"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	
+	<xsd:complexType name="complexTestType">
+    <xsd:sequence>
+      <xsd:element name="subject" type="my:subjectType" />
+      <xsd:element name="size" type="xsd:integer" />
+    </xsd:sequence>
+    <xsd:attribute ref="my:type"/>
+  </xsd:complexType>
+  
+  <xsd:simpleType name="subjectType">
+    <xsd:restriction base="xsd:string">
+      <xsd:enumeration value="math"/>
+      <xsd:enumeration value="language"/>
+      <xsd:enumeration value="chemistry"/>
+      <xsd:enumeration value="georgaphy"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+
+</xsd:schema>

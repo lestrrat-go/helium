@@ -1,0 +1,25 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="xhttp://schema067.uri/"
+           elementFormDefault="qualified"
+           attributeFormDefault="qualified"
+           >
+
+
+<xs:simpleType name="colors">
+  <xs:list>
+    <xs:simpleType>
+        <xs:restriction base="xs:NCName">
+          <xs:enumeration value="red"/>
+          <xs:enumeration value="orange"/>
+          <xs:enumeration value="yellow"/>
+          <xs:enumeration value="green"/>
+          <xs:enumeration value="blue"/>
+          <xs:enumeration value="indigo"/>
+          <xs:enumeration value="violet"/>
+        </xs:restriction>
+     </xs:simpleType>
+  </xs:list>
+</xs:simpleType>
+
+</xs:schema>

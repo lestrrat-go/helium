@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!ELEMENT doc (a*)>
+<!ELEMENT a EMPTY>
+<!ATTLIST a id ID #REQUIRED>
+]>
+<doc>
+<a id="frag1"/>
+<a id="frag2"/>
+</doc>

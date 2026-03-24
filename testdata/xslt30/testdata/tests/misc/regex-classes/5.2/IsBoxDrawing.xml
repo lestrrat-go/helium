@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsBoxDrawing">
+      <match from="9472" to="9599"/>
+   </ranges>
+   <ranges complement="IsBoxDrawing">
+      <match from="9" to="9471"/>
+      <match from="9600" to="1114111"/>
+   </ranges>
+</out>

@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<my:doc xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.example.com/ns/sub-group subgroupTypeSchemaAs.xsd"
+     xmlns:my="http://www.example.com/ns/sub-group">
+	 <my:audio-book>
+	 	<title>Hello World</title>
+	 	<uri>http://www.mybook.foo</uri>
+	 	<price>19.99</price>
+	 </my:audio-book>
+</my:doc>

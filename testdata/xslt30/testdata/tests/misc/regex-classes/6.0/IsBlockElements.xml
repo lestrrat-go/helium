@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsBlockElements">
+      <match from="9600" to="9631"/>
+   </ranges>
+   <ranges complement="IsBlockElements">
+      <match from="9" to="9599"/>
+      <match from="9632" to="1114111"/>
+   </ranges>
+</out>

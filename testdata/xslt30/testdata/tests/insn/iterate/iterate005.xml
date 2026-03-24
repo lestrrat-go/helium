@@ -1,0 +1,362 @@
+<?xml version="1.0"?><html section="changes">
+<head>
+  <title>SAXON: Changes in this Release</title>
+
+</head>
+<body>          
+
+<h1>Changes in this Release</h1>
+
+<page>
+<h2 id="intro">Version 9.1 (2008-NN-NN)</h2>
+
+<p>XQuery Updates</p>
+<p>Conditional Type Assignment</p>
+
+
+<p>Saxon 9.1 introduces support for XQuery Updates.</p>
+
+<p>To run an updating query from the command line, use the option <code>-update:on</code> on the command line.
+From Java, compile the query in the normal way, and use the method <code>XQueryExpression.runUpdate()</code> to
+execute the query. At present it is not possible to run updates using the higher-level interfaces in XQJ or S9API,
+or using the .NET API.</p>
+
+<p>To enable updating internally, an extension of the <code>NodeInfo</code> interface has been introduced, called
+<code>MutableNodeInfo</code>. Currently the only tree implementation that supports this interface is the linked tree
+(formerly called the standard tree). In principle updating should work with any tree model that supports this
+interface, though at present there are probably some dependencies on the specific implementation.</p>
+
+<p>The linked tree has been improved so that it can now handle schema type annotations, and there have been improvements
+to the way in which line number information is maintained.</p>
+
+<p>Saxon does not currently include any locking code to prevent concurrent threads attempting to update the same document.
+This is something that applications must organize for themselves.</p>
+
+<p>At the Java API level, updated documents are not automatically written back to disk. Rather, the <code>runUpdate()</code>
+method returns a set containing the root nodes of documents that have been updated. This may include documents that were read
+using the doc() or collection() functions as well as documents supplied as the context node of the query or by binding
+external variables. There is a helper method <code>QueryResult.rewriteToDisk</code> allowing such documents to be written 
+back to disk if required, but this must be explicitly invoked by the application. Clearly if the application does not have
+write access to the URI, this operation will fail.</p>
+
+<p>Applications should access the updated document via the root nodes returned by the <code>runUpdate()</code> function.
+Use of <code>NodeInfo</code> objects that were obtained before running the update is in general unsafe; while it will probably
+work in most cases, there are some cases (particularly with attributes) where the <code>NodeInfo</code> object returned to the 
+application is a snapshot created on demand, and this snapshot will not be updated when the underlying tree is changed.</p>
+
+<p>Updates are not currently atomic, as required by the specification. In particular, if the update fails revalidation
+against the schema, it is not rolled back.</p>
+
+<h3>Configuration flag</h3>
+
+<p>There is now a configuration flag to enable use of XML Schema 1.1 syntax; if this flag is not set, all new
+XML Schema 1.1 features will be disabled. The flag can be set using <code>-xsdlversion:1.1</code> on the command
+line (of <code>Query</code>, <code>Transform</code>, or <code>Validate</code>), 
+or by calling <code>configuration.setConfigurationProperty(FeatureKeys.XSDL_VERSION, "1.1")</code>.</p>
+
+<p><b>Conditional Type Assignment</b> (often called co-constraints) is implemented. Any XPath expression
+may be used to define the condition, so long as it only accesses the attributes and namespaces of the 
+element in question. Rules on type subsumption not yet implemented.</p>
+
+<p>The <b>xpathDefaultNamespace</b> attribute is supported for both <code>xs:assert</code> and <code>xs:alternative</code>
+(but not yet for <code>xs:field</code> or <code>xs:selector</code>, because the specification is unclear).
+The <code>defaultXPathDefaultNamespace</code> attribute on <code>xs:schema</code> is also recognized.</p> 
+
+<p>A model group defined with an <code>&lt;xs:all&gt;</code> compositor may now have arbitrary
+ <code>minOccurs</code> and <code>maxOccure</code> values on the element particles within the group.
+ Much more analysis is now done to determine whether a sequence of choice group is a valid restriction 
+ of a type that uses
+ an <code>xs:all</code> compositor; some of this will also apply to XSDL 1.0 schemas.
+ For example, substitution groups are now taken into account, and the derived type is allowed
+ to have an <code>xs:choice</code> content model (each branch of the choice must be a valid restriction
+ of the base content model.)</p>
+ 
+<p>Element wildcards (<code>&lt;xs:any&gt;</code>) are now allowed in an a model group defined 
+using <code>&lt;xs:all&gt;</code>. Not yet implemented: minOccurs(). Not yet tested - validation of children
+(processContents).</p>
+
+<p>Local element and attribute declarations can now have a <code>targetNamespace</code> attribute, provided that they
+appear within an <code>xs:restriction</code> element that restricts a complex type. This makes it easier to define
+a restriction of a complex type that has been imported from another namespace, since it is now possible for the
+restricted type to declare local elements and attributes having the same names as those from the base type.</p>
+
+<p>The reporting of validation errors on <code>xs:assert</code> has been improved: if the assertion takes the form
+<code>empty(expression)</code> then the validator will not only report an error if the result of the expression is not
+empty; it will also identify all the nodes (or atomic values) that were present in the result of the expression, enabling
+easier detection and correction of the problem. This also works for the expression <code>not(exp)</code> provided that <code>exp</code>
+has a static item type of <code>node()</code>. </p>
+
+<p>Going beyond the XML Schema 1.1 specification, Saxon implements an extension allowing assertions on simple types.
+The assertion is defined by means of a <code>saxon:assert</code> attribute on the <code>xs:restriction</code> child of the
+<code>xs:simpleType</code> element. This must be an atomic type. The value of the attribute must be an XPath expression;
+the assertion is satisfied if the effective boolean value of the expression is true, when evaluated with the context item
+(.) set to the atomic value being validated. For example <code>saxon:assert=". lt current-date()"</code> requires a
+type derived from <code>xs:date</code> to represent a date in the past. The XPath expression is allowed to invoke external
+Java functions, allowing full procedural validation logic. The XPath expression has access only to the atomic value
+being validated, it cannot access any nodes in the document. For further details see 
+<xref section="schema-processing" page="extensions" subpage="simpleassert">Assertions on Simple Types</xref>.</p>
+
+<h3>Other XML Schema Changes</h3>
+
+<p>Saxon now implements enumeration facets on union and list types as the authors of the
+specification intended. Although the spec as written has problems (bug 5328 has been raised), the intent is that
+the enumeration facet as written should be interpreted as an instance of the type being restricted. Previously
+enumeration facets on union and list types were doing a string comparison on the lexical value.</p>
+
+<p>The reporting of keyRef validation errors has been improved. Multiple errors can now be reported in a single
+schema validation run, and the line number given with the error message reflects the location of the unresolved
+keyRef value, rather than the end of the document as before.</p>
+
+<p>A new configuration option is available to control whether the schema processor takes notice (and attempts to
+dereference) <code>xsi:schemaLocation</code> and <code>xsi:noNamespaceSchemaLocation</code> attributes encountered
+in an instance document that is being validated. This is available as the named property <code>FeatureKeys.USE_XSI_SCHEMA_LOCATION</code>
+on the <code>TransformerFactory</code> and <code>Configuration</code> classes, via methods on the S9API and .NET 
+<code>SchemaValidator</code> classes, and the XQJ class <code>SaxonXQDataSource</code>, and via the <code>-xsiloc</code>
+option on the command line interfaces <code>Validate</code>, <code>Transform</code>, and <code>Query</code>.</p>
+
+
+
+<p>The warning that is issued when a stylesheet that specifies <code>version="1.0"</code> is now suppressed
+by default when the transformation is run via an API rather than from the command line. The default can be changed
+by calling <code>Configuration.setVersionWarning(true)</code>. User feedback suggests that this warning is often
+an irritant and there are environments where it is hard to suppress it. The XSLT specification says that the warning
+SHOULD be produced unless the user has requested otherwise; therefore be informed that calling the Saxon API without setting
+this switch counts as "requesting otherwise".</p>
+
+<p>Tail call optimization is now implemented for <code>xsl:next-match</code> as well as <code>xsl:call-template</code>
+and <code>xsl:apply-templates</code>. This caters for mutual recursion involving a mixture of these three instructions.</p>
+
+<p>The <code>type-available()</code> function can now be used to check for the availability of Java classes. For example
+<code>type-available('jt:java.util.HashMap')</code> returns true, where the prefix <code>jt</code> is bound to the URI
+<code>http://saxon.sf.net/java-type</code>.</p>
+
+<p>The system property <code>xsl:supports-namespace-axis</code>, introduced in erratum E14, is now recognized (and returns the
+value "yes").</p>
+
+<p>An additional option <code>-xsd:schemadoc1.xsd;schemadoc2.xsd...</code> is available on the command line. This supplies
+a list of additional schema documents to be loaded. These are not automatically available in the static context of the stylesheet, but they
+are available for use when validating input documents (or result documents). The argument can also be used to supply the schema
+location of a schema document imported by the stylesheet, in the case where the <code>xsl:import-schema</code> declaration 
+refers only to the target namespace of the schema and not to its location.</p> 
+
+<p>An additional command line option <code>-traceout</code> allows the output from the <code>trace()</code> function to be directed
+to a file, or to be discarded. A corresponding option is available in the API (classes <code>Controller</code>
+and <code>XsltTransformer</code>).</p>
+
+<p>A new extension instruction <code>saxon:iterate</code> is available experimentally, with subsidiary instructions
+<code>saxon:continue</code> and <code>saxon:break</code>. This is designed partly for easier coding of operations
+that otherwise require explicit recursion, and partly to enable streamed processing of input files. For details see
+<xref section="extensions" page="instructions" subpage="iterate">saxon:iterate</xref></p>
+
+
+<p>The change defined by bug 5083 is implemented: namespace URIs declared in a direct element constructor may contain
+doubled curly braces ("{{" or "}}") to represent single curly braces, and must not contain curly braces unless they are
+so doubled.</p>
+
+<p>The <xref section="sourcedocs" page="serial">streaming copy</xref> optimization, previously available only with XSLT, is now
+available also with XQuery. This allows a subset of XQuery expressions to be evaluated in streaming mode, that is, without building
+the tree representation of the source document in memory. The facility is available only in Saxon-SA, and only when requested
+using the pragma <code>(# saxon:read-once #){ expr }</code>. Use the <code>-explain</code> switch on the command line to check
+whether the optimization is successful.</p>
+
+<p>An additional option <code>-xsd:schemadoc1.xsd;schemadoc2.xsd...</code> is available on the command line. This supplies
+a list of additional schema documents to be loaded. These are not automatically available in the static context of the query, but they
+are available for use when validating input documents (or result documents). The argument can also be used to supply the schema
+location of a schema document imported by the query, in the case where the query refers only to the target namespace of the schema
+and not to its location.</p>
+
+<p>An additional command line option <code>-traceout</code> allows the output from the <code>trace()</code> function to be directed
+to a file, or to be discarded. A corresponding option is available in the API (classes <code>DynamicQueryContext</code>
+and <code>XQueryEvaluator</code>).</p> 
+
+
+
+<p>Saxon's implementation of XQJ has been brought into line with the 1.0 "final draft" released on 20 Nov 2007.
+The final draft includes a set of compatibility tests, and Saxon now passes all these tests, with the exception
+of four tests whose results have been queried as they appear inconsistent with the documentation.</p>
+
+<p>This change means that the XQJ interfaces now have their proper package names (<code>javax.xml.query.*</code>
+in place of <code>net.sf.saxon.javax.xml.query.*</code>, and applications will need to be updated accordingly.
+The interfaces together with the implementation classes are in the JAR file saxon9-xqj.jar .</p>
+
+<p>To pass the test suite, quite a few changes were necessary, but few of these will affect applications. Many of them
+concern the behaviour when null arguments are passed to methods, or when operations are attempted on a connection that
+has been closed - neither of which are things that real applications are likely to do.</p>
+
+<p>One noticeable change is that the rules for processing a forwards-only sequence are now strictly enforced. These
+rules prevent you accessing the same item in the result of a query more than once, unless you save a local copy using
+the <code>getItem()</code> method.</p>
+
+<p>As required by the licensing conditions for XQJ, a 
+<xref section="conformance" page="XQJ">conformance statement</xref> is provided.</p>
+
+<p>The XQJ implementation now allows a Java object to be supplied as an "external object", whose instance methods
+can be invoked as external functions within the query. TestL in the sample application XQJExamples.java provides an
+illustration of how to do this. It is necessary to create an <code>XQItemType</code> representing the type of the
+item: this will always have a name whose URI is <code>http://saxon.sf.net/java-type</code> and whose local name
+is the qualified name of the Java class. The standard XQJ method <code>createItemFromObject()</code> will recognize a
+type name in this form and handle the object accordingly.</p>
+
+<p>A number of named properties have been implemented to allow Saxon's behavior to be configured via the
+<code>setProperty()</code> method of <code>XQDataSource</code>; for details see the Javadoc of the
+Saxon implementation class <code>SaxonXQDataSource</code>. For configuration settings that are not in this
+list, <code>SaxonXQDataSource</code> provides a method <code>getConfiguration()</code> that allows access
+to the underlying <code>Configuration</code> object.</p>
+
+<p>There have been changes to the implementation of XQJ methods involving input or delivery of results using 
+the Stax <code>XMLStreamReader</code> interface. These methods are now implemented using the "pull events"
+mechanism introduced in Saxon 9.0, replacing the older <code>PullProvider</code> interface.</p>
+
+<p>A new <code>EventIterator</code> is available for use in the event-pull pipeline, namely <code>NamespaceMaintainer</code>.
+This maintains the namespace context (it acts as a <code>NamespaceResolver</code>). This is used by XQJ when delivering
+results in the form of a StAX <code>XMLStreamReader</code>, underpinning the methods on the <code>XMLStreamReader</code>
+interface that allow namespace prefixes to be resolved.</p>
+
+
+<p>A new method <code>Processor.writeXdmValue(XdmValue, Destination)</code> has been added, allowing any
+XDM value (for example, a document node) to be written to any <code>Destination</code> (for example, a <code>Serializer</code>, 
+a <code>Validator</code>, or a <code>Transformer</code>). For usage examples, see the S9APIExamples demonstration program.</p>
+
+<p>A new constructor has been added to <code>XdmValue</code> allowing an <code>XdmValue</code> to be constructed
+from a sequence of items.</p>
+
+<p>A new interface <code>MessageListener</code> is available. A user-written implementation of <code>MessageListener</code>
+may be registered with the <code>XsltTransformer</code> to receive notification of <code>xsl:message</code> output. The class
+has a single method <code>message()</code>, which is called once for each message; the parameters include the message content
+(as an XML document), a boolean indicating whether <code>terminate="yes"</code> was requested, and a <code>SourceLocator</code>
+to distinguish which <code>xsl:message</code> instruction generated the output.</p>
+
+<p>New methods have been added to <code>ItemTypeFactory</code> to allow creation of ItemTypes and XdmAtomicValues representing
+external Java objects, which can be passed to a stylesheet or query for use in conjunction with external functions (extension functions).
+An example of how to achieve this has been added to the sample application <code>S9APIExamples.java</code> (test QueryF).</p>
+
+<p>New methods are available (classes <code>XQueryEvaluator</code>
+and <code>XsltTransformer</code>) to allow the output from the <code>trace()</code> function to be directed
+to a specified output stream, or to be discarded.</p>
+
+
+<p>Saxon now supports the <code>nextSibling</code> property of a <code>DOMResult</code>, introduced in JDK 1.5. This property
+allows you to specify more precisely the insertion point for new data into an existing DOM tree.</p>
+
+
+<p>If requested using the <code>-l</code> (letter ell) option on the command line (or the equivalent in the API), Saxon now maintains
+column numbers as well as line numbers for source documents. The information is available to applications using a new extension
+function <code>saxon:column-number()</code>, or at the level of the Java API via a new method on the <code>NodeInfo</code> interface,
+<code>getColumnNumber()</code> (Third-party implementations of <code>NodeInfo</code> will need to implement this method; by default
+it can return -1). Note that the information is only as good as that supplied by the XML parser: SAX parsers report for an element the
+line and column of the "&gt;" character that forms the last character of the element's start tag.</p>
+
+<p>Errors that occur during schema validation of an input document now display both line number and column,
+as do static errors detected in a stylesheet or schema. Dynamic errors occurring during expression evaluation
+still contain a line number only.</p>
+
+<p>After a dynamic error, Saxon now outputs a stack trace - that is, a representation of the XSLT or XQuery call stack.
+This feature is now available in Saxon-B, it was previously only in Saxon-SA. The stack trace has been improved at the same
+time (it now shows changes to the context item made by <code>xsl:apply-templates</code> or <code>xsl:for-each</code>).</p>
+
+<p>The information in the stack trace is also available programmatically through the method <code>iterateStackFrames()</code>
+on the <code>XPathContext</code> object.</p>
+
+<p>The formatted print of the stack trace can be retrieved as a string from within a query or stylesheet using the new extension
+function <code>saxon:print-stack()</code>.</p>
+
+<p>There are some internal changes as a result of this development, which may be noticeable to applications that do debugging
+or tracing. The <code>InstructionInfoProvider</code> interface has disappeared; instead all expressions (including instructions)
+now implement <code>InstructionInfo</code> directly, as do container objects such as <code>UserFunction</code> and <code>Template</code>.
+Generally the <code>getProperties()</code> method of <code>InstructionInfo</code> is not so well supported; applications requiring
+properties of expressions should cast the <code>InstructionInfo</code> to the required class and get the information directly from
+the expression tree.</p>
+
+<p>The <code>InstructionInfo</code> object no longer contains a <code>NamespaceResolver</code> - it is no longer needed because
+all names are now represented as expanded names.</p>
+
+<p>The <code>saxon:path()</code> extension function now accepts a node as an argument. Previously it worked only on the context node.</p>
+
+<p>New methods are available to allow the output from the <code>trace()</code> function to be directed
+to a specified output stream, or to be discarded.</p>
+
+
+<p>New constructors have been added to the class <code>DomDestination</code>, allowing new content to be attached
+to an existing document, document fragment, or element node.</p>
+
+<p>A new method <code>Processor.WriteXdmValue(XdmValue, XmlDestination)</code> has been added, allowing any
+XDM value (for example, a document node) to be written to any <code>XmlDestination</code> (for example, 
+a <code>Serializer</code>, a <code>Validator</code>, or a <code>Transformer</code>).</p>
+
+<p>The <code>WriteTo</code> method on <code>XdmNode</code> has been changed so it will write to any <code>XmlWriter</code>,
+not only an <code>XmlTextWriter</code> as before.</p>
+
+<p>A new property <code>MessageListener</code> has been added to the <code>XsltTransformer</code> object. This allows the
+output of &lt;xsl:message&gt; instructions to be intercepted. Each call of &lt;xsl:message&gt; generates a document node, which
+is passed in the form of an <code>XdmNode</code> to the supplied message listener. Additional parameters indicate whether the
+&lt;xsl:message&gt; instruction specified <code>terminate="yes"</code>, and the location in the stylesheet of the originating
+&lt;xsl:message&gt; instruction.</p>
+
+<p>The <code>XmlResolver</code> supplied as a property of various classes including the <code>DocumentBuilder</code>, the
+<code>XsltCompiler</code>, the <code>XsltTransformer</code>, and the <code>XQueryEvaluator</code>, is now used not only when
+resolving URIs at the Saxon level (for example in calls to the <code>doc()</code> function or in <code>xsl:import</code> and
+<code>xsl:include</code>), but also by the XML parser in resolving URIs referring to external entities, including an external DTD.
+Note that this means it is unwise to return anything other than a <code>Stream</code> from the <code>GetEntity()</code> method, since
+this is the only return value that the Microsoft <code>XmlTextReader</code> can handle.</p>
+
+<p>Extension functions (external functions) may now use <code>System.Xml.XmlNode</code> as an argument type, provided
+that the node that is actually passed in the call is a Saxon wrapper around an <code>XmlNode</code>. Similarly, an
+<code>XmlNode</code> may also act as the return type. This also applies to subtypes of <code>XmlNode</code>, and to arrays
+of <code>XmlNode</code>. However, this facility is only available when Saxon is invoked via the .NET API, not when it is
+invoked from the command line. Note that returning <code>XmlNode</code> values may be expensive if the extension function
+is called frequently, as new wrappers are created each time; the calling stylesheet or query should also not rely on the identity
+of nodes that are returned in this way.
+</p>
+
+<p>Extension functions (external functions) may also use the types <code>Saxon.Api.XdmValue</code> and its Saxon-defined 
+subtypes as an argument or return type. This facility is only available when Saxon is invoked via the .NET API, not when it is
+invoked from the command line. 
+</p>
+
+<p>New methods are available to allow the output from the <code>trace()</code> function to be directed
+to a specified output stream, or to be discarded.</p>
+
+
+<p>The three methods <code>isId()</code>, <code>isIdref()</code>, and <code>isNilled()</code> have been moved from the
+<code>ExtendedNodeInfo</code> interface into <code>NodeInfo</code>, which means they must now be implemented by all concrete
+classes implementing <code>NodeInfo</code>. The <code>ExtendedNodeInfo</code> interface has been dropped.</p>
+
+
+
+
+<p>Saxon now honours a request to output using UTF-16 with no byte-order-mark. Perviously a byte-order-mark was inserted
+(by the Java IO library) whether requested or not.</p>
+
+
+
+
+<p>It is now possible to call Java methods that expect a JDOM or DOM4J node as their argument, provided that
+the actual node passed as a parameter from the query or stylesheet is a wrapper around a JDOM or DOM4J node
+respectively. Returning JDOM or DOM4J nodes from an extension function remains unsupported.</p>
+
+<p>The XQuery expression <code>for $x at $p in EXPR return $p</code> is now rewritten as
+<code>1 to count(EXPR)</code>.</p>
+
+<p>A filter expression that filters a constant sequence is now evaluated at compile time, provided the predicate does not
+use any variables and has no dependencies on the dynamic context other than the context item, position, and size.</p>
+
+<p>"Loop-lifting" (extraction of subexpressions to prevent them being repeatedly evaluated within a loop) is now
+extended to XQuery <code>for</code> expressions that have a position variable.</p>
+
+<p>Adjacent literal text nodes in the content of an element or document constructor are now merged at compile time.
+(These can arise as a result of early evaluation of expressions in the content sequence.)</p>
+
+<p>The <code>AttributeValidator</code>, which checks whether required attributes are present and expands default
+values during schema validation, has been rewritten for efficiency, to do most of the work of setting up the necessary
+data structures at schema compile time rather than on a per-element basis at validation time. It also uses two different
+implementations of the main data structure to handle the typical case with a small number of attributes, and the more
+difficult but unusual case where large numbers of attributes are declared.</p>
+
+<p>When an attribute has an enumeration type, space is saved on the instance tree by using references to the
+attribute value as held in the compiled schema, avoiding holding multiple copies of the same string.</p>
+
+
+
+</page>
+</body>
+</html>

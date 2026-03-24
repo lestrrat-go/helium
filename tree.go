@@ -11,9 +11,10 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
-	"github.com/lestrrat-go/strcursor"
+	"github.com/lestrrat-go/helium/internal/strcursor"
 )
 
 // BuildURI resolves a relative system ID against a base URI.
@@ -28,32 +29,41 @@ func BuildURI(systemID, base string) string {
 		return systemID
 	}
 
+	// When the systemID is an absolute file path (starts with /) and
+	// the base has a scheme (e.g. http://), resolve via URL reference
+	// so that /path replaces only the path component of the base.
+	// Without this, filepath.Join would concatenate incorrectly.
 	baseURL, err := url.Parse(base)
 	if err != nil {
 		return ""
 	}
-	if baseURL.Scheme == "" || baseURL.Scheme == "file" {
-		basePath := baseURL.Path
-		if basePath == "" {
-			basePath = base
-		}
-		// When the base ends with "/" it represents a directory;
-		// use it directly instead of calling filepath.Dir which
-		// would strip the last component.
-		dir := filepath.Dir(basePath)
-		if strings.HasSuffix(basePath, "/") {
-			dir = strings.TrimRight(basePath, "/")
-		}
-		result := filepath.Join(dir, systemID)
-		// Preserve trailing slash from systemID (indicates a directory
-		// base for xml:base chaining).
-		if strings.HasSuffix(systemID, "/") && !strings.HasSuffix(result, "/") {
-			result += "/"
-		}
-		return result
+
+	if baseURL.Scheme != "" && baseURL.Scheme != "file" {
+		return baseURL.ResolveReference(u).String()
 	}
 
-	return baseURL.ResolveReference(u).String()
+	// File path resolution
+	if filepath.IsAbs(systemID) {
+		return systemID
+	}
+	basePath := baseURL.Path
+	if basePath == "" {
+		basePath = base
+	}
+	// When the base ends with "/" it represents a directory;
+	// use it directly instead of calling filepath.Dir which
+	// would strip the last component.
+	dir := filepath.Dir(basePath)
+	if strings.HasSuffix(basePath, "/") {
+		dir = strings.TrimRight(basePath, "/")
+	}
+	result := filepath.Join(dir, systemID)
+	// Preserve trailing slash from systemID (indicates a directory
+	// base for xml:base chaining).
+	if strings.HasSuffix(systemID, "/") && !strings.HasSuffix(result, "/") {
+		result += "/"
+	}
+	return result
 }
 
 // fileParseInput wraps an os.File as a sax.ParseInput.
@@ -122,6 +132,11 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif context.Context, target, data 
 	pi, err := doc.CreatePI(target, data)
 	if err != nil {
 		return err
+	}
+
+	// Track external entity base URI for base-uri() resolution.
+	if ctx.currentEntityURI != "" {
+		pi.entityBaseURI = ctx.currentEntityURI
 	}
 
 	switch ctx.inSubset {
@@ -240,6 +255,13 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 
 	e.SetLine(ctx.LineNumber())
 
+	// When this element is being created as part of external entity
+	// expansion, record the entity's URI so base-uri() returns the
+	// correct value without needing a synthetic xml:base attribute.
+	if ctx.currentEntityURI != "" {
+		e.entityBaseURI = ctx.currentEntityURI
+	}
+
 	if uri != "" {
 		if err := e.SetActiveNamespace(prefix, uri); err != nil {
 			return err
@@ -268,12 +290,24 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 			if ns == nil && ctx.elem != nil {
 				ns = lookupNSByPrefix(ctx.elem, p)
 			}
-			if err := e.SetAttributeNS(attr.LocalName(), attr.Value(), ns); err != nil {
-				return err
+			if ctx.replaceEntities {
+				// When replaceEntities is true (ParseNoEnt), entity
+				// references are already resolved in the attribute
+				// value. Use literal mode to avoid re-parsing & as
+				// new entity reference starts.
+				e.SetLiteralAttributeNS(attr.LocalName(), attr.Value(), ns)
+			} else {
+				if err := e.SetAttributeNS(attr.LocalName(), attr.Value(), ns); err != nil {
+					return err
+				}
 			}
 		} else {
-			if err := e.SetAttribute(attr.Name(), attr.Value()); err != nil {
-				return err
+			if ctx.replaceEntities {
+				e.SetLiteralAttribute(attr.Name(), attr.Value())
+			} else {
+				if err := e.SetAttribute(attr.Name(), attr.Value()); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -283,21 +317,23 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 	if prefix != "" {
 		elemName = prefix + ":" + localname
 	}
-	for _, a := range e.Attributes() {
+	e.ForEachAttribute(func(a *Attribute) bool {
 		aLocalName := a.LocalName()
 		aPrefix := a.Prefix()
 		if decl := lookupAttributeDecl(doc, aLocalName, aPrefix, elemName); decl != nil {
 			a.SetAType(decl.AType())
 		}
-	}
+		return true
+	})
 
 	// Register ID attributes in the document's ID table for O(1) lookup.
 	if !ctx.loadsubset.IsSet(SkipIDs) {
-		for _, a := range e.Attributes() {
-			if a.Name() == "xml:id" || a.AType() == enum.AttrID {
+		e.ForEachAttribute(func(a *Attribute) bool {
+			if a.Name() == lexicon.QNameXMLID || a.AType() == enum.AttrID {
 				doc.RegisterID(a.Value(), e)
 			}
-		}
+			return true
+		})
 	}
 
 	var parent Node
@@ -511,7 +547,9 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// Parse markup declarations from the DTD content.
 	// Push content onto the input stack and loop until exhausted.
 	savedExternal := ctx.external
+	savedBaseURI := ctx.baseURI
 	ctx.external = true
+	ctx.baseURI = resolved
 
 	baseLen := ctx.inputTab.Len()
 	ctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(data)))
@@ -551,6 +589,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	}
 
 	ctx.external = savedExternal
+	ctx.baseURI = savedBaseURI
 
 	return nil
 }
@@ -617,7 +656,7 @@ func (t *TreeBuilder) AttributeDecl(ctxif context.Context, eName string, aName s
 
 	ctx := getParserCtx(ctxif)
 
-	if aName == "xml:id" && typ != enum.AttrID {
+	if aName == lexicon.QNameXMLID && typ != enum.AttrID {
 		// libxml2 says "raise the error but keep the validity flag"
 		// but I don't know if we can do that..
 		return errors.New("xml:id: attribute type should be enum.AttrID")
@@ -900,7 +939,23 @@ func (t *TreeBuilder) UnparsedEntityDecl(ctxif context.Context, name string, pub
 		return errors.New("sax.UnparsedEntityDecl called while not in subset")
 	}
 
-	_, _ = dtd.AddEntity(name, enum.ExternalGeneralUnparsedEntity, publicID, systemID, notation)
+	ent, _ := dtd.AddEntity(name, enum.ExternalGeneralUnparsedEntity, publicID, systemID, notation)
+
+	// Build the full URI for unparsed entities by resolving the system ID
+	// against the document's base URI (mirrors libxml2's xmlSAX2UnparsedEntityDecl).
+	if ent != nil && ent.uri == "" && systemID != "" {
+		base := ctx.baseURI
+		if base != "" {
+			resolved := BuildURI(systemID, base)
+			if resolved != "" {
+				ent.uri = resolved
+			}
+		}
+		if ent.uri == "" {
+			ent.uri = systemID
+		}
+	}
+
 	return nil
 }
 

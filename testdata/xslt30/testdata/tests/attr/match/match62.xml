@@ -1,0 +1,10 @@
+<!DOCTYPE doc [
+  <!ELEMENT doc (a*)>
+  <!ELEMENT a (#PCDATA)>
+  <!ATTLIST a id ID #IMPLIED>
+]>
+<doc>
+  <a id="a">A</a>
+  <a id="b">B</a>
+  <a id="c">C</a>
+</doc>

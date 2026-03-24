@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsGreek">
+      <match from="880" to="1023"/>
+   </ranges>
+   <ranges complement="IsGreek">
+      <match from="9" to="879"/>
+      <match from="1024" to="1114111"/>
+   </ranges>
+</out>

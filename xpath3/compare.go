@@ -7,49 +7,52 @@ import (
 	"math/big"
 	"strings"
 	"time"
+
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
 // evalGeneralComparison implements general comparison (= != < <= > >=).
 // Per XPath 3.1 Section 3.7.1: atomize both operands, then existentially
 // quantify — true if ANY pair satisfies the value comparison.
-func evalGeneralComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
-	if result, ok, err := evalGeneralComparisonAgainstRange(ec, e); ok {
+func evalGeneralComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	if result, ok, err := evalGeneralComparisonAgainstRange(evalFn, ec, e); ok {
 		if err != nil {
 			return nil, err
 		}
 		return SingleBoolean(result), nil
 	}
-	left, err := eval(ec, e.Left)
+	left, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := eval(ec, e.Right)
+	right, err := evalFn(ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
-	result, err := GeneralCompare(e.Op, left, right)
+	coll := ec.resolveDefaultCollation()
+	result, err := generalCompareWithCollation(e.Op, left, right, coll, ec)
 	if err != nil {
 		return nil, err
 	}
 	return SingleBoolean(result), nil
 }
 
-func evalGeneralComparisonAgainstRange(ec *evalContext, e BinaryExpr) (bool, bool, error) {
+func evalGeneralComparisonAgainstRange(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (bool, bool, error) {
 	if re, ok := e.Right.(RangeExpr); ok {
-		return compareSingletonAgainstRange(ec, e.Op, e.Left, re, false)
+		return compareSingletonAgainstRange(evalFn, ec, e.Op, e.Left, re, false)
 	}
 	if re, ok := e.Left.(RangeExpr); ok {
-		return compareSingletonAgainstRange(ec, e.Op, e.Right, re, true)
+		return compareSingletonAgainstRange(evalFn, ec, e.Op, e.Right, re, true)
 	}
 	return false, false, nil
 }
 
-func compareSingletonAgainstRange(ec *evalContext, op TokenType, singletonExpr Expr, rangeExpr RangeExpr, rangeOnLeft bool) (bool, bool, error) {
-	singletonSeq, err := eval(ec, singletonExpr)
+func compareSingletonAgainstRange(evalFn exprEvaluator, ec *evalContext, op TokenType, singletonExpr Expr, rangeExpr RangeExpr, rangeOnLeft bool) (bool, bool, error) {
+	singletonSeq, err := evalFn(ec, singletonExpr)
 	if err != nil {
 		return false, true, err
 	}
-	if len(singletonSeq) == 0 {
+	if seqLen(singletonSeq) == 0 {
 		return false, true, nil
 	}
 	singletonAtoms, err := AtomizeSequence(singletonSeq)
@@ -63,7 +66,7 @@ func compareSingletonAgainstRange(ec *evalContext, op TokenType, singletonExpr E
 	if err != nil {
 		return false, false, nil
 	}
-	start, end, empty, err := evalRangeBounds(ec, rangeExpr)
+	start, end, empty, err := evalRangeBounds(evalFn, ec, rangeExpr)
 	if err != nil {
 		return false, true, err
 	}
@@ -73,16 +76,16 @@ func compareSingletonAgainstRange(ec *evalContext, op TokenType, singletonExpr E
 	return compareRangeBounds(op, singletonInt.BigInt(), start, end, rangeOnLeft), true, nil
 }
 
-func evalRangeBounds(ec *evalContext, e RangeExpr) (*big.Int, *big.Int, bool, error) {
-	startSeq, err := eval(ec, e.Start)
+func evalRangeBounds(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (*big.Int, *big.Int, bool, error) {
+	startSeq, err := evalFn(ec, e.Start)
 	if err != nil {
 		return nil, nil, false, err
 	}
-	endSeq, err := eval(ec, e.End)
+	endSeq, err := evalFn(ec, e.End)
 	if err != nil {
 		return nil, nil, false, err
 	}
-	if len(startSeq) == 0 || len(endSeq) == 0 {
+	if seqLen(startSeq) == 0 || seqLen(endSeq) == 0 {
 		return nil, nil, true, nil
 	}
 	startAtoms, err := AtomizeSequence(startSeq)
@@ -145,12 +148,12 @@ func compareRangeBounds(op TokenType, singleton, start, end *big.Int, rangeOnLef
 
 // evalValueComparison implements value comparison (eq ne lt le gt ge).
 // Per XPath 3.1 Section 3.7.2: both operands must be single atomic values.
-func evalValueComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := eval(ec, e.Left)
+func evalValueComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := eval(ec, e.Right)
+	right, err := evalFn(ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -172,34 +175,36 @@ func evalValueComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 	}
 	la := leftAtoms[0]
 	ra := rightAtoms[0]
-	result, err := ValueCompareWithImplicitTimezone(e.Op, la, ra, ec.getImplicitTimezone())
+	pa, pb := promoteForValueComparison(la, ra)
+	coll := ec.resolveDefaultCollation()
+	result, err := compareAtomicCollation(e.Op, pa, pb, ec.getImplicitTimezone(), coll)
 	if err != nil {
 		return nil, err
 	}
 	return SingleBoolean(result), nil
 }
 
-func evalNodeComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
-	left, err := eval(ec, e.Left)
+func evalNodeComparison(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequence, error) {
+	left, err := evalFn(ec, e.Left)
 	if err != nil {
 		return nil, err
 	}
-	right, err := eval(ec, e.Right)
+	right, err := evalFn(ec, e.Right)
 	if err != nil {
 		return nil, err
 	}
 	// Empty sequence yields empty sequence
-	if len(left) == 0 || len(right) == 0 {
+	if seqLen(left) == 0 || seqLen(right) == 0 {
 		return nil, nil
 	}
-	if len(left) > 1 || len(right) > 1 {
+	if left.Len() > 1 || right.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires singletons"}
 	}
-	ln, ok := left[0].(NodeItem)
+	ln, ok := left.Get(0).(NodeItem)
 	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires node operands"}
 	}
-	rn, ok := right[0].(NodeItem)
+	rn, ok := right.Get(0).(NodeItem)
 	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "node comparison requires node operands"}
 	}
@@ -222,6 +227,12 @@ func evalNodeComparison(ec *evalContext, e BinaryExpr) (Sequence, error) {
 // Atomizes both sides and returns true if any pair of atomic values
 // satisfies the operator.
 func GeneralCompare(op TokenType, left, right Sequence) (bool, error) {
+	return generalCompareWithCollation(op, left, right, nil, nil)
+}
+
+// generalCompareWithCollation is the collation-aware implementation of
+// general comparison.  When coll is nil, codepoint collation is used.
+func generalCompareWithCollation(op TokenType, left, right Sequence, coll *collationImpl, ec *evalContext) (bool, error) {
 	leftIter := newAtomicSequenceIter(left)
 	rightAtoms := newCachedAtomicSequence(right)
 	for {
@@ -240,11 +251,15 @@ func GeneralCompare(op TokenType, left, right Sequence) (bool, error) {
 			if !ok {
 				break
 			}
-			pa, pb, err := promoteForGeneralComparison(la, ra)
+			pa, pb, err := promoteForGeneralComparison(la, ra, ec)
 			if err != nil {
 				return false, err
 			}
-			match, err := compareAtomic(op, pa, pb)
+			var implTZ *time.Location
+			if ec != nil {
+				implTZ = ec.getImplicitTimezone()
+			}
+			match, err := compareAtomicCollation(op, pa, pb, implTZ, coll)
 			if err != nil {
 				return false, err
 			}
@@ -273,12 +288,12 @@ func newAtomicSequenceIter(seq Sequence) *atomicSequenceIter {
 func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
 	for len(it.stack) > 0 {
 		top := &it.stack[len(it.stack)-1]
-		if top.index >= len(top.seq) {
+		if top.index >= seqLen(top.seq) {
 			it.stack = it.stack[:len(it.stack)-1]
 			continue
 		}
 
-		item := top.seq[top.index]
+		item := top.seq.Get(top.index)
 		top.index++
 
 		if arr, ok := item.(ArrayItem); ok {
@@ -287,6 +302,32 @@ func (it *atomicSequenceIter) Next() (AtomicValue, bool, error) {
 				it.stack = append(it.stack, atomicSeqFrame{seq: members[i]})
 			}
 			continue
+		}
+
+		// List types: expand to multiple atoms.
+		if ni, ok := item.(NodeItem); ok {
+			listItem := ni.ListItemType
+			if listItem == "" {
+				listItem = builtinListItemType(ni.TypeAnnotation)
+			}
+			if listItem != "" {
+				s := ixpath.StringValue(ni.Node)
+				tokens := strings.Fields(s)
+				listSeq := make(ItemSlice, len(tokens))
+				for i, tok := range tokens {
+					cast, err := CastFromString(tok, listItem)
+					if err != nil {
+						if strings.HasPrefix(listItem, "Q{") {
+							cast = AtomicValue{TypeName: listItem, Value: tok}
+						} else {
+							return AtomicValue{}, false, err
+						}
+					}
+					listSeq[i] = cast
+				}
+				it.stack = append(it.stack, atomicSeqFrame{seq: listSeq})
+				continue
+			}
 		}
 
 		atom, err := AtomizeItem(item)
@@ -432,7 +473,7 @@ func promoteForValueComparison(a, b AtomicValue) (AtomicValue, AtomicValue) {
 
 // promoteForGeneralComparison applies type promotion rules for general comparison (= != < > <= >=).
 // Per XPath 3.1 Section 3.7.1 — untypedAtomic is cast to the type of the other operand.
-func promoteForGeneralComparison(a, b AtomicValue) (AtomicValue, AtomicValue, error) {
+func promoteForGeneralComparison(a, b AtomicValue, ec *evalContext) (AtomicValue, AtomicValue, error) {
 	// untypedAtomic vs untypedAtomic → compare as string
 	if a.TypeName == TypeUntypedAtomic && b.TypeName == TypeUntypedAtomic {
 		return AtomicValue{TypeName: TypeString, Value: stringFromAtomic(a)},
@@ -440,14 +481,14 @@ func promoteForGeneralComparison(a, b AtomicValue) (AtomicValue, AtomicValue, er
 	}
 	// untypedAtomic vs typed → cast untypedAtomic to the other's type
 	if a.TypeName == TypeUntypedAtomic {
-		castA, err := castUntypedToType(a, b.TypeName)
+		castA, err := castUntypedToType(a, b.TypeName, ec)
 		if err != nil {
 			return AtomicValue{}, AtomicValue{}, err
 		}
 		return castA, b, nil
 	}
 	if b.TypeName == TypeUntypedAtomic {
-		castB, err := castUntypedToType(b, a.TypeName)
+		castB, err := castUntypedToType(b, a.TypeName, ec)
 		if err != nil {
 			return AtomicValue{}, AtomicValue{}, err
 		}
@@ -458,7 +499,11 @@ func promoteForGeneralComparison(a, b AtomicValue) (AtomicValue, AtomicValue, er
 
 // castUntypedToType casts an untypedAtomic value to the given target type.
 // For general comparison, cast failures are errors (not silently ignored).
-func castUntypedToType(untyped AtomicValue, targetType string) (AtomicValue, error) {
+func castUntypedToType(untyped AtomicValue, targetType string, ec *evalContext) (AtomicValue, error) {
+	// QName requires namespace context for prefix resolution
+	if targetType == TypeQName {
+		return castToQName(untyped, ec)
+	}
 	// For numeric types, cast to double per spec
 	if isIntegerDerived(targetType) || targetType == TypeDecimal || targetType == TypeFloat {
 		targetType = TypeDouble
@@ -496,9 +541,57 @@ func compareAtomic(op TokenType, a, b AtomicValue) (bool, error) {
 	return compareAtomicWithImplicitTimezone(op, a, b, nil)
 }
 
+// AtomicEquals tests two atomic values for equality using XPath value
+// comparison (eq) semantics, including untypedAtomic promotion.
+// Returns false when the types are not comparable (instead of an error),
+// making it suitable for key() lookup where type mismatches mean "no match".
+func AtomicEquals(a, b AtomicValue) bool {
+	result, err := ValueCompare(TokenEq, a, b)
+	if err != nil {
+		return false
+	}
+	return result
+}
+
+// coerceTimePair safely extracts time.Time from two AtomicValues,
+// handling the case where the value is stored as a string by re-parsing.
+func coerceTimePair(a, b AtomicValue) (time.Time, time.Time, error) {
+	ta, err := coerceToTime(a)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	tb, err := coerceToTime(b)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return ta, tb, nil
+}
+
+func coerceToTime(v AtomicValue) (time.Time, error) {
+	if t, ok := v.Value.(time.Time); ok {
+		return t, nil
+	}
+	// Value stored as string — re-parse
+	if s, ok := v.Value.(string); ok {
+		switch v.TypeName {
+		case TypeDate:
+			return parseXSDDate(s)
+		case TypeDateTime, TypeDateTimeStamp:
+			return parseXSDDateTime(s)
+		case TypeTime:
+			return parseXSDTime(s)
+		}
+	}
+	return time.Time{}, fmt.Errorf("cannot coerce %T to time.Time for %s", v.Value, v.TypeName)
+}
+
 func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitTZ *time.Location) (bool, error) {
 	// Map general comparison operators to value comparison operators
 	op = normalizeCompareOp(op)
+
+	// Promote user-defined schema types to their built-in base for comparison.
+	a = promoteSchemaForCompare(a)
+	b = promoteSchemaForCompare(b)
 
 	// String comparison (includes string-derived types and anyURI)
 	aStr := isStringDerived(a.TypeName) || a.TypeName == TypeAnyURI
@@ -524,16 +617,22 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 	if a.TypeName == b.TypeName {
 		switch a.TypeName {
 		case TypeDate:
-			ta := a.Value.(time.Time)
-			tb := b.Value.(time.Time)
+			ta, tb, err := coerceTimePair(a, b)
+			if err != nil {
+				return false, err
+			}
 			return compareDate(op, ta, tb, implicitTZ), nil
 		case TypeDateTime:
-			ta := a.Value.(time.Time)
-			tb := b.Value.(time.Time)
+			ta, tb, err := coerceTimePair(a, b)
+			if err != nil {
+				return false, err
+			}
 			return compareTime(op, applyImplicitTZ(ta, implicitTZ), applyImplicitTZ(tb, implicitTZ)), nil
 		case TypeTime:
-			ta := a.Value.(time.Time)
-			tb := b.Value.(time.Time)
+			ta, tb, err := coerceTimePair(a, b)
+			if err != nil {
+				return false, err
+			}
 			return compareTimeOfDay(op, ta, tb, implicitTZ), nil
 		case TypeYearMonthDuration, TypeDayTimeDuration:
 			return compareDuration(op, a.DurationVal(), b.DurationVal())
@@ -550,6 +649,10 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 		case TypeQName:
 			return compareQName(op, a.Value.(QNameValue), b.Value.(QNameValue))
 		case TypeGDay, TypeGMonth, TypeGMonthDay, TypeGYear, TypeGYearMonth:
+			// Gregorian partial types only support eq/ne, not ordering
+			if op != TokenEq && op != TokenNe {
+				return false, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("%s values are not orderable", a.TypeName)}
+			}
 			ta, okA := parseGTypeToTime(a.TypeName, stringFromAtomic(a))
 			tb, okB := parseGTypeToTime(b.TypeName, stringFromAtomic(b))
 			if !okA || !okB {
@@ -581,11 +684,55 @@ func compareAtomicWithImplicitTimezone(op TokenType, a, b AtomicValue, implicitT
 		return compareDuration(op, a.DurationVal(), b.DurationVal())
 	}
 
+	// Fallback for user-defined date/time types (only when at least one is non-built-in).
+	if !IsKnownXSDType(a.TypeName) || !IsKnownXSDType(b.TypeName) {
+		if ta, ok := a.Value.(time.Time); ok {
+			if tb, ok := b.Value.(time.Time); ok {
+				return compareDate(op, ta, tb, implicitTZ), nil
+			}
+		}
+		if _, ok := a.Value.(Duration); ok {
+			if _, ok := b.Value.(Duration); ok {
+				return compareDuration(op, a.DurationVal(), b.DurationVal())
+			}
+		}
+	}
+
 	// Types are not comparable
 	return false, &XPathError{
 		Code:    errCodeXPTY0004,
 		Message: fmt.Sprintf("cannot compare %s with %s", a.TypeName, b.TypeName),
 	}
+}
+
+// promoteSchemaForCompare promotes a user-defined schema type to its built-in
+// base type for comparison purposes.
+func promoteSchemaForCompare(a AtomicValue) AtomicValue {
+	return PromoteSchemaType(a)
+}
+
+// compareAtomicCollation compares two atomic values using the given collation
+// for string comparisons.  When coll is nil, codepoint collation is used.
+func compareAtomicCollation(op TokenType, a, b AtomicValue, implicitTZ *time.Location, coll *collationImpl) (bool, error) {
+	if coll == nil {
+		return compareAtomicWithImplicitTimezone(op, a, b, implicitTZ)
+	}
+	// Normalize the operator
+	op = normalizeCompareOp(op)
+
+	// String comparison with collation
+	aStr := isStringDerived(a.TypeName) || a.TypeName == TypeAnyURI
+	bStr := isStringDerived(b.TypeName) || b.TypeName == TypeAnyURI
+	if aStr && bStr {
+		sa := stringFromAtomic(a)
+		sb := stringFromAtomic(b)
+		cmp := coll.compare(sa, sb)
+		return applyCompare(op, cmp), nil
+	}
+
+	// For non-string types, collation doesn't apply — delegate to the
+	// standard comparison which handles numerics, dates, etc.
+	return compareAtomicWithImplicitTimezone(op, a, b, implicitTZ)
 }
 
 // compareDate compares xs:date values by their UTC instants.
@@ -606,12 +753,25 @@ func compareTimeOfDay(op TokenType, a, b time.Time, implicitTZ *time.Location) b
 	return compareTime(op, ra, rb)
 }
 
+// TimeToReferenceDateTime converts an xs:time to an xs:dateTime using the
+// XPath reference date 1972-12-31, preserving the timezone offset.
+// This is the canonical conversion for comparing xs:time values per F&O §10.4.4.
+func TimeToReferenceDateTime(t time.Time) time.Time {
+	return timeToReferenceDateTime(t)
+}
+
 // timeToReferenceDateTime converts an xs:time to an xs:dateTime using the
 // XPath reference date 1972-12-31, preserving the timezone offset.
 func timeToReferenceDateTime(t time.Time) time.Time {
 	_, offset := t.Zone()
 	loc := time.FixedZone("", offset)
 	return time.Date(1972, 12, 31, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
+}
+
+// ApplyImplicitTZ applies the implicit timezone to a time that has
+// no explicit timezone. Times with explicit timezones are returned as-is.
+func ApplyImplicitTZ(t time.Time, implicitTZ *time.Location) time.Time {
+	return applyImplicitTZ(t, implicitTZ)
 }
 
 // applyImplicitTZ applies the system's implicit timezone to a time that has

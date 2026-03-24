@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="No">
+      <match from="178" to="179"/>
+      <match from="185" to="185"/>
+      <match from="188" to="190"/>
+      <match from="2548" to="2553"/>
+      <match from="3056" to="3058"/>
+      <match from="3882" to="3891"/>
+      <match from="4978" to="4988"/>
+      <match from="6128" to="6137"/>
+      <match from="8304" to="8304"/>
+      <match from="8308" to="8313"/>
+      <match from="8320" to="8329"/>
+      <match from="8531" to="8543"/>
+      <match from="9312" to="9371"/>
+      <match from="9450" to="9471"/>
+      <match from="10102" to="10131"/>
+      <match from="12690" to="12693"/>
+      <match from="12832" to="12841"/>
+      <match from="12881" to="12895"/>
+      <match from="12928" to="12937"/>
+      <match from="12977" to="12991"/>
+      <match from="65799" to="65843"/>
+      <match from="66336" to="66339"/>
+   </ranges>
+   <ranges complement="No">
+      <match from="9" to="177"/>
+      <match from="180" to="184"/>
+      <match from="186" to="187"/>
+      <match from="191" to="2547"/>
+      <match from="2554" to="3055"/>
+      <match from="3059" to="3881"/>
+      <match from="3892" to="4977"/>
+      <match from="4989" to="6127"/>
+      <match from="6138" to="8303"/>
+      <match from="8305" to="8307"/>
+      <match from="8314" to="8319"/>
+      <match from="8330" to="8530"/>
+      <match from="8544" to="9311"/>
+      <match from="9372" to="9449"/>
+      <match from="9472" to="10101"/>
+      <match from="10132" to="12689"/>
+      <match from="12694" to="12831"/>
+      <match from="12842" to="12880"/>
+      <match from="12896" to="12927"/>
+      <match from="12938" to="12976"/>
+      <match from="12992" to="65798"/>
+      <match from="65844" to="66335"/>
+      <match from="66340" to="1114111"/>
+   </ranges>
+</out>

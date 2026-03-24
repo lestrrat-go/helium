@@ -1,0 +1,6 @@
+<?xml version="1.0"?> <doc>
+  <para id="1" xml:lang="en">en</para>
+  <div xml:lang="en"><para>en</para></div>
+  <para id="3" xml:lang="EN">EN</para>
+  <para id="4" xml:lang="en-us">en-us</para>
+</doc>

@@ -8,8 +8,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	henc "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/enum"
+	henc "github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -85,7 +86,8 @@ var (
 	esc_tab  = []byte("&#9;")
 	esc_nl   = []byte("&#10;")
 	esc_cr   = []byte("&#13;")
-	esc_fffd = []byte("\uFFFD") // Unicode replacement character
+	esc_fffd     = []byte("\uFFFD")      // Unicode replacement character
+	esc_fffd_ref = []byte("&#xFFFD;") // U+FFFD as a numeric character reference
 )
 
 // Decide whether the given rune is in the XML Character Range, per
@@ -139,6 +141,10 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII bool) error {
 			}
 			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
 				esc = esc_fffd
+				break
+			}
+			if r == 0xFFFD {
+				esc = esc_fffd_ref
 				break
 			}
 			continue
@@ -201,6 +207,10 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 				esc = esc_fffd
 				break
 			}
+			if r == 0xFFFD {
+				esc = esc_fffd_ref
+				break
+			}
 			continue
 		}
 
@@ -254,6 +264,20 @@ func WithSkipDTD() WriteOption {
 	return func(d *Writer) { d.skipDTD = true }
 }
 
+// WithNoEscapeNonASCII suppresses escaping of non-ASCII characters to
+// numeric character references. When set, non-ASCII characters are output
+// as raw UTF-8 bytes. Used by XSLT serialization.
+func WithNoEscapeNonASCII() WriteOption {
+	return func(d *Writer) { d.noEscapeNonASCII = true }
+}
+
+// WithAllowPrefixUndecl enables output of xmlns:prefix="" namespace
+// undeclarations. This is valid in XML 1.1 and required by XSLT 3.0 when
+// undeclare-prefixes="yes" is set on xsl:output.
+func WithAllowPrefixUndecl() WriteOption {
+	return func(d *Writer) { d.allowPrefixUndecl = true }
+}
+
 // Writer serializes an XML document tree (libxml2: xmlSaveCtxt).
 //
 // All serialization behavior is configured via WriteOption functional options
@@ -270,15 +294,17 @@ func WithSkipDTD() WriteOption {
 // U+0080-U+00FF are emitted as numeric character references (&#xNN;);
 // when an encoding handler is present they pass through for re-encoding.
 type Writer struct {
-	format         bool
-	indentString   string
-	skipDTD        bool
-	noEmpty        bool
-	noDecl         bool
-	escapeNonASCII bool
-	isXHTML        bool
-	encoding       string // document encoding, used for XHTML meta injection
-	indent         int    // current indent depth (used when format is true)
+	format            bool
+	indentString      string
+	skipDTD           bool
+	noEmpty           bool
+	noDecl            bool
+	noEscapeNonASCII  bool
+	escapeNonASCII    bool
+	isXHTML           bool
+	encoding          string // document encoding, used for XHTML meta injection
+	indent            int    // current indent depth (used when format is true)
+	allowPrefixUndecl bool   // emit xmlns:prefix="" undeclarations (XML 1.1)
 }
 
 // NewWriter creates a Writer configured with the given options.
@@ -309,7 +335,7 @@ func (d *Writer) writeIndent(out io.Writer) {
 
 // hasOnlyTextChildren returns true when every child is a text or entity-ref node.
 func hasOnlyTextChildren(n Node) bool {
-	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range Children(n) {
 		switch c.Type() {
 		case TextNode, EntityRefNode, CDATASectionNode:
 			// ok
@@ -375,7 +401,7 @@ func (d *Writer) WriteDoc(out io.Writer, doc *Document) error {
 	// Mirrors libxml2's xmlSaveWriteText: when output encoding is UTF-8
 	// (no encoder), escape non-ASCII chars 0x80-0xDF as numeric refs.
 	// When an encoder is present, pass them through for re-encoding.
-	d.escapeNonASCII = true
+	d.escapeNonASCII = !d.noEscapeNonASCII
 	if enc := doc.encoding; enc != "" {
 		lower := strings.ToLower(enc)
 		if lower != "utf-8" && lower != encUTF8 && lower != "us-ascii" && lower != "ascii" {
@@ -401,7 +427,7 @@ func (d *Writer) WriteDoc(out io.Writer, doc *Document) error {
 		return err
 	}
 
-	for e := doc.FirstChild(); e != nil; e = e.NextSibling() {
+	for e := range Children(doc) {
 		if d.skipDTD && e.Type() == DTDNode {
 			continue
 		}
@@ -439,12 +465,21 @@ func (d *Writer) dumpDocContent(out io.Writer, n Node) error {
 
 	switch doc.Standalone() {
 	case StandaloneExplicitNo:
-		_, _ = io.WriteString(out, ` standalone="no"`)
+		_, _ = io.WriteString(out, ` standalone="`+lexicon.ValueNo+`"`)
 	case StandaloneExplicitYes:
-		_, _ = io.WriteString(out, ` standalone="yes"`)
+		_, _ = io.WriteString(out, ` standalone="`+lexicon.ValueYes+`"`)
 	}
 	_, _ = io.WriteString(out, "?>\n")
 	return nil
+}
+
+// dtdQuoteChar returns the appropriate quote character for a DTD identifier.
+// Uses double quote by default, single quote if the value contains double quotes.
+func dtdQuoteChar(value string) byte {
+	if strings.ContainsRune(value, '"') {
+		return '\''
+	}
+	return '"'
 }
 
 func (d *Writer) dumpDTD(out io.Writer, n Node) error {
@@ -453,15 +488,12 @@ func (d *Writer) dumpDTD(out io.Writer, n Node) error {
 	_, _ = io.WriteString(out, dtd.Name())
 
 	if dtd.externalID != "" {
-		_, _ = io.WriteString(out, " PUBLIC \"")
-		_, _ = io.WriteString(out, dtd.externalID)
-		_, _ = io.WriteString(out, "\" \"")
-		_, _ = io.WriteString(out, dtd.systemID)
-		_, _ = io.WriteString(out, "\"")
+		pubQ := dtdQuoteChar(dtd.externalID)
+		sysQ := dtdQuoteChar(dtd.systemID)
+		_, _ = fmt.Fprintf(out, " PUBLIC %c%s%c %c%s%c", pubQ, dtd.externalID, pubQ, sysQ, dtd.systemID, sysQ)
 	} else if dtd.systemID != "" {
-		_, _ = io.WriteString(out, " SYSTEM \"")
-		_, _ = io.WriteString(out, dtd.systemID)
-		_, _ = io.WriteString(out, "\"")
+		sysQ := dtdQuoteChar(dtd.systemID)
+		_, _ = fmt.Fprintf(out, " SYSTEM %c%s%c", sysQ, dtd.systemID, sysQ)
 	}
 
 	if len(dtd.entities) == 0 && len(dtd.elements) == 0 && len(dtd.pentities) == 0 && len(dtd.attributes) == 0 && len(dtd.notations) == 0 {
@@ -478,7 +510,7 @@ func (d *Writer) dumpDTD(out io.Writer, n Node) error {
 	d.format = false
 	d.indent = -1
 
-	for e := dtd.FirstChild(); e != nil; e = e.NextSibling() {
+	for e := range Children(dtd) {
 		if err := d.WriteNode(out, e); err != nil {
 			d.format = savedFormat
 			d.indent = savedIndent
@@ -838,9 +870,18 @@ func (d *Writer) dumpNsList(out io.Writer, nslist []*Namespace) error {
 }
 
 func (d *Writer) dumpNs(out io.Writer, ns *Namespace) error {
-	if ns.href == "" {
-		// no op
-		return nil
+	if ns.href == "" && ns.prefix != "" {
+		// Prefixed namespace with empty URI — skip unless serializer
+		// opts in to XML 1.1 undeclarations (xmlns:prefix="").
+		// The default XML 1.0 serialization does not support these.
+		if !d.allowPrefixUndecl {
+			return nil
+		}
+	}
+	if ns.href == "" && ns.prefix == "" {
+		// xmlns="" — namespace undeclaration; emit it
+		_, err := io.WriteString(out, ` xmlns=""`)
+		return err
 	}
 
 	// Skip the implicit xml: prefix namespace declaration.
@@ -849,17 +890,31 @@ func (d *Writer) dumpNs(out io.Writer, ns *Namespace) error {
 		return nil
 	}
 
-	_, _ = io.WriteString(out, " ")
+	if _, err := io.WriteString(out, " "); err != nil {
+		return err
+	}
 
 	if ns.prefix == "" {
-		_, _ = io.WriteString(out, "xmlns")
+		if _, err := io.WriteString(out, "xmlns"); err != nil {
+			return err
+		}
 	} else {
-		_, _ = io.WriteString(out, "xmlns:")
-		_, _ = io.WriteString(out, ns.prefix)
+		if _, err := io.WriteString(out, "xmlns:"); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(out, ns.prefix); err != nil {
+			return err
+		}
 	}
-	_, _ = io.WriteString(out, `="`)
-	_ = escapeAttrValue(out, []byte(ns.href), d.escapeNonASCII)
-	_, _ = io.WriteString(out, `"`)
+	if _, err := io.WriteString(out, `="`); err != nil {
+		return err
+	}
+	if err := escapeAttrValue(out, []byte(ns.href), d.escapeNonASCII); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(out, `"`); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -1005,7 +1060,7 @@ func (d *Writer) WriteNode(out io.Writer, n Node) error {
 			g := pdebug.IPrintf("START WriteNode(fallthrough->attribute(%s))", attr.Name())
 			_, _ = io.WriteString(out, " "+attr.Name()+`="`)
 			count := 0
-			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
+			for achld := range Children(attr) {
 				count++
 				if achld.Type() == TextNode {
 					if err := escapeAttrValue(out, achld.Content(), d.escapeNonASCII); err != nil {
@@ -1179,7 +1234,7 @@ func (d *Writer) dumpXHTMLNode(out io.Writer, n Node) error {
 		}
 	}
 
-	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range Children(e) {
 		if d.format && !textOnly {
 			d.writeIndent(out)
 		}
@@ -1228,7 +1283,7 @@ func (d *Writer) dumpXHTMLAttrList(out io.Writer, e *Element) {
 			nameAttr = attr
 		case "lang":
 			langAttr = attr
-		case "xml:lang":
+		case lexicon.QNameXMLLang:
 			xmlLangAttr = attr
 		}
 
@@ -1242,7 +1297,7 @@ func (d *Writer) dumpXHTMLAttrList(out io.Writer, e *Element) {
 		if attrValue == "" && htmlBooleanAttrs[attrName] {
 			_, _ = io.WriteString(out, attrName)
 		} else {
-			for achld := attr.FirstChild(); achld != nil; achld = achld.NextSibling() {
+			for achld := range Children(attr) {
 				if achld.Type() == TextNode {
 					_ = escapeAttrValue(out, achld.Content(), d.escapeNonASCII)
 				} else {
@@ -1281,7 +1336,7 @@ func (d *Writer) dumpXHTMLAttrList(out io.Writer, e *Element) {
 // headHasContentTypeMeta checks if a <head> element already has a
 // <meta http-equiv="Content-Type"> child.
 func (d *Writer) headHasContentTypeMeta(head *Element) bool {
-	for child := head.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range Children(head) {
 		if child.Type() != ElementNode {
 			continue
 		}

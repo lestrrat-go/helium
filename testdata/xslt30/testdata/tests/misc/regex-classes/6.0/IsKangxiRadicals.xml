@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsKangxiRadicals">
+      <match from="12032" to="12255"/>
+   </ranges>
+   <ranges complement="IsKangxiRadicals">
+      <match from="9" to="12031"/>
+      <match from="12256" to="1114111"/>
+   </ranges>
+</out>

@@ -19,13 +19,13 @@ func TestVariableScopeLookupPrefersNearestBinding(t *testing.T) {
 
 	seq, ok := shadow.Lookup("x")
 	require.True(t, ok)
-	require.Equal(t, int64(3), seq[0].(AtomicValue).IntegerVal())
+	require.Equal(t, int64(3), seq.Get(0).(AtomicValue).IntegerVal())
 
 	seq, ok = shadow.Lookup("y")
 	require.True(t, ok)
-	require.Equal(t, int64(2), seq[0].(AtomicValue).IntegerVal())
+	require.Equal(t, int64(2), seq.Get(0).(AtomicValue).IntegerVal())
 
 	seq, ok = root.Lookup("x")
 	require.True(t, ok)
-	require.Equal(t, int64(1), seq[0].(AtomicValue).IntegerVal())
+	require.Equal(t, int64(1), seq.Get(0).(AtomicValue).IntegerVal())
 }

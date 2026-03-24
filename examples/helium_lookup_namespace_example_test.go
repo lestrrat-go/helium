@@ -15,6 +15,9 @@ func Example_helium_lookup_namespace() {
 	}
 	root := doc.DocumentElement()
 
+	// LookupNSByPrefix and LookupNSByHref resolve namespace bindings that are in
+	// scope for a particular element. That is useful when translating between
+	// prefixes, URIs, and DOM nodes during namespace-aware processing.
 	byPrefix := helium.LookupNSByPrefix(root, "a")
 	byHref := helium.LookupNSByHref(root, "urn:a")
 	custom := helium.NewNamespace("b", "urn:b")

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<page xmlns:nvd="http://www.novadeck.com/nvd/">
+        père
+        <test>père</test>
+        <formfield name="test1">père</formfield>
+        <formfield2 name="test1">père</formfield2>
+        <formtxt name="test2">père</formtxt>
+</page>

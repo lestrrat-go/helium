@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Nl">
+      <match from="5870" to="5872"/>
+      <match from="8544" to="8579"/>
+      <match from="12295" to="12295"/>
+      <match from="12321" to="12329"/>
+      <match from="12344" to="12346"/>
+      <match from="66378" to="66378"/>
+   </ranges>
+   <ranges complement="Nl">
+      <match from="9" to="5869"/>
+      <match from="5873" to="8543"/>
+      <match from="8580" to="12294"/>
+      <match from="12296" to="12320"/>
+      <match from="12330" to="12343"/>
+      <match from="12347" to="66377"/>
+      <match from="66379" to="1114111"/>
+   </ranges>
+</out>

@@ -33,33 +33,33 @@ func init() {
 }
 
 func fnEmpty(_ context.Context, args []Sequence) (Sequence, error) {
-	return SingleBoolean(len(args[0]) == 0), nil
+	return SingleBoolean(seqLen(args[0]) == 0), nil
 }
 
 func fnExists(_ context.Context, args []Sequence) (Sequence, error) {
-	return SingleBoolean(len(args[0]) > 0), nil
+	return SingleBoolean(seqLen(args[0]) > 0), nil
 }
 
 func fnHead(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
-	return Sequence{args[0][0]}, nil
+	return ItemSlice{args[0].Get(0)}, nil
 }
 
 func fnTail(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) <= 1 {
+	if seqLen(args[0]) <= 1 {
 		return nil, nil
 	}
-	return args[0][1:], nil
+	return ItemSlice(seqMaterialize(args[0])[1:]), nil
 }
 
 func fnInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	target := args[0]
-	if len(args[1]) == 0 {
+	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "fn:insert-before: position argument is an empty sequence"}
 	}
-	a, err := AtomizeItem(args[1][0])
+	a, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -69,14 +69,16 @@ func fnInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	if pos < 1 {
 		pos = 1
 	}
-	if pos > len(target)+1 {
-		pos = len(target) + 1
+	tItems := seqMaterialize(target)
+	if pos > len(tItems)+1 {
+		pos = len(tItems) + 1
 	}
 
-	result := make(Sequence, 0, len(target)+len(inserts))
-	result = append(result, target[:pos-1]...)
-	result = append(result, inserts...)
-	result = append(result, target[pos-1:]...)
+	iItems := seqMaterialize(inserts)
+	result := make(ItemSlice, 0, len(tItems)+len(iItems))
+	result = append(result, tItems[:pos-1]...)
+	result = append(result, iItems...)
+	result = append(result, tItems[pos-1:]...)
 	return result, nil
 }
 
@@ -88,30 +90,42 @@ func fnRemove(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	pos := int(posVal)
 
-	if pos < 1 || pos > len(target) {
+	tItems := seqMaterialize(target)
+	if pos < 1 || pos > len(tItems) {
 		return target, nil
 	}
 
-	result := make(Sequence, 0, len(target)-1)
-	result = append(result, target[:pos-1]...)
-	result = append(result, target[pos:]...)
+	result := make(ItemSlice, 0, len(tItems)-1)
+	result = append(result, tItems[:pos-1]...)
+	result = append(result, tItems[pos:]...)
 	return result, nil
 }
 
 func fnReverse(_ context.Context, args []Sequence) (Sequence, error) {
 	seq := args[0]
-	result := make(Sequence, len(seq))
-	for i, item := range seq {
-		result[len(seq)-1-i] = item
+	items := seqMaterialize(seq)
+	result := make(ItemSlice, len(items))
+	for i, item := range items {
+		result[len(items)-1-i] = item
 	}
 	return result, nil
 }
 
 func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	seq := args[0]
-	a, err := AtomizeItem(args[1][0])
+	if seqLen(args[1]) == 0 {
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position is required"}
+	}
+	a, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
 		return nil, err
+	}
+	// Cast untypedAtomic to double (per XPath function calling convention)
+	if a.TypeName == TypeUntypedAtomic {
+		a, err = CastAtomic(a, TypeDouble)
+		if err != nil {
+			return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position must be numeric"}
+		}
 	}
 	if !isSubtypeOf(a.TypeName, TypeNumeric) {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: starting position must be numeric"}
@@ -119,11 +133,20 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	startF := math.Round(a.ToFloat64())
 
 	hasLength := len(args) > 2
+	if hasLength && seqLen(args[2]) == 0 {
+		hasLength = false // $length is xs:double? — empty means no bound
+	}
 	var lengthF float64
 	if hasLength {
-		la, err := AtomizeItem(args[2][0])
+		la, err := AtomizeItem(args[2].Get(0))
 		if err != nil {
 			return nil, err
+		}
+		if la.TypeName == TypeUntypedAtomic {
+			la, err = CastAtomic(la, TypeDouble)
+			if err != nil {
+				return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: length must be numeric"}
+			}
 		}
 		if !isSubtypeOf(la.TypeName, TypeNumeric) {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "subsequence: length must be numeric"}
@@ -150,16 +173,19 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	// Items at position p where startF <= p (and p < endF if length given)
-	var result Sequence
-	for i, item := range seq {
+	var result ItemSlice
+	i := 0
+	for item := range seqItems(seq) {
 		p := float64(i + 1)
 		if p < startF {
+			i++
 			continue
 		}
 		if hasLength && p >= endF {
 			break
 		}
 		result = append(result, item)
+		i++
 	}
 	return result, nil
 }
@@ -169,22 +195,22 @@ func fnUnordered(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnZeroOrOne(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) > 1 {
-		return nil, &XPathError{Code: "FORG0003", Message: fmt.Sprintf("zero-or-one() called with sequence of length %d", len(args[0]))}
+	if seqLen(args[0]) > 1 {
+		return nil, &XPathError{Code: "FORG0003", Message: fmt.Sprintf("zero-or-one() called with sequence of length %d", seqLen(args[0]))}
 	}
 	return args[0], nil
 }
 
 func fnOneOrMore(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, &XPathError{Code: "FORG0004", Message: "one-or-more() called with empty sequence"}
 	}
 	return args[0], nil
 }
 
 func fnExactlyOne(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) != 1 {
-		return nil, &XPathError{Code: "FORG0005", Message: fmt.Sprintf("exactly-one() called with sequence of length %d", len(args[0]))}
+	if seqLen(args[0]) != 1 {
+		return nil, &XPathError{Code: "FORG0005", Message: fmt.Sprintf("exactly-one() called with sequence of length %d", seqLen(args[0]))}
 	}
 	return args[0], nil
 }
@@ -211,11 +237,11 @@ func fnDeepEqual(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func deepEqualSequence(a, b Sequence, opts deepEqualOptions) (bool, error) {
-	if len(a) != len(b) {
+	if seqLen(a) != seqLen(b) {
 		return false, nil
 	}
-	for i := range a {
-		eq, err := deepEqualItem(a[i], b[i], opts)
+	for i := range seqLen(a) {
+		eq, err := deepEqualItem(a.Get(i), b.Get(i), opts)
 		if err != nil {
 			return false, err
 		}
@@ -443,25 +469,27 @@ func deepEqualArray(a, b ArrayItem, opts deepEqualOptions) (bool, error) {
 }
 
 func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[1]) == 0 {
+	if seqLen(args[1]) == 0 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "index-of: search value must not be empty sequence"}
 	}
-	search, err := AtomizeItem(args[1][0])
+	search, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
 		return nil, err
 	}
-	// Validate optional collation argument (3rd arg)
+	// Resolve optional collation argument (3rd arg)
+	var coll *collationImpl
 	if len(args) > 2 {
-		if len(args[2]) == 0 {
+		if seqLen(args[2]) == 0 {
 			return nil, &XPathError{Code: errCodeXPTY0004, Message: "collation argument must not be empty"}
 		}
-		collA, err := AtomizeItem(args[2][0])
+		collA, err := AtomizeItem(args[2].Get(0))
 		if err != nil {
 			return nil, err
 		}
-		coll := collA.StringVal()
-		if coll != codepointCollationURI {
-			return nil, &XPathError{Code: errCodeFOCH0002, Message: "unsupported collation: " + coll}
+		collURI := collA.StringVal()
+		coll, err = resolveCollation(collURI, "")
+		if err != nil {
+			return nil, err
 		}
 	}
 	// Per spec: untypedAtomic values are cast to xs:string for comparison
@@ -475,14 +503,20 @@ func fnIndexOf(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	var result Sequence
+	var result ItemSlice
 	for i, a := range atoms {
 		if a.TypeName == TypeUntypedAtomic {
 			a = AtomicValue{TypeName: TypeString, Value: a.StringVal()}
 		}
-		eq, err := compareAtomic(TokenEq, a, search)
-		if err != nil {
-			continue // incomparable types are silently skipped
+		var eq bool
+		if coll != nil && isStringDerived(a.TypeName) && isStringDerived(search.TypeName) {
+			eq = coll.compare(a.StringVal(), search.StringVal()) == 0
+		} else {
+			matched, cmpErr := compareAtomic(TokenEq, a, search)
+			if cmpErr != nil {
+				continue // incomparable types are silently skipped
+			}
+			eq = matched
 		}
 		if eq {
 			result = append(result, AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(i + 1))})
@@ -510,13 +544,13 @@ func fnPosition(ctx context.Context, _ []Sequence) (Sequence, error) {
 // fnSort implements fn:sort($input [, $collation [, $key]])
 func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 	input := args[0]
-	if len(input) <= 1 {
+	if seqLen(input) <= 1 {
 		return input, nil
 	}
 
 	// Optional collation (2nd argument)
 	var coll *collationImpl
-	if len(args) >= 2 && len(args[1]) > 0 {
+	if len(args) >= 2 && seqLen(args[1]) > 0 {
 		uri, err := coerceArgToString(args[1])
 		if err != nil {
 			return nil, err
@@ -531,7 +565,7 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	// Optional key function (3rd argument)
 	var keyFn *FunctionItem
-	if len(args) >= 3 && len(args[2]) > 0 {
+	if len(args) >= 3 && seqLen(args[2]) > 0 {
 		fi, err := extractFunctionItem(args[2])
 		if err != nil {
 			return nil, err
@@ -544,21 +578,22 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 		item Item
 		key  Sequence
 	}
-	pairs := make([]sortPair, len(input))
-	for i, item := range input {
+	inputItems := seqMaterialize(input)
+	pairs := make([]sortPair, len(inputItems))
+	for i, item := range inputItems {
 		if keyFn != nil {
-			k, err := keyFn.Invoke(ctx, []Sequence{{item}})
+			k, err := keyFn.Invoke(ctx, []Sequence{ItemSlice{item}})
 			if err != nil {
 				return nil, err
 			}
 			pairs[i] = sortPair{item: item, key: k}
 		} else {
 			// Default key: fn:data() semantics (atomize, flattening arrays)
-			atoms, err := AtomizeSequence(Sequence{item})
+			atoms, err := AtomizeSequence(ItemSlice{item})
 			if err != nil {
 				pairs[i] = sortPair{item: item, key: nil}
 			} else {
-				key := make(Sequence, len(atoms))
+				key := make(ItemSlice, len(atoms))
 				for k, a := range atoms {
 					key[k] = a
 				}
@@ -575,13 +610,13 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		ki := pairs[i].key
 		kj := pairs[j].key
-		minLen := len(ki)
-		if len(kj) < minLen {
-			minLen = len(kj)
+		minLen := seqLen(ki)
+		if seqLen(kj) < minLen {
+			minLen = seqLen(kj)
 		}
 		for idx := 0; idx < minLen; idx++ {
-			ai, err1 := AtomizeItem(ki[idx])
-			aj, err2 := AtomizeItem(kj[idx])
+			ai, err1 := AtomizeItem(ki.Get(idx))
+			aj, err2 := AtomizeItem(kj.Get(idx))
 			if err1 != nil || err2 != nil {
 				return false
 			}
@@ -599,13 +634,13 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 			// Equal — continue to next key component
 		}
 		// All compared items equal; shorter key comes first
-		return len(ki) < len(kj)
+		return seqLen(ki) < seqLen(kj)
 	})
 	if sortErr != nil {
 		return nil, sortErr
 	}
 
-	result := make(Sequence, len(pairs))
+	result := make(ItemSlice, len(pairs))
 	for i, p := range pairs {
 		result[i] = p.item
 	}
@@ -613,13 +648,13 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnFlatten(_ context.Context, args []Sequence) (Sequence, error) {
-	var result Sequence
+	var result ItemSlice
 	flattenItems(args[0], &result)
 	return result, nil
 }
 
-func flattenItems(seq Sequence, result *Sequence) {
-	for _, item := range seq {
+func flattenItems(seq Sequence, result *ItemSlice) {
+	for item := range seqItems(seq) {
 		if arr, ok := item.(ArrayItem); ok {
 			for _, m := range arr.members0() {
 				flattenItems(m, result)

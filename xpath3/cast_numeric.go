@@ -29,6 +29,10 @@ func castToDouble(v AtomicValue) (AtomicValue, error) {
 		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(0)}, nil
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeDouble)
+	default:
+		if isStringDerived(v.TypeName) {
+			return CastFromString(v.StringVal(), TypeDouble)
+		}
 	}
 	return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:double", v.TypeName)}
 }
@@ -36,7 +40,7 @@ func castToDouble(v AtomicValue) (AtomicValue, error) {
 func castToFloat(v AtomicValue) (AtomicValue, error) {
 	// When casting from string, use the xs:float lexical rules directly
 	// (XSD 1.1 accepts "INF", "-INF", "+INF", "NaN")
-	if v.TypeName == TypeString || v.TypeName == TypeUntypedAtomic {
+	if v.TypeName == TypeString || v.TypeName == TypeUntypedAtomic || isStringDerived(v.TypeName) {
 		return castStringToFloat(strings.TrimSpace(v.StringVal()))
 	}
 	// For non-string sources, promote through double then narrow
@@ -75,11 +79,9 @@ func castStringToFloat(s string) (AtomicValue, error) {
 	if math.IsInf(f, 0) {
 		return AtomicValue{}, castError(s, TypeFloat)
 	}
-	// Reject finite values that overflow float32 range
+	// Values that overflow float32 range become ±INF for xs:float
+	// (per XSD casting rules: overflow → infinity, not error).
 	f32 := float32(f)
-	if math.IsInf(float64(f32), 0) {
-		return AtomicValue{}, castError(s, TypeFloat)
-	}
 	// Store the float32-rounded value so precision matches xs:float semantics
 	return AtomicValue{TypeName: TypeFloat, Value: NewFloat(float64(f32))}, nil
 }
@@ -107,6 +109,10 @@ func castToInteger(v AtomicValue) (AtomicValue, error) {
 		return AtomicValue{TypeName: TypeInteger, Value: big.NewInt(0)}, nil
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeInteger)
+	default:
+		if isStringDerived(v.TypeName) {
+			return CastFromString(v.StringVal(), TypeInteger)
+		}
 	}
 	return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:integer", v.TypeName)}
 }
@@ -130,6 +136,10 @@ func castToDecimal(v AtomicValue) (AtomicValue, error) {
 		return AtomicValue{TypeName: TypeDecimal, Value: big.NewRat(0, 1)}, nil
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeDecimal)
+	default:
+		if isStringDerived(v.TypeName) {
+			return CastFromString(v.StringVal(), TypeDecimal)
+		}
 	}
 	return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:decimal", v.TypeName)}
 }
@@ -147,6 +157,10 @@ func castToBoolean(v AtomicValue) (AtomicValue, error) {
 		return AtomicValue{TypeName: TypeBoolean, Value: v.BigRat().Sign() != 0}, nil
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeBoolean)
+	default:
+		if isStringDerived(v.TypeName) {
+			return CastFromString(v.StringVal(), TypeBoolean)
+		}
 	}
 	return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:boolean", v.TypeName)}
 }
@@ -157,6 +171,10 @@ func castToBase64Binary(v AtomicValue) (AtomicValue, error) {
 		return AtomicValue{TypeName: TypeBase64Binary, Value: v.BytesVal()}, nil
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeBase64Binary)
+	default:
+		if isStringDerived(v.TypeName) {
+			return CastFromString(v.StringVal(), TypeBase64Binary)
+		}
 	}
 	return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:base64Binary", v.TypeName)}
 }
@@ -185,6 +203,10 @@ func castToHexBinary(v AtomicValue) (AtomicValue, error) {
 		return AtomicValue{TypeName: TypeHexBinary, Value: v.BytesVal()}, nil
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeHexBinary)
+	default:
+		if isStringDerived(v.TypeName) {
+			return CastFromString(v.StringVal(), TypeHexBinary)
+		}
 	}
 	return AtomicValue{}, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("cannot cast %s to xs:hexBinary", v.TypeName)}
 }

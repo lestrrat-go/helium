@@ -747,7 +747,7 @@ func TestStateValidation(t *testing.T) {
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		err := w.WriteString("text")
-		require.Error(t, err)
+		require.NoError(t, err) // stateNone allows fragment writing
 	})
 }
 

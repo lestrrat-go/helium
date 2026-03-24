@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <item class="class1">item 1</item>
+    <item class="class2">item 2</item>
+    <item class="class1">item 3</item>
+    <item class="class1">item 4</item>
+    <item class="class3">item 5</item>
+    <item class="class2">item 6</item>
+</root>

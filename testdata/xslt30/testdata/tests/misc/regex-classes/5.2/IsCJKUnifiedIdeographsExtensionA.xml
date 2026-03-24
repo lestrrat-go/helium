@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsCJKUnifiedIdeographsExtensionA">
+      <match from="13312" to="19903"/>
+   </ranges>
+   <ranges complement="IsCJKUnifiedIdeographsExtensionA">
+      <match from="9" to="13311"/>
+      <match from="19904" to="1114111"/>
+   </ranges>
+</out>

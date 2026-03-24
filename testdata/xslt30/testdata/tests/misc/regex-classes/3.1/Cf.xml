@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Cf">
+      <match from="173" to="173"/>
+      <match from="1536" to="1539"/>
+      <match from="1757" to="1757"/>
+      <match from="1807" to="1807"/>
+      <match from="6068" to="6069"/>
+      <match from="8204" to="8207"/>
+      <match from="8234" to="8238"/>
+      <match from="8288" to="8291"/>
+      <match from="8298" to="8303"/>
+      <match from="65279" to="65279"/>
+      <match from="65529" to="65531"/>
+      <match from="119155" to="119162"/>
+      <match from="917505" to="917505"/>
+      <match from="917536" to="917631"/>
+   </ranges>
+   <ranges complement="Cf">
+      <match from="9" to="172"/>
+      <match from="174" to="1535"/>
+      <match from="1540" to="1756"/>
+      <match from="1758" to="1806"/>
+      <match from="1808" to="6067"/>
+      <match from="6070" to="8203"/>
+      <match from="8208" to="8233"/>
+      <match from="8239" to="8287"/>
+      <match from="8292" to="8297"/>
+      <match from="8304" to="65278"/>
+      <match from="65280" to="65528"/>
+      <match from="65532" to="119154"/>
+      <match from="119163" to="917504"/>
+      <match from="917506" to="917535"/>
+      <match from="917632" to="1114111"/>
+   </ranges>
+</out>

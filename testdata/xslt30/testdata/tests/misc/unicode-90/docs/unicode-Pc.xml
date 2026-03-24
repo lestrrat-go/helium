@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<characters>
+   <c cp="005F" d="95" v="1.1" cat="Pc" c="_"/>
+   <c cp="203F" d="8255" v="1.1" cat="Pc" c="‿"/>
+   <c cp="2040" d="8256" v="1.1" cat="Pc" c="⁀"/>
+   <c cp="2054" d="8276" v="4.0" cat="Pc" c="⁔"/>
+   <c cp="FE33" d="65075" v="1.1" cat="Pc" c="︳"/>
+   <c cp="FE34" d="65076" v="1.1" cat="Pc" c="︴"/>
+   <c cp="FE4D" d="65101" v="1.1" cat="Pc" c="﹍"/>
+   <c cp="FE4E" d="65102" v="1.1" cat="Pc" c="﹎"/>
+   <c cp="FE4F" d="65103" v="1.1" cat="Pc" c="﹏"/>
+   <c cp="FF3F" d="65343" v="1.1" cat="Pc" c="＿"/>
+</characters>

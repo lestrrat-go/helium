@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<out>
+   <file name="xutf-16.txt">Kirche, Kinder, Küche</file>
+   <file name="xutf-8.txt">Kirche, Kinder, Küche</file>
+   <file name="xutf-16.xml">&lt;?xml version="1.0" encoding="utf-16"?&gt;Kirche, Kinder, Küche</file>
+   <file name="xutf-8.xml">&lt;?xml version="1.0" encoding="utf-8"?&gt;Kirche, Kinder, Küche</file>
+   <file name="xiso-8859-1.xml">&lt;?xml version="1.0" encoding="iso-8859-1"?&gt;Kirche, Kinder, Küche</file>
+</out>

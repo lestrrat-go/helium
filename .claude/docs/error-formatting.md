@@ -90,6 +90,36 @@ Note: line number appears twice (prefix and message suffix).
 
 Context extraction matches libxml2's `xmlParserInputGetWindow`: skip-eol, walk back 80, forward 80, cap caret.
 
+### XSLT 3.0 (`xslt3/errors.go`)
+
+**`XSLTError`** — structured error with W3C XSLT error code:
+
+```
+type XSLTError struct {
+    Code    string
+    Message string
+    Cause   error
+    Value   interface{}  // xsl:message body for $err:value in xsl:catch
+}
+```
+
+**Format** (`Error()`): `CODE: MESSAGE` (or just `MESSAGE` when Code is empty).
+
+Unwraps to `Cause` via `Unwrap()`.
+
+| Constructor | Usage |
+|-------------|-------|
+| `staticError(code, fmt, args...)` | Compile-time XSLT errors (XTSE*) |
+| `dynamicError(code, fmt, args...)` | Runtime XSLT errors (XTDE*, XTTE*, etc.) |
+
+**Sentinel errors** (exported):
+- `ErrStaticError`, `ErrDynamicError`, `ErrCircularRef`, `ErrNoTemplate`, `ErrTerminated`, `ErrInvalidOutput`
+
+**Internal sentinels**:
+- `errNilStylesheet` — returned by convenience wrappers (`Transform`, `TransformString`, `TransformToWriter`) when `*Stylesheet` is nil; prevents nil-pointer panic
+
+**Error code checker**: `isXSLTError(err, code) → bool` — unwraps and matches `XSLTError.Code`.
+
 ### Shim (`shim/compat_errors.go`)
 
 `convertParseError()` maps helium `ErrParseError` → `encoding/xml.SyntaxError`:

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsDingbats">
+      <match from="9984" to="10175"/>
+   </ranges>
+   <ranges complement="IsDingbats">
+      <match from="9" to="9983"/>
+      <match from="10176" to="1114111"/>
+   </ranges>
+</out>

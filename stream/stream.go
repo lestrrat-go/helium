@@ -304,6 +304,19 @@ func (w *Writer) lookupNS(prefix, uri string) bool {
 	return false
 }
 
+// hasDefaultNSInScope returns true if any ancestor has declared a
+// non-empty default namespace (xmlns="...") that is still in scope.
+func (w *Writer) hasDefaultNSInScope() bool {
+	for i := len(w.nsStack) - 1; i >= 0; i-- {
+		for _, ns := range w.nsStack[i].decls {
+			if ns.prefix == "" {
+				return ns.uri != ""
+			}
+		}
+	}
+	return false
+}
+
 // declareNS adds a namespace declaration to the current element scope
 // if the prefix is not already bound to the given URI.
 func (w *Writer) declareNS(prefix, uri string) {
@@ -466,6 +479,10 @@ func (w *Writer) StartElementNS(prefix, localName, namespaceURI string) error {
 	}
 	if namespaceURI != "" {
 		w.declareNS(prefix, namespaceURI)
+	} else if prefix == "" && w.hasDefaultNSInScope() {
+		// When an element has no namespace but a default namespace is
+		// in scope from an ancestor, emit xmlns="" to undeclare it.
+		w.declareNS("", "")
 	}
 	return w.err
 }
@@ -671,7 +688,7 @@ func (w *Writer) WriteString(content string) error {
 			w.elemStack[len(w.elemStack)-1].hasText = true
 		}
 		w.writeTextEscaped(content)
-	case stateText:
+	case stateNone, stateText, stateDocument:
 		if len(w.elemStack) > 0 {
 			w.elemStack[len(w.elemStack)-1].hasText = true
 		}
@@ -706,7 +723,7 @@ func (w *Writer) WriteRaw(content string) error {
 			w.elemStack[len(w.elemStack)-1].hasText = true
 		}
 		w.writeStr(content)
-	case stateText, stateDocument:
+	case stateNone, stateText, stateDocument:
 		if len(w.elemStack) > 0 {
 			w.elemStack[len(w.elemStack)-1].hasText = true
 		}
@@ -889,7 +906,27 @@ func (w *Writer) EndCDATA() error {
 }
 
 // WriteCDATA is a convenience for StartCDATA + WriteString + EndCDATA.
+// If content contains "]]>", it is split into multiple CDATA sections
+// per the XML serialization spec (e.g., "]]>" becomes "]]]]><![CDATA[>").
 func (w *Writer) WriteCDATA(content string) error {
+	for {
+		idx := strings.Index(content, "]]>")
+		if idx < 0 {
+			break
+		}
+		// Write everything up to and including "]]" as one CDATA section
+		if err := w.StartCDATA(); err != nil {
+			return err
+		}
+		if err := w.WriteString(content[:idx+2]); err != nil {
+			return err
+		}
+		if err := w.EndCDATA(); err != nil {
+			return err
+		}
+		// Continue with ">" onwards in the next CDATA section
+		content = content[idx+2:]
+	}
 	if err := w.StartCDATA(); err != nil {
 		return err
 	}
@@ -927,29 +964,44 @@ func (w *Writer) StartDTD(name, pubid, sysid string) error {
 		} else {
 			w.writeStr(" PUBLIC ")
 		}
-		w.writeByte(w.quoteChar)
+		pubQ := dtdQuoteFor(pubid, w.quoteChar)
+		w.writeByte(pubQ)
 		w.writeStr(pubid)
-		w.writeByte(w.quoteChar)
+		w.writeByte(pubQ)
 		if w.indent != "" {
 			w.writeStr("\n       ")
 		} else {
 			w.writeByte(' ')
 		}
-		w.writeByte(w.quoteChar)
+		sysQ := dtdQuoteFor(sysid, w.quoteChar)
+		w.writeByte(sysQ)
 		w.writeStr(sysid)
-		w.writeByte(w.quoteChar)
+		w.writeByte(sysQ)
 	} else if sysid != "" {
 		if w.indent != "" {
 			w.writeStr("\nSYSTEM ")
 		} else {
 			w.writeStr(" SYSTEM ")
 		}
-		w.writeByte(w.quoteChar)
+		sysQ := dtdQuoteFor(sysid, w.quoteChar)
+		w.writeByte(sysQ)
 		w.writeStr(sysid)
-		w.writeByte(w.quoteChar)
+		w.writeByte(sysQ)
 	}
 	w.state = stateDTD
 	return w.err
+}
+
+// dtdQuoteFor returns the appropriate quote character for a DTD identifier.
+// If the value contains the preferred quote, use the other one.
+func dtdQuoteFor(value string, preferred byte) byte {
+	if strings.ContainsRune(value, rune(preferred)) {
+		if preferred == '"' {
+			return '\''
+		}
+		return '"'
+	}
+	return preferred
 }
 
 // ensureDTDInternalSubset writes the opening " [" for the DTD internal

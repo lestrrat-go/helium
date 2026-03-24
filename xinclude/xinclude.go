@@ -13,13 +13,12 @@ import (
 	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/xpointer"
 )
 
 const (
-	xiNamespaceLegacy = "http://www.w3.org/2001/XInclude"
-	xiNamespaceNew    = "http://www.w3.org/2003/XInclude"
 	maxDepth          = 40
 	maxURILength      = 2000
 )
@@ -136,7 +135,7 @@ func (p *processor) processNode(ctx context.Context, n helium.Node) error {
 	// so we loop until no more are found.
 	for {
 		var includes []*helium.Element
-		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		for c := range helium.Children(n) {
 			if isXInclude(c) {
 				includes = append(includes, c.(*helium.Element))
 			}
@@ -152,7 +151,7 @@ func (p *processor) processNode(ctx context.Context, n helium.Node) error {
 	}
 
 	// Recurse into remaining children (including newly inserted content)
-	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(n) {
 		if c.Type() == helium.ElementNode {
 			if isFallback(c) {
 				return fmt.Errorf("xi:fallback is not the child of an 'include'")
@@ -190,7 +189,7 @@ func (p *processor) processInclude(ctx context.Context, inc *helium.Element) err
 	}
 
 	// 2003 namespace with fragment in href is an error per spec
-	if getNamespaceURI(inc) == xiNamespaceNew && fragment != "" {
+	if getNamespaceURI(inc) == lexicon.NamespaceXInclude11 && fragment != "" {
 		return p.handleFallback(inc, fmt.Errorf("xi:include: invalid fragment identifier in URI, use the xpointer attribute"))
 	}
 
@@ -269,7 +268,7 @@ func (p *processor) includeXML(ctx context.Context, inc *helium.Element, uri str
 
 	// Collect top-level children from included document, skipping DTD nodes
 	var nodes []helium.Node
-	for c := doc.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(doc) {
 		if c.Type() == helium.DTDNode {
 			continue
 		}
@@ -443,7 +442,7 @@ func (p *processor) mergeEntities(src, dst *helium.Document) {
 	// Ensure target has an internal subset
 	dstInt := dst.IntSubset()
 	if dstInt == nil {
-		for c := dst.FirstChild(); c != nil; c = c.NextSibling() {
+		for c := range helium.Children(dst) {
 			if c.Type() == helium.ElementNode {
 				var err error
 				dstInt, err = dst.CreateInternalSubset(c.(*helium.Element).LocalName(), "", "")
@@ -611,7 +610,7 @@ func (p *processor) loadText(uri string) ([]byte, error) {
 
 func (p *processor) handleFallback(inc *helium.Element, origErr error) error {
 	nsURI := getNamespaceURI(inc)
-	for c := inc.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(inc) {
 		if c.Type() == helium.ElementNode {
 			if elem, ok := c.(*helium.Element); ok {
 				if elem.LocalName() == "fallback" && getNamespaceURI(elem) == nsURI {
@@ -625,7 +624,7 @@ func (p *processor) handleFallback(inc *helium.Element, origErr error) error {
 
 func (p *processor) processFallback(inc *helium.Element, fb *helium.Element) error {
 	var nodes []helium.Node
-	for c := fb.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(fb) {
 		nodes = append(nodes, c)
 	}
 
@@ -708,7 +707,7 @@ func spliceReplace(target helium.Node, nodes []helium.Node) {
 }
 
 func isXINamespace(ns string) bool {
-	return ns == xiNamespaceLegacy || ns == xiNamespaceNew
+	return ns == lexicon.NamespaceXInclude || ns == lexicon.NamespaceXInclude11
 }
 
 func isFallback(n helium.Node) bool {
@@ -725,7 +724,7 @@ func isFallback(n helium.Node) bool {
 func validateIncludeChildren(inc *helium.Element) error {
 	nsURI := getNamespaceURI(inc)
 	var fallbackCount int
-	for c := inc.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(inc) {
 		if c.Type() != helium.ElementNode {
 			continue
 		}
@@ -796,10 +795,10 @@ func getNamespaceURI(n helium.Node) string {
 func getAttr(elem *helium.Element, name string) string {
 	elemNS := getNamespaceURI(elem)
 	var otherNS string
-	if elemNS == xiNamespaceLegacy {
-		otherNS = xiNamespaceNew
+	if elemNS == lexicon.NamespaceXInclude {
+		otherNS = lexicon.NamespaceXInclude11
 	} else {
-		otherNS = xiNamespaceLegacy
+		otherNS = lexicon.NamespaceXInclude
 	}
 
 	attrs := elem.Attributes()
@@ -864,7 +863,7 @@ func resolveURI(href, base string) (string, error) {
 func computeAndSetBaseURI(elem *helium.Element, includedURI, targetBase string) {
 	// If the included element already has xml:base set, leave it alone
 	for _, a := range elem.Attributes() {
-		if a.Name() == "xml:base" {
+		if a.Name() == lexicon.QNameXMLBase {
 			return
 		}
 	}
@@ -875,7 +874,7 @@ func computeAndSetBaseURI(elem *helium.Element, includedURI, targetBase string) 
 		return
 	}
 
-	_ = elem.SetAttribute("xml:base", base)
+	_ = elem.SetAttribute(lexicon.QNameXMLBase, base)
 }
 
 // computeBaseForIncludedNode sets xml:base on a node that was included via
@@ -886,7 +885,7 @@ func computeBaseForIncludedNode(elem *helium.Element, srcEffectiveBase, targetEf
 	// Check if this element has an existing xml:base attribute
 	var existingBase string
 	for _, a := range elem.Attributes() {
-		if a.Name() == "xml:base" {
+		if a.Name() == lexicon.QNameXMLBase {
 			existingBase = a.Value()
 			break
 		}
@@ -904,14 +903,14 @@ func computeBaseForIncludedNode(elem *helium.Element, srcEffectiveBase, targetEf
 		if newBase == "" {
 			return
 		}
-		_ = elem.SetAttribute("xml:base", newBase)
+		_ = elem.SetAttribute(lexicon.QNameXMLBase, newBase)
 	} else {
 		// No xml:base — set one relative to the target's effective base.
 		newBase := relativeURI(srcEffectiveBase, targetEffectiveBase)
 		if newBase == "" {
 			return
 		}
-		_ = elem.SetAttribute("xml:base", newBase)
+		_ = elem.SetAttribute(lexicon.QNameXMLBase, newBase)
 	}
 }
 
@@ -1009,7 +1008,7 @@ func fixupNamespaceDecls(n helium.Node) {
 	}
 
 	// Recurse into children
-	for c := elem.FirstChild(); c != nil; c = c.NextSibling() {
+	for c := range helium.Children(elem) {
 		fixupNamespaceDecls(c)
 	}
 }
@@ -1046,7 +1045,7 @@ func effectiveBaseURI(node helium.Node, docURI string) string {
 	for n := node; n != nil; n = n.Parent() {
 		if elem, ok := n.(*helium.Element); ok {
 			for _, a := range elem.Attributes() {
-				if a.Name() == "xml:base" {
+				if a.Name() == lexicon.QNameXMLBase {
 					bases = append(bases, a.Value())
 					break
 				}

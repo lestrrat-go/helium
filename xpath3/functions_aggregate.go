@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strconv"
 	"time"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func init() {
@@ -18,7 +21,7 @@ func init() {
 }
 
 func fnCount(_ context.Context, args []Sequence) (Sequence, error) {
-	return SingleInteger(int64(len(args[0]))), nil
+	return SingleInteger(int64(seqLen(args[0]))), nil
 }
 
 // aggregateTypeFamily classifies an atomic type for aggregate type checking.
@@ -58,22 +61,27 @@ func aggregateTypeFamily(typeName string) string {
 	return ""
 }
 
-// validateCollationArg checks if the collation argument at args[idx] is supported.
-func validateCollationArg(args []Sequence, idx int) error {
-	if len(args) <= idx || len(args[idx]) == 0 {
-		return nil
+// resolveCollationArg resolves the optional collation argument at args[idx].
+// Returns nil collation (use default) if the argument is absent or is the
+// codepoint collation.
+func resolveCollationArg(args []Sequence, idx int) (*collationImpl, error) {
+	if len(args) <= idx || seqLen(args[idx]) == 0 {
+		return nil, nil
 	}
 	uri, err := coerceArgToString(args[idx])
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if uri != codepointCollationURI {
-		return &XPathError{
-			Code:    errCodeFOCH0002,
-			Message: fmt.Sprintf("unsupported collation: %s", uri),
-		}
+	if uri == lexicon.CollationCodepoint {
+		return nil, nil
 	}
-	return nil
+	return resolveCollation(uri, "")
+}
+
+// validateCollationArg checks if the collation argument at args[idx] is supported.
+func validateCollationArg(args []Sequence, idx int) error {
+	_, err := resolveCollationArg(args, idx)
+	return err
 }
 
 func checkSumAvgType(a AtomicValue) error {
@@ -147,7 +155,7 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 	if family == "duration:YM" || family == "duration:DT" {
-		atomSeq := make(Sequence, len(atoms))
+		atomSeq := make(ItemSlice, len(atoms))
 		for i, a := range atoms {
 			atomSeq[i] = a
 		}
@@ -170,7 +178,7 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 func avgDurations(seq Sequence, family string) (Sequence, error) {
 	totalMonths := new(big.Int)
 	var totalSeconds float64
-	for _, item := range seq {
+	for item := range seqItems(seq) {
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
 		if d.Negative {
@@ -184,16 +192,11 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 	if !totalMonths.IsInt64() {
 		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
 	}
-	count := len(seq)
-	avgMonthsBig := new(big.Int).Quo(totalMonths, big.NewInt(int64(count)))
-	if !avgMonthsBig.IsInt64() {
-		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
-	}
-	avgMonths64 := avgMonthsBig.Int64()
-	if int64(int(avgMonths64)) != avgMonths64 {
-		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
-	}
-	avgMonths := int(avgMonths64)
+	count := seqLen(seq)
+	// Per XPath F&O spec: months are rounded "half towards positive infinity"
+	// i.e. math.Floor(months + 0.5), matching op:divide-yearMonthDuration behavior.
+	monthsF := float64(totalMonths.Int64()) / float64(count)
+	avgMonths := int(math.Floor(monthsF + 0.5))
 	avgSeconds := totalSeconds / float64(count)
 	negative := avgMonths < 0 || avgSeconds < 0
 	if negative {
@@ -212,6 +215,18 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 
 // promoteForAggregate promotes an atomic value for aggregate operations.
 func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
+	if a.TypeName == TypeDecimal {
+		if s, ok := a.Value.(string); ok {
+			dec, err := CastFromString(s, TypeDecimal)
+			if err != nil {
+				return AtomicValue{}, &XPathError{
+					Code:    errCodeFORG0001,
+					Message: fmt.Sprintf("cannot promote %q to xs:decimal", s),
+				}
+			}
+			return dec, nil
+		}
+	}
 	if a.TypeName == TypeUntypedAtomic {
 		f, err := castToDouble(a)
 		if err != nil {
@@ -224,6 +239,19 @@ func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
 	}
 	if isIntegerDerived(a.TypeName) && a.TypeName != TypeInteger {
 		return AtomicValue{TypeName: TypeInteger, Value: a.BigInt()}, nil
+	}
+	// User-defined schema types: promote based on the underlying Go value.
+	if !IsKnownXSDType(a.TypeName) && a.TypeName != "" {
+		switch a.Value.(type) {
+		case *big.Int:
+			return AtomicValue{TypeName: TypeInteger, Value: a.BigInt()}, nil
+		case *big.Rat:
+			return AtomicValue{TypeName: TypeDecimal, Value: a.BigRat()}, nil
+		case float64, *FloatValue:
+			return AtomicValue{TypeName: TypeDouble, Value: a.Value}, nil
+		case float32:
+			return AtomicValue{TypeName: TypeFloat, Value: a.Value}, nil
+		}
 	}
 	return a, nil
 }
@@ -267,10 +295,11 @@ func fnMax(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(atoms) == 0 {
 		return nil, nil
 	}
-	if err := validateCollationArg(args, 1); err != nil {
+	coll, err := resolveCollationArg(args, 1)
+	if err != nil {
 		return nil, err
 	}
-	return maxMinCommon(atoms, true)
+	return maxMinCommon(atoms, true, coll)
 }
 
 func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
@@ -281,13 +310,14 @@ func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(atoms) == 0 {
 		return nil, nil
 	}
-	if err := validateCollationArg(args, 1); err != nil {
+	coll, err := resolveCollationArg(args, 1)
+	if err != nil {
 		return nil, err
 	}
-	return maxMinCommon(atoms, false)
+	return maxMinCommon(atoms, false, coll)
 }
 
-func maxMinCommon(atoms []AtomicValue, isMax bool) (Sequence, error) {
+func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequence, error) {
 	fnName := "fn:min"
 	if isMax {
 		fnName = "fn:max"
@@ -350,13 +380,18 @@ func maxMinCommon(atoms []AtomicValue, isMax bool) (Sequence, error) {
 			continue
 		}
 		var cmp bool
-		if isMax {
-			cmp, err = ValueCompare(TokenGt, a, best)
+		if coll != nil && family == "string" {
+			r := coll.compare(a.StringVal(), best.StringVal())
+			cmp = (isMax && r > 0) || (!isMax && r < 0)
 		} else {
-			cmp, err = ValueCompare(TokenLt, a, best)
-		}
-		if err != nil {
-			return nil, err
+			if isMax {
+				cmp, err = ValueCompare(TokenGt, a, best)
+			} else {
+				cmp, err = ValueCompare(TokenLt, a, best)
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 		if cmp {
 			best = a
@@ -441,7 +476,7 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 	if family == "duration:YM" || family == "duration:DT" {
-		atomSeq := make(Sequence, len(atoms))
+		atomSeq := make(ItemSlice, len(atoms))
 		for i, a := range atoms {
 			atomSeq[i] = a
 		}
@@ -462,7 +497,7 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 func sumDurations(seq Sequence, family string) (Sequence, error) {
 	var totalMonths int
 	var totalSeconds float64
-	for _, item := range seq {
+	for item := range seqItems(seq) {
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
 		if d.Negative {
@@ -489,7 +524,7 @@ func sumDurations(seq Sequence, family string) (Sequence, error) {
 }
 
 func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	if err := validateCollationArg(args, 1); err != nil {
@@ -504,8 +539,12 @@ func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
 		implicitTZ = ec.getImplicitTimezone()
 	}
 	var result []AtomicValue
+	seenFast := make(map[string]struct{})
+	var numericDecInt []AtomicValue
+	var numericFloat []AtomicValue
+	var numericDouble []AtomicValue
 	seenNaN := false
-	for _, item := range args[0] {
+	for item := range seqItems(args[0]) {
 		a, err := AtomizeItem(item)
 		if err != nil {
 			return nil, err
@@ -521,6 +560,29 @@ func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
 			}
 			seenNaN = true
 			result = append(result, a)
+			continue
+		}
+		if group, key, ok := distinctValueFastKey(a); ok {
+			if _, exists := seenFast[key]; exists {
+				continue
+			}
+			found, err := distinctValueSeenInOtherNumericGroups(a, group, coll, implicitTZ, numericDecInt, numericFloat, numericDouble)
+			if err != nil {
+				return nil, err
+			}
+			if found {
+				continue
+			}
+			seenFast[key] = struct{}{}
+			result = append(result, a)
+			switch group {
+			case distinctGroupDecimalInt:
+				numericDecInt = append(numericDecInt, a)
+			case distinctGroupFloat:
+				numericFloat = append(numericFloat, a)
+			case distinctGroupDouble:
+				numericDouble = append(numericDouble, a)
+			}
 			continue
 		}
 		found := false
@@ -542,11 +604,90 @@ func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
 			result = append(result, a)
 		}
 	}
-	seq := make(Sequence, len(result))
+	seq := make(ItemSlice, len(result))
 	for i, a := range result {
 		seq[i] = a
 	}
 	return seq, nil
+}
+
+type distinctGroup uint8
+
+const (
+	distinctGroupUnknown distinctGroup = iota
+	distinctGroupString
+	distinctGroupBoolean
+	distinctGroupDecimalInt
+	distinctGroupFloat
+	distinctGroupDouble
+)
+
+func distinctValueFastKey(a AtomicValue) (distinctGroup, string, bool) {
+	switch {
+	case isStringDerived(a.TypeName):
+		return distinctGroupString, "s:" + a.StringVal(), true
+	case a.TypeName == TypeAnyURI:
+		return distinctGroupString, "s:" + stringFromAtomic(a), true
+	case a.TypeName == TypeBoolean:
+		return distinctGroupBoolean, "b:" + strconv.FormatBool(a.BooleanVal()), true
+	case isIntegerDerived(a.TypeName) || a.TypeName == TypeDecimal:
+		return distinctGroupDecimalInt, "n:" + toRatForCompare(a).RatString(), true
+	case a.TypeName == TypeFloat:
+		f := float32(a.ToFloat64())
+		if f == 0 {
+			f = 0
+		}
+		return distinctGroupFloat, "f:" + strconv.FormatUint(uint64(math.Float32bits(f)), 16), true
+	case a.TypeName == TypeDouble:
+		f := a.ToFloat64()
+		if f == 0 {
+			f = 0
+		}
+		return distinctGroupDouble, "d:" + strconv.FormatUint(math.Float64bits(f), 16), true
+	default:
+		return distinctGroupUnknown, "", false
+	}
+}
+
+func distinctValueSeenInOtherNumericGroups(
+	a AtomicValue,
+	group distinctGroup,
+	coll *collationImpl,
+	implicitTZ *time.Location,
+	decimalInts []AtomicValue,
+	floats []AtomicValue,
+	doubles []AtomicValue,
+) (bool, error) {
+	switch group {
+	case distinctGroupDecimalInt:
+		return distinctValueSeenInSet(a, coll, implicitTZ, floats, doubles)
+	case distinctGroupFloat:
+		return distinctValueSeenInSet(a, coll, implicitTZ, decimalInts, doubles)
+	case distinctGroupDouble:
+		return distinctValueSeenInSet(a, coll, implicitTZ, decimalInts, floats)
+	default:
+		return false, nil
+	}
+}
+
+func distinctValueSeenInSet(
+	a AtomicValue,
+	coll *collationImpl,
+	implicitTZ *time.Location,
+	sets ...[]AtomicValue,
+) (bool, error) {
+	for _, set := range sets {
+		for _, existing := range set {
+			eq, err := distinctValueEqual(a, existing, coll, implicitTZ)
+			if err != nil {
+				continue
+			}
+			if eq {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func distinctValueEqual(a, b AtomicValue, coll *collationImpl, implicitTZ *time.Location) (bool, error) {

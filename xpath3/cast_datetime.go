@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -67,7 +68,6 @@ func splitXSDYear(s string) (int, string, error) {
 	if digits > 4 && s[start] == '0' {
 		return 0, "", fmt.Errorf("year with leading zeros is not valid")
 	}
-	// XSD 1.1: year 0000 is valid
 	yearStr := s[start:i]
 	year, err := strconv.Atoi(yearStr)
 	if err != nil {
@@ -75,6 +75,10 @@ func splitXSDYear(s string) (int, string, error) {
 	}
 	if neg {
 		year = -year
+	}
+	// Year 0000 is not supported; reject with FODT0001.
+	if year == 0 {
+		return 0, "", &XPathError{Code: errCodeFODT0001, Message: "year zero is not supported"}
 	}
 	// Reject years outside Go's time.Time representable range.
 	// time.Date wraps silently for extreme years; cap at ±999,999,999.
@@ -88,6 +92,14 @@ func splitXSDYear(s string) (int, string, error) {
 // remaining month-day (and optional time/tz) components. It uses time.Parse
 // with a reference year of 2006, then replaces the year with the actual value.
 func buildTimeFromParts(year int, rest string, layouts []string, original string) (time.Time, bool) {
+	month, day, err := extractDateMonthDay(rest)
+	if err != nil {
+		return time.Time{}, false
+	}
+	if err := validateDateComponents(month, day, year); err != nil {
+		return time.Time{}, false
+	}
+
 	// rest starts with "-MM-DD..." — prepend a synthetic 4-digit year for time.Parse.
 	// Go's time.Parse reference year (2006) is not a leap year, so Feb 29 fails.
 	// Use a leap year (2000) in the value string. Go layout uses "2006" for year,
@@ -122,9 +134,30 @@ func buildTimeFromParts(year int, rest string, layouts []string, original string
 	return time.Time{}, false
 }
 
+func extractDateMonthDay(rest string) (int, int, error) {
+	if len(rest) < 6 || rest[0] != '-' || rest[3] != '-' {
+		return 0, 0, fmt.Errorf("invalid month-day segment %q", rest)
+	}
+
+	month, err := strconv.Atoi(rest[1:3])
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid month in %q", rest)
+	}
+
+	day, err := strconv.Atoi(rest[4:6])
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid day in %q", rest)
+	}
+	return month, day, nil
+}
+
 func parseXSDDate(s string) (time.Time, error) {
 	year, rest, err := splitXSDYear(s)
 	if err != nil {
+		var xe *XPathError
+		if errors.As(err, &xe) {
+			return time.Time{}, xe
+		}
 		return time.Time{}, fmt.Errorf("invalid xs:date: %q", s)
 	}
 	if err := validateTimezoneInString(s); err != nil {
@@ -155,6 +188,10 @@ func parseXSDDateTime(s string) (time.Time, error) {
 	}
 	year, rest, err := splitXSDYear(target)
 	if err != nil {
+		var xe *XPathError
+		if errors.As(err, &xe) {
+			return time.Time{}, xe
+		}
 		return time.Time{}, fmt.Errorf("invalid xs:dateTime: %q", s)
 	}
 	layouts := []string{
@@ -211,29 +248,51 @@ func parseXSDTime(s string) (time.Time, error) {
 // normalizeMidnight24DateTime checks if a dateTime string has T24:00:00 and
 // replaces it with T00:00:00. Returns the normalized string and true if it was
 // a midnight-24 value. The caller must advance the date by one day.
-// 24:00:00.xxx (with fractional seconds) is NOT valid per XSD.
+// 24:00:00.nnn is valid only when the fractional part is all zeros.
 func normalizeMidnight24DateTime(s string) (string, bool) {
 	idx := strings.Index(s, "T24:00:00")
 	if idx < 0 {
 		return s, false
 	}
-	// Check that minutes and seconds are exactly 00:00 (no fractional seconds allowed with hour 24)
 	rest := s[idx+len("T24:00:00"):]
+	// Allow fractional seconds only if all digits are zero (e.g. .000)
 	if len(rest) > 0 && rest[0] == '.' {
-		return s, false // 24:00:00.xxx is invalid
+		i := 1
+		for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
+			if rest[i] != '0' {
+				return s, false // non-zero fractional part is invalid
+			}
+			i++
+		}
+		if i == 1 {
+			return s, false // bare "." with no digits is invalid
+		}
+		// Strip the all-zero fractional part
+		rest = rest[i:]
 	}
 	return s[:idx] + "T00:00:00" + rest, true
 }
 
 // normalizeMidnight24Time checks if a time string starts with 24:00:00 and
 // replaces it with 00:00:00. For xs:time, 24:00:00 equals 00:00:00 (no date rollover).
+// 24:00:00.nnn is valid only when the fractional part is all zeros.
 func normalizeMidnight24Time(s string) (string, bool) {
 	if !strings.HasPrefix(s, "24:00:00") {
 		return s, false
 	}
 	rest := s[len("24:00:00"):]
 	if len(rest) > 0 && rest[0] == '.' {
-		return s, false // 24:00:00.xxx is invalid
+		i := 1
+		for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
+			if rest[i] != '0' {
+				return s, false // non-zero fractional part is invalid
+			}
+			i++
+		}
+		if i == 1 {
+			return s, false
+		}
+		rest = rest[i:]
 	}
 	return "00:00:00" + rest, true
 }
@@ -512,20 +571,35 @@ func formatDuration(d Duration, typeName string) string {
 		fmt.Fprintf(&b, "%dM", months)
 	}
 
-	totalMicro := int64(math.Round(totalSeconds * 1e6))
-	days := totalMicro / (86400 * 1e6)
-	totalMicro -= days * 86400 * 1e6
-	hours := totalMicro / (3600 * 1e6)
-	totalMicro -= hours * 3600 * 1e6
-	mins := totalMicro / (60 * 1e6)
-	totalMicro -= mins * 60 * 1e6
-	wholeSecs := totalMicro / 1e6
-	fracMicro := totalMicro % 1e6
+	// Decompose seconds using integer arithmetic to avoid int64 overflow
+	// for very large values (totalSeconds * 1e6 can exceed MaxInt64).
+	totalWholeSeconds := int64(totalSeconds)
+	fracSeconds := totalSeconds - float64(totalWholeSeconds)
+	// Round fractional part to microseconds
+	fracMicro := int64(math.Round(fracSeconds * 1e6))
+	if fracMicro >= 1e6 {
+		totalWholeSeconds++
+		fracMicro -= 1e6
+	}
+	if fracMicro < 0 {
+		fracMicro = 0
+	}
+	// Use FracSec for exact fractional representation if available
+	if d.FracSec != nil && d.FracSec.Sign() != 0 {
+		fracMicro = 0 // will be formatted from FracSec below
+	}
+	days := totalWholeSeconds / 86400
+	totalWholeSeconds -= days * 86400
+	hours := totalWholeSeconds / 3600
+	totalWholeSeconds -= hours * 3600
+	mins := totalWholeSeconds / 60
+	wholeSecs := totalWholeSeconds - mins*60
 
+	hasFrac := fracMicro != 0 || (d.FracSec != nil && d.FracSec.Sign() != 0)
+	hasSecs := wholeSecs != 0 || hasFrac
 	if days != 0 {
 		fmt.Fprintf(&b, "%dD", days)
 	}
-	hasSecs := wholeSecs != 0 || fracMicro != 0
 	if hours != 0 || mins != 0 || hasSecs {
 		b.WriteByte('T')
 		if hours != 0 {
@@ -535,7 +609,18 @@ func formatDuration(d Duration, typeName string) string {
 			fmt.Fprintf(&b, "%dM", mins)
 		}
 		if hasSecs {
-			if fracMicro == 0 {
+			if d.FracSec != nil && d.FracSec.Sign() != 0 {
+				// Use exact fractional representation
+				fracStr := d.FracSec.FloatString(20)
+				// Remove "0." prefix
+				fracStr = strings.TrimPrefix(fracStr, "0.")
+				fracStr = strings.TrimRight(fracStr, "0")
+				if fracStr == "" {
+					fmt.Fprintf(&b, "%dS", wholeSecs)
+				} else {
+					fmt.Fprintf(&b, "%d.%sS", wholeSecs, fracStr)
+				}
+			} else if fracMicro == 0 {
 				fmt.Fprintf(&b, "%dS", wholeSecs)
 			} else {
 				frac := fmt.Sprintf("%06d", fracMicro)

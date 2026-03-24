@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsCurrencySymbols">
+      <match from="8352" to="8399"/>
+   </ranges>
+   <ranges complement="IsCurrencySymbols">
+      <match from="9" to="8351"/>
+      <match from="8400" to="1114111"/>
+   </ranges>
+</out>

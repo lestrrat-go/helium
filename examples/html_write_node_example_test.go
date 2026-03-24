@@ -11,6 +11,8 @@ import (
 )
 
 func Example_html_write_node() {
+	// html.WriteNode is the fragment-oriented counterpart to html.WriteDoc.
+	// Use it when you already selected a subtree and only want that node's HTML.
 	doc, err := html.Parse(context.Background(), []byte(`<div><p>Hello</p></div>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
@@ -29,6 +31,7 @@ func Example_html_write_node() {
 		return
 	}
 
+	// This is intentionally checking a fragment, not a full HTML document.
 	fmt.Println(strings.Contains(buf.String(), "<p>Hello</p>"))
 	// Output:
 	// true

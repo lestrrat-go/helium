@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Pc">
+      <match from="95" to="95"/>
+      <match from="8255" to="8256"/>
+      <match from="8276" to="8276"/>
+      <match from="65075" to="65076"/>
+      <match from="65101" to="65103"/>
+      <match from="65343" to="65343"/>
+   </ranges>
+   <ranges complement="Pc">
+      <match from="9" to="94"/>
+      <match from="96" to="8254"/>
+      <match from="8257" to="8275"/>
+      <match from="8277" to="65074"/>
+      <match from="65077" to="65100"/>
+      <match from="65104" to="65342"/>
+      <match from="65344" to="1114111"/>
+   </ranges>
+</out>

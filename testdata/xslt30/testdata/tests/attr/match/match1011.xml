@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (a*)>
+  <!ELEMENT a (#PCDATA)>
+  <!ATTLIST a  id ID #REQUIRED>
+]>
+<doc>
+  <a id="a">A</a>
+  <a id="b">B</a>
+  <a id="c">C</a>
+  <a id="d">D</a>
+</doc>

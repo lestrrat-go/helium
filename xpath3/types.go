@@ -8,9 +8,11 @@ import (
 	"math"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/sequence"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -19,14 +21,25 @@ type Item interface {
 	itemTag()
 }
 
-// Sequence is an ordered collection of items.
-type Sequence []Item
+// Sequence is an ordered collection of XPath 3.1 items.
+// Implementations include ItemSlice (slice-backed) and lazy sequences via sequence.Range.
+type Sequence = sequence.Interface[Item]
 
-func cloneSequence(seq Sequence) Sequence {
-	if seq == nil {
-		return nil
-	}
-	return append(Sequence(nil), seq...)
+// ItemSlice is a Sequence backed by a plain slice of Item values.
+type ItemSlice = sequence.Slice[Item]
+
+// Nil-safe helpers — delegate to generic sequence package.
+var (
+	seqLen         = sequence.Len[Item]
+	seqItems       = sequence.Items[Item]
+	seqMaterialize = sequence.Materialize[Item]
+)
+
+var cloneSequence = sequence.Clone[Item]
+
+// CloneSequence returns a deep copy of the Sequence.
+func CloneSequence(seq Sequence) Sequence {
+	return cloneSequence(seq)
 }
 
 func cloneSequences(seqs []Sequence) []Sequence {
@@ -44,7 +57,11 @@ func cloneSequences(seqs []Sequence) []Sequence {
 
 // NodeItem wraps a helium.Node as an XPath item.
 type NodeItem struct {
-	Node helium.Node
+	Node             helium.Node
+	TypeAnnotation   string   // optional xs:... type annotation (schema-aware)
+	AtomizedType     string   // optional built-in base type used for typed atomization
+	ListItemType     string   // non-empty when the type is a list; the item type name
+	UnionMemberTypes []string // member type names for union types (for atomization)
 }
 
 func (NodeItem) itemTag() {}
@@ -111,14 +128,47 @@ const (
 	TypeDateTimeStamp = "xs:dateTimeStamp"
 	TypeError         = "xs:error"
 	TypeNumeric       = "xs:numeric"
+
+	// Non-atomic / structural types
+	TypeAnyType       = "xs:anyType"
+	TypeAnySimpleType = "xs:anySimpleType"
+	TypeUntyped       = "xs:untyped"
+	TypeNOTATION      = "xs:NOTATION"
 )
+
+// QAnnotation returns the Q{ns}local annotation format for a namespace URI and local name.
+func QAnnotation(ns, local string) string {
+	return "Q{" + ns + "}" + local
+}
 
 // isSubtypeOf returns true if actualType is the same as or a subtype of targetType
 // per the XSD type hierarchy.
+// subtypeCache caches isSubtypeOf results. The type hierarchy is static,
+// so results are deterministic and safe to cache globally.
+var subtypeCache sync.Map // key: [2]string{actual,target} → bool
+
 func isSubtypeOf(actualType, targetType string) bool {
 	if actualType == targetType {
 		return true
 	}
+	key := [2]string{actualType, targetType}
+	if v, ok := subtypeCache.Load(key); ok {
+		return v.(bool)
+	}
+	result := computeIsSubtypeOf(actualType, targetType)
+	subtypeCache.Store(key, result)
+	return result
+}
+
+// BuiltinIsSubtypeOf reports whether actualType is the same as or a subtype of
+// targetType using only the built-in XSD type hierarchy (no schema lookup).
+// This is exported for use by schema-aware backends (e.g. xslt3) that need to
+// check the final leg of a type ancestry chain against a built-in base type.
+func BuiltinIsSubtypeOf(actualType, targetType string) bool {
+	return isSubtypeOf(actualType, targetType)
+}
+
+func computeIsSubtypeOf(actualType, targetType string) bool {
 	// xs:numeric is a union of xs:integer, xs:decimal, xs:float, xs:double
 	if targetType == TypeNumeric {
 		return isSubtypeOf(actualType, TypeDecimal) ||
@@ -190,12 +240,17 @@ var xsdTypeParent = map[string]string{
 	TypeGMonthDay:  TypeAnyAtomicType,
 	TypeGYear:      TypeAnyAtomicType,
 	TypeGYearMonth: TypeAnyAtomicType,
+	// Complex type hierarchy (for element/attribute type tests)
+	TypeUntyped:       TypeAnyType,
+	TypeAnySimpleType: TypeAnyType,
+	TypeAnyAtomicType: TypeAnySimpleType,
 }
 
 // AtomicValue represents an XSD atomic value with its type name.
 type AtomicValue struct {
 	TypeName string // e.g. "xs:string", "xs:integer"
 	Value    any    // Go native backing value (see type table in design doc)
+	BaseType string // built-in base type when TypeName is a user-defined schema type
 }
 
 func (AtomicValue) itemTag() {}
@@ -211,13 +266,35 @@ func (a AtomicValue) IntegerVal() int64 {
 }
 
 // BigInt returns the backing *big.Int value.
+// If the value is stored as a string, it attempts to parse it.
 func (a AtomicValue) BigInt() *big.Int {
-	return a.Value.(*big.Int)
+	if n, ok := a.Value.(*big.Int); ok {
+		return n
+	}
+	if s, ok := a.Value.(string); ok {
+		n, ok := new(big.Int).SetString(s, 10)
+		if ok {
+			return n
+		}
+	}
+	return new(big.Int)
 }
 
 // BigRat returns the backing *big.Rat value.
+// If the value is stored as a string (e.g. from a type annotation mismatch),
+// it attempts to parse it.
 func (a AtomicValue) BigRat() *big.Rat {
-	return a.Value.(*big.Rat)
+	if r, ok := a.Value.(*big.Rat); ok {
+		return r
+	}
+	if s, ok := a.Value.(string); ok {
+		r, ok := new(big.Rat).SetString(s)
+		if ok {
+			return r
+		}
+	}
+	// Last resort: return zero
+	return new(big.Rat)
 }
 
 // DoubleVal returns the backing float64 value (extracts from *FloatValue).
@@ -255,13 +332,28 @@ func (a AtomicValue) QNameVal() QNameValue {
 	return a.Value.(QNameValue)
 }
 
+// IsNaN returns true if the atomic value is NaN (xs:double or xs:float).
+func (a AtomicValue) IsNaN() bool {
+	if a.TypeName != TypeDouble && a.TypeName != TypeFloat {
+		return false
+	}
+	fv, ok := a.Value.(*FloatValue)
+	return ok && fv.IsNaN()
+}
+
 // IsNumeric returns true if the type is xs:integer (or derived), xs:decimal, xs:double, or xs:float.
+// Also returns true for user-defined types whose underlying value is numeric.
 func (a AtomicValue) IsNumeric() bool {
 	if isIntegerDerived(a.TypeName) {
 		return true
 	}
 	switch a.TypeName {
 	case TypeDecimal, TypeDouble, TypeFloat:
+		return true
+	}
+	// User-defined schema types: check the underlying Go value.
+	switch a.Value.(type) {
+	case *big.Int, *big.Rat, float64, float32, *FloatValue:
 		return true
 	}
 	return false
@@ -440,7 +532,12 @@ func normalizeMapKey(key AtomicValue) mapKey {
 
 	switch v := key.Value.(type) {
 	case time.Time:
-		return mapKey{typeName: tn, value: v.UTC().Format(time.RFC3339Nano)}
+		// Per XPath 3.1, dateTimes with and without timezone are not equal
+		// (they are incomparable), so they must be different map keys.
+		if HasTimezone(v) {
+			return mapKey{typeName: tn, value: v.UTC().Format(time.RFC3339Nano)}
+		}
+		return mapKey{typeName: tn, value: "notz:" + v.Format("2006-01-02T15:04:05.999999999")}
 	case []byte:
 		return mapKey{typeName: tn, value: hex.EncodeToString(v)}
 	case QNameValue:
@@ -566,14 +663,14 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
 					continue
 				case MergeReject:
 					return MapItem{}, &XPathError{
-						Code:    "FOJS0003",
+						Code:    errCodeFOJS0003,
 						Message: fmt.Sprintf("duplicate key in map merge: %v", e.key.Value),
 					}
 				case MergeCombine:
 					// Combine: concatenate values
 					allEntries[idx] = mapEntry{
 						key:   allEntries[idx].key,
-						value: append(cloneSequence(allEntries[idx].value), e.value...),
+						value: ItemSlice(append(cloneSequence(allEntries[idx].value).Materialize(), e.value.Materialize()...)),
 					}
 					continue
 				}
@@ -588,6 +685,64 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
 		newIndex[normalizeMapKey(e.key)] = i
 	}
 	return MapItem{entries: allEntries, index: newIndex}, nil
+}
+
+// MapBuilder accumulates map entries without defensive cloning,
+// producing a MapItem when Build is called. This is significantly
+// faster than MergeMaps for large merges because it avoids
+// per-entry cloneSequence calls and builds the index incrementally.
+type MapBuilder struct {
+	entries []mapEntry
+	index   map[mapKey]int
+	policy  MergePolicy
+}
+
+// NewMapBuilder creates a builder for accumulating map entries.
+// sizeHint is used to pre-allocate internal storage.
+func NewMapBuilder(policy MergePolicy, sizeHint int) *MapBuilder {
+	return &MapBuilder{
+		entries: make([]mapEntry, 0, sizeHint),
+		index:   make(map[mapKey]int, sizeHint),
+		policy:  policy,
+	}
+}
+
+// Add inserts a key-value pair into the builder, applying the merge policy
+// for duplicate keys. The value is NOT cloned — the caller must ensure the
+// value is not mutated after this call (which is the case for values produced
+// by the evaluator, since XPath values are immutable).
+func (b *MapBuilder) Add(key AtomicValue, value Sequence) error {
+	nk := normalizeMapKey(key)
+	if idx, ok := b.index[nk]; ok {
+		switch b.policy {
+		case MergeUseFirst:
+			return nil
+		case MergeUseLast:
+			b.entries[idx] = mapEntry{key: key, value: value}
+			return nil
+		case MergeReject:
+			return &XPathError{
+				Code:    errCodeFOJS0003,
+				Message: fmt.Sprintf("duplicate key in map merge: %v", key.Value),
+			}
+		case MergeCombine:
+			existing := b.entries[idx].value
+			b.entries[idx] = mapEntry{
+				key:   b.entries[idx].key,
+				value: ItemSlice(append(seqMaterialize(existing), seqMaterialize(value)...)),
+			}
+			return nil
+		}
+	}
+	b.index[nk] = len(b.entries)
+	b.entries = append(b.entries, mapEntry{key: key, value: value})
+	return nil
+}
+
+// Build returns the accumulated MapItem. The builder should not be used
+// after calling Build.
+func (b *MapBuilder) Build() MapItem {
+	return MapItem{entries: b.entries, index: b.index}
 }
 
 // --- ArrayItem ---
@@ -681,11 +836,11 @@ func (a ArrayItem) SubArray(start, length int) (ArrayItem, error) {
 // Flatten returns all members concatenated into a single sequence.
 // Nested arrays are recursively flattened per XPath 3.1 spec.
 func (a ArrayItem) Flatten() Sequence {
-	var result Sequence
+	var result ItemSlice
 	for _, m := range a.members {
-		for _, item := range m {
+		for item := range m.Items() {
 			if nested, ok := item.(ArrayItem); ok {
-				result = append(result, nested.Flatten()...)
+				result = append(result, nested.Flatten().Materialize()...)
 			} else {
 				result = append(result, item)
 			}
@@ -696,15 +851,213 @@ func (a ArrayItem) Flatten() Sequence {
 
 // --- Atomization ---
 
+// IsKnownXSDType returns true if name is a recognized XSD type in the
+// xpath3 type hierarchy (the xsdTypeParent map or a base type).
+func IsKnownXSDType(name string) bool {
+	if _, ok := xsdTypeParent[name]; ok {
+		return true
+	}
+	switch name {
+	case TypeAnyAtomicType, TypeNumeric,
+		TypeAnyType, TypeAnySimpleType, TypeUntyped,
+		TypeNOTATION, TypeError,
+		TypeNMTOKENS, TypeENTITIES, TypeIDREFS:
+		return true
+	}
+	return false
+}
+
+func schemaAnnotationParts(name string) (local, ns string, ok bool) {
+	if strings.HasPrefix(name, "Q{") {
+		end := strings.IndexByte(name, '}')
+		if end <= 1 || end == len(name)-1 {
+			return "", "", false
+		}
+		return name[end+1:], name[2:end], true
+	}
+	if strings.HasPrefix(name, "xs:") || strings.HasPrefix(name, "xsd:") {
+		return "", "", false
+	}
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		return name[idx+1:], "", true
+	}
+	if name == "" {
+		return "", "", false
+	}
+	return name, "", true
+}
+
+// resolveQNameFromNode resolves a QName string (e.g., "my:brown-bear") using
+// the in-scope namespaces of the given node.
+func resolveQNameFromNode(s string, node helium.Node) (QNameValue, error) {
+	s = strings.TrimSpace(s)
+	prefix, local := "", s
+	if idx := strings.IndexByte(s, ':'); idx >= 0 {
+		prefix = s[:idx]
+		local = s[idx+1:]
+	}
+	var uri string
+	scope := node
+	if _, ok := scope.(*helium.Element); !ok {
+		scope = node.Parent()
+	}
+	if prefix != "" {
+		for p := scope; p != nil; p = p.Parent() {
+			pe, ok := p.(*helium.Element)
+			if !ok {
+				continue
+			}
+			for _, ns := range pe.Namespaces() {
+				if ns.Prefix() == prefix {
+					uri = ns.URI()
+					break
+				}
+			}
+			if uri != "" {
+				break
+			}
+		}
+		if uri == "" {
+			return QNameValue{}, fmt.Errorf("undeclared namespace prefix: %s", prefix)
+		}
+	} else {
+		for p := scope; p != nil; p = p.Parent() {
+			pe, ok := p.(*helium.Element)
+			if !ok {
+				continue
+			}
+			for _, ns := range pe.Namespaces() {
+				if ns.Prefix() == "" {
+					uri = ns.URI()
+					break
+				}
+			}
+			if uri != "" {
+				break
+			}
+		}
+	}
+	return QNameValue{Prefix: prefix, Local: local, URI: uri}, nil
+}
+
+func atomizedTypeForAnnotation(annotation string, decls SchemaDeclarations) string {
+	switch annotation {
+	case "", TypeUntypedAtomic, TypeUntyped:
+		return ""
+	}
+	if IsKnownXSDType(annotation) {
+		return annotation
+	}
+	if decls == nil {
+		return ""
+	}
+
+	// Check if this is a union type — if so, return the annotation itself
+	// so that AtomizeItem can try member types via the SchemaDeclarations.
+	members := decls.UnionMemberTypes(annotation)
+	if len(members) > 0 {
+		// For union types, find the first member type that resolves to a
+		// concrete built-in type — this will be used for atomization.
+		for _, m := range members {
+			mType := atomizedTypeForAnnotation(m, decls)
+			if mType != "" && mType != TypeAnySimpleType && mType != TypeAnyAtomicType {
+				return mType
+			}
+		}
+		return ""
+	}
+
+	current := annotation
+	for i := 0; i < 32; i++ {
+		local, ns, ok := schemaAnnotationParts(current)
+		if !ok {
+			return ""
+		}
+		baseType, ok := decls.LookupSchemaType(local, ns)
+		if !ok || baseType == "" || baseType == current {
+			return ""
+		}
+		switch baseType {
+		case TypeUntypedAtomic, TypeUntyped:
+			return ""
+		}
+		// xs:anySimpleType is not a useful atomized type — it means we
+		// reached the top of the simple type hierarchy without finding a
+		// concrete type (e.g. for union types). Return empty.
+		if baseType == TypeAnySimpleType || baseType == TypeAnyAtomicType {
+			return ""
+		}
+		if IsKnownXSDType(baseType) {
+			return baseType
+		}
+		current = baseType
+	}
+	return ""
+}
+
 // AtomizeItem converts a single item to an atomic value per XPath 3.1 Section 2.6.2.
 func AtomizeItem(item Item) (AtomicValue, error) {
 	switch v := item.(type) {
 	case AtomicValue:
 		return v, nil
 	case NodeItem:
+		s := ixpath.StringValue(v.Node)
+		if v.TypeAnnotation != "" && v.TypeAnnotation != TypeUntypedAtomic {
+			// QName-like types need namespace resolution from the node's scope.
+			if v.TypeAnnotation == TypeQName || v.TypeAnnotation == TypeNOTATION ||
+				v.AtomizedType == TypeQName || v.AtomizedType == TypeNOTATION {
+				if qv, err := resolveQNameFromNode(s, v.Node); err == nil {
+					typeName := v.TypeAnnotation
+					if typeName == "" {
+						typeName = v.AtomizedType
+					}
+					if typeName == "" {
+						typeName = TypeQName
+					}
+					return AtomicValue{TypeName: typeName, Value: qv}, nil
+				}
+			}
+			cast, err := CastFromString(s, v.TypeAnnotation)
+			if err == nil {
+				return cast, nil
+			}
+		}
+		if v.AtomizedType != "" && v.AtomizedType != TypeUntypedAtomic && v.AtomizedType != v.TypeAnnotation {
+			cast, err := CastFromString(s, v.AtomizedType)
+			if err == nil {
+				// Preserve the user-defined type annotation so that
+				// "instance of" checks match the original schema type.
+				if v.TypeAnnotation != "" && !IsKnownXSDType(v.TypeAnnotation) {
+					cast.BaseType = cast.TypeName
+					cast.TypeName = v.TypeAnnotation
+				}
+				return cast, nil
+			}
+		}
+		// Union types: try each member type until one succeeds.
+		if len(v.UnionMemberTypes) > 0 {
+			for _, memberType := range v.UnionMemberTypes {
+				cast, err := CastFromString(s, memberType)
+				if err == nil {
+					cast.BaseType = cast.TypeName
+					cast.TypeName = v.TypeAnnotation
+					return cast, nil
+				}
+			}
+		}
+		// XPath 3.1 Section 2.6.2: typed value of PI, comment, and namespace nodes is xs:string
+		if v.Node != nil {
+			switch v.Node.Type() {
+			case helium.ProcessingInstructionNode, helium.CommentNode, helium.NamespaceNode:
+				return AtomicValue{
+					TypeName: TypeString,
+					Value:    s,
+				}, nil
+			}
+		}
 		return AtomicValue{
 			TypeName: TypeUntypedAtomic,
-			Value:    ixpath.StringValue(v.Node),
+			Value:    s,
 		}, nil
 	case ArrayItem:
 		// XPath 3.1: atomizing an array atomizes each member and concatenates
@@ -716,8 +1069,8 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 		}
 		if v.Size() == 1 {
 			member, _ := v.Get(1)
-			if len(member) == 1 {
-				return AtomizeItem(member[0])
+			if seqLen(member) == 1 {
+				return AtomizeItem(member.Get(0))
 			}
 		}
 		return AtomicValue{}, &XPathError{

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
-)
 
-const xmlNSURI = "http://www.w3.org/XML/1998/namespace"
+	"github.com/lestrrat-go/helium/internal/lexicon"
+)
 
 // nsStack tracks namespace prefix bindings for the encoder, matching
 // stdlib encoding/xml's createAttrPrefix/popPrefix behavior.
@@ -46,7 +46,7 @@ func (s *nsStack) createAttrPrefix(w *bufio.Writer, url string) string {
 		}
 	}
 
-	if url == xmlNSURI {
+	if url == lexicon.NamespaceXML {
 		return "xml"
 	}
 

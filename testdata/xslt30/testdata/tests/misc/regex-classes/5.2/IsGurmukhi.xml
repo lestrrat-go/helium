@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsGurmukhi">
+      <match from="2560" to="2687"/>
+   </ranges>
+   <ranges complement="IsGurmukhi">
+      <match from="9" to="2559"/>
+      <match from="2688" to="1114111"/>
+   </ranges>
+</out>

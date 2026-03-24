@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<doc xmlns:ed="http://www.example.edu" xmlns:co="http://www.example.com" xmlns:bz="http://www.example.biz">
+  <a mark="plain"/>
+  <ed:a mark="ed-a"/>
+  <ed:b mark="ed-b"/>
+  <co:a mark="co-a"/>
+  <co:b mark="co-b"/>
+  <bz:a mark="bz-a"/>
+  <bz:b mark="bz-b"/>
+</doc>

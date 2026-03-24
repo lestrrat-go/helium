@@ -1,0 +1,3 @@
+<test xsi:schemaLocation="http://ns.example.com/val12/ validation-12.xsd"
+xmlns="http://ns.example.com/val12/"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="false">7</test>

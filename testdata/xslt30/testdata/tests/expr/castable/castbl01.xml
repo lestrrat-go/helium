@@ -1,0 +1,15 @@
+<?xml version="1.0" ?>
+<untypedDoc>
+<string>abcd</string>
+<boolean>true</boolean>
+<integer>43</integer>
+<decimal>-1.23</decimal>
+<float>12.78e-2</float>
+<double>12.78e-2</double>
+<schemaDuration>P1Y2M3DT1H2M3S</schemaDuration>
+<dayTimeDuration>P3DT1H2M3S</dayTimeDuration>
+<yearMonthDuration>P1Y2M</yearMonthDuration>
+<dateTime>2002-10-10T12:00:00-05:00</dateTime>
+<date>2006-05-16</date>
+<time>23:17:00</time>
+</untypedDoc>

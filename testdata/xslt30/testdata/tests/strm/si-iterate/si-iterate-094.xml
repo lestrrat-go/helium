@@ -1,0 +1,11 @@
+<doc>
+  <chapter>
+    <p>foo bar foobar</p>
+  </chapter>
+  <chapter>
+    <p>foobar baz foo</p>
+  </chapter>
+  <chapter>
+    <p>baz bar foobaz</p>
+  </chapter>
+</doc>

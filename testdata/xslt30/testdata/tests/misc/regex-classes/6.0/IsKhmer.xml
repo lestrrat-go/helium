@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsKhmer">
+      <match from="6016" to="6143"/>
+   </ranges>
+   <ranges complement="IsKhmer">
+      <match from="9" to="6015"/>
+      <match from="6144" to="1114111"/>
+   </ranges>
+</out>

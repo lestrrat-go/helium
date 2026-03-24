@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<doc>
+  <div>
+    <title>Introduction</title>
+    <p>Intro Section.</p>
+  </div>
+  
+  <div>
+    <title>Stylesheet Structure</title>
+    <p>SS Section.</p>
+    <div>
+      <title>Introduction</title>
+      <p>Intro to SS subsection.</p>
+    </div>
+  </div>
+  
+  <div>
+    <title>Expressions</title>
+    <p>Exp Section.</p>
+  </div>
+
+  <appendix>
+    <title>Appendix Title</title>
+    <p>Appendix.</p>
+    <div>
+      <title>Introduction</title>
+      <p>Intro to Appendix.</p>
+    </div>
+  </appendix>
+</doc>

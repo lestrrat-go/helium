@@ -23,11 +23,11 @@ func fnFormatTime(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return SingleString(""), nil
 	}
 
-	valAtom, err := AtomizeItem(args[0][0])
+	valAtom, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 		lang = ec.getDefaultLanguage()
 	}
 	calendar := ""
-	if len(args) > 2 && len(args[2]) > 0 {
+	if len(args) > 2 && seqLen(args[2]) > 0 {
 		lang, err = coerceArgToString(args[2])
 		if err != nil {
 			return nil, err
@@ -61,7 +61,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 			return nil, &XPathError{Code: errCodeFOFD1340, Message: "format-dateTime: language argument must not be empty"}
 		}
 	}
-	if len(args) > 3 && len(args[3]) > 0 {
+	if len(args) > 3 && seqLen(args[3]) > 0 {
 		calendar, err = coerceArgToString(args[3])
 		if err != nil {
 			return nil, err
@@ -71,7 +71,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 		}
 	}
 
-	if len(args) > 4 && len(args[4]) > 0 {
+	if len(args) > 4 && seqLen(args[4]) > 0 {
 		place, err := coerceArgToString(args[4])
 		if err != nil {
 			return nil, err
@@ -99,6 +99,26 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 // formatDateTimePicture formats a time.Time value using an XPath picture string.
 func formatDateTimePicture(t time.Time, picture, lang, calendar, typeName string) (string, error) {
 	var b strings.Builder
+
+	// Language fallback: if the requested language is not "en", fall back
+	// and prepend [Language: en] per XPath F&O §9.8.4.
+	effectiveLang := lang
+	if effectiveLang == "" {
+		effectiveLang = "en"
+	}
+	if !isSupportedLanguage(effectiveLang) {
+		b.WriteString("[Language: en]")
+		effectiveLang = "en"
+	}
+
+	// Calendar fallback: if a non-ISO calendar is requested, fall back
+	// to the Gregorian/AD calendar and prepend [Calendar: AD].
+	effectiveCalendar := calendar
+	if effectiveCalendar != "" && !isISOCalendar(effectiveCalendar) {
+		b.WriteString("[Calendar: AD]")
+		effectiveCalendar = "ISO"
+	}
+
 	i := 0
 	runes := []rune(picture)
 
@@ -122,7 +142,7 @@ func formatDateTimePicture(t time.Time, picture, lang, calendar, typeName string
 				return "", &XPathError{Code: errCodeFOFD1340, Message: "unclosed '[' in picture string"}
 			}
 			component := string(runes[i+1 : end])
-			formatted, err := formatComponent(t, component, lang, calendar, typeName)
+			formatted, err := formatComponent(t, component, effectiveLang, effectiveCalendar, typeName)
 			if err != nil {
 				return "", err
 			}
@@ -143,6 +163,16 @@ func formatDateTimePicture(t time.Time, picture, lang, calendar, typeName string
 	}
 
 	return b.String(), nil
+}
+
+// isSupportedLanguage returns true if the language is supported for formatting.
+func isSupportedLanguage(lang string) bool {
+	switch lang {
+	case "en", "de":
+		return true
+	default:
+		return false
+	}
 }
 
 // formatComponent handles a single [component] specifier.
@@ -192,7 +222,7 @@ func formatComponent(t time.Time, spec, lang, calendar, typeName string) (string
 		}
 		value = int64(h)
 	case 'P':
-		return formatAMPM(t, presentation), nil
+		return formatAMPM(t, presentation, width), nil
 	case 'm':
 		value = int64(t.Minute())
 	case 's':
@@ -200,7 +230,7 @@ func formatComponent(t time.Time, spec, lang, calendar, typeName string) (string
 	case 'f':
 		return formatFractionalSeconds(t, presentation, width), nil
 	case 'Z', 'z':
-		return formatTimezone(t, compChar, presentation), nil
+		return formatTimezone(t, compChar, presentation, width), nil
 	case 'W':
 		_, w := t.ISOWeek()
 		value = int64(w)
@@ -637,7 +667,7 @@ func formatDayOfWeek(t time.Time, p dtPresentation, w dtWidth, lang string) stri
 	}
 }
 
-func formatAMPM(t time.Time, p dtPresentation) string {
+func formatAMPM(t time.Time, p dtPresentation, w dtWidth) string {
 	var s string
 	if t.Hour() < 12 {
 		s = "am"
@@ -646,14 +676,17 @@ func formatAMPM(t time.Time, p dtPresentation) string {
 	}
 	switch p.format {
 	case "N":
-		return strings.ToUpper(s)
+		s = strings.ToUpper(s)
 	case "n":
-		return strings.ToLower(s)
+		s = strings.ToLower(s)
 	case "Nn":
-		return strings.ToUpper(s[:1]) + s[1:]
-	default:
-		return s
+		s = strings.ToUpper(s[:1]) + s[1:]
 	}
+	// Apply maximum width constraint: truncate to maxWidth characters
+	if w.maxWidth > 0 && len(s) > w.maxWidth {
+		s = s[:w.maxWidth]
+	}
+	return s
 }
 
 func formatFractionalSeconds(t time.Time, p dtPresentation, w dtWidth) string {
@@ -756,7 +789,7 @@ func formatFractionalSeconds(t time.Time, p dtPresentation, w dtWidth) string {
 	return s
 }
 
-func formatTimezone(t time.Time, comp byte, p dtPresentation) string {
+func formatTimezone(t time.Time, comp byte, p dtPresentation, w dtWidth) string {
 	// Check if the time has no explicit timezone
 	if !HasTimezone(t) {
 		if p.format == "Z" && !p.implicit {
@@ -778,6 +811,11 @@ func formatTimezone(t time.Time, comp byte, p dtPresentation) string {
 	}
 
 	spec := parseTimezonePicture(comp, p)
+	// When a width modifier is present and limits the width to just the hour
+	// portion, show minutes only when non-zero (XSLT 2.0 Erratum E29 behavior).
+	if w.maxWidth > 0 && p.implicit && w.maxWidth <= spec.hourWidth {
+		spec.showMinutes = false
+	}
 	return renderTimezoneOffset(offset, spec)
 }
 
@@ -959,7 +997,7 @@ func militaryTimezoneCode(offset int) (string, bool) {
 
 func isISOCalendar(calendar string) bool {
 	switch calendar {
-	case "ISO", "Q{}ISO":
+	case "ISO", "Q{}ISO", "AD", "Q{}AD":
 		return true
 	default:
 		return false
@@ -995,10 +1033,7 @@ func validateCalendarName(calendar string) error {
 		}
 		return nil
 	}
-	if !isKnownCalendarName(calendar) {
-		return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
-	}
-	return nil
+	return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
 }
 
 func isNCName(s string) bool {
@@ -1041,7 +1076,9 @@ func isoMonthWeekOneStart(t time.Time) time.Time {
 
 func isKnownCalendarName(calendar string) bool {
 	switch calendar {
-	case "ISO", "CB":
+	case "ISO", "AD", "AH", "AM", "AP", "AS", "BE", "CB", "CE", "CL",
+		"CS", "EE", "FE", "JE", "KE", "KY", "ME", "MS", "NS",
+		"OS", "RS", "SE", "SH", "SS", "TE", "US":
 		return true
 	default:
 		return false

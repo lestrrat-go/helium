@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsHiragana">
+      <match from="12352" to="12447"/>
+   </ranges>
+   <ranges complement="IsHiragana">
+      <match from="9" to="12351"/>
+      <match from="12448" to="1114111"/>
+   </ranges>
+</out>

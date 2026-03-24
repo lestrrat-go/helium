@@ -1,0 +1,27 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema043.uri/"
+           elementFormDefault="qualified">
+
+
+
+<xs:simpleType name="list10int">
+  <xs:restriction>
+    <xs:simpleType>
+      <xs:list itemType="xs:positiveInteger"/>
+    </xs:simpleType>
+    <xs:length value="10"/>  
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="list5-8int">
+  <xs:restriction>
+    <xs:simpleType>
+      <xs:list itemType="xs:positiveInteger"/>
+    </xs:simpleType>
+    <xs:minLength value="5"/> 
+    <xs:maxLength value="8"/>  
+  </xs:restriction>
+</xs:simpleType>
+
+</xs:schema>

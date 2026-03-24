@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <p>Some text <span class="italic">broken </span><span class="italic">tag</span><span class="italic">s</span> in my content which is <span class="italic">really </span><span class="italic">annoying</span>.</p>
+    <p>Testing <span class="class1">the code</span><span> with </span> some other samples.</p>
+    <p>Testing <b class="foo">adjacent </b><i class="foo">elements</i> of different name.</p>
+</root>

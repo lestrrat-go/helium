@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/unparsedtext"
 )
 
@@ -33,7 +34,7 @@ type jsonOptions struct {
 }
 
 func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	s, err := coerceArgToString(args[0])
@@ -72,7 +73,7 @@ func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, nil
 	}
 
-	return Sequence{item}, nil
+	return ItemSlice{item}, nil
 }
 
 // parseJSONOptions extracts and validates options from the second argument.
@@ -80,10 +81,10 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 	opts := jsonOptions{
 		duplicates: "use-first", // XPath spec default
 	}
-	if len(args) <= 1 || len(args[1]) == 0 {
+	if len(args) <= 1 || seqLen(args[1]) == 0 {
 		return opts, nil
 	}
-	m, ok := args[1][0].(MapItem)
+	m, ok := args[1].Get(0).(MapItem)
 	if !ok {
 		return opts, nil
 	}
@@ -91,10 +92,10 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 	// Parse "liberal" option — must be xs:boolean
 	liberalKey := AtomicValue{TypeName: TypeString, Value: "liberal"}
 	if v, found := m.Get(liberalKey); found {
-		if len(v) != 1 {
+		if seqLen(v) != 1 {
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'liberal' must be a single xs:boolean"}
 		}
-		av, ok := v[0].(AtomicValue)
+		av, ok := v.Get(0).(AtomicValue)
 		if !ok {
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'liberal' must be xs:boolean"}
 		}
@@ -109,10 +110,10 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 	// Parse "duplicates" option
 	dupKey := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 	if v, found := m.Get(dupKey); found {
-		if len(v) != 1 {
+		if seqLen(v) != 1 {
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must be a single string"}
 		}
-		av, ok := v[0].(AtomicValue)
+		av, ok := v.Get(0).(AtomicValue)
 		if !ok {
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must be a string"}
 		}
@@ -129,10 +130,10 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 	// Parse "escape" option — must be xs:boolean
 	escKey := AtomicValue{TypeName: TypeString, Value: "escape"}
 	if v, found := m.Get(escKey); found {
-		if len(v) != 1 {
+		if seqLen(v) != 1 {
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'escape' must be a single xs:boolean"}
 		}
-		av, ok := v[0].(AtomicValue)
+		av, ok := v.Get(0).(AtomicValue)
 		if !ok {
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'escape' must be xs:boolean"}
 		}
@@ -147,11 +148,11 @@ func parseJSONOptions(args []Sequence) (jsonOptions, error) {
 	// Parse "fallback" option — must be a function item
 	fbKey := AtomicValue{TypeName: TypeString, Value: "fallback"}
 	if v, found := m.Get(fbKey); found {
-		if len(v) != 1 {
+		if seqLen(v) != 1 {
 			return opts, &XPathError{Code: errCodeFOJS0005,
 				Message: "option 'fallback' must be a single function item"}
 		}
-		fi, ok := v[0].(FunctionItem)
+		fi, ok := v.Get(0).(FunctionItem)
 		if !ok {
 			return opts, &XPathError{Code: errCodeFOJS0005,
 				Message: "option 'fallback' must be a function item"}
@@ -201,7 +202,7 @@ func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts
 				}
 				var value Sequence
 				if valueItem != nil {
-					value = Sequence{valueItem}
+					value = ItemSlice{valueItem}
 				}
 
 				if prev, found := index[key]; found {
@@ -241,7 +242,7 @@ func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts
 					members = append(members, nil)
 					continue
 				}
-				members = append(members, Sequence{item})
+				members = append(members, ItemSlice{item})
 			}
 			endTok, err := dec.Token()
 			if err != nil {
@@ -402,7 +403,7 @@ func applyJSONStringOptions(ctx context.Context, s string, opts jsonOptions) (st
 
 		repl := string(rune(0xFFFD))
 		if opts.fallback != nil {
-			seq, err := opts.fallback.Invoke(ctx, []Sequence{{AtomicValue{TypeName: TypeString, Value: raw}}})
+			seq, err := opts.fallback.Invoke(ctx, []Sequence{ItemSlice{AtomicValue{TypeName: TypeString, Value: raw}}})
 			if err != nil {
 				return "", err
 			}
@@ -478,7 +479,7 @@ func canonicalInvalidJSONEscape(raw string) string {
 }
 
 func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	uri, err := coerceArgToString(args[0])
@@ -497,7 +498,7 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	// Delegate to parse-json logic, preserving any caller-supplied options.
-	parseArgs := []Sequence{{AtomicValue{TypeName: TypeString, Value: string(body)}}}
+	parseArgs := []Sequence{ItemSlice{AtomicValue{TypeName: TypeString, Value: string(body)}}}
 	if len(args) > 1 {
 		parseArgs = append(parseArgs, args[1])
 	}
@@ -505,7 +506,7 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 
@@ -552,7 +553,7 @@ func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err := doc.SetDocumentElement(root); err != nil {
 		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
 	}
-	return Sequence{NodeItem{Node: doc}}, nil
+	return ItemSlice{NodeItem{Node: doc}}, nil
 }
 
 func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root bool) (*helium.Element, error) {
@@ -579,11 +580,11 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
 	}
 	if root {
-		if err := elem.DeclareNamespace("fn", NSFn); err != nil {
+		if err := elem.DeclareNamespace("", NSFn); err != nil {
 			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
 		}
 	}
-	if err := elem.SetActiveNamespace("fn", NSFn); err != nil {
+	if err := elem.SetActiveNamespace("", NSFn); err != nil {
 		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
 	}
 
@@ -597,13 +598,9 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 				return err
 			}
 			keyText := key.StringVal()
-			if err := child.SetAttribute("key", keyText); err != nil {
-				return &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to set key attribute: %v", err)}
-			}
+			child.SetLiteralAttribute("key", keyText)
 			if opts.escape {
-				if err := child.SetAttribute("escaped-key", "true"); err != nil {
-					return &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to set escaped-key attribute: %v", err)}
-				}
+				child.SetLiteralAttribute("escaped-key", "true")
 			}
 			if err := elem.AddChild(child); err != nil {
 				return &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to attach child: %v", err)}
@@ -626,9 +623,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 		switch v.TypeName {
 		case TypeString:
 			if opts.escape {
-				if err := elem.SetAttribute("escaped", "true"); err != nil {
-					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to set escaped attribute: %v", err)}
-				}
+				elem.SetLiteralAttribute("escaped", "true")
 			}
 			if err := elem.AppendText([]byte(v.StringVal())); err != nil {
 				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append string value: %v", err)}
@@ -658,24 +653,24 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 }
 
 func jsonSequenceToItem(seq Sequence) Item {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return nil
 	}
-	return seq[0]
+	return seq.Get(0)
 }
 
 func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 	opts := jsonOptions{
 		duplicates: "use-first",
 	}
-	if len(args) <= 1 || len(args[1]) == 0 {
+	if len(args) <= 1 || seqLen(args[1]) == 0 {
 		return opts, nil
 	}
-	if len(args[1]) != 1 {
+	if seqLen(args[1]) != 1 {
 		return opts, &XPathError{Code: errCodeXPTY0004, Message: "json-to-xml options must be a single map"}
 	}
 
-	m, ok := args[1][0].(MapItem)
+	m, ok := args[1].Get(0).(MapItem)
 	if !ok {
 		return opts, &XPathError{Code: errCodeXPTY0004, Message: "json-to-xml options must be a map"}
 	}
@@ -686,10 +681,10 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 		if !found {
 			return false, false, nil
 		}
-		if len(v) != 1 {
+		if seqLen(v) != 1 {
 			return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("option '%s' must be a single xs:boolean", name)}
 		}
-		av, ok := v[0].(AtomicValue)
+		av, ok := v.Get(0).(AtomicValue)
 		if !ok || av.TypeName != TypeBoolean {
 			return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("option '%s' must be xs:boolean", name)}
 		}
@@ -719,7 +714,7 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 
 	dupKey := AtomicValue{TypeName: TypeString, Value: "duplicates"}
 	if v, found := m.Get(dupKey); found {
-		if len(v) != 1 {
+		if seqLen(v) != 1 {
 			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'duplicates' must be a single xs:string"}
 		}
 		s, err := coerceArgToString(v)
@@ -727,7 +722,7 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'duplicates' must be xs:string"}
 		}
 		switch s {
-		case "reject", "use-first":
+		case "reject", "use-first", "retain":
 			opts.duplicates = s
 		case "use-last":
 			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must not be 'use-last' for json-to-xml"}
@@ -736,16 +731,22 @@ func parseJSONToXMLOptions(args []Sequence) (jsonOptions, error) {
 		}
 	}
 
-	if validateSet && validate && opts.duplicates != "reject" {
-		return opts, &XPathError{Code: errCodeFOJS0005, Message: "validate=true() requires duplicates='reject'"}
+	// When validate=true() is set and no explicit duplicates option was
+	// provided, default duplicates to 'reject' per the spec.
+	// We silently accept validate=true() even without schema support.
+	if validateSet && validate {
+		dupKey2 := AtomicValue{TypeName: TypeString, Value: "duplicates"}
+		if _, found := m.Get(dupKey2); !found {
+			opts.duplicates = "reject"
+		}
 	}
 
 	fbKey := AtomicValue{TypeName: TypeString, Value: "fallback"}
 	if v, found := m.Get(fbKey); found {
-		if len(v) != 1 {
+		if seqLen(v) != 1 {
 			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'fallback' must be a single function item"}
 		}
-		fi, ok := v[0].(FunctionItem)
+		fi, ok := v.Get(0).(FunctionItem)
 		if !ok {
 			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'fallback' must be a function item"}
 		}
@@ -780,10 +781,10 @@ type xmlJSONMeta struct {
 }
 
 func fnXMLToJSON(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
-	if len(args[0]) != 1 {
+	if seqLen(args[0]) != 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "xml-to-json expects zero or one node"}
 	}
 
@@ -792,7 +793,7 @@ func fnXMLToJSON(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 
-	ni, ok := args[0][0].(NodeItem)
+	ni, ok := args[0].Get(0).(NodeItem)
 	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "xml-to-json expects an element or document node"}
 	}
@@ -814,20 +815,20 @@ func parseXMLToJSONOptions(args []Sequence) (xmlToJSONOptions, error) {
 	if len(args) <= 1 {
 		return opts, nil
 	}
-	if len(args[1]) != 1 {
+	if seqLen(args[1]) != 1 {
 		return opts, &XPathError{Code: errCodeXPTY0004, Message: "xml-to-json options must be a single map"}
 	}
-	m, ok := args[1][0].(MapItem)
+	m, ok := args[1].Get(0).(MapItem)
 	if !ok {
 		return opts, &XPathError{Code: errCodeXPTY0004, Message: "xml-to-json options must be a map"}
 	}
 
 	key := AtomicValue{TypeName: TypeString, Value: "indent"}
 	if v, found := m.Get(key); found {
-		if len(v) != 1 {
+		if seqLen(v) != 1 {
 			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'indent' must be a single xs:boolean"}
 		}
-		av, ok := v[0].(AtomicValue)
+		av, ok := v.Get(0).(AtomicValue)
 		if !ok || av.TypeName != TypeBoolean {
 			return opts, &XPathError{Code: errCodeXPTY0004, Message: "option 'indent' must be xs:boolean"}
 		}
@@ -842,6 +843,16 @@ func xmlToJSONRootElement(node helium.Node) (*helium.Element, error) {
 		root := n.DocumentElement()
 		if root == nil {
 			return nil, &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: document has no document element"}
+		}
+		// FOJS0006: document must have exactly one element child.
+		elemCount := 0
+		for child := range helium.Children(n) {
+			if child.Type() == helium.ElementNode {
+				elemCount++
+			}
+		}
+		if elemCount != 1 {
+			return nil, &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: document must have exactly one element child"}
 		}
 		return root, nil
 	case *helium.Element:
@@ -999,7 +1010,7 @@ func parseXMLJSONMeta(elem *helium.Element, inherited xmlJSONInherited) (xmlJSON
 
 func jsonElementChildren(elem *helium.Element, insideMap bool) ([]*helium.Element, error) {
 	var children []*helium.Element
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch v := child.(type) {
 		case *helium.Element:
 			children = append(children, v)
@@ -1022,7 +1033,7 @@ func jsonElementChildren(elem *helium.Element, insideMap bool) ([]*helium.Elemen
 
 func scalarElementText(elem *helium.Element, allowComments bool) (string, error) {
 	var b strings.Builder
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			b.Write(child.Content())
@@ -1040,7 +1051,7 @@ func scalarElementText(elem *helium.Element, allowComments bool) (string, error)
 }
 
 func validateNullElement(elem *helium.Element) error {
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			if strings.TrimSpace(string(child.Content())) != "" {
@@ -1313,25 +1324,24 @@ type serializeOptions struct {
 	encoding            string
 }
 
-const serializeParamsNS = "http://www.w3.org/2010/xslt-xquery-serialization"
 
 func parseSerializeOptions(args []Sequence) (serializeOptions, error) {
 	opts := serializeOptions{
 		method:        "adaptive",
 		itemSeparator: " ",
 	}
-	if len(args) <= 1 || len(args[1]) == 0 {
+	if len(args) <= 1 || seqLen(args[1]) == 0 {
 		return opts, nil
 	}
 
-	m, ok := args[1][0].(MapItem)
+	m, ok := args[1].Get(0).(MapItem)
 	if ok {
 		return parseSerializeOptionsMap(opts, m)
 	}
-	if len(args[1]) != 1 {
+	if seqLen(args[1]) != 1 {
 		return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options must be a singleton"}
 	}
-	node, ok := args[1][0].(NodeItem)
+	node, ok := args[1].Get(0).(NodeItem)
 	if !ok {
 		return opts, nil
 	}
@@ -1344,10 +1354,10 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 		if !found {
 			return "", false, nil
 		}
-		if len(v) != 1 {
+		if seqLen(v) != 1 {
 			return "", true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be a singleton", name)}
 		}
-		av, ok := v[0].(AtomicValue)
+		av, ok := v.Get(0).(AtomicValue)
 		if !ok {
 			return "", true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be atomic", name)}
 		}
@@ -1363,10 +1373,10 @@ func parseSerializeOptionsMap(opts serializeOptions, m MapItem) (serializeOption
 		if !found {
 			return false, false, nil
 		}
-		if len(v) != 1 {
+		if seqLen(v) != 1 {
 			return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be a single xs:boolean", name)}
 		}
-		av, ok := v[0].(AtomicValue)
+		av, ok := v.Get(0).(AtomicValue)
 		if !ok {
 			return false, true, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize option %q must be xs:boolean", name)}
 		}
@@ -1435,7 +1445,7 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 	if !ok {
 		return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options node must be an element"}
 	}
-	if elem.URI() != serializeParamsNS || elem.LocalName() != "serialization-parameters" {
+	if elem.URI() != lexicon.NamespaceSerialization || elem.LocalName() != "serialization-parameters" {
 		return opts, &XPathError{Code: errCodeXPTY0004, Message: "serialize options root must be output:serialization-parameters"}
 	}
 	if len(elem.Attributes()) != 0 {
@@ -1443,7 +1453,7 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 	}
 
 	seen := make(map[string]struct{})
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			if strings.TrimSpace(string(child.Content())) == "" {
@@ -1468,7 +1478,7 @@ func parseSerializeOptionsNode(opts serializeOptions, n helium.Node) (serializeO
 		}
 		seen[key] = struct{}{}
 
-		if param.URI() != serializeParamsNS {
+		if param.URI() != lexicon.NamespaceSerialization {
 			if _, err := readSerializeParamValue(param); err != nil {
 				return opts, err
 			}
@@ -1555,9 +1565,9 @@ func readSerializeParamYesNo(elem *helium.Element) (bool, error) {
 		return false, err
 	}
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "yes", "true", "1":
+	case lexicon.ValueYes, "true", "1":
 		return true, nil
-	case "no", "false", "0":
+	case lexicon.ValueNo, "false", "0":
 		return false, nil
 	default:
 		return false, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("serialize parameter %q must be yes/no", elem.LocalName())}
@@ -1570,7 +1580,7 @@ func readSerializeParamStandalone(elem *helium.Element) (string, error) {
 		return "", err
 	}
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "yes", "no", "omit":
+	case lexicon.ValueYes, lexicon.ValueNo, "omit":
 		return value, nil
 	default:
 		return "", &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter \"standalone\" must be yes/no/omit"}
@@ -1582,7 +1592,7 @@ func validateSerializeCharacterMapsElement(elem *helium.Element) error {
 		return &XPathError{Code: errCodeXPTY0004, Message: "serialize parameter use-character-maps must not have attributes"}
 	}
 	seen := make(map[string]struct{})
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			if strings.TrimSpace(string(child.Content())) == "" {
@@ -1597,7 +1607,7 @@ func validateSerializeCharacterMapsElement(elem *helium.Element) error {
 		}
 
 		charMap := child.(*helium.Element)
-		if charMap.URI() != serializeParamsNS || charMap.LocalName() != "character-map" {
+		if charMap.URI() != lexicon.NamespaceSerialization || charMap.LocalName() != "character-map" {
 			return &XPathError{Code: errCodeXPTY0004, Message: "use-character-maps children must be output:character-map"}
 		}
 		if hasNonWhitespaceContent(charMap) {
@@ -1633,7 +1643,7 @@ func validateSerializeCharacterMapsElement(elem *helium.Element) error {
 }
 
 func hasNonWhitespaceContent(elem *helium.Element) bool {
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			if strings.TrimSpace(string(child.Content())) != "" {
@@ -1649,10 +1659,10 @@ func hasNonWhitespaceContent(elem *helium.Element) bool {
 }
 
 func validateSerializeCharacterMaps(v Sequence) error {
-	if len(v) != 1 {
+	if seqLen(v) != 1 {
 		return &XPathError{Code: errCodeXPTY0004, Message: "serialize option 'use-character-maps' must be a singleton map"}
 	}
-	m, ok := v[0].(MapItem)
+	m, ok := v.Get(0).(MapItem)
 	if !ok {
 		return &XPathError{Code: errCodeXPTY0004, Message: "serialize option 'use-character-maps' must be a map"}
 	}
@@ -1664,10 +1674,10 @@ func validateSerializeCharacterMaps(v Sequence) error {
 		if err != nil || utf8.RuneCountInString(keyString) != 1 {
 			return &XPathError{Code: errCodeXPTY0004, Message: "serialize use-character-maps keys must be single characters"}
 		}
-		if len(value) != 1 {
+		if seqLen(value) != 1 {
 			return &XPathError{Code: errCodeXPTY0004, Message: "serialize use-character-maps values must be singleton strings"}
 		}
-		av, ok := value[0].(AtomicValue)
+		av, ok := value.Get(0).(AtomicValue)
 		if !ok || (av.TypeName != TypeString && av.TypeName != TypeUntypedAtomic) {
 			return &XPathError{Code: errCodeXPTY0004, Message: "serialize use-character-maps values must be strings"}
 		}
@@ -1677,8 +1687,8 @@ func validateSerializeCharacterMaps(v Sequence) error {
 }
 
 func serializeAdaptiveSequence(seq Sequence, opts serializeOptions) (string, error) {
-	parts := make([]string, 0, len(seq))
-	for _, item := range seq {
+	parts := make([]string, 0, seqLen(seq))
+	for item := range seqItems(seq) {
 		s, err := serializeAdaptiveItem(item, opts)
 		if err != nil {
 			return "", err
@@ -1700,6 +1710,13 @@ func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
 		s, err := atomicToString(v)
 		if err != nil {
 			return "", err
+		}
+		// Per XPath 3.1 §12.2 (Adaptive): string and untypedAtomic values
+		// are serialized enclosed in double quotes, with internal quotes
+		// escaped as "".
+		if v.TypeName == TypeString || v.TypeName == TypeUntypedAtomic {
+			escaped := strings.ReplaceAll(s, `"`, `""`)
+			return `"` + escaped + `"`, nil
 		}
 		return s, nil
 	case NodeItem:
@@ -1748,13 +1765,13 @@ func serializeAdaptiveArray(a ArrayItem, opts serializeOptions) (string, error) 
 }
 
 func serializeJSONSequence(seq Sequence, opts serializeOptions) (string, error) {
-	if len(seq) > 1 {
+	if seqLen(seq) > 1 {
 		return "", &XPathError{Code: errCodeFOER0000, Message: "json serialization requires at most one top-level item"}
 	}
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return "null", nil
 	}
-	return serializeJSONItem(seq[0], opts)
+	return serializeJSONItem(seq.Get(0), opts)
 }
 
 func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
@@ -1764,11 +1781,11 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 	case ArrayItem:
 		parts := make([]string, 0, v.Size())
 		for _, member := range v.members0() {
-			if len(member) == 0 {
+			if seqLen(member) == 0 {
 				parts = append(parts, "null")
 				continue
 			}
-			for _, memberItem := range member {
+			for memberItem := range seqItems(member) {
 				text, err := serializeJSONItem(memberItem, opts)
 				if err != nil {
 					return "", err
@@ -1789,12 +1806,12 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 				return &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json serialization duplicate key %q", keyText)}
 			}
 			seen[keyText] = struct{}{}
-			if len(value) > 1 {
+			if seqLen(value) > 1 {
 				return &XPathError{Code: errCodeFOER0000, Message: "json serialization map values must be singleton or empty"}
 			}
 			valText := "null"
-			if len(value) == 1 {
-				valText, err = serializeJSONItem(value[0], opts)
+			if seqLen(value) == 1 {
+				valText, err = serializeJSONItem(value.Get(0), opts)
 				if err != nil {
 					return err
 				}
@@ -1845,8 +1862,8 @@ func serializeJSONAtomic(v AtomicValue, opts serializeOptions) (string, error) {
 }
 
 func serializeXMLSequence(seq Sequence, opts serializeOptions) (string, error) {
-	parts := make([]string, 0, len(seq))
-	for _, item := range seq {
+	parts := make([]string, 0, seqLen(seq))
+	for item := range seqItems(seq) {
 		switch v := item.(type) {
 		case FunctionItem:
 			return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item"}
@@ -1964,7 +1981,7 @@ func jsonToXDM(v any) (Item, error) {
 			if item == nil {
 				members[i] = nil // JSON null → empty sequence
 			} else {
-				members[i] = Sequence{item}
+				members[i] = ItemSlice{item}
 			}
 		}
 		return NewArray(members), nil
@@ -1979,7 +1996,7 @@ func jsonToXDM(v any) (Item, error) {
 			if item == nil {
 				value = nil // JSON null → empty sequence
 			} else {
-				value = Sequence{item}
+				value = ItemSlice{item}
 			}
 			entries = append(entries, MapEntry{
 				Key:   AtomicValue{TypeName: TypeString, Value: k},

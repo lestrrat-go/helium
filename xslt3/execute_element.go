@@ -1,0 +1,1476 @@
+package xslt3
+
+import (
+	"context"
+	"errors"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
+)
+
+func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error {
+	name, err := inst.Name.evaluate(ctx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+
+	// XTDE0820: validate computed name is a valid QName
+	name = strings.TrimSpace(name)
+	if name == "" || !isValidQName(name) {
+		return dynamicError(errCodeXTDE0820,
+			"invalid element name %q: not a valid QName", name)
+	}
+
+	// Extract local name for element creation so SetActiveNamespace doesn't double the prefix
+	localName := name
+	prefix := ""
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		prefix = name[:idx]
+		localName = name[idx+1:]
+	}
+
+	elem, err := ec.resultDoc.CreateElement(localName)
+	if err != nil {
+		return err
+	}
+
+	hasNS := false
+	if inst.Namespace != nil {
+		nsURI, err := inst.Namespace.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		// XTDE0835: namespace URI must not be the reserved xmlns namespace
+		if nsURI == lexicon.NamespaceXMLNS {
+			return dynamicError(errCodeXTDE0835,
+				"namespace URI %q is reserved and cannot be used", nsURI)
+		}
+		if nsURI != "" {
+			hasNS = true
+			if err := elem.DeclareNamespace(prefix, nsURI); err != nil {
+				return err
+			}
+			if err := elem.SetActiveNamespace(prefix, nsURI); err != nil {
+				return err
+			}
+		} else {
+			// namespace="" explicitly sets no namespace. Strip the prefix
+			// so the element is created without a namespace prefix.
+			prefix = ""
+		}
+	} else {
+		// No namespace attribute: resolve from compile-time namespace context.
+		uri := ""
+		if inst.NSBindings != nil {
+			uri = inst.NSBindings[prefix]
+		}
+		if uri == "" && prefix != "" {
+			// For prefixed names, fall back to stylesheet-level namespace
+			// declarations. For unprefixed names (prefix == ""), the default
+			// namespace is determined solely by the static context at the
+			// xsl:element position — do not use resolvePrefix which may
+			// return a global default namespace from a different scope.
+			uri = ec.resolvePrefix(prefix)
+		}
+		if uri != "" {
+			hasNS = true
+			if !ec.isNSDeclaredInScope(prefix, uri) {
+				if err := elem.DeclareNamespace(prefix, uri); err != nil {
+					return err
+				}
+			}
+			if err := elem.SetActiveNamespace(prefix, uri); err != nil {
+				return err
+			}
+		} else if prefix != "" {
+			// XTDE0830: prefix in computed element name is undeclared
+			return dynamicError(errCodeXTDE0830,
+				"undeclared namespace prefix %q in element name %q", prefix, name)
+		}
+	}
+
+	// Mark element as eligible for namespace fixup. The namespace
+	// declaration from xsl:element is auto-generated from the name
+	// resolution, so xsl:namespace can override the prefix.
+	if hasNS && prefix != "" {
+		if ec.nsFixupAllowed == nil {
+			ec.nsFixupAllowed = make(map[*helium.Element]struct{})
+		}
+		ec.nsFixupAllowed[elem] = struct{}{}
+	}
+
+	// If this element has no namespace but there's a default namespace in scope,
+	// we need to undeclare it with xmlns=""
+	if !hasNS && prefix == "" && ec.hasDefaultNSInScope() {
+		if err := elem.DeclareNamespace("", ""); err != nil {
+			return err
+		}
+	}
+
+	if err := ec.addNode(elem); err != nil {
+		return err
+	}
+
+	if inst.TypeName != "" {
+		ec.annotateNode(elem, inst.TypeName)
+	}
+
+	// Override static base URI when xsl:element carries xml:base.
+	savedBaseOverride := ec.staticBaseURIOverride
+	if inst.StaticBaseURI != "" {
+		ec.staticBaseURIOverride = inst.StaticBaseURI
+	}
+	defer func() { ec.staticBaseURIOverride = savedBaseOverride }()
+
+	// Push new output context for children.
+	// Temporarily disable sequenceMode and captureItems so that children
+	// are added to this element normally (not captured as separate items).
+	out := ec.currentOutput()
+	savedCurrent := out.current
+	savedPrevAtomic := out.prevWasAtomic
+	savedSeqMode := out.sequenceMode
+	savedCapture := out.captureItems
+	savedWherePop := out.wherePopulated
+	out.current = elem
+	out.prevWasAtomic = false
+	out.sequenceMode = false
+	out.captureItems = false
+	// Clear wherePopulated inside the element body so that xsl:document
+	// unwraps its children normally (same rationale as LRE — see
+	// execLiteralResultElement).
+	out.wherePopulated = false
+	defer func() {
+		out.current = savedCurrent
+		out.prevWasAtomic = savedPrevAtomic
+		out.sequenceMode = savedSeqMode
+		out.captureItems = savedCapture
+		out.wherePopulated = savedWherePop
+	}()
+
+	// Apply attribute sets (before body so body can override)
+	if len(inst.UseAttrSets) > 0 {
+		if err := ec.applyAttributeSets(ctx, inst.UseAttrSets); err != nil {
+			return err
+		}
+	}
+
+	if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
+		return err
+	}
+
+	// inherit-namespaces="no": undeclare parent namespaces on direct
+	// child elements so they do not inherit them via the DOM tree.
+	if !inst.InheritNamespaces {
+		undeclareInheritedNamespaces(elem)
+	}
+
+	// F.2: Type-based content validation and normalization.
+	// When type="xs:integer" (or similar) is set, validate and normalize the
+	// element's text content against the declared type, raising XTTE1510 on
+	// failure.
+	if inst.TypeName != "" {
+		if err := ec.validateAndNormalizeElementContent(elem, inst.TypeName); err != nil {
+			// XTTE1540: content does not match the declared type.
+			if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
+				return dynamicError(errCodeXTTE1540,
+					"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
+			}
+			return err
+		}
+		ec.annotateAttributesFromType(elem, inst.TypeName)
+	}
+
+	if inst.Validation != "" {
+		return ec.validateConstructedElement(ctx, elem, inst.Validation)
+	}
+	return nil
+}
+
+// validateConstructedAttribute validates an attribute value against the schema
+// when validation="strict" or validation="lax". Returns XTTE1510 when the
+// value is invalid, XTTE1555 when no matching global declaration is found
+// (strict only).
+func (ec *execContext) validateConstructedAttribute(localName, nsURI, value, validation string) error {
+	if ec.schemaRegistry == nil {
+		return nil
+	}
+	typeName, valid, valErr := ec.schemaRegistry.ValidateAttribute(localName, nsURI, value)
+	if typeName == "" {
+		// No matching global attribute declaration found.
+		if validation == validationStrict {
+			return dynamicError(errCodeXTTE1555,
+				"no schema declaration found for attribute {%s}%s (validation=strict)", nsURI, localName)
+		}
+		return nil // lax: silently skip if no declaration
+	}
+	if !valid || valErr != nil {
+		return dynamicError(errCodeXTTE1510,
+			"attribute {%s}%s value %q is not valid for type %s: %v", nsURI, localName, value, typeName, valErr)
+	}
+	return nil
+}
+
+// validateAndNormalizeElementContent validates the text content of elem against
+// the declared XSD type name (e.g., "xs:integer"). It raises XTTE1510 when the
+// content is invalid. The original text content is preserved in the DOM; the
+// type annotation (stored separately) controls typed-value extraction via
+// data()/atomization at runtime.
+func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, typeName string) error {
+	// xs:anyType and xs:untyped accept any content — skip validation entirely.
+	if typeName == "xs:anyType" || typeName == "xs:untyped" {
+		return nil
+	}
+
+	// For user-defined types, look up the TypeDef from the schema registry.
+	// Complex types need structural validation, not just string casting.
+	// When multiple schemas define the same type (e.g., imported from
+	// different schema files), try each until one validates successfully.
+	if ec.schemaRegistry != nil {
+		allDefs := ec.schemaRegistry.LookupAllTypeDefs(typeName)
+		if len(allDefs) > 0 {
+			var lastErr error
+			for _, def := range allDefs {
+				td, schema := def.TD, def.Schema
+				switch td.ContentType {
+				case xsd.ContentTypeElementOnly, xsd.ContentTypeMixed, xsd.ContentTypeEmpty:
+					if err := xsd.ValidateElementAgainstType(elem, td, schema); err != nil {
+						lastErr = err
+						continue
+					}
+					return nil
+				case xsd.ContentTypeSimple:
+					content := strings.TrimSpace(elementTextContent(elem))
+					if err := xsd.ValidateSimpleValue(content, td); err != nil {
+						lastErr = err
+						continue
+					}
+					return nil
+				}
+			}
+			if lastErr != nil {
+				return dynamicError(errCodeXTTE1510,
+					"element content does not match declared type %s: %v", typeName, lastErr)
+			}
+		}
+	}
+
+	// Built-in simple types (xs:string, xs:integer, xs:untypedAtomic, etc.)
+	// require that the element have simple content — no child elements.
+	if elementHasChildElements(elem) {
+		return dynamicError(errCodeXTTE1510,
+			"element has child elements but type %s requires simple content", typeName)
+	}
+
+	// Built-in XSD type: validate by attempting to cast.
+	// Use text-only string value (skip comments/PIs) per XPath data model.
+	content := strings.TrimSpace(elementTextContent(elem))
+	_, castErr := xpath3.CastFromString(content, typeName)
+	if castErr != nil {
+		// Fall back to schema-defined simple type validation.
+		if ec.schemaRegistry != nil {
+			_, schemaErr := ec.schemaRegistry.CastToSchemaType(content, typeName)
+			if schemaErr != nil {
+				return dynamicError(errCodeXTTE1510,
+					"content %q is not a valid value for type %s: %v", content, typeName, schemaErr)
+			}
+			return nil
+		}
+		return dynamicError(errCodeXTTE1510,
+			"content %q is not a valid value for type %s: %v", content, typeName, castErr)
+	}
+
+	// Content is valid — original text is preserved in the DOM.
+	return nil
+}
+
+// elementTextContent returns the concatenation of all descendant text nodes,
+// skipping comments and processing instructions (XPath string-value semantics).
+func elementTextContent(elem *helium.Element) string {
+	var buf strings.Builder
+	collectTextContent(elem.FirstChild(), &buf)
+	return buf.String()
+}
+
+func collectTextContent(node helium.Node, buf *strings.Builder) {
+	for ; node != nil; node = node.NextSibling() {
+		switch node.Type() {
+		case helium.TextNode, helium.CDATASectionNode:
+			buf.Write(node.Content())
+		case helium.ElementNode:
+			if elem, ok := node.(*helium.Element); ok {
+				collectTextContent(elem.FirstChild(), buf)
+			}
+		}
+	}
+}
+
+// elementHasChildElements returns true if elem has any direct child elements.
+func elementHasChildElements(elem *helium.Element) bool {
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() == helium.ElementNode {
+			return true
+		}
+	}
+	return false
+}
+
+// validateConstructedElement validates a constructed element node against the
+// imported schemas and applies type annotations to the result tree.
+func (ec *execContext) validateConstructedElement(ctx context.Context, elem *helium.Element, validation string) error {
+	switch validation {
+	case validationStrip:
+		ec.stripAnnotations(elem)
+		return nil
+	case validationPreserve:
+		// Per XSLT 3.0 §19.2: validation="preserve" assigns type
+		// annotation xs:anyType to the constructed element node,
+		// while preserving existing annotations on child nodes.
+		ec.annotateNode(elem, "xs:anyType")
+		return nil
+	case validationStrict, validationLax:
+		if ec.schemaRegistry == nil {
+			return nil
+		}
+		// For lax validation, if no element declaration exists in any
+		// imported schema, the element is valid and remains untyped.
+		if validation == validationLax {
+			if _, found := ec.schemaRegistry.LookupElement(elem.LocalName(), elem.URI()); !found {
+				return nil
+			}
+		}
+		// Create a temporary document containing a deep copy of the element.
+		tmpDoc := helium.NewDefaultDocument()
+		copied, err := helium.CopyNode(elem, tmpDoc)
+		if err != nil {
+			return err
+		}
+		if err := tmpDoc.AddChild(copied); err != nil {
+			return err
+		}
+		vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+		ann := vr.Annotations
+		if valErr != nil {
+			switch validation {
+			case validationStrict:
+				return dynamicError(errCodeXTTE1510, "validation of constructed element failed: %v", valErr)
+			case validationLax:
+				return dynamicError(errCodeXTTE1515, "lax validation of constructed element failed: %v", valErr)
+			}
+		} else if ann == nil || (len(ann) == 0 && elem.URI() != "" && !ec.schemaRegistry.HasNamespace(elem.URI())) {
+			// No matching schema found, or the element's namespace is not
+			// covered by any imported schema.
+			if validation == validationStrict {
+				elemNS := elem.URI()
+				elemLocal := elem.LocalName()
+				if _, found := ec.schemaRegistry.LookupElement(elemLocal, elemNS); !found {
+					return dynamicError(errCodeXTTE1512,
+						"no schema declaration found for element {%s}%s (validation=strict)", elemNS, elemLocal)
+				}
+			}
+		} else {
+			// Schema validation passed (ann != nil). Perform additional value-level
+			// validation using CastFromString to catch calendar-invalid dates etc.
+			// (the XSD regex validator may accept e.g. "2006-02-31" as a valid date).
+			elemNS := elem.URI()
+			elemLocal := elem.LocalName()
+			if typeName, found := ec.schemaRegistry.LookupElement(elemLocal, elemNS); found && typeName != "" {
+				// Only validate for simple types (built-in xs: types); skip for complex types.
+				if isBuiltinSimpleType(typeName) {
+					content := strings.TrimSpace(string(elem.Content()))
+					if _, castErr := xpath3.CastFromString(content, typeName); castErr != nil {
+						switch validation {
+						case validationStrict:
+							return dynamicError(errCodeXTTE1510,
+								"element {%s}%s content %q is not valid for type %s: %v",
+								elemNS, elemLocal, content, typeName, castErr)
+						case validationLax:
+							return dynamicError(errCodeXTTE1515,
+								"element {%s}%s content %q is not valid for type %s: %v",
+								elemNS, elemLocal, content, typeName, castErr)
+						}
+					}
+				}
+			}
+		}
+		for elem := range vr.NilledElements {
+			ec.markNilled(elem)
+		}
+		// Merge type annotations for the actual (non-copy) element by walking
+		// the temp tree and live tree in parallel.
+		if len(ann) > 0 {
+			ec.mapAnnotationsFromValidation(ann, copied, elem)
+		}
+		// When the XSD validator returns empty annotations (e.g., because the
+		// element declaration's type was not resolved due to a name collision
+		// with a global element), look up the element's type directly from the
+		// schema registry and annotate the element so that instance-of checks
+		// work correctly.
+		if ec.typeAnnotations[elem] == "" && valErr == nil {
+			if typeName, found := ec.schemaRegistry.LookupElement(elem.LocalName(), elem.URI()); found && typeName != "" {
+				ec.annotateNode(elem, typeName)
+			}
+		}
+		// XTTE1510: check QName-typed attribute values can be resolved
+		// using the element's in-scope namespace declarations. Two attributes
+		// of type xs:QName using the same prefix but different namespace URIs
+		// create a conflict: only one xmlns:prefix can exist on the element.
+		if validation == validationStrict && valErr == nil {
+			if err := ec.checkQNameAttrConflicts(elem); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return nil
+}
+
+// validateConstructedElementWithIDCheck validates a constructed element and
+// also checks xs:ID uniqueness and xs:IDREF resolution constraints. This is
+// used by xsl:copy-of where the copied subtree must be validated as a whole,
+// including document-level ID constraints.
+func (ec *execContext) validateConstructedElementWithIDCheck(ctx context.Context, elem *helium.Element, validation string) error {
+	switch validation {
+	case validationStrip:
+		ec.stripAnnotations(elem)
+		return nil
+	case validationPreserve:
+		// Per XSLT 3.0 §19.2: validation="preserve" assigns type
+		// annotation xs:anyType to the constructed element node,
+		// while preserving existing annotations on child nodes.
+		ec.annotateNode(elem, "xs:anyType")
+		return nil
+	case validationStrict, validationLax:
+		if ec.schemaRegistry == nil {
+			return nil
+		}
+		if validation == validationLax {
+			if _, found := ec.schemaRegistry.LookupElement(elem.LocalName(), elem.URI()); !found {
+				return nil
+			}
+		}
+		tmpDoc := helium.NewDefaultDocument()
+		copied, err := helium.CopyNode(elem, tmpDoc)
+		if err != nil {
+			return err
+		}
+		if err := tmpDoc.AddChild(copied); err != nil {
+			return err
+		}
+		vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
+		ann := vr.Annotations
+		if valErr != nil {
+			switch validation {
+			case validationStrict:
+				return dynamicError(errCodeXTTE1510, "validation of constructed element failed: %v", valErr)
+			case validationLax:
+				return dynamicError(errCodeXTTE1515, "lax validation of constructed element failed: %v", valErr)
+			}
+		} else if ann == nil || (len(ann) == 0 && elem.URI() != "" && !ec.schemaRegistry.HasNamespace(elem.URI())) {
+			if validation == validationStrict {
+				if _, found := ec.schemaRegistry.LookupElement(elem.LocalName(), elem.URI()); !found {
+					return dynamicError(errCodeXTTE1512,
+						"no schema declaration found for element {%s}%s (validation=strict)", elem.URI(), elem.LocalName())
+				}
+			}
+		} else {
+			if isBuiltinSimpleType(ann[copied]) {
+				content := strings.TrimSpace(string(elem.Content()))
+				if _, castErr := xpath3.CastFromString(content, ann[copied]); castErr != nil {
+					switch validation {
+					case validationStrict:
+						return dynamicError(errCodeXTTE1510,
+							"element {%s}%s content %q is not valid for type %s: %v",
+							elem.URI(), elem.LocalName(), content, ann[copied], castErr)
+					case validationLax:
+						return dynamicError(errCodeXTTE1515,
+							"element {%s}%s content %q is not valid for type %s: %v",
+							elem.URI(), elem.LocalName(), content, ann[copied], castErr)
+					}
+				}
+			}
+		}
+		for nElem := range vr.NilledElements {
+			ec.markNilled(nElem)
+		}
+		// NOTE: xs:ID uniqueness and xs:IDREF resolution (XTTE1555) are NOT
+		// checked here at the element level, because partial validation of a
+		// subtree cannot resolve IDREFs that reference IDs elsewhere in the
+		// document. The caller (execCopyOf) performs the ID check when the
+		// copied content is a complete document node.
+		// Merge type annotations back to the live element.
+		if len(ann) > 0 {
+			ec.mapAnnotationsFromValidation(ann, copied, elem)
+		}
+		if ec.typeAnnotations[elem] == "" && valErr == nil {
+			if typeName, found := ec.schemaRegistry.LookupElement(elem.LocalName(), elem.URI()); found && typeName != "" {
+				ec.annotateNode(elem, typeName)
+			}
+		}
+		return nil
+	}
+	return nil
+}
+
+// mapAnnotationsFromValidation maps type annotations from a validated copy
+// tree back to the corresponding live tree nodes.
+func (ec *execContext) mapAnnotationsFromValidation(ann xsd.TypeAnnotations, src, dst helium.Node) {
+	if typeName, ok := ann[src]; ok {
+		ec.annotateNode(dst, typeName)
+	}
+	// Map attribute annotations and copy default/fixed attributes from validated copy.
+	if srcElem, ok := src.(*helium.Element); ok {
+		if dstElem, ok := dst.(*helium.Element); ok {
+			for _, srcAttr := range srcElem.Attributes() {
+				// Check if this attribute exists on the destination.
+				dstFound := false
+				for _, dstAttr := range dstElem.Attributes() {
+					if srcAttr.LocalName() == dstAttr.LocalName() && srcAttr.URI() == dstAttr.URI() {
+						dstFound = true
+						if typeName, ok := ann[srcAttr]; ok {
+							ec.annotateNode(dstAttr, typeName)
+						}
+						break
+					}
+				}
+				// Attribute exists on copy but not on original — it was inserted
+				// as a default/fixed value by schema validation. Copy it over.
+				if !dstFound {
+					// Copy the default/fixed attribute from the validated copy.
+					dstElem.SetLiteralAttribute(srcAttr.Name(), srcAttr.Value())
+					// Annotate the newly added attribute.
+					if typeName, ok := ann[srcAttr]; ok {
+						for _, dstAttr := range dstElem.Attributes() {
+							if srcAttr.LocalName() == dstAttr.LocalName() && srcAttr.URI() == dstAttr.URI() {
+								ec.annotateNode(dstAttr, typeName)
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	// Recurse into children
+	srcChild := src.FirstChild()
+	dstChild := dst.FirstChild()
+	for srcChild != nil && dstChild != nil {
+		ec.mapAnnotationsFromValidation(ann, srcChild, dstChild)
+		srcChild = srcChild.NextSibling()
+		dstChild = dstChild.NextSibling()
+	}
+}
+
+// stripAnnotations removes type annotations from a node and all its descendants.
+func (ec *execContext) stripAnnotations(node helium.Node) {
+	if ec.typeAnnotations == nil {
+		return
+	}
+	delete(ec.typeAnnotations, node)
+	// Also strip annotations from attributes on elements.
+	if elem, ok := node.(*helium.Element); ok {
+		for _, attr := range elem.Attributes() {
+			delete(ec.typeAnnotations, attr)
+		}
+	}
+	for child := range helium.Children(node) {
+		ec.stripAnnotations(child)
+	}
+}
+
+// annotateAttributesFromType annotates each attribute on elem with the type
+// declared in the complex type definition identified by typeName.  This is
+// needed so that "instance of attribute(*, xs:integer)" works on attributes
+// of elements constructed with xsl:type or type="…".
+func (ec *execContext) annotateAttributesFromType(elem *helium.Element, typeName string) {
+	if ec.schemaRegistry == nil {
+		return
+	}
+	allDefs := ec.schemaRegistry.LookupAllTypeDefs(typeName)
+	if len(allDefs) == 0 {
+		return
+	}
+	td := allDefs[0].TD
+	if len(td.Attributes) == 0 {
+		return
+	}
+	for _, attr := range elem.Attributes() {
+		for _, au := range td.Attributes {
+			if au.Name.Local == attr.LocalName() && au.Name.NS == attr.URI() {
+				if au.TypeName.Local != "" {
+					var ann string
+					if au.TypeName.NS == lexicon.NamespaceXSD {
+						ann = "xs:" + au.TypeName.Local
+					} else {
+						ann = xpath3.QAnnotation(au.TypeName.NS, au.TypeName.Local)
+					}
+					ec.annotateNode(attr, ann)
+				}
+				break
+			}
+		}
+	}
+}
+
+func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) error {
+	name, err := inst.Name.evaluate(ctx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+
+	var value string
+	if inst.Select != nil {
+		sep := " "
+		if inst.Separator != nil {
+			sep, err = inst.Separator.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+		}
+		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		// Per XSLT 3.0 §5.7.2: check for function items (FOTY0013),
+		// remove zero-length text nodes, and merge adjacent text nodes
+		// before applying the separator.
+		seq := result.Sequence()
+		if fErr := checkAtomizable(seq); fErr != nil {
+			return fErr
+		}
+		seq = removeZeroLengthTextNodes(seq)
+		seq = mergeAdjacentTextNodes(seq)
+		value = stringifySequenceWithSep(seq, sep)
+	} else if len(inst.Body) > 0 {
+		sep := ""
+		if inst.Separator != nil {
+			sep, err = inst.Separator.evaluate(ctx, ec.contextNode)
+			if err != nil {
+				return err
+			}
+		}
+		// XSLT 2.0: attribute body is temporary output state (XTDE1480).
+		// XSLT 3.0 relaxes this restriction.
+		isV2TempOutput := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
+		if isV2TempOutput {
+			ec.temporaryOutputDepth++
+		}
+		val, err := ec.evaluateBodyForAttr(ctx, inst.Body)
+		if isV2TempOutput {
+			ec.temporaryOutputDepth--
+		}
+		if err != nil {
+			return err
+		}
+		// Per XSLT 3.0 §5.7.2: check for function items, remove zero-length
+		// text nodes, and merge adjacent text nodes before the separator is applied.
+		if fErr := checkAtomizable(val); fErr != nil {
+			return fErr
+		}
+		val = removeZeroLengthTextNodes(val)
+		val = mergeAdjacentTextNodes(val)
+		value = stringifySequenceWithSep(val, sep)
+	}
+
+	// When a type annotation is present (e.g. type="xs:integer"), cast the
+	// string value to the target type and back so that the canonical lexical
+	// form is used (e.g. "0023" → 23 → "23").
+	if inst.TypeName != "" {
+		av, castErr := xpath3.CastFromString(value, inst.TypeName)
+		if castErr != nil {
+			// Fall back to schema-defined type validation for user-defined types.
+			if ec.schemaRegistry != nil {
+				normalized, schemaErr := ec.schemaRegistry.CastToSchemaType(value, inst.TypeName)
+				if schemaErr != nil {
+					return dynamicError(errCodeXTTE1515,
+						"attribute value %q does not match type %s: %v", value, inst.TypeName, schemaErr)
+				}
+				value = normalized
+			} else {
+				return dynamicError(errCodeXTTE1515, "attribute value %q does not match type %s", value, inst.TypeName)
+			}
+		} else if s, sErr := xpath3.AtomicToString(av); sErr == nil {
+			value = s
+		}
+	}
+
+	// In sequence mode (variable/param with as), capture the attribute as a
+	// standalone item rather than attaching it to an element.
+	out := ec.currentOutput()
+	if out.sequenceMode {
+		// Resolve namespace for prefixed attribute names.
+		var attrNS *helium.Namespace
+		localName := name
+		nsURI := ""
+		if idx := strings.IndexByte(name, ':'); idx >= 0 {
+			prefix := name[:idx]
+			localName = name[idx+1:]
+			nsURI = ec.resolvePrefix(prefix)
+			if nsURI != "" {
+				ns, _ := out.doc.CreateNamespace(prefix, nsURI)
+				attrNS = ns
+			}
+		}
+		// Schema validation when validation attribute is set.
+		if inst.Validation == validationStrict || inst.Validation == validationLax {
+			if err := ec.validateConstructedAttribute(localName, nsURI, value, inst.Validation); err != nil {
+				return err
+			}
+		}
+		attr, attrErr := out.doc.CreateAttribute(name, value, attrNS)
+		if attrErr != nil {
+			return attrErr
+		}
+		ni := xpath3.NodeItem{Node: attr}
+		if inst.TypeName != "" {
+			ec.annotateNode(attr, inst.TypeName)
+			ni.TypeAnnotation = inst.TypeName
+			// Set ListItemType for list types (built-in or schema-defined).
+			if ec.schemaRegistry != nil {
+				if itemType, ok := ec.schemaRegistry.ListItemType(inst.TypeName); ok {
+					ni.ListItemType = itemType
+				}
+			}
+		}
+		out.pendingItems = append(out.pendingItems, ni)
+		out.noteOutput()
+		return nil
+	}
+
+	// Inside xsl:where-populated, a zero-length attribute is treated as absent
+	// (XSLT 3.0 §11.1.8): skip it so it does not overwrite a non-empty value.
+	if out.wherePopulated && value == "" {
+		return nil
+	}
+
+	// The current output node must be an element
+	elem, ok := out.current.(*helium.Element)
+	if !ok {
+		// XTDE0420: it is a dynamic error if the result sequence used to
+		// construct the content of a document node contains an attribute node.
+		if _, isDoc := out.current.(*helium.Document); isDoc && !out.sequenceMode && !ec.isItemOutputMethod() {
+			return dynamicError(errCodeXTDE0420,
+				"cannot add attribute %q to a document node", name)
+		}
+		// In adaptive/json output mode or build-tree=no, capture the
+		// attribute as a pending item rather than raising XTDE0820.
+		if ec.isItemOutputMethod() || out.captureItems {
+			// Create a standalone attribute node by attaching it to a
+			// temporary element, then capturing it as a node item.
+			tmpDoc := helium.NewDefaultDocument()
+			tmpElem, err := tmpDoc.CreateElement("_tmp")
+			if err == nil {
+				_ = tmpElem.SetAttribute(name, value)
+				for _, attr := range tmpElem.Attributes() {
+					out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: attr})
+					out.noteOutput()
+					break
+				}
+			}
+			return nil
+		}
+		return dynamicError(errCodeXTDE0820, "xsl:attribute must be added to an element")
+	}
+
+	// XTRE0540: cannot add attribute after child content has been added.
+	// Inside xsl:where-populated the body is evaluated into a temporary tree
+	// and later filtered, so attribute-after-child is permitted during evaluation.
+	if elem.FirstChild() != nil && !out.wherePopulated {
+		return dynamicError(errCodeXTRE0540, "cannot add attribute to element after children have been added")
+	}
+
+	// XTDE0855: when no namespace attribute, name must not be "xmlns"
+	if inst.Namespace == nil && name == lexicon.PrefixXMLNS {
+		return dynamicError(errCodeXTDE0855,
+			"xsl:attribute name must not be %q when no namespace attribute is specified", name)
+	}
+
+	// XTDE0850: name must be a valid QName
+	if !isValidQName(name) && !isValidEQName(name) {
+		return dynamicError(errCodeXTDE0850,
+			"xsl:attribute name %q is not a valid QName", name)
+	}
+
+	if inst.Namespace != nil {
+		nsURI, err := inst.Namespace.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		// XTDE0865: the xmlns namespace URI is reserved
+		if nsURI == lexicon.NamespaceXMLNS {
+			return dynamicError(errCodeXTDE0865,
+				"namespace URI %q is reserved and cannot be used for attributes", nsURI)
+		}
+		if nsURI != "" {
+			prefix := ""
+			localName := name
+			if idx := strings.IndexByte(name, ':'); idx >= 0 {
+				prefix = name[:idx]
+				localName = name[idx+1:]
+			}
+			// Attributes in a namespace require a non-empty prefix (unlike
+			// elements, the default namespace does not apply to attributes).
+			if prefix == "" {
+				prefix = "ns0"
+			}
+			// Schema validation when validation attribute is set.
+			if inst.Validation == validationStrict || inst.Validation == validationLax {
+				if err := ec.validateConstructedAttribute(localName, nsURI, value, inst.Validation); err != nil {
+					return err
+				}
+			}
+			// If the prefix is already bound to a different URI on this element,
+			// generate a unique prefix to avoid conflicts.
+			prefix = uniqueNSPrefix(elem, prefix, nsURI)
+			// Ensure the namespace is declared on the element
+			if !hasNSDecl(elem, prefix, nsURI) {
+				if err := elem.DeclareNamespace(prefix, nsURI); err != nil {
+					return err
+				}
+			}
+			// Remove existing attribute with same expanded name to allow replacement
+			elem.RemoveAttributeNS(localName, nsURI)
+			ns, err := ec.resultDoc.CreateNamespace(prefix, nsURI)
+			if err != nil {
+				return err
+			}
+			// Use literal mode: XSLT evaluation values are plain text
+			// that may contain & from resolved entities.
+			elem.SetLiteralAttributeNS(localName, value, ns)
+			ec.annotateAttr(elem, inst.TypeName, localName, nsURI, value)
+			out.noteOutput()
+			return nil
+		}
+		// namespace="" explicitly: strip prefix, use no-namespace attribute
+		if idx := strings.IndexByte(name, ':'); idx >= 0 {
+			name = name[idx+1:]
+		}
+		// Schema validation for no-namespace attribute.
+		if inst.Validation == validationStrict || inst.Validation == validationLax {
+			if err := ec.validateConstructedAttribute(name, "", value, inst.Validation); err != nil {
+				return err
+			}
+		}
+		elem.RemoveAttribute(name)
+		elem.SetLiteralAttribute(name, value)
+		ec.annotateAttr(elem, inst.TypeName, name, "", value)
+		out.noteOutput()
+		return nil
+	}
+
+	// Handle prefixed attribute names without explicit namespace
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		prefix := name[:idx]
+		localName := name[idx+1:]
+		uri := ec.resolvePrefix(prefix)
+		if uri == "" {
+			// XTDE0860: prefix in computed attribute name is undeclared
+			return dynamicError(errCodeXTDE0860,
+				"undeclared namespace prefix %q in attribute name %q", prefix, name)
+		}
+		// Schema validation for prefixed attribute.
+		if inst.Validation == validationStrict || inst.Validation == validationLax {
+			if err := ec.validateConstructedAttribute(localName, uri, value, inst.Validation); err != nil {
+				return err
+			}
+		}
+		// Ensure the namespace is declared on the element
+		if !hasNSDecl(elem, prefix, uri) {
+			if err := elem.DeclareNamespace(prefix, uri); err != nil {
+				return err
+			}
+		}
+		// Remove existing attribute with same expanded name to allow replacement
+		elem.RemoveAttributeNS(localName, uri)
+		ns, err := ec.resultDoc.CreateNamespace(prefix, uri)
+		if err != nil {
+			return err
+		}
+		elem.SetLiteralAttributeNS(localName, value, ns)
+		ec.annotateAttr(elem, inst.TypeName, localName, uri, value)
+		out.noteOutput()
+		return nil
+	}
+
+	// Schema validation for simple unprefixed attribute.
+	if inst.Validation == validationStrict || inst.Validation == validationLax {
+		if err := ec.validateConstructedAttribute(name, "", value, inst.Validation); err != nil {
+			return err
+		}
+	}
+
+	// Remove existing attribute with same name to allow replacement
+	elem.RemoveAttribute(name)
+	elem.SetLiteralAttribute(name, value)
+	ec.annotateAttr(elem, inst.TypeName, name, "", value)
+	out.noteOutput()
+	return nil
+}
+
+// copyAttributeToElement copies an attribute to an element, preserving its
+// namespace URI and prefix. For non-namespaced attributes, falls back to
+// SetLiteralAttribute.
+func copyAttributeToElement(elem *helium.Element, attr *helium.Attribute) {
+	if uri := attr.URI(); uri != "" {
+		prefix := attr.Prefix()
+		// Extract local name by stripping prefix from Name()
+		name := attr.Name()
+		localName := name
+		if prefix != "" {
+			localName = name[len(prefix)+1:]
+		}
+		// Namespace fixup: if the prefix is already used by another attribute
+		// or namespace declaration on this element with a different URI,
+		// generate a unique prefix to avoid conflict.
+		if prefix != "" {
+			if conflictingAttrPrefix(elem, prefix, uri) {
+				prefix = uniqueNSPrefix(elem, prefix+"_0", uri)
+			}
+		}
+		ns := helium.NewNamespace(prefix, uri)
+		elem.SetLiteralAttributeNS(localName, attr.Value(), ns)
+		// Ensure the namespace declaration is present on the element
+		// so that the prefix is properly declared in the serialized output.
+		if prefix != "" && !hasNSDecl(elem, prefix, uri) {
+			_ = elem.DeclareNamespace(prefix, uri)
+		}
+		return
+	}
+	elem.SetLiteralAttribute(attr.Name(), attr.Value())
+}
+
+// conflictingAttrPrefix returns true if the given prefix is already used
+// on the element (by a namespace declaration or an existing attribute)
+// with a different namespace URI.
+func conflictingAttrPrefix(elem *helium.Element, prefix, uri string) bool {
+	// Check namespace declarations
+	for _, ns := range elem.Namespaces() {
+		if ns.Prefix() == prefix && ns.URI() != uri {
+			return true
+		}
+	}
+	// Check existing attributes
+	for _, a := range elem.Attributes() {
+		if a.Prefix() == prefix && a.URI() != "" && a.URI() != uri {
+			return true
+		}
+	}
+	return false
+}
+
+// hasNSDecl checks if an element already has a namespace declaration for
+// the given prefix and URI.
+func hasNSDecl(elem *helium.Element, prefix, uri string) bool {
+	for _, ns := range elem.Namespaces() {
+		if ns.Prefix() == prefix && ns.URI() == uri {
+			return true
+		}
+	}
+	return false
+}
+
+// collectInScopeNamespaces collects all in-scope namespace declarations for
+// an element, walking up the ancestor chain.  Declarations closer to the
+// element take precedence (first-seen prefix wins).
+func collectInScopeNamespaces(elem *helium.Element) []*helium.Namespace {
+	seen := make(map[string]struct{})
+	var result []*helium.Namespace
+	for cur := elem; cur != nil; {
+		for _, ns := range cur.Namespaces() {
+			if _, ok := seen[ns.Prefix()]; !ok {
+				seen[ns.Prefix()] = struct{}{}
+				result = append(result, ns)
+			}
+		}
+		p := cur.Parent()
+		if p == nil {
+			break
+		}
+		pe, ok := p.(*helium.Element)
+		if !ok {
+			break
+		}
+		cur = pe
+	}
+	return result
+}
+
+// undeclareInheritedNamespaces adds namespace undeclarations (xmlns:p="") on
+// each direct child element for every in-scope namespace visible from parent
+// that the child does not itself declare.  This implements the XSLT 3.0
+// inherit-namespaces="no" semantics: children must not inherit ANY namespace
+// reachable through the parent in the DOM tree.
+func undeclareInheritedNamespaces(parent *helium.Element) {
+	// Collect all in-scope namespace prefix→URI bindings visible from the
+	// parent, including those inherited from grandparent and beyond.
+	inScope := make(map[string]string) // prefix → URI
+	for cur := parent; cur != nil; {
+		for _, ns := range cur.Namespaces() {
+			if _, ok := inScope[ns.Prefix()]; !ok {
+				inScope[ns.Prefix()] = ns.URI()
+			}
+		}
+		p := cur.Parent()
+		if p == nil {
+			break
+		}
+		pe, ok := p.(*helium.Element)
+		if !ok {
+			break
+		}
+		cur = pe
+	}
+	if len(inScope) == 0 {
+		return
+	}
+	for child := range helium.Children(parent) {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		// Sort prefixes for deterministic namespace declaration order.
+		sortedPrefixes := make([]string, 0, len(inScope))
+		for prefix := range inScope {
+			sortedPrefixes = append(sortedPrefixes, prefix)
+		}
+		sort.Strings(sortedPrefixes)
+		for _, prefix := range sortedPrefixes {
+			parentURI := inScope[prefix]
+			// Check if the child already has an explicit declaration for this prefix.
+			alreadyDeclared := false
+			var childNSURI string
+			for _, cns := range childElem.Namespaces() {
+				if cns.Prefix() == prefix {
+					alreadyDeclared = true
+					childNSURI = cns.URI()
+					break
+				}
+			}
+			if alreadyDeclared {
+				// If the child's declaration is identical to the parent's,
+				// remove it — the serializer will see the parent's
+				// declaration in scope, so repeating it is redundant.
+				if childNSURI == parentURI {
+					childElem.RemoveNamespaceByPrefix(prefix)
+				}
+				continue
+			}
+			// If the parent binding is already an undeclaration (empty URI),
+			// the prefix is already not bound in scope — no need to redeclare.
+			if parentURI == "" {
+				continue
+			}
+			// If the child element itself uses this prefix (i.e., its
+			// namespace matches the inherited binding), add an explicit
+			// declaration rather than undeclaring. This preserves the
+			// element's own namespace while blocking further inheritance.
+			childPrefix := childElem.Prefix()
+			childURI := childElem.URI()
+			if childPrefix == prefix && childURI != "" {
+				_ = childElem.DeclareNamespace(prefix, childURI)
+				continue
+			}
+			// Add an undeclaration (empty URI) so the prefix is not visible
+			// when walking the ancestor chain.
+			_ = childElem.DeclareNamespace(prefix, "")
+		}
+		// After processing this child, clean up redundant undeclarations
+		// in its descendants. An inner inherit-namespaces="no" element
+		// may have added undeclarations that are now superseded by the
+		// undeclarations we just added on this child.
+		removeRedundantDescendantUndecls(childElem)
+	}
+}
+
+// removeRedundantDescendantUndecls removes namespace undeclarations from
+// descendant elements that are redundant because the same prefix is already
+// undeclared (or bound to the same URI) on an ancestor in the serialized output.
+func removeRedundantDescendantUndecls(elem *helium.Element) {
+	// Build the set of namespace bindings on this element.
+	bindings := make(map[string]string)
+	for _, ns := range elem.Namespaces() {
+		bindings[ns.Prefix()] = ns.URI()
+	}
+	for child := range helium.Children(elem) {
+		childElem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		// Remove any namespace declaration on the child that is identical
+		// to what's already in scope from this element.
+		for _, cns := range childElem.Namespaces() {
+			if parentURI, ok := bindings[cns.Prefix()]; ok && cns.URI() == parentURI {
+				childElem.RemoveNamespaceByPrefix(cns.Prefix())
+			}
+		}
+	}
+}
+
+// uniqueNSPrefix returns a prefix for nsURI that doesn't conflict with
+// in-scope namespace declarations on elem or its ancestors. If prefix is
+// already bound to nsURI, it's returned as-is. If it's bound to a different
+// URI, a suffix like _1, _2, ... is appended until a unique prefix is found.
+func uniqueNSPrefix(elem *helium.Element, prefix, nsURI string) string {
+	if prefixBoundTo(elem, prefix) == nsURI {
+		return prefix
+	}
+	if uri := prefixBoundTo(elem, prefix); uri != "" && uri != nsURI {
+		for i := 1; ; i++ {
+			candidate := prefix + "_" + strconv.Itoa(i)
+			if prefixBoundTo(elem, candidate) == "" {
+				return candidate
+			}
+		}
+	}
+	return prefix
+}
+
+// prefixBoundTo walks the element and its ancestors to find what URI
+// a prefix is bound to. Returns "" if not found.
+func prefixBoundTo(elem *helium.Element, prefix string) string {
+	for node := helium.Node(elem); node != nil; node = node.Parent() {
+		e, ok := node.(*helium.Element)
+		if !ok {
+			continue
+		}
+		for _, ns := range e.Namespaces() {
+			if ns.Prefix() == prefix {
+				return ns.URI()
+			}
+		}
+	}
+	return ""
+}
+
+func (ec *execContext) execComment(ctx context.Context, inst *commentInst) error {
+	var value string
+	if inst.Select != nil {
+		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		value = stringifyResult(result)
+	} else if len(inst.Body) > 0 {
+		// XSLT 2.0: comment body is temporary output state (XTDE1480).
+		// XSLT 3.0 relaxes this restriction.
+		isV2TempOutput := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
+		if isV2TempOutput {
+			ec.temporaryOutputDepth++
+		}
+		val, err := ec.evaluateBody(ctx, inst.Body)
+		if isV2TempOutput {
+			ec.temporaryOutputDepth--
+		}
+		if err != nil {
+			return err
+		}
+		value = stringifySequence(val)
+	}
+
+	// Sanitize comment content per XSLT 3.0 spec §11.1:
+	// Replace any occurrence of "--" with "- -" and ensure the value
+	// doesn't end with "-" (add a trailing space if so).
+	value = sanitizeComment(value)
+
+	comment, err := ec.resultDoc.CreateComment([]byte(value))
+	if err != nil {
+		return err
+	}
+	return ec.addNode(comment)
+}
+
+// sanitizeComment replaces "--" sequences with "- -" and ensures the
+// value does not end with "-", per XSLT comment construction rules.
+func sanitizeComment(s string) string {
+	var sb strings.Builder
+	sb.Grow(len(s))
+	prevDash := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '-' {
+			if prevDash {
+				sb.WriteByte(' ')
+			}
+			sb.WriteByte('-')
+			prevDash = true
+		} else {
+			sb.WriteByte(s[i])
+			prevDash = false
+		}
+	}
+	result := sb.String()
+	if len(result) > 0 && result[len(result)-1] == '-' {
+		result += " "
+	}
+	return result
+}
+
+func (ec *execContext) execPI(ctx context.Context, inst *piInst) error {
+	name, err := inst.Name.evaluate(ctx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+
+	var value string
+	if inst.Select != nil {
+		result, err := ec.evalXPath(inst.Select, ec.contextNode)
+		if err != nil {
+			return err
+		}
+		value = stringifyResult(result)
+	} else if len(inst.Body) > 0 {
+		// XSLT 2.0: PI body is temporary output state (XTDE1480).
+		// XSLT 3.0 relaxes this restriction.
+		isV2TempOutput := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
+		if isV2TempOutput {
+			ec.temporaryOutputDepth++
+		}
+		val, err := ec.evaluateBody(ctx, inst.Body)
+		if isV2TempOutput {
+			ec.temporaryOutputDepth--
+		}
+		if err != nil {
+			return err
+		}
+		value = stringifySequence(val)
+	}
+
+	// XTDE0890: name must be a valid NCName and PITarget
+	if !isValidNCName(name) {
+		return dynamicError(errCodeXTDE0890,
+			"xsl:processing-instruction name %q is not a valid NCName", name)
+	}
+	if strings.EqualFold(name, "xml") {
+		return dynamicError(errCodeXTDE0890,
+			"xsl:processing-instruction name must not be %q", name)
+	}
+
+	// XSLT 3.0 §11.6: replace "?>" in PI content with "? >" to avoid
+	// premature termination of the processing instruction.
+	value = strings.ReplaceAll(value, "?>", "? >")
+
+	pi, err := ec.resultDoc.CreatePI(name, value)
+	if err != nil {
+		return err
+	}
+	return ec.addNode(pi)
+}
+
+func (ec *execContext) execNamespace(ctx context.Context, inst *namespaceInst) error {
+	name, err := inst.Name.evaluate(ctx, ec.contextNode)
+	if err != nil {
+		return err
+	}
+
+	var value string
+	if inst.Select != nil {
+		result, evalErr := ec.evalXPath(inst.Select, ec.contextNode)
+		if evalErr != nil {
+			return evalErr
+		}
+		value = stringifyResult(result)
+	} else if len(inst.Body) > 0 {
+		// XSLT 2.0: namespace body is temporary output state (XTDE1480).
+		// XSLT 3.0 relaxes this restriction.
+		isV2TempOutput := ec.stylesheet.version != "" && ec.stylesheet.version < "3.0"
+		if isV2TempOutput {
+			ec.temporaryOutputDepth++
+		}
+		val, bodyErr := ec.evaluateBody(ctx, inst.Body)
+		if isV2TempOutput {
+			ec.temporaryOutputDepth--
+		}
+		if bodyErr != nil {
+			return bodyErr
+		}
+		value = stringifySequence(val)
+	}
+
+	// XTDE0920: the name must be either a zero-length string or an NCName,
+	// and must not be "xmlns".
+	if name == lexicon.PrefixXMLNS {
+		return dynamicError(errCodeXTDE0920,
+			"cannot create namespace node with prefix %q", name)
+	}
+	if name != "" && !isValidNCName(name) {
+		return dynamicError(errCodeXTDE0920,
+			"xsl:namespace name %q is not a valid NCName", name)
+	}
+	// XTDE0925: xml prefix requires the XML namespace URI, and
+	// the XML namespace URI requires the xml prefix.
+	if name == lexicon.PrefixXML && value != lexicon.NamespaceXML {
+		return dynamicError(errCodeXTDE0925,
+			"namespace prefix %q must be bound to %q, got %q",
+			name, lexicon.NamespaceXML, value)
+	}
+	if value == lexicon.NamespaceXML && name != lexicon.PrefixXML {
+		return dynamicError(errCodeXTDE0925,
+			"namespace URI %q can only be bound to prefix %q, got %q",
+			value, lexicon.PrefixXML, name)
+	}
+	// XTDE0905: the xmlns namespace URI is reserved
+	if value == lexicon.NamespaceXMLNS {
+		return dynamicError(errCodeXTDE0905,
+			"namespace URI %q is reserved and cannot be used", value)
+	}
+	// XTDE0905: namespace URI must be valid in the lexical space of xs:anyURI.
+	// A URI can have at most one '#' (fragment separator).
+	if value != "" && strings.Count(value, "#") > 1 {
+		return dynamicError(errCodeXTDE0905,
+			"namespace URI %q is not a valid xs:anyURI", value)
+	}
+	// XTDE0930: non-empty prefix with zero-length namespace URI
+	if name != "" && value == "" {
+		return dynamicError(errCodeXTDE0930,
+			"namespace prefix %q requires a non-empty URI", name)
+	}
+
+	// The xml namespace is always implicitly declared — skip it to
+	// avoid creating a redundant namespace declaration that some
+	// serializers might output as an element.
+	if name == lexicon.PrefixXML && value == lexicon.NamespaceXML {
+		return nil
+	}
+
+	out := ec.currentOutput()
+	// In sequence mode, capture the namespace node as a standalone item.
+	if out.sequenceMode {
+		ns := helium.NewNamespace(name, value)
+		nsNode := helium.NewNamespaceNodeWrapper(ns, nil)
+		out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: nsNode})
+		out.noteOutput()
+		return nil
+	}
+	elem, ok := out.current.(*helium.Element)
+	if !ok {
+		return dynamicError(errCodeXTDE0420,
+			"cannot add namespace node to a non-element node")
+	}
+
+	// XTDE0430: it is a non-recoverable dynamic error if two namespace
+	// nodes for the same element have the same prefix but different URIs.
+	// Exception: when the element's prefix namespace was auto-generated
+	// (from xsl:element name resolution), namespace fixup can rename the
+	// element's prefix instead of raising an error.
+	_, fixupOK := ec.nsFixupAllowed[elem]
+	for _, ns := range elem.Namespaces() {
+		if ns.Prefix() == name && ns.URI() != value {
+			if fixupOK && elem.Prefix() == name && elem.URI() == ns.URI() {
+				continue // allow fixup below
+			}
+			return dynamicError(errCodeXTDE0430,
+				"namespace prefix %q is already bound to %q; cannot rebind to %q", name, ns.URI(), value)
+		}
+	}
+
+	// XTDE0440: defining a default namespace when the element is in no namespace
+	if name == "" && value != "" && elem.URI() == "" && elem.Prefix() == "" {
+		return dynamicError(errCodeXTDE0440,
+			"cannot define default namespace %q on element %q which is in no namespace",
+			value, elem.Name())
+	}
+
+	// If the new namespace binding conflicts with the element's own prefix
+	// (same prefix, different URI), rename the element's prefix to avoid
+	// the collision via namespace fixup.
+	if fixupOK && name != "" && elem.Prefix() == name && elem.URI() != value {
+		origURI := elem.URI()
+		newPrefix := uniqueNSPrefix(elem, name+"_0", origURI)
+		elem.RemoveNamespaceByPrefix(name)
+		if err := elem.DeclareNamespace(newPrefix, origURI); err != nil {
+			return err
+		}
+		if err := elem.SetActiveNamespace(newPrefix, origURI); err != nil {
+			return err
+		}
+	}
+
+	if err := elem.DeclareNamespace(name, value); err != nil {
+		return err
+	}
+	out.noteOutput()
+	return nil
+}
+
+// checkQNameAttrConflicts checks for namespace-sensitive attribute value
+// conflicts on a validated element. When two attributes are typed as xs:QName
+// and use the same prefix bound to different namespace URIs, only one binding
+// can exist on the element. This makes at least one QName value unresolvable,
+// which is a strict validation error (XTTE1510).
+func (ec *execContext) checkQNameAttrConflicts(elem *helium.Element) error {
+	if ec.schemaRegistry == nil {
+		return nil
+	}
+	// Collect QName-typed attribute values with their expected namespace bindings.
+	type qnameAttr struct {
+		prefix string
+		uri    string
+		name   string
+	}
+	var qnames []qnameAttr
+	elemLocal := elem.LocalName()
+	elemNS := elem.URI()
+
+	for _, attr := range elem.Attributes() {
+		attrLocal := attr.LocalName()
+		attrNS := attr.URI()
+		// Check both the schema declaration and runtime type annotation.
+		attrTypeName := ec.schemaRegistry.LookupSchemaAttributeType(elemLocal, elemNS, attrLocal, attrNS)
+		if attrTypeName == "" {
+			// Fall back to runtime type annotation.
+			if ec.typeAnnotations != nil {
+				attrTypeName = ec.typeAnnotations[attr]
+			}
+		}
+		if attrTypeName == "" {
+			continue
+		}
+		if !isQNameType(attrTypeName) {
+			continue
+		}
+		val := string(attr.Content())
+		if idx := strings.IndexByte(val, ':'); idx > 0 {
+			prefix := val[:idx]
+			// Resolve the prefix using the element's namespace declarations.
+			resolved := ""
+			for _, ns := range elem.Namespaces() {
+				if ns.Prefix() == prefix {
+					resolved = ns.URI()
+					break
+				}
+			}
+			qnames = append(qnames, qnameAttr{prefix: prefix, uri: resolved, name: attrLocal})
+		}
+	}
+
+	// Check for unresolvable prefixes or conflicts.
+	for i := 0; i < len(qnames); i++ {
+		// If the prefix can't be resolved at all, that's an error.
+		if qnames[i].uri == "" {
+			return dynamicError(errCodeXTTE1510,
+				"QName attribute @%s has value with prefix %q that is not declared on the element",
+				qnames[i].name, qnames[i].prefix)
+		}
+		for j := i + 1; j < len(qnames); j++ {
+			if qnames[i].prefix == qnames[j].prefix && qnames[i].uri != qnames[j].uri {
+				return dynamicError(errCodeXTTE1510,
+					"QName attributes @%s and @%s use prefix %q bound to different namespaces (%q vs %q)",
+					qnames[i].name, qnames[j].name, qnames[i].prefix, qnames[i].uri, qnames[j].uri)
+			}
+		}
+	}
+	return nil
+}
+
+// isQNameType returns true if the given type name is xs:QName or derived.
+func isQNameType(typeName string) bool {
+	switch typeName {
+	case "xs:QName", "Q{http://www.w3.org/2001/XMLSchema}QName":
+		return true
+	}
+	return false
+}
+

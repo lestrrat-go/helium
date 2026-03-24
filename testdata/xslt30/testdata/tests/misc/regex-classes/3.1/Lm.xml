@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="Lm">
+      <match from="688" to="705"/>
+      <match from="710" to="721"/>
+      <match from="736" to="740"/>
+      <match from="750" to="750"/>
+      <match from="890" to="890"/>
+      <match from="1369" to="1369"/>
+      <match from="1600" to="1600"/>
+      <match from="1765" to="1766"/>
+      <match from="3654" to="3654"/>
+      <match from="3782" to="3782"/>
+      <match from="6103" to="6103"/>
+      <match from="6211" to="6211"/>
+      <match from="7468" to="7521"/>
+      <match from="12293" to="12293"/>
+      <match from="12337" to="12341"/>
+      <match from="12347" to="12347"/>
+      <match from="12445" to="12446"/>
+      <match from="12540" to="12542"/>
+      <match from="65392" to="65392"/>
+      <match from="65438" to="65439"/>
+   </ranges>
+   <ranges complement="Lm">
+      <match from="9" to="687"/>
+      <match from="706" to="709"/>
+      <match from="722" to="735"/>
+      <match from="741" to="749"/>
+      <match from="751" to="889"/>
+      <match from="891" to="1368"/>
+      <match from="1370" to="1599"/>
+      <match from="1601" to="1764"/>
+      <match from="1767" to="3653"/>
+      <match from="3655" to="3781"/>
+      <match from="3783" to="6102"/>
+      <match from="6104" to="6210"/>
+      <match from="6212" to="7467"/>
+      <match from="7522" to="12292"/>
+      <match from="12294" to="12336"/>
+      <match from="12342" to="12346"/>
+      <match from="12348" to="12444"/>
+      <match from="12447" to="12539"/>
+      <match from="12543" to="65391"/>
+      <match from="65393" to="65437"/>
+      <match from="65440" to="1114111"/>
+   </ranges>
+</out>

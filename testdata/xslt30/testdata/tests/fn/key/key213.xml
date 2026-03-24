@@ -1,0 +1,21 @@
+<PRODUCTS>
+<PRODUCT>
+    <NAME>WINDOWS XP</NAME>
+    <TECHNOLOGY domain="1" bookmark="xp">Desktop Operating System</TECHNOLOGY>
+    <TECHNOLOGY domain="2" bookmark="xp">Workstation OS</TECHNOLOGY>
+</PRODUCT>
+<PRODUCT>
+    <NAME>Outlook</NAME>
+    <TECHNOLOGY domain="2" bookmark="outlook">Desktop Email Client</TECHNOLOGY>
+</PRODUCT>
+<PRODUCT>
+    <NAME>Power Designer</NAME>
+    <TECHNOLOGY domain="1" bookmark="pd">Repository Tool</TECHNOLOGY>
+    <TECHNOLOGY domain="2" bookmark="pd">CASE Tools</TECHNOLOGY>
+</PRODUCT>
+<PRODUCT>
+    <NAME>ERWIN</NAME>
+    <TECHNOLOGY domain="2" bookmark="erwin">CASE Tools</TECHNOLOGY>
+    <TECHNOLOGY domain="1" bookmark="erwin">Repository Tool</TECHNOLOGY>
+</PRODUCT>
+</PRODUCTS>

@@ -10,6 +10,27 @@ Go and grew broader native Go APIs and features along the way.
 
 The xpath3 package targets **XSD 1.1 only**. This means `+INF` is a valid lexical form for xs:double and xs:float, and xs:dateTimeStamp is a recognized type. QT3 tests with `dependency type="xsd-version" value="1.0"` are skipped.
 
+## XSLT 3.0 — Conformance Scope
+
+The xslt3 package targets **Basic XSLT 3.0** conformance (W3C spec Section 27). The spec defines 8 conformance levels; only "Basic XSLT Processor" is required. The remaining 7 are optional features:
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Basic XSLT Processor | **Target** | Core requirement |
+| Schema-Awareness | In progress | `xsl:import-schema`, type annotations |
+| Serialization | Implemented | xml/html/text output methods |
+| Streaming | Implemented | DOM-materialization; XTSE3430 analysis |
+| Higher-Order Functions | Implemented | Via xpath3 |
+| XPath 3.1 | Implemented | Via xpath3 |
+| Dynamic Evaluation | Implemented | `xsl:evaluate` |
+| **Compatibility (1.0/2.0)** | **Not planned** | Optional per spec; 122 tests skipped legitimately |
+
+Do NOT implement XSLT 1.0/2.0 backwards compatibility mode. Tests skipped with reason `"unsupported feature: backwards_compatibility"` or `"unsupported spec: XSLT20"` are intentionally out of scope.
+
+## Generated Files
+
+- NEVER modify generated files by hand. Regenerate through owning generator, e.g. `xslt3gen`.
+
 ## Pre-Read Rules
 
 Read the linked doc BEFORE working in that area. No exceptions.
@@ -33,7 +54,6 @@ Read the linked doc BEFORE working in that area. No exceptions.
 | XPath 3.1 lexer, parser, AST nodes | `.claude/docs/xpath3-parser.md` |
 | XPath 3.1 evaluator, comparison, casting | `.claude/docs/xpath3-eval.md` |
 | XPath 3.1 function system, built-in categories | `.claude/docs/xpath3-functions.md` |
-| XPath 3.1 phased tasks, dependencies, risks | `.claude/docs/xpath3-tasks.md` |
 | Saxon-HE source layout (reference) | `.claude/docs/saxon-layout.md` |
 
 ## Cache Maintenance
@@ -62,5 +82,4 @@ These docs cache repository state. Still read source before modifying code.
 | `xpath3-parser.md` | Lexer, parser, AST node, token type changes |
 | `xpath3-eval.md` | Evaluator, comparison, casting logic changes |
 | `xpath3-functions.md` | Function registry, built-in function additions/changes |
-| `xpath3-tasks.md` | Task completion, dependency, or risk changes |
 | `saxon-layout.md` | Reference layout updates |

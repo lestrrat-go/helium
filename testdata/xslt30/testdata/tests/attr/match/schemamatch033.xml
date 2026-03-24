@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<my:userNode xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		  xsi:schemaLocation="http://www.example.com/ns/match/var variousTypesSchemaMatch.xsd"
+		  xmlns:my="http://www.example.com/ns/match/var"
+	 	  my:specialPart="123-AB" my:listParts="000-SS 000-RR">
+		<my:simpleBuiltin>http://www.example.com/ns/test</my:simpleBuiltin>
+		<my:simpleUserElem>123-AB</my:simpleUserElem>
+		<my:simpleUserList>345-PT 675-RT 897-GB</my:simpleUserList>
+		<my:simpleUserUnion>100</my:simpleUserUnion>
+		<my:complexSimpleContentElem my:count="five">5</my:complexSimpleContentElem>
+		<my:onlyAttributes my:colors="red blue green" specialPart="123-AB" />	
+</my:userNode>

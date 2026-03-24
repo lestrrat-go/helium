@@ -1,0 +1,10 @@
+<Notifications>
+    <Notification>
+        <NotifId>1</NotifId>
+        <MsgText>Message 1</MsgText>
+    </Notification>
+    <Notification>
+        <NotifId>2</NotifId>
+        <MsgText>Message 2</MsgText>
+    </Notification>
+</Notifications>

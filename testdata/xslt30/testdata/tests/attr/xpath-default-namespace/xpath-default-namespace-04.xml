@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc xmlns="http://example.org/hal">
+	<item attr="atr1">
+		<subitem>a</subitem>
+	</item>
+	<item attr="atr2">
+		<subitem>b</subitem>
+	</item>
+	<item attr="atr3">
+		<subitem>c</subitem>
+	</item>
+</doc>

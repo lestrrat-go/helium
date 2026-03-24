@@ -1,0 +1,20 @@
+<?xml version="1.0"?> 
+<chapter title="A">
+  <section title="A1">
+    <subsection title="A1a">hello</subsection>
+    <subsection title="A1b">ahoy</subsection>
+  </section>
+  <section title="A2">
+    <subsection title="A2a">goodbye</subsection>
+    <subsection title="A2b">sayonara</subsection>
+    <subsection title="A2c">adios</subsection>
+  </section>
+  <section title="A3">
+    <subsection title="A3a">aloha</subsection>
+    <subsection title="A3b">
+      <footnote>A3b-1</footnote>
+      <footnote>A3b-2</footnote>
+    </subsection>
+    <subsection title="A3c">shalom</subsection>
+  </section>
+</chapter>

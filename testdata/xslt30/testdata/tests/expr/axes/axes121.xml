@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+
+<far-north>
+  <north>north-text1
+    <near-north>
+      <far-west/>
+      <west><!-- Western comment --></west>
+      <near-west/>
+      <center>center-text1
+        <near-south>
+          <south>south-text</south>
+        </near-south>
+        <near-south-west/>center-text2
+      </center>
+      <near-east/>
+      <east><!-- Eastern comment --></east>
+      <far-east/>
+    </near-north>north-text2
+  </north>
+</far-north>

@@ -52,7 +52,10 @@ Regex: use Go `regexp` package by default; fall back to `github.com/dlclark/rege
 Compiled regexes are cached by pattern + flags pair so repeated literal calls do not repay translation/compilation cost.
 
 ### `functions_numeric.go`
-`abs`, `ceiling`, `floor`, `round`, `round-half-to-even`, `format-integer` (stub v1), `format-number` (stub v1)
+`abs`, `ceiling`, `floor`, `round`, `round-half-to-even`
+
+### `functions_constructors.go`
+Typed atomic constructors for XSD types
 
 ### `functions_boolean.go`
 `boolean`, `not`, `true`, `false`
@@ -101,11 +104,17 @@ All delegate to Go `math` package.
 ### `functions_misc.go`
 `static-base-uri`, `default-collation`, `available-environment-variables`, `environment-variable`, `current-dateTime`, `current-date`, `current-time`, `implicit-timezone`, `generate-id`
 
-## Stubs (v1)
+### `format_number.go`
+`format-number` (full ICU-style decimal format patterns)
 
-Return "not yet implemented" error:
-- `fn:format-number`, `fn:format-integer`
-- `fn:serialize` (needs helium serializer integration)
+### `format_integer.go`
+`format-integer` (word, ordinal, cardinal patterns)
+
+### `format_datetime.go`
+`format-date`, `format-dateTime`, `format-time`
+
+### `functions_unparsed_text.go`
+`unparsed-text`, `unparsed-text-lines`, `unparsed-text-available`
 
 ## FunctionItem Mechanics
 

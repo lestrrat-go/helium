@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsSpacingModifierLetters">
+      <match from="688" to="767"/>
+   </ranges>
+   <ranges complement="IsSpacingModifierLetters">
+      <match from="9" to="687"/>
+      <match from="768" to="1114111"/>
+   </ranges>
+</out>

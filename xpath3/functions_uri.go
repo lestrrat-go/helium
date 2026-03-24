@@ -24,10 +24,10 @@ func fnEncodeForURI(_ context.Context, args []Sequence) (Sequence, error) {
 // coerceArgToStringOpt extracts a string from xs:string? argument, validating
 // both cardinality (0 or 1) and type (string-derived, anyURI, untypedAtomic).
 func coerceArgToStringOpt(seq Sequence) (string, error) {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return "", nil
 	}
-	if len(seq) > 1 {
+	if seq.Len() > 1 {
 		return "", &XPathError{Code: errCodeXPTY0004, Message: "expected xs:string?, got sequence of length > 1"}
 	}
 	return coerceArgToString(seq)
@@ -82,8 +82,8 @@ func fnIRIToURI(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleString(b.String()), nil
 }
 
-func fnResolveURI(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	relative, err := coerceArgToString(args[0])
@@ -98,13 +98,25 @@ func fnResolveURI(_ context.Context, args []Sequence) (Sequence, error) {
 			}
 			return SingleString(base), nil
 		}
+		// 1-arg with empty relative: return static base URI
+		if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
+			return SingleString(ec.baseURI), nil
+		}
 		return SingleString(""), nil
 	}
 	base := ""
+	baseFromContext := false
 	if len(args) >= 2 {
 		base, err = coerceArgToString(args[1])
 		if err != nil {
 			return nil, err
+		}
+	}
+	// 1-arg form: use static base URI from context
+	if base == "" {
+		if ec := getFnContext(ctx); ec != nil {
+			base = ec.baseURI
+			baseFromContext = true
 		}
 	}
 	if base == "" {
@@ -122,6 +134,13 @@ func fnResolveURI(_ context.Context, args []Sequence) (Sequence, error) {
 		return SingleString(relative), nil
 	}
 
+	// Convert absolute file paths to file: URIs so that resolve-uri works
+	// correctly with file system paths (e.g. from static-base-uri()).
+	// Only apply this for context-derived bases; explicit arguments must
+	// be proper absolute URIs per FO.E1 erratum (FORG0002 otherwise).
+	if baseFromContext && strings.HasPrefix(base, "/") && !strings.Contains(base, "://") {
+		base = "file://" + base
+	}
 	parsedBase, err := parseURIReference(base)
 	if err != nil {
 		return nil, &XPathError{Code: "FORG0002", Message: "invalid base URI: " + base}
@@ -149,20 +168,26 @@ func validateIRI(s string) error {
 	if err := validatePercentEncoding(s); err != nil {
 		return err
 	}
+	// A URI reference may contain at most one '#' (fragment separator).
+	if idx := strings.IndexByte(s, '#'); idx >= 0 {
+		if strings.IndexByte(s[idx+1:], '#') >= 0 {
+			return fmt.Errorf("invalid IRI: multiple '#' characters")
+		}
+	}
 	for _, r := range s {
-		if r == ' ' || r < 0x20 || (r > 0x7E && r < 0xA0) {
+		if r < 0x20 || (r > 0x7E && r < 0xA0) {
 			return fmt.Errorf("invalid IRI character U+%04X", r)
 		}
 	}
 	return nil
 }
 
-// iriToURI percent-encodes non-ASCII characters for use with Go's url.Parse.
+// iriToURI percent-encodes non-ASCII characters and spaces for use with Go's url.Parse.
 func iriToURI(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if c > 0x7E {
+		if c > 0x7E || c == ' ' {
 			fmt.Fprintf(&b, "%%%02X", c)
 		} else {
 			b.WriteByte(c)
@@ -171,7 +196,8 @@ func iriToURI(s string) string {
 	return b.String()
 }
 
-// uriToIRI decodes percent-encoded non-ASCII characters back to their IRI form.
+// uriToIRI decodes percent-encoded non-ASCII characters and spaces back to
+// their IRI form.
 func uriToIRI(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
@@ -180,7 +206,7 @@ func uriToIRI(s string) string {
 			lo := unhexByte(s[i+2])
 			if hi >= 0 && lo >= 0 {
 				c := byte(hi<<4 | lo)
-				if c > 0x7E {
+				if c > 0x7E || c == ' ' {
 					b.WriteByte(c)
 					i += 2
 					continue

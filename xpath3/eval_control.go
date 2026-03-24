@@ -1,6 +1,7 @@
 package xpath3
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -22,82 +23,88 @@ func checkedArrayIndex(a AtomicValue) (int, error) {
 	return int(n.Int64()), nil
 }
 
-func evalLookupExpr(ec *evalContext, e LookupExpr) (Sequence, error) {
-	base, err := eval(ec, e.Expr)
+func evalLookupExpr(evalFn exprEvaluator, ec *evalContext, e LookupExpr) (Sequence, error) {
+	base, err := evalFn(ec, e.Expr)
 	if err != nil {
 		return nil, err
 	}
-	var result Sequence
-	for _, item := range base {
-		r, err := lookupItem(ec, item, e.Key, e.All)
+	var result ItemSlice
+	for item := range seqItems(base) {
+		r, err := lookupItem(evalFn, ec, item, e.Key, e.All)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, r...)
+		result = append(result, seqMaterialize(r)...)
 	}
 	return result, nil
 }
 
-func evalUnaryLookupExpr(ec *evalContext, e UnaryLookupExpr) (Sequence, error) {
+func evalUnaryLookupExpr(evalFn exprEvaluator, ec *evalContext, e UnaryLookupExpr) (Sequence, error) {
 	if ec.contextItem != nil {
-		return lookupItem(ec, ec.contextItem, e.Key, e.All)
+		return lookupItem(evalFn, ec, ec.contextItem, e.Key, e.All)
 	}
 	if ec.node == nil {
 		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
 	}
-	return lookupItem(ec, NodeItem{Node: ec.node}, e.Key, e.All)
+	return lookupItem(evalFn, ec, NodeItem{Node: ec.node}, e.Key, e.All)
 }
 
-func lookupItem(ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, error) {
+func lookupItem(evalFn exprEvaluator, ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, error) {
 	switch v := item.(type) {
 	case MapItem:
 		if all {
-			var result Sequence
+			var result ItemSlice
 			_ = v.ForEach(func(_ AtomicValue, val Sequence) error {
-				result = append(result, val...)
+				result = append(result, seqMaterialize(val)...)
 				return nil
 			})
 			return result, nil
 		}
-		keySeq, err := eval(ec, keyExpr)
+		keySeq, err := evalFn(ec, keyExpr)
 		if err != nil {
 			return nil, err
 		}
-		if len(keySeq) == 0 {
+		if seqLen(keySeq) == 0 {
 			return nil, nil
 		}
-		var result Sequence
-		for _, keyItem := range keySeq {
+		var result ItemSlice
+		for keyItem := range seqItems(keySeq) {
 			ka, err := AtomizeItem(keyItem)
 			if err != nil {
 				return nil, err
 			}
 			val, ok := v.Get(ka)
 			if ok {
-				result = append(result, val...)
+				result = append(result, seqMaterialize(val)...)
 			}
 		}
 		return result, nil
 	case ArrayItem:
 		if all {
-			var result Sequence
+			var result ItemSlice
 			for _, m := range v.members0() {
-				result = append(result, m...)
+				result = append(result, seqMaterialize(m)...)
 			}
 			return result, nil
 		}
-		keySeq, err := eval(ec, keyExpr)
+		keySeq, err := evalFn(ec, keyExpr)
 		if err != nil {
 			return nil, err
 		}
-		if len(keySeq) == 0 {
+		if seqLen(keySeq) == 0 {
 			return nil, nil
 		}
-		var result Sequence
-		for _, keyItem := range keySeq {
+		var result ItemSlice
+		for keyItem := range seqItems(keySeq) {
 			ka, err := AtomizeItem(keyItem)
 			if err != nil {
 				return nil, err
+			}
+			if ka.TypeName == TypeUntypedAtomic {
+				ka, err = CastAtomic(ka, TypeInteger)
+				if err != nil {
+					return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", ka.TypeName)}
+				}
 			}
 			if !isIntegerDerived(ka.TypeName) {
 				return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", ka.TypeName)}
@@ -110,7 +117,7 @@ func lookupItem(ec *evalContext, item Item, keyExpr Expr, all bool) (Sequence, e
 			if err != nil {
 				return nil, err
 			}
-			result = append(result, member...)
+			result = append(result, seqMaterialize(member)...)
 		}
 		return result, nil
 	default:
@@ -132,19 +139,19 @@ func (f tupleConsumerFunc) ConsumeTuple(scope *variableScope) error {
 	return f(scope)
 }
 
-func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
-	var result Sequence
+func evalFLWOR(evalFn exprEvaluator, ec *evalContext, e FLWORExpr) (Sequence, error) {
+	var result ItemSlice
 	consumer := tupleConsumerFunc(func(scope *variableScope) error {
 		retCtx := ec.withScope(scope)
-		r, err := eval(retCtx, e.Return)
+		r, err := evalFn(retCtx, e.Return)
 		if err != nil {
 			return err
 		}
-		result = append(result, r...)
+		result = append(result, seqMaterialize(r)...)
 		return nil
 	})
 
-	if err := iterateFLWORClauses(ec, e.Clauses, 0, ec.vars, consumer); err != nil {
+	if err := iterateFLWORClauses(evalFn, ec, e.Clauses, 0, ec.vars, consumer); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -152,7 +159,7 @@ func evalFLWOR(ec *evalContext, e FLWORExpr) (Sequence, error) {
 
 // iterateFLWORClauses processes clauses[i..] recursively, streaming each
 // completed scope to the consumer instead of materializing all tuples.
-func iterateFLWORClauses(ec *evalContext, clauses []FLWORClause, i int, scope *variableScope, consumer tupleConsumer) error {
+func iterateFLWORClauses(evalFn exprEvaluator, ec *evalContext, clauses []FLWORClause, i int, scope *variableScope, consumer tupleConsumer) error {
 	if i >= len(clauses) {
 		return consumer.ConsumeTuple(scope)
 	}
@@ -164,43 +171,45 @@ func iterateFLWORClauses(ec *evalContext, clauses []FLWORClause, i int, scope *v
 	switch c := clauses[i].(type) {
 	case ForClause:
 		subCtx := ec.withScope(scope)
-		domain, err := eval(subCtx, c.Expr)
+		domain, err := evalFn(subCtx, c.Expr)
 		if err != nil {
 			return err
 		}
-		for pos, item := range domain {
-			inner := scopeWithBinding(scope, c.Var, Sequence{item})
+		pos := 0
+		for item := range seqItems(domain) {
+			inner := scopeWithBinding(scope, c.Var, ItemSlice{item})
 			if c.PosVar != "" {
-				inner = scopeWithBinding(inner, c.PosVar, Sequence{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(pos + 1))}})
+				inner = scopeWithBinding(inner, c.PosVar, ItemSlice{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(pos + 1))}})
 			}
-			if err := iterateFLWORClauses(ec, clauses, i+1, inner, consumer); err != nil {
+			if err := iterateFLWORClauses(evalFn, ec, clauses, i+1, inner, consumer); err != nil {
 				return err
 			}
+			pos++
 		}
 		return nil
 
 	case LetClause:
 		subCtx := ec.withScope(scope)
-		val, err := eval(subCtx, c.Expr)
+		val, err := evalFn(subCtx, c.Expr)
 		if err != nil {
 			return err
 		}
 		inner := scopeWithBinding(scope, c.Var, val)
-		return iterateFLWORClauses(ec, clauses, i+1, inner, consumer)
+		return iterateFLWORClauses(evalFn, ec, clauses, i+1, inner, consumer)
 
 	default:
-		return iterateFLWORClauses(ec, clauses, i+1, scope, consumer)
+		return iterateFLWORClauses(evalFn, ec, clauses, i+1, scope, consumer)
 	}
 }
 
-func evalQuantifiedExpr(ec *evalContext, e QuantifiedExpr) (Sequence, error) {
-	return evalQuantifiedBindings(ec, e, 0)
+func evalQuantifiedExpr(evalFn exprEvaluator, ec *evalContext, e QuantifiedExpr) (Sequence, error) {
+	return evalQuantifiedBindings(evalFn, ec, e, 0)
 }
 
-func evalQuantifiedBindings(ec *evalContext, e QuantifiedExpr, idx int) (Sequence, error) {
+func evalQuantifiedBindings(evalFn exprEvaluator, ec *evalContext, e QuantifiedExpr, idx int) (Sequence, error) {
 	if idx >= len(e.Bindings) {
 		// All bindings bound — evaluate satisfies
-		r, err := eval(ec, e.Satisfies)
+		r, err := evalFn(ec, e.Satisfies)
 		if err != nil {
 			return nil, err
 		}
@@ -211,13 +220,13 @@ func evalQuantifiedBindings(ec *evalContext, e QuantifiedExpr, idx int) (Sequenc
 		return SingleBoolean(b), nil
 	}
 	binding := e.Bindings[idx]
-	domain, err := eval(ec, binding.Domain)
+	domain, err := evalFn(ec, binding.Domain)
 	if err != nil {
 		return nil, err
 	}
-	for _, item := range domain {
-		subCtx := ec.withScope(scopeWithBinding(ec.vars, binding.Var, Sequence{item}))
-		result, err := evalQuantifiedBindings(subCtx, e, idx+1)
+	for item := range seqItems(domain) {
+		subCtx := ec.withScope(scopeWithBinding(ec.vars, binding.Var, ItemSlice{item}))
+		result, err := evalQuantifiedBindings(evalFn, subCtx, e, idx+1)
 		if err != nil {
 			return nil, err
 		}
@@ -238,8 +247,8 @@ func evalQuantifiedBindings(ec *evalContext, e QuantifiedExpr, idx int) (Sequenc
 	return SingleBoolean(true), nil
 }
 
-func evalIfExpr(ec *evalContext, e IfExpr) (Sequence, error) {
-	cond, err := eval(ec, e.Cond)
+func evalIfExpr(evalFn exprEvaluator, ec *evalContext, e IfExpr) (Sequence, error) {
+	cond, err := evalFn(ec, e.Cond)
 	if err != nil {
 		return nil, err
 	}
@@ -248,23 +257,23 @@ func evalIfExpr(ec *evalContext, e IfExpr) (Sequence, error) {
 		return nil, err
 	}
 	if b {
-		return eval(ec, e.Then)
+		return evalFn(ec, e.Then)
 	}
-	return eval(ec, e.Else)
+	return evalFn(ec, e.Else)
 }
 
-func evalTryCatchExpr(ec *evalContext, e TryCatchExpr) (Sequence, error) {
-	result, err := eval(ec, e.Try)
+func evalTryCatchExpr(evalFn exprEvaluator, ec *evalContext, e TryCatchExpr) (Sequence, error) {
+	result, err := evalFn(ec, e.Try)
 	if err == nil {
 		return result, nil
 	}
-	xpErr, ok := err.(*XPathError)
+	xpErr, ok := errors.AsType[*XPathError](err)
 	if !ok {
 		return nil, err // non-XPath errors propagate through
 	}
 	for _, catch := range e.Catches {
 		if catchMatchesError(catch, xpErr) {
-			return eval(buildCatchContext(ec, xpErr), catch.Expr)
+			return evalFn(buildCatchContext(ec, xpErr), catch.Expr)
 		}
 	}
 	return nil, err // no matching catch

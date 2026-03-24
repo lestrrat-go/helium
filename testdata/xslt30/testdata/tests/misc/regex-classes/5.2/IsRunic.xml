@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsRunic">
+      <match from="5792" to="5887"/>
+   </ranges>
+   <ranges complement="IsRunic">
+      <match from="9" to="5791"/>
+      <match from="5888" to="1114111"/>
+   </ranges>
+</out>

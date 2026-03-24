@@ -11,6 +11,12 @@ import (
 // Supports Element, Text, Comment, CDATASection, PI, and EntityRef nodes.
 func CopyNode(src Node, targetDoc *Document) (Node, error) {
 	switch src.Type() {
+	case DocumentNode:
+		doc, ok := src.(*Document)
+		if !ok {
+			return nil, fmt.Errorf("helium: unexpected DocumentNode type %T", src)
+		}
+		return CopyDoc(doc)
 	case ElementNode:
 		return copyElement(src.(*Element), targetDoc)
 	case TextNode:
@@ -23,6 +29,10 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 		return targetDoc.CreatePI(src.Name(), string(src.Content()))
 	case EntityRefNode:
 		return targetDoc.CreateCharRef(src.Name())
+	case NamespaceNode:
+		// Namespace nodes are virtual; return a new wrapper with the same data.
+		ns := NewNamespace(src.Name(), string(src.Content()))
+		return NewNamespaceNodeWrapper(ns, nil), nil
 	default:
 		return nil, fmt.Errorf("helium: cannot copy node of type %s", src.Type())
 	}
@@ -50,7 +60,7 @@ func copyElement(src *Element, doc *Document) (*Element, error) {
 	// Copy the active namespace, adding a declaration if not already present.
 	if nsr, ok := Node(src).(Namespacer); ok {
 		if ns := nsr.Namespace(); ns != nil {
-			if ns.Prefix() != "" && !declaredPrefixes[ns.Prefix()] {
+			if ns.URI() != "" && !declaredPrefixes[ns.Prefix()] {
 				if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
 					return nil, err
 				}
@@ -62,10 +72,20 @@ func copyElement(src *Element, doc *Document) (*Element, error) {
 		}
 	}
 
-	// Copy attributes
+	// Copy attributes, preserving namespace information
 	for _, a := range src.Attributes() {
-		if err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
-			return nil, err
+		if a.URI() != "" {
+			ns, nsErr := doc.CreateNamespace(a.Prefix(), a.URI())
+			if nsErr != nil {
+				return nil, nsErr
+			}
+			if err := elem.SetAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -113,6 +133,18 @@ func CopyDoc(src *Document) (*Document, error) {
 	}
 
 	return dst, nil
+}
+
+// CopyDTDInfo copies DTD information (entities, notations, element/attribute
+// declarations) from src to dst. This preserves unparsed entity information
+// when creating document copies via xsl:copy.
+func CopyDTDInfo(src, dst *Document) {
+	if src == nil || dst == nil {
+		return
+	}
+	if dtd := src.intSubset; dtd != nil {
+		_ = copyDTD(dtd, dst)
+	}
 }
 
 // copyDTD deep-copies src into dst's internal subset, including all

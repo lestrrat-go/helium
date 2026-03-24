@@ -1,0 +1,8 @@
+<?xml version="1.0" ?>
+<order>
+<order-item price="11.32" qty="1"/>
+<order-item price="2.34" qty="3"/>
+<order-item price="1.00" qty="5"/>
+<order-item price="2.56" qty="3"/>
+<order-item price="5.00" qty="1"/>
+</order>

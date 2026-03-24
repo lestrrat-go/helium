@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsIPAExtensions">
+      <match from="592" to="687"/>
+   </ranges>
+   <ranges complement="IsIPAExtensions">
+      <match from="9" to="591"/>
+      <match from="688" to="1114111"/>
+   </ranges>
+</out>

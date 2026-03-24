@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<doc>
+	<item attr="a">1</item>
+	<item attr="A">2</item>
+	<item attr="ab">3</item>
+	<item attr="aB">4</item>
+	<str1>http://www.w3.org/2005/xpath-functions/collation/codepoint</str1>
+	<str2>w3.org/2005/xpath-functions/collation/codepoint</str2>
+	<str3>http://www.w3.org/2005/xpath-functions/collation/</str3>
+	<str4>www.w3.org/2005/xpath-functions/</str4>
+</doc>

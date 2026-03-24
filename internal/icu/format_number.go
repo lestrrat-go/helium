@@ -192,6 +192,27 @@ func ParsePicture(pic string, df DecimalFormat) (ParsedPicture, error) {
 		return pp, nil
 	}
 
+	// Validate percent/per-mille: at most one of either, and not both
+	percentCount := 0
+	perMilleCount := 0
+	for _, r := range mantissaRunes {
+		switch r {
+		case df.Percent:
+			percentCount++
+		case df.PerMille:
+			perMilleCount++
+		}
+	}
+	if percentCount > 1 {
+		return ParsedPicture{}, fmt.Errorf("picture contains more than one percent sign")
+	}
+	if perMilleCount > 1 {
+		return ParsedPicture{}, fmt.Errorf("picture contains more than one per-mille sign")
+	}
+	if percentCount > 0 && perMilleCount > 0 {
+		return ParsedPicture{}, fmt.Errorf("picture contains both percent and per-mille signs")
+	}
+
 	pp.Prefix = string(mantissaRunes[:numStart])
 	// Suffix comes after the exponent part (if any) or after the mantissa numeric part
 	if pp.HasExponent {
@@ -298,6 +319,20 @@ func ParsePicture(pic string, df DecimalFormat) (ParsedPicture, error) {
 	if pp.MaxIntDigits+pp.MaxFracDigits == 0 {
 		return ParsedPicture{}, fmt.Errorf("picture requires at least one digit")
 	}
+
+	// Validate: in integer part, mandatory digits must not precede optional digits
+	seenMandatory := false
+	for _, r := range intPart {
+		if r == df.GroupingSeparator {
+			continue
+		}
+		if isMandatoryDigit(r, df.ZeroDigit) {
+			seenMandatory = true
+		} else if r == df.Digit && seenMandatory {
+			return ParsedPicture{}, fmt.Errorf("optional digit after mandatory digit in integer part")
+		}
+	}
+
 	return pp, nil
 }
 
@@ -312,6 +347,9 @@ func ParsePicture(pic string, df DecimalFormat) (ParsedPicture, error) {
 func FormatNumber(f float64, isNaN, isPosInf, isNegInf, negative bool, precise *big.Rat, picture string, df DecimalFormat) (string, error) {
 	// Split picture on pattern separator
 	parts := strings.Split(picture, string(df.PatternSeparator))
+	if len(parts) > 2 {
+		return "", fmt.Errorf("picture %q contains more than one pattern separator", picture)
+	}
 	posPic := parts[0]
 	negPic := ""
 	if len(parts) > 1 {

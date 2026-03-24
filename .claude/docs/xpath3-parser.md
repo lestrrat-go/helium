@@ -64,6 +64,8 @@ Recursive descent. Parse depth limit: 200.
 
 Entry: `Parse(input string) (Expr, error)` → `parseExpression()`.
 
+Step detection and path continuation use `PeekAt`-based lookahead so the hot path can classify separators, axis specifiers, and QName-vs-function-call ambiguities without advancing and backing up the lexer cursor.
+
 ### Precedence (low → high)
 
 | Level | Construct | Method |

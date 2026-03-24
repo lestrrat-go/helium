@@ -4,7 +4,7 @@ Three validation engines: XSD (grammar-based), RELAX NG (pattern-based), Schemat
 
 ## XSD
 
-Files: `xsd/xsd.go` (API), `parse.go` (compiler), `parse_check.go` (constraints), `validate.go` + `validate_elem.go` (content), `validate_idc.go` (IDC), `schema.go` (model)
+Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `check_*.go` (compile/read/resolve/constraint pipeline), `validate_context.go` + `validate.go` + `validate_elem.go` (content validation), `validate_idc.go` (IDC), `simplevalue_*.go` + `validate_value_api.go` (simple-value validation), `schema.go` (model)
 
 ### Compile: Document → Schema
 
@@ -39,6 +39,11 @@ Files: `xsd/xsd.go` (API), `parse.go` (compiler), `parse_check.go` (constraints)
      - Empty: no child elements
      - Simple: no child elements, validate text vs type facets
      - Element-only/Mixed: match children against ModelGroup (`matchSequence()`/`matchChoice()`)
+
+QName/NOTATION simple-value validation compares enumeration facets in value
+space, not raw prefix text. Instance lexical QNames are resolved against the
+instance node's in-scope namespaces; facet lexical QNames are resolved against
+the schema facet's in-scope namespaces.
 
 **Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
 - For elements with IDCs (xs:unique, xs:key, xs:keyref):

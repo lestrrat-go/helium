@@ -1,0 +1,39 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://schema039.uri/"
+           elementFormDefault="qualified"
+           xmlns:xsl39="http://schema039.uri/">
+
+
+
+<xs:simpleType name="QName">
+  <xs:annotation>
+    <xs:documentation>
+      A QName.
+      This schema does not use the built-in type xs:QName, but rather defines its own
+      QName type. Although xs:QName would define the correct validation on these attributes,
+      a schema processor would expand unprefixed QNames incorrectly when constructing the PSVI,
+      because (as defined in XML Schema errata) an unprefixed xs:QName is assumed to be in
+      the default namespace, which is not the correct assumption for XSLT.
+      The data type is defined as a restriction of the built-in type Name, restricted
+      so that it can only contain one colon which must not be the first or last character.
+    </xs:documentation>
+  </xs:annotation>
+  <xs:restriction base="xs:Name">
+    <xs:pattern value="([^:]+:)?[^:]+"/>      
+  </xs:restriction>        
+</xs:simpleType>
+
+<xs:simpleType name="QNames">
+  <xs:annotation>
+    <xs:documentation>
+      A list of QNames.
+      Used in the [xsl:]use-attribute-sets attribute of various elements,
+      and in the cdata-section-elements attribute of xsl:output
+    </xs:documentation>
+  </xs:annotation>
+  <xs:list itemType="xsl39:QName"/>          
+</xs:simpleType>
+
+
+</xs:schema>

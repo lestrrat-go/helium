@@ -29,8 +29,8 @@ func TestFnBoolean(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.expr, func(t *testing.T) {
 			seq := evalExpr(t, doc, tc.expr)
-			require.Len(t, seq, 1)
-			av := seq[0].(xpath3.AtomicValue)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
 			require.Equal(t, tc.expect, av.BooleanVal())
 		})
 	}
@@ -63,8 +63,8 @@ func TestFnString(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.expr, func(t *testing.T) {
 			seq := evalExpr(t, doc, tc.expr)
-			require.Len(t, seq, 1)
-			av := seq[0].(xpath3.AtomicValue)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
 			s, _ := xpath3.CastAtomic(av, xpath3.TypeString)
 			require.Equal(t, tc.expect, s.StringVal())
 		})
@@ -74,16 +74,16 @@ func TestFnString(t *testing.T) {
 func TestFnMatches(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 	seq := evalExpr(t, doc, `matches("hello", "^hel")`)
-	require.Len(t, seq, 1)
-	av := seq[0].(xpath3.AtomicValue)
+	require.Equal(t, 1, seq.Len())
+	av := seq.Get(0).(xpath3.AtomicValue)
 	require.True(t, av.BooleanVal())
 }
 
 func TestFnReplace(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 	seq := evalExpr(t, doc, `replace("hello world", "world", "Go")`)
-	require.Len(t, seq, 1)
-	av := seq[0].(xpath3.AtomicValue)
+	require.Equal(t, 1, seq.Len())
+	av := seq.Get(0).(xpath3.AtomicValue)
 	require.Equal(t, "hello Go", av.StringVal())
 }
 
@@ -92,12 +92,12 @@ func TestFnTokenize(t *testing.T) {
 
 	t.Run("with pattern", func(t *testing.T) {
 		seq := evalExpr(t, doc, `tokenize("a,b,c", ",")`)
-		require.Len(t, seq, 3)
+		require.Equal(t, 3, seq.Len())
 	})
 
 	t.Run("whitespace", func(t *testing.T) {
 		seq := evalExpr(t, doc, `tokenize("  a  b  c  ")`)
-		require.Len(t, seq, 3)
+		require.Equal(t, 3, seq.Len())
 	})
 }
 
@@ -122,8 +122,8 @@ func TestFnNumeric(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.expr, func(t *testing.T) {
 			seq := evalExpr(t, doc, tc.expr)
-			require.Len(t, seq, 1)
-			av := seq[0].(xpath3.AtomicValue)
+			require.Equal(t, 1, seq.Len())
+			av := seq.Get(0).(xpath3.AtomicValue)
 			require.InDelta(t, tc.expect, av.ToFloat64(), 0.001)
 		})
 	}
@@ -136,36 +136,36 @@ func TestFnAggregate(t *testing.T) {
 
 	t.Run("count", func(t *testing.T) {
 		seq := evalExpr(t, doc, `count((1, 2, 3))`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, int64(3), av.IntegerVal())
 	})
 
 	t.Run("sum", func(t *testing.T) {
 		seq := evalExpr(t, doc, `sum((1, 2, 3))`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, 6.0, av.ToFloat64(), 0.001)
 	})
 
 	t.Run("avg", func(t *testing.T) {
 		seq := evalExpr(t, doc, `avg((2, 4, 6))`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, 4.0, av.ToFloat64(), 0.001)
 	})
 
 	t.Run("min", func(t *testing.T) {
 		seq := evalExpr(t, doc, `min((3, 1, 2))`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, 1.0, av.ToFloat64(), 0.001)
 	})
 
 	t.Run("max", func(t *testing.T) {
 		seq := evalExpr(t, doc, `max((3, 1, 2))`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, 3.0, av.ToFloat64(), 0.001)
 	})
 }
@@ -177,43 +177,48 @@ func TestFnSequence(t *testing.T) {
 
 	t.Run("empty", func(t *testing.T) {
 		seq := evalExpr(t, doc, `empty(())`)
-		av := seq[0].(xpath3.AtomicValue)
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.True(t, av.BooleanVal())
 	})
 
 	t.Run("exists", func(t *testing.T) {
 		seq := evalExpr(t, doc, `exists((1))`)
-		av := seq[0].(xpath3.AtomicValue)
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.True(t, av.BooleanVal())
 	})
 
 	t.Run("head", func(t *testing.T) {
 		seq := evalExpr(t, doc, `head((1, 2, 3))`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, int64(1), av.IntegerVal())
 	})
 
 	t.Run("tail", func(t *testing.T) {
 		seq := evalExpr(t, doc, `tail((1, 2, 3))`)
-		require.Len(t, seq, 2)
+		require.Equal(t, 2, seq.Len())
 	})
 
 	t.Run("reverse", func(t *testing.T) {
 		seq := evalExpr(t, doc, `reverse((1, 2, 3))`)
-		require.Len(t, seq, 3)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 3, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, int64(3), av.IntegerVal())
 	})
 
 	t.Run("subsequence", func(t *testing.T) {
 		seq := evalExpr(t, doc, `subsequence((1, 2, 3, 4), 2, 2)`)
-		require.Len(t, seq, 2)
+		require.Equal(t, 2, seq.Len())
 	})
 
 	t.Run("distinct-values", func(t *testing.T) {
 		seq := evalExpr(t, doc, `distinct-values((1, 2, 1, 3, 2))`)
-		require.Len(t, seq, 3)
+		require.Equal(t, 3, seq.Len())
+	})
+
+	t.Run("distinct-values mixed numerics", func(t *testing.T) {
+		seq := evalExpr(t, doc, `distinct-values((xs:float('1'), xs:double('1'), xs:decimal('1.0'), xs:integer('1'), xs:float('0.1'), xs:decimal('0.1')))`)
+		require.Equal(t, 2, seq.Len())
 	})
 }
 
@@ -225,36 +230,36 @@ func TestFnNode(t *testing.T) {
 
 	t.Run("local-name", func(t *testing.T) {
 		seq := evalExpr(t, root, `local-name()`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, "root", av.StringVal())
 	})
 
 	t.Run("name", func(t *testing.T) {
 		seq := evalExpr(t, root, `name()`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, "root", av.StringVal())
 	})
 
 	t.Run("has-children", func(t *testing.T) {
 		seq := evalExpr(t, root, `has-children()`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.True(t, av.BooleanVal())
 	})
 
 	t.Run("count children", func(t *testing.T) {
 		seq := evalExpr(t, root, `count(*)`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, int64(2), av.IntegerVal())
 	})
 
 	t.Run("position and last", func(t *testing.T) {
 		seq := evalExpr(t, root, `*[position() = last()]`)
-		require.Len(t, seq, 1)
-		ni := seq[0].(xpath3.NodeItem)
+		require.Equal(t, 1, seq.Len())
+		ni := seq.Get(0).(xpath3.NodeItem)
 		require.Equal(t, "b", ni.Node.Name())
 	})
 }
@@ -266,22 +271,22 @@ func TestFnMath(t *testing.T) {
 
 	t.Run("math:pi", func(t *testing.T) {
 		seq := evalExpr(t, doc, `math:pi()`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, math.Pi, av.DoubleVal(), 0.0001)
 	})
 
 	t.Run("math:sqrt", func(t *testing.T) {
 		seq := evalExpr(t, doc, `math:sqrt(4)`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, 2.0, av.DoubleVal(), 0.001)
 	})
 
 	t.Run("math:pow", func(t *testing.T) {
 		seq := evalExpr(t, doc, `math:pow(2, 10)`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, 1024.0, av.DoubleVal(), 0.001)
 	})
 }
@@ -293,20 +298,20 @@ func TestFnHOF(t *testing.T) {
 
 	t.Run("for-each", func(t *testing.T) {
 		seq := evalExpr(t, doc, `for-each((1, 2, 3), function($x) { $x + 10 })`)
-		require.Len(t, seq, 3)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 3, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, 11.0, av.ToFloat64(), 0.001)
 	})
 
 	t.Run("filter", func(t *testing.T) {
 		seq := evalExpr(t, doc, `filter((1, 2, 3, 4, 5), function($x) { $x > 3 })`)
-		require.Len(t, seq, 2)
+		require.Equal(t, 2, seq.Len())
 	})
 
 	t.Run("fold-left", func(t *testing.T) {
 		seq := evalExpr(t, doc, `fold-left((1, 2, 3), 0, function($acc, $x) { $acc + $x })`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, 6.0, av.ToFloat64(), 0.001)
 	})
 }
@@ -318,34 +323,34 @@ func TestFnMap(t *testing.T) {
 
 	t.Run("map:size", func(t *testing.T) {
 		seq := evalExpr(t, doc, `map:size(map { "a": 1, "b": 2 })`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, int64(2), av.IntegerVal())
 	})
 
 	t.Run("map:contains", func(t *testing.T) {
 		seq := evalExpr(t, doc, `map:contains(map { "a": 1 }, "a")`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.True(t, av.BooleanVal())
 	})
 
 	t.Run("map:get", func(t *testing.T) {
 		seq := evalExpr(t, doc, `map:get(map { "x": 42 }, "x")`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, 42.0, av.ToFloat64(), 0.001)
 	})
 
 	t.Run("map:keys", func(t *testing.T) {
 		seq := evalExpr(t, doc, `map:keys(map { "a": 1, "b": 2 })`)
-		require.Len(t, seq, 2)
+		require.Equal(t, 2, seq.Len())
 	})
 
 	t.Run("map:put", func(t *testing.T) {
 		seq := evalExpr(t, doc, `map:size(map:put(map { "a": 1 }, "b", 2))`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, int64(2), av.IntegerVal())
 	})
 }
@@ -357,36 +362,36 @@ func TestFnArray(t *testing.T) {
 
 	t.Run("array:size", func(t *testing.T) {
 		seq := evalExpr(t, doc, `array:size([1, 2, 3])`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, int64(3), av.IntegerVal())
 	})
 
 	t.Run("array:get", func(t *testing.T) {
 		seq := evalExpr(t, doc, `array:get([10, 20, 30], 2)`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, 20.0, av.ToFloat64(), 0.001)
 	})
 
 	t.Run("array:head", func(t *testing.T) {
 		seq := evalExpr(t, doc, `array:head([10, 20, 30])`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, 10.0, av.ToFloat64(), 0.001)
 	})
 
 	t.Run("array:tail", func(t *testing.T) {
 		seq := evalExpr(t, doc, `array:size(array:tail([1, 2, 3]))`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, int64(2), av.IntegerVal())
 	})
 
 	t.Run("array:reverse", func(t *testing.T) {
 		seq := evalExpr(t, doc, `array:get(array:reverse([1, 2, 3]), 1)`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.InDelta(t, 3.0, av.ToFloat64(), 0.001)
 	})
 }
@@ -398,8 +403,8 @@ func TestFnURI(t *testing.T) {
 
 	t.Run("encode-for-uri", func(t *testing.T) {
 		seq := evalExpr(t, doc, `encode-for-uri("hello world")`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, "hello%20world", av.StringVal())
 	})
 }
@@ -408,8 +413,9 @@ func TestFnURI(t *testing.T) {
 
 func TestFnError(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
-	parsed := mustParseExpr(t, `error()`)
-	_, err := xpath3.EvalForTesting(t.Context(), doc, parsed)
+	compiled, err := xpath3.Compile(`error()`)
+	require.NoError(t, err)
+	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
 	require.Error(t, err)
 }
 
@@ -420,15 +426,15 @@ func TestFnDateTime(t *testing.T) {
 
 	t.Run("current-dateTime", func(t *testing.T) {
 		seq := evalExpr(t, doc, `current-dateTime()`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.Equal(t, xpath3.TypeDateTime, av.TypeName)
 	})
 
 	t.Run("year-from-dateTime", func(t *testing.T) {
 		seq := evalExpr(t, doc, `year-from-dateTime(current-dateTime())`)
-		require.Len(t, seq, 1)
-		av := seq[0].(xpath3.AtomicValue)
+		require.Equal(t, 1, seq.Len())
+		av := seq.Get(0).(xpath3.AtomicValue)
 		require.True(t, av.IntegerVal() >= 2024)
 	})
 }

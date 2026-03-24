@@ -1,0 +1,11 @@
+<?xml version="1.0"?> 
+<doc xmlns:foo="http://ns1/" xmlns:roo="http://ns2/">
+  <foo:test>
+       <a>a</a>
+       <b>b</b>
+  </foo:test>
+  <roo:test>
+       <c>c</c>
+       <d>d</d>
+  </roo:test>
+</doc>

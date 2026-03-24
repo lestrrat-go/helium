@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<out>
+   <ranges category="IsGeorgian">
+      <match from="4256" to="4351"/>
+   </ranges>
+   <ranges complement="IsGeorgian">
+      <match from="9" to="4255"/>
+      <match from="4352" to="1114111"/>
+   </ranges>
+</out>

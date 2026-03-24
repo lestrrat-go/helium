@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"errors"
 
 	"github.com/lestrrat-go/helium/internal/unparsedtext"
 )
@@ -33,14 +34,14 @@ func wrapUnparsedTextError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if ue, ok := err.(*unparsedtext.Error); ok {
+	if ue, ok := errors.AsType[*unparsedtext.Error](err); ok {
 		return &XPathError{Code: ue.Code, Message: ue.Message}
 	}
 	return err
 }
 
 func fnUnparsedText(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	href, err := coerceArgToString(args[0])
@@ -63,7 +64,7 @@ func fnUnparsedText(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func fnUnparsedTextAvailable(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return SingleBoolean(false), nil
 	}
 	href, err := coerceArgToString(args[0])
@@ -83,7 +84,7 @@ func fnUnparsedTextAvailable(ctx context.Context, args []Sequence) (Sequence, er
 }
 
 func fnUnparsedTextLines(ctx context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 {
+	if seqLen(args[0]) == 0 {
 		return nil, nil
 	}
 	href, err := coerceArgToString(args[0])
@@ -102,7 +103,7 @@ func fnUnparsedTextLines(ctx context.Context, args []Sequence) (Sequence, error)
 	if err != nil {
 		return nil, wrapUnparsedTextError(err)
 	}
-	result := make(Sequence, len(lines))
+	result := make(ItemSlice, len(lines))
 	for i, line := range lines {
 		result[i] = AtomicValue{TypeName: TypeString, Value: line}
 	}

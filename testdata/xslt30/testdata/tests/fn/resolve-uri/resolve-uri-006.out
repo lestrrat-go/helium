@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?><out>
+Case of: include, import, include, include
+  Including level1_import4.xsl
+  
+		 
+  From stylesheet level1_import4.xsl: Text of one-tag
+  importing level2_include3.xsl
+
+		 
+  From stylesheet level2_include3.xsl: Text of two-tag
+  Including level3_include1.xsl
+
+		 
+  From stylesheet level3_include1.xsl: Text of three-tag
+  Including final_included.xsl
+
+		 
+  From stylesheet final_included.xsl: Text of four-tag
+</out>

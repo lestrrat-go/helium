@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<schema xmlns="http://www.w3.org/2001/XMLSchema"
+		targetNamespace="http://ns.example.com/redefine"
+		xmlns:my="http://ns.example.com/redefine">
+
+<element name="elem1" type="my:subject"/>
+
+<element name="elem2" type="my:subject"/>
+
+<simpleType name="subject">
+	<restriction base="decimal">
+		<enumeration value="1" />
+		<enumeration value="-1" />
+		<enumeration value="0" />
+	</restriction>
+</simpleType>
+
+</schema>

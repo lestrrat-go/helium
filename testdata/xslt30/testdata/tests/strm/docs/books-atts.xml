@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BOOKLIST>
+   <BOOKS OWNER="MHK">
+      <ITEM CAT="MMP"
+            TITLE="Pride and Prejudice"
+            AUTHOR="Jane Austen"
+            PUBLISHER="Modern Library"
+            PUB-DATE="2002-12-31"
+            LANGUAGE="English"
+            PRICE="4.95"
+            QUANTITY="187"
+            ISBN="0679601686"
+            PAGES="352"
+            DIMENSIONS="8.3 5.7 1.1"
+            WEIGHT="6.1"/>
+      <ITEM CAT="P"
+            TITLE="Wuthering Heights"
+            AUTHOR="Charlotte Brontë"
+            PUBLISHER="Penguin Classics"
+            PUB-DATE="2002-12-31"
+            LANGUAGE="English"
+            PRICE="6.58"
+            QUANTITY="113"
+            ISBN="0141439556"
+            PAGES="430"
+            DIMENSIONS="1.0 5.2 7.8"
+            WEIGHT="11.2"/>
+      <ITEM CAT="P"
+            TITLE="Tess of the d'Urbervilles"
+            AUTHOR="Thomas Hardy"
+            PUBLISHER="Bantam Classics"
+            PUB-DATE="1984-05-01"
+            LANGUAGE="English"
+            PRICE="4.95"
+            QUANTITY="85"
+            ISBN="0553211684"
+            PAGES="480"
+            DIMENSIONS="6.8 4.2 0.8"
+            WEIGHT="7.7"/>
+      <ITEM CAT="P"
+            TITLE="Jude the Obscure"
+            AUTHOR="Thomas Hardy"
+            PUBLISHER="Penguin Classics"
+            PUB-DATE="1998-09-01"
+            LANGUAGE="English"
+            PRICE="4.95"
+            QUANTITY="129"
+            ISBN="0140435387"
+            PAGES="528"
+            DIMENSIONS="7.8 5.2 0.9"
+            WEIGHT="10.9"/>
+      <ITEM CAT="H"
+            TITLE="The Big Over Easy"
+            AUTHOR="Jasper Fforde"
+            PUBLISHER="Hodder &amp; Stoughton"
+            PUB-DATE="2005-07-11"
+            LANGUAGE="English"
+            PRICE="16.47"
+            QUANTITY="129"
+            ISBN="0340835672"
+            PAGES="346"
+            DIMENSIONS="22.5 18.0 3.5"
+            WEIGHT="390"/>
+      <ITEM CAT="P"
+            TITLE="The Eyre Affair"
+            AUTHOR="Jasper Fforde"
+            PUBLISHER="Penguin"
+            PUB-DATE="2003-02-25"
+            LANGUAGE="English"
+            PRICE="16.47"
+            QUANTITY="129"
+            ISBN="0142001805"
+            PAGES="384"
+            DIMENSIONS="7.8 5.0 0.9"
+            WEIGHT="9.0"/>
+   </BOOKS>
+   <CATEGORIES DESC="Miscellaneous categories">
+      <CATEGORY CODE="P" DESC="Paperback"/>
+      <CATEGORY CODE="MMP" DESC="Mass-market Paperback"/>
+      <CATEGORY CODE="H" DESC="Hard Cover"/>
+   </CATEGORIES>
+</BOOKLIST>

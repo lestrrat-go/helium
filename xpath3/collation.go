@@ -9,6 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 )
@@ -229,9 +230,9 @@ func parseUCAParams(query string) (ucaParams, error) {
 		switch key {
 		case "fallback":
 			switch val {
-			case "no":
+			case lexicon.ValueNo:
 				p.fallbackNo = true
-			case "yes", "unknown":
+			case lexicon.ValueYes, "unknown":
 				// Unknown fallback values are implementation-defined unless
 				// fallback=no explicitly requests strict rejection.
 			default:
@@ -279,37 +280,37 @@ func parseUCAParams(query string) (ucaParams, error) {
 			}
 		case "caseLevel":
 			switch val {
-			case "yes":
+			case lexicon.ValueYes:
 				p.caseLevel = true
 				unsupported = true
-			case "no":
+			case lexicon.ValueNo:
 				p.caseLevel = false
 			default:
 				invalid = true
 			}
 		case "backwards":
 			switch val {
-			case "yes":
+			case lexicon.ValueYes:
 				p.backwards = true
-			case "no":
+			case lexicon.ValueNo:
 				p.backwards = false
 			default:
 				invalid = true
 			}
 		case "numeric":
 			switch val {
-			case "yes":
+			case lexicon.ValueYes:
 				p.collateOpts = append(p.collateOpts, collate.Numeric)
 				p.numeric = true
-			case "no":
+			case lexicon.ValueNo:
 				p.numeric = false
 			default:
 				invalid = true
 			}
 		case "normalization":
 			switch val {
-			case "yes", "no":
-				if val == "yes" {
+			case lexicon.ValueYes, lexicon.ValueNo:
+				if val == lexicon.ValueYes {
 					unsupported = true
 				}
 			default:
@@ -603,14 +604,14 @@ func buildCaseFirstKey(s, caseFirst string) []byte {
 	return key
 }
 
-// codepointCollationURI is the default XPath collation URI.
-const codepointCollationURI = "http://www.w3.org/2005/xpath-functions/collation/codepoint"
+// IsCollationSupported reports whether the given collation URI is recognized
+// by the evaluator.  This is useful for XSLT default-collation resolution
+// where the first supported URI from a list should be selected.
+func IsCollationSupported(uri string) bool {
+	_, err := resolveCollation(uri, "")
+	return err == nil
+}
 
-// ucaCollationURI is the Unicode Collation Algorithm base URI.
-const ucaCollationURI = "http://www.w3.org/2013/collation/UCA"
-
-// htmlASCIICaseInsensitiveURI is the HTML ASCII case-insensitive collation URI.
-const htmlASCIICaseInsensitiveURI = "http://www.w3.org/2005/xpath-functions/collation/html-ascii-case-insensitive"
 
 // caseblindCollationURI is the QT3 test suite's case-blind collation URI.
 const caseblindCollationURI = "http://www.w3.org/2010/09/qt-fots-catalog/collation/caseblind"
@@ -630,13 +631,13 @@ func resolveCollation(uri, baseURI string) (*collationImpl, error) {
 	}
 
 	switch {
-	case uri == codepointCollationURI:
+	case uri == lexicon.CollationCodepoint:
 		return codepointCollation, nil
-	case uri == htmlASCIICaseInsensitiveURI:
+	case uri == lexicon.CollationHTMLASCII:
 		return htmlASCIICaseInsensitiveCollation, nil
 	case uri == caseblindCollationURI:
 		return htmlASCIICaseInsensitiveCollation, nil
-	case strings.HasPrefix(uri, ucaCollationURI):
+	case strings.HasPrefix(uri, lexicon.CollationUCA):
 		if cached, ok := ucaCollationCache.Load(uri); ok {
 			return cached.(*collationImpl), nil
 		}
@@ -653,4 +654,28 @@ func resolveCollation(uri, baseURI string) (*collationImpl, error) {
 	default:
 		return nil, &XPathError{Code: errCodeFOCH0002, Message: fmt.Sprintf("unsupported collation: %s", uri)}
 	}
+}
+
+// ResolveCollationKeyFunc resolves a collation URI and returns a function that
+// maps strings to their collation sort keys (as strings). Two strings that are
+// equal under the collation will produce identical keys.
+// This is intended for use by xslt3 for-each-group collation-based grouping.
+func ResolveCollationKeyFunc(uri string) (func(string) string, error) {
+	coll, err := resolveCollation(uri, "")
+	if err != nil {
+		return nil, err
+	}
+	return func(s string) string {
+		return string(coll.key(s))
+	}, nil
+}
+
+// ResolveCollationCompareFunc returns a comparison function for the given
+// collation URI. Returns an error for unrecognized collation URIs.
+func ResolveCollationCompareFunc(uri string) (func(a, b string) int, error) {
+	coll, err := resolveCollation(uri, "")
+	if err != nil {
+		return nil, err
+	}
+	return coll.compare, nil
 }

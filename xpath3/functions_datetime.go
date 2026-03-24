@@ -52,10 +52,10 @@ func init() {
 }
 
 func extractTime(seq Sequence, allowedTypes ...string) (time.Time, bool, error) {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return time.Time{}, false, nil
 	}
-	a, err := AtomizeItem(seq[0])
+	a, err := AtomizeItem(seq.Get(0))
 	if err != nil {
 		return time.Time{}, false, err
 	}
@@ -71,7 +71,9 @@ func extractTime(seq Sequence, allowedTypes ...string) (time.Time, bool, error) 
 				break
 			}
 		}
-		if !matched {
+		// For user-defined types, the Go value is time.Time which we already
+		// validated above — accept it without type-name check.
+		if !matched && IsKnownXSDType(a.TypeName) {
 			return time.Time{}, false, &XPathError{Code: errCodeXPTY0004, Message: "expected " + allowedTypes[0] + ", got " + a.TypeName}
 		}
 	}
@@ -79,10 +81,10 @@ func extractTime(seq Sequence, allowedTypes ...string) (time.Time, bool, error) 
 }
 
 func extractDuration(seq Sequence, allowedTypes ...string) (Duration, bool, error) {
-	if len(seq) == 0 {
+	if seqLen(seq) == 0 {
 		return Duration{}, false, nil
 	}
-	a, err := AtomizeItem(seq[0])
+	a, err := AtomizeItem(seq.Get(0))
 	if err != nil {
 		return Duration{}, false, err
 	}
@@ -108,23 +110,36 @@ func extractDuration(seq Sequence, allowedTypes ...string) (Duration, bool, erro
 // --- Constructors ---
 
 func fnDateTime(_ context.Context, args []Sequence) (Sequence, error) {
-	if len(args[0]) == 0 || len(args[1]) == 0 {
+	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
 		return nil, nil
 	}
-	dateA, err := AtomizeItem(args[0][0])
+	dateA, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
 		return nil, err
 	}
-	timeA, err := AtomizeItem(args[1][0])
+	timeA, err := AtomizeItem(args[1].Get(0))
 	if err != nil {
 		return nil, err
+	}
+	// Coerce xs:untypedAtomic to xs:date / xs:time.
+	if dateA.TypeName == TypeUntypedAtomic || dateA.TypeName == TypeString {
+		dateA, err = CastAtomic(dateA, TypeDate)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if timeA.TypeName == TypeUntypedAtomic || timeA.TypeName == TypeString {
+		timeA, err = CastAtomic(timeA, TypeTime)
+		if err != nil {
+			return nil, err
+		}
 	}
 	d, ok := dateA.Value.(time.Time)
-	if !ok || dateA.TypeName != TypeDate {
+	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "first arg must be xs:date, got " + dateA.TypeName}
 	}
 	t, ok := timeA.Value.(time.Time)
-	if !ok || timeA.TypeName != TypeTime {
+	if !ok {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "second arg must be xs:time, got " + timeA.TypeName}
 	}
 
@@ -465,7 +480,7 @@ func fnAdjustDateTimeToTimezone(ctx context.Context, args []Sequence) (Sequence,
 	if !ok {
 		return nil, nil
 	}
-	if len(args) > 1 && len(args[1]) == 0 {
+	if len(args) > 1 && seqLen(args[1]) == 0 {
 		// Remove timezone: keep local components
 		t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), noTZLocation)
 		return SingleAtomic(AtomicValue{TypeName: TypeDateTime, Value: t}), nil
@@ -492,7 +507,7 @@ func fnAdjustDateToTimezone(ctx context.Context, args []Sequence) (Sequence, err
 	if !ok {
 		return nil, nil
 	}
-	if len(args) > 1 && len(args[1]) == 0 {
+	if len(args) > 1 && seqLen(args[1]) == 0 {
 		// Remove timezone: keep local date
 		t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, noTZLocation)
 		return SingleAtomic(AtomicValue{TypeName: TypeDate, Value: t}), nil
@@ -520,7 +535,7 @@ func fnAdjustTimeToTimezone(ctx context.Context, args []Sequence) (Sequence, err
 	if !ok {
 		return nil, nil
 	}
-	if len(args) > 1 && len(args[1]) == 0 {
+	if len(args) > 1 && seqLen(args[1]) == 0 {
 		// Remove timezone: keep local time components
 		t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), noTZLocation)
 		return SingleAtomic(AtomicValue{TypeName: TypeTime, Value: t}), nil
@@ -542,7 +557,7 @@ func fnAdjustTimeToTimezone(ctx context.Context, args []Sequence) (Sequence, err
 // getTargetTimezone extracts the target timezone from the second argument (if provided)
 // or falls back to the implicit timezone from the dynamic context.
 func getTargetTimezone(ctx context.Context, args []Sequence) (*time.Location, error) {
-	if len(args) > 1 && len(args[1]) > 0 {
+	if len(args) > 1 && seqLen(args[1]) > 0 {
 		d, ok, err := extractDuration(args[1], TypeDayTimeDuration)
 		if err != nil {
 			return nil, err

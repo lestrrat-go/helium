@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root xmlns="urn:gba:sqg" xmlns:xenc="http://www.w3.org/2001/04/xmlenc#"
+	xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	container_version="2.0" content_version="1.0">
+	<header id="{45664537-5642-9056-8676-456468327446}" set_id="{45664537-5642-9056-8676-456468327446}"
+		origination_dttm="2001-12-17T09:30:47Z" modification_dttm="2014-02-10T14:15:17Z"
+		specification="2013 SR 3" data_flow="QS-Bundesbezogen" data_target="Probedatenpool"
+		total_count="3">
+		<protocol>
+			<validation_provider name="Name der DAS"
+				function="Datenannahmestelle" registration="1.2.276.0.76.3.1.39">
+				<validation_item id="1" V="Schema"
+					c_date="2012-04-12T14:11:19.246+02:00">
+					<status V="OK" />
+				</validation_item>
+			</validation_provider>
+			<validation_provider name="VST-PSN-Portal Test"
+				function="Vertrauensstelle" registration="BU20001">
+				<validation_item id="2" V="Schema"
+					c_date="2012-04-12T14:11:19.246+02:00">
+					<status V="OK" />
+				</validation_item>
+			</validation_provider>
+			<validation_provider email="office@test.de"
+				function="Datenannahmestelle" name="Validationsstelle" registration="P0815">
+				<validation_item id="3" V="Dechiffrierung">
+					<status V="OK" />
+				</validation_item>
+				<validation_item id="4" V="Spezifikation">
+					<status V="ERROR">
+						<error>
+							<list V="1, 2, 3" />
+							<rule_id V="1019005" />
+							<error_message
+								V="Das Verfahren '09/1_09/2_09/3' ist der Vertrauensstelle als Pseudonymisierungsstelle (VST-PSN) nicht bekannt. Diese Datenleiferung kann von der VST-PSN nicht verarbeitet werden." />
+						</error>
+					</status>
+				</validation_item>
+			</validation_provider>
+			<status_document V="OK" />
+		</protocol>
+	</header>
+	<body module="17/7" pseud_procedure="17/5_17/7">
+		<case lfdnr="1">
+			<patient twodigitik="10">
+				<pseudonym V="1234567890" alg="0" />
+			</patient>
+			<protocol>
+				<status_case V="ERROR" />
+				<validation_item id="4" V="Spezifikation">
+					<status V="ERROR">
+						<error>
+							<rule_id V="1019005" />
+							<error_message
+								V="Das Verfahren '09/1_09/2_09/3' ist der Vertrauensstelle als Pseudonymisierungsstelle (VST-PSN) nicht bekannt. Diese Datenleiferung kann von der VST-PSN nicht verarbeitet werden." />
+						</error>
+					</status>
+				</validation_item>
+			</protocol>
+		</case>
+		<case lfdnr="2">
+			<patient twodigitik="10">
+				<pseudonym V="0987654321" alg="0" />
+			</patient>
+			<protocol>
+				<status_case V="ERROR" />
+				<validation_item id="4" V="Spezifikation">
+					<status V="ERROR">
+						<error>
+							<rule_id V="1019005" />
+							<error_message
+								V="Das Verfahren '09/1_09/2_09/3' ist der Vertrauensstelle als Pseudonymisierungsstelle (VST-PSN) nicht bekannt. Diese Datenleiferung kann von der VST-PSN nicht verarbeitet werden." />
+						</error>
+					</status>
+				</validation_item>
+			</protocol>
+		</case>
+		<statistic>
+			<sent count="2" />
+		</statistic>
+	</body>
+</root>

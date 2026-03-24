@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://example.org/defn/" xmlns:tns="http://hello.org/base"
+    xmlns:ns1="http://hello.org/plug" xmlns:ns2="http://hello.org/types">
+  <types>
+    <!-- Below: default + tns changed, ns1 unaffected, ns2 same, xsi new -->
+    <schema xmlns="http://www.w3.org/2001/XMLSchema" xmlns:tns="http://hello.org/types"
+        xmlns:ns2="http://hello.org/types" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        targetNamespace="http://hello.org/types">
+      <complexType name="Hobbies">
+        <sequence>
+          <element name="name" type="tns:Name"/>
+          <element name="detail" type="string"/>
+          <element name="places" type="ns2:collection"/>
+          <element name="hobby" type="ns2:vector"/>
+        </sequence>
+      </complexType>
+    </schema>
+  </types>
+</definitions>

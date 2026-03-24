@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!-- Test for xsl:sort -->
+<doc>
+  <t>First</t>
+  <t>1</t>
+  <t>p2</t>
+  <t>1.0.9</t>
+  <t>007</t>
+  <t>1.0</t>
+  <t>7</t>
+  <t>00k</t>
+  <t>1.u</t>
+  <t>0.5</t>
+  <t>0.5.9</t>
+  <t>0</t>
+  <t>1-m</t>
+  <t> 1.1</t>
+  <t>11</t>
+  <t>0.5s</t>
+  <t>Last</t>
+</doc>
+

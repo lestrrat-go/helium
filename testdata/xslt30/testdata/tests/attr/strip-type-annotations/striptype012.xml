@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<doc-id xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="id-idref-types.xsd">
+     <id-elem id="a1">id1</id-elem>
+     <id-elem id="a2">id2</id-elem>
+     <idref-elem ref="a1">idref</idref-elem>
+     <idrefs-elem refs="a2 a1">idrefs</idrefs-elem>
+</doc-id>

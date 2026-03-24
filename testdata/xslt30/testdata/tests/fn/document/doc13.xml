@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doc>
+	<str1>
+				
+					<space>1</space>
+	</str1>
+	
+	<str1>2</str1>
+	
+	<str2>3</str2>
+	
+	<str2>
+		<no-space>3</no-space>		</str2>
+</doc>
