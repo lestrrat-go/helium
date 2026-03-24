@@ -66,6 +66,11 @@ func (ec *execContext) fnCopyOf(ctx context.Context, args []xpath3.Sequence) (xp
 				addInScopeNamespaces(srcElem, dstElem)
 			}
 		}
+		// Transfer type annotations from original to copy so that
+		// schema-aware functions (nilled(), instance of, etc.) work on copies.
+		if ec.typeAnnotations != nil {
+			ec.deepTransferAnnotations(node, copied)
+		}
 		// Transfer nilled status from original to copy so fn:nilled()
 		// works correctly on copied nodes.
 		ec.transferNilledStatus(node, copied)
@@ -140,7 +145,14 @@ func (ec *execContext) snapshotNode(ctx context.Context, node helium.Node) (heli
 		if !ok {
 			return nil, fmt.Errorf("unexpected DocumentNode type %T", node)
 		}
-		return helium.CopyDoc(doc)
+		copied, err := helium.CopyDoc(doc)
+		if err != nil {
+			return nil, err
+		}
+		if ec.typeAnnotations != nil {
+			ec.deepTransferAnnotations(doc, copied)
+		}
+		return copied, nil
 	}
 
 	// For namespace nodes, build the ancestor chain, declare the namespace
@@ -195,6 +207,12 @@ func (ec *execContext) snapshotNode(ctx context.Context, node helium.Node) (heli
 		if dstElem, ok2 := copied.(*helium.Element); ok2 {
 			addInScopeNamespaces(srcElem, dstElem)
 		}
+	}
+
+	// Transfer type annotations from original to copy so that
+	// nilled(), instance of, etc. work on the snapshot.
+	if ec.typeAnnotations != nil {
+		ec.deepTransferAnnotations(node, copied)
 	}
 
 	// For parentless (orphan) nodes that have no document root ancestor,

@@ -52,8 +52,9 @@ type evaluatorCfg struct {
 	position           int
 	size               int
 	contextItem        Item
-	typeAnnotations    map[helium.Node]string
-	variableResolver   VariableResolver
+	typeAnnotations        map[helium.Node]string
+	preservedIDAnnotations map[helium.Node]string // ID/IDREF annotations preserved after input-type-annotations="strip"
+	variableResolver       VariableResolver
 	functionResolver   FunctionResolver
 	strictPrefixes     bool
 	schemaDeclarations SchemaDeclarations
@@ -245,6 +246,20 @@ func (e Evaluator) TypeAnnotations(annotations map[helium.Node]string) Evaluator
 	return e
 }
 
+// PreservedIDAnnotations sets the preserved ID/IDREF annotations map for use
+// by fn:id and fn:idref when input-type-annotations="strip" has removed the
+// regular type annotations. The is-id and is-idref properties are preserved
+// per the XSLT spec even when type annotations are stripped.
+func (e Evaluator) PreservedIDAnnotations(annotations map[helium.Node]string) Evaluator {
+	e = e.clone()
+	if e.borrowing() {
+		e.cfg.preservedIDAnnotations = annotations
+	} else {
+		e.cfg.preservedIDAnnotations = maps.Clone(annotations)
+	}
+	return e
+}
+
 // SchemaDeclarations sets the schema declarations provider.
 func (e Evaluator) SchemaDeclarations(d SchemaDeclarations) Evaluator {
 	e = e.clone()
@@ -362,6 +377,7 @@ func (e Evaluator) newEvalCtx(ctx context.Context, node helium.Node) *evalContex
 	// schema / typing
 	ec.typeAnnotations = cfg.typeAnnotations
 	ec.schemaDeclarations = cfg.schemaDeclarations
+	ec.preservedIDAnnotations = cfg.preservedIDAnnotations
 	ec.strictPrefixes = cfg.strictPrefixes
 	ec.allowXML11Chars = cfg.allowXML11Chars
 

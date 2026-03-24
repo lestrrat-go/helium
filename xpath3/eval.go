@@ -48,8 +48,9 @@ type evalContext struct {
 	// withNode/withContextItem are negligible. The net/http dependency is
 	// already transitively required by golang.org/x/text.
 	httpClient         *http.Client
-	typeAnnotations    map[helium.Node]string // node → xs:... type (from xslt3 schema awareness)
-	variableResolver   VariableResolver       // lazy resolver for variables not in static scope
+	typeAnnotations        map[helium.Node]string // node → xs:... type (from xslt3 schema awareness)
+	preservedIDAnnotations map[helium.Node]string // ID/IDREF annotations preserved after input-type-annotations="strip"
+	variableResolver       VariableResolver       // lazy resolver for variables not in static scope
 	functionResolver   FunctionResolver       // lazy resolver for functions (not visible to function-lookup)
 	strictPrefixes     bool                   // skip defaultPrefixNS fallback in prefix validation
 	schemaDeclarations SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests

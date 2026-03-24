@@ -198,6 +198,9 @@ func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
 		if itemType, ok := ec.schemaDeclarations.ListItemType(ni.TypeAnnotation); ok {
 			ni.ListItemType = itemType
 		}
+		if members := ec.schemaDeclarations.UnionMemberTypes(ni.TypeAnnotation); len(members) > 0 {
+			ni.UnionMemberTypes = members
+		}
 	}
 	return ni
 }

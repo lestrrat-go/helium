@@ -845,6 +845,9 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 	if ec.typeAnnotations != nil {
 		eval = eval.TypeAnnotations(ec.typeAnnotations)
 	}
+	if ec.preservedIDAnnotations != nil {
+		eval = eval.PreservedIDAnnotations(ec.preservedIDAnnotations)
+	}
 	if ec.schemaRegistry != nil {
 		eval = eval.SchemaDeclarations(ec.schemaRegistry)
 	}

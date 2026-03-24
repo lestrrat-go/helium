@@ -1264,6 +1264,7 @@ func isNamespaceSensitiveType(typeName string) bool {
 	return false
 }
 
+
 // isComplexTypeName returns true if the given type name refers to a complex
 // type definition in the imported schemas.
 func (ec *execContext) isComplexTypeName(typeName string) bool {

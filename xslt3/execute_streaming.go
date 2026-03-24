@@ -83,6 +83,7 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 	// Apply input-type-annotations="strip": remove all type annotations so
 	// elements are xs:untyped and attributes xs:untypedAtomic.
 	if ec.stylesheet.inputTypeAnnotations == validationStrip && ec.typeAnnotations != nil {
+		ec.preserveIDAnnotations()
 		for k := range ec.typeAnnotations {
 			delete(ec.typeAnnotations, k)
 		}

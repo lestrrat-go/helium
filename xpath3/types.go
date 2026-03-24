@@ -57,10 +57,11 @@ func cloneSequences(seqs []Sequence) []Sequence {
 
 // NodeItem wraps a helium.Node as an XPath item.
 type NodeItem struct {
-	Node           helium.Node
-	TypeAnnotation string // optional xs:... type annotation (schema-aware)
-	AtomizedType   string // optional built-in base type used for typed atomization
-	ListItemType   string // non-empty when the type is a list; the item type name
+	Node             helium.Node
+	TypeAnnotation   string   // optional xs:... type annotation (schema-aware)
+	AtomizedType     string   // optional built-in base type used for typed atomization
+	ListItemType     string   // non-empty when the type is a list; the item type name
+	UnionMemberTypes []string // member type names for union types (for atomization)
 }
 
 func (NodeItem) itemTag() {}
@@ -1031,6 +1032,17 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 					cast.TypeName = v.TypeAnnotation
 				}
 				return cast, nil
+			}
+		}
+		// Union types: try each member type until one succeeds.
+		if len(v.UnionMemberTypes) > 0 {
+			for _, memberType := range v.UnionMemberTypes {
+				cast, err := CastFromString(s, memberType)
+				if err == nil {
+					cast.BaseType = cast.TypeName
+					cast.TypeName = v.TypeAnnotation
+					return cast, nil
+				}
 			}
 		}
 		// XPath 3.1 Section 2.6.2: typed value of PI, comment, and namespace nodes is xs:string

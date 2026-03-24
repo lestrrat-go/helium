@@ -675,7 +675,10 @@ func fnID(ctx context.Context, args []Sequence) (Sequence, error) {
 }
 
 func idElementsFromTypeAnnotations(doc *helium.Document, tokens []string, ec *evalContext) []helium.Node {
-	if ec == nil || ec.typeAnnotations == nil || len(tokens) == 0 {
+	if ec == nil || len(tokens) == 0 {
+		return nil
+	}
+	if ec.typeAnnotations == nil && ec.preservedIDAnnotations == nil {
 		return nil
 	}
 
@@ -684,28 +687,43 @@ func idElementsFromTypeAnnotations(doc *helium.Document, tokens []string, ec *ev
 		wanted[token] = struct{}{}
 	}
 
+	seen := make(map[helium.Node]struct{})
 	var nodes []helium.Node
-	for node, typeName := range ec.typeAnnotations {
-		if !annotationMatchesIDType(typeName, ec) {
-			continue
-		}
-		if ixpath.DocumentRoot(node) != doc {
-			continue
-		}
 
-		switch typed := node.(type) {
-		case *helium.Attribute:
-			if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; !ok {
+	// Check both regular type annotations and preserved ID annotations
+	// (the latter are kept when input-type-annotations="strip" removes
+	// regular annotations but preserves is-id/is-idref properties).
+	for _, annMap := range []map[helium.Node]string{ec.typeAnnotations, ec.preservedIDAnnotations} {
+		for node, typeName := range annMap {
+			if !annotationMatchesIDType(typeName, ec) {
 				continue
 			}
-			parent, ok := typed.Parent().(*helium.Element)
-			if !ok {
+			if ixpath.DocumentRoot(node) != doc {
 				continue
 			}
-			nodes = append(nodes, parent)
-		case *helium.Element:
-			if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; ok {
-				nodes = append(nodes, typed)
+
+			switch typed := node.(type) {
+			case *helium.Attribute:
+				if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; !ok {
+					continue
+				}
+				parent, ok := typed.Parent().(*helium.Element)
+				if !ok {
+					continue
+				}
+				if _, dup := seen[parent]; dup {
+					continue
+				}
+				seen[parent] = struct{}{}
+				nodes = append(nodes, parent)
+			case *helium.Element:
+				if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; ok {
+					if _, dup := seen[typed]; dup {
+						continue
+					}
+					seen[typed] = struct{}{}
+					nodes = append(nodes, typed)
+				}
 			}
 		}
 	}
@@ -723,6 +741,32 @@ func annotationMatchesIDType(typeName string, ec *evalContext) bool {
 		return false
 	}
 	return ec.schemaDeclarations.IsSubtypeOf(typeName, TypeID)
+}
+
+// annotationMatchesIDRefType checks if an attribute node has an IDREF/IDREFS
+// type annotation in either typeAnnotations or preservedIDAnnotations.
+func annotationMatchesIDRefType(ec *evalContext, attr *helium.Attribute) bool {
+	for _, annMap := range []map[helium.Node]string{ec.typeAnnotations, ec.preservedIDAnnotations} {
+		if ann, ok := annMap[attr]; ok && isIDRefAnnotation(ann, ec) {
+			return true
+		}
+	}
+	return false
+}
+
+// isIDRefAnnotation returns true if the type name is xs:IDREF, xs:IDREFS, or
+// a subtype thereof.
+func isIDRefAnnotation(typeName string, ec *evalContext) bool {
+	if typeName == "" {
+		return false
+	}
+	if isSubtypeOf(typeName, TypeIDREF) || isSubtypeOf(typeName, TypeIDREFS) {
+		return true
+	}
+	if ec != nil && ec.schemaDeclarations != nil {
+		return ec.schemaDeclarations.IsSubtypeOf(typeName, TypeIDREF) || ec.schemaDeclarations.IsSubtypeOf(typeName, TypeIDREFS)
+	}
+	return false
 }
 
 func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -753,6 +797,7 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 
+	ec := getFnContext(ctx)
 	var nodes []helium.Node
 	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		elem, ok := n.(*helium.Element)
@@ -760,13 +805,35 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 			return nil
 		}
 		for _, attr := range elem.Attributes() {
-			if attr.AType() != enum.AttrIDRef && attr.AType() != enum.AttrIDRefs {
+			isIDRef := attr.AType() == enum.AttrIDRef || attr.AType() == enum.AttrIDRefs
+			if !isIDRef && ec != nil {
+				isIDRef = annotationMatchesIDRefType(ec, attr)
+			}
+			if !isIDRef {
 				continue
 			}
 			for _, token := range strings.Fields(attr.Value()) {
 				if _, ok := wanted[token]; ok {
 					nodes = append(nodes, attr)
 					break
+				}
+			}
+		}
+		// Also check element content for IDREF type annotations.
+		if ec != nil {
+			isIDRef := false
+			for _, annMap := range []map[helium.Node]string{ec.typeAnnotations, ec.preservedIDAnnotations} {
+				if ann, ok := annMap[elem]; ok && isIDRefAnnotation(ann, ec) {
+					isIDRef = true
+					break
+				}
+			}
+			if isIDRef {
+				for _, token := range strings.Fields(strings.TrimSpace(ixpath.StringValue(elem))) {
+					if _, ok := wanted[token]; ok {
+						nodes = append(nodes, elem)
+						break
+					}
 				}
 			}
 		}
