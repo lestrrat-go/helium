@@ -1075,6 +1075,9 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	// Parse xsl:package metadata
 	if localName == "package" {
 		c.stylesheet.packageName = getAttr(root, "name")
+		if c.stylesheet.packageName == "" {
+			return nil, staticError(errCodeXTSE0020, "xsl:package requires a name attribute")
+		}
 		c.stylesheet.packageVersion = getAttr(root, "package-version")
 		c.stylesheet.isPackage = true
 		c.stylesheet.declaredModes = true // default for xsl:package
