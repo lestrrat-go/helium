@@ -277,7 +277,10 @@ func applyAcceptRules(compType, compName string, rules []acceptRule, defaultVis 
 			continue
 		}
 
-		// Calculate specificity: exact name > prefix:* > *
+		// Calculate specificity based on name token only (XSLT 3.0 §3.6.2):
+		// * = 0, ns:* or *:local = 1, explicit name = 2.
+		// Component attribute does NOT affect priority.
+		// When priority ties, last matching rule (document order) wins.
 		spec := 0
 		if rule.names == xslWildcard {
 			spec = 0
@@ -286,12 +289,8 @@ func applyAcceptRules(compType, compName string, rules []acceptRule, defaultVis 
 		} else {
 			spec = 2
 		}
-		// Component type specificity
-		if rule.component != xslWildcard {
-			spec += 3
-		}
 
-		if spec > bestSpecificity {
+		if spec >= bestSpecificity {
 			bestSpecificity = spec
 			bestVis = rule.visibility
 		}
