@@ -68,8 +68,8 @@ func (ec *execContext) execMessage(ctx context.Context, inst *messageInst) error
 		}
 	}
 
-	if ec.msgReceiver != nil {
-		if err := ec.msgReceiver.HandleMessage(value, terminate); err != nil {
+	if ec.msgHandler != nil {
+		if err := ec.msgHandler.HandleMessage(value, terminate); err != nil {
 			return err
 		}
 	}

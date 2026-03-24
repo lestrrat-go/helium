@@ -199,7 +199,7 @@ type transformDepthKey struct{}
 
 const maxTransformDepth = 10
 
-// resultDocCollector implements ResultDocumentReceiver for fn:transform,
+// resultDocCollector implements ResultDocumentHandler for fn:transform,
 // collecting secondary result documents into a map.
 type resultDocCollector struct {
 	results map[string]*helium.Document
@@ -432,9 +432,9 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 	fnTransformCfg := &transformConfig{
 		initialTemplate:   initialTemplate,
 		initialMode:       initialMode,
-		initialFunction:   initialFunction,
-		baseOutputURI:     baseOutputURI,
-		resultDocReceiver: resultDocCollector{results: secondaryResults},
+		initialFunction:  initialFunction,
+		baseOutputURI:    baseOutputURI,
+		resultDocHandler: resultDocCollector{results: secondaryResults},
 	}
 
 	// Apply map-valued options from the fn:transform options map.
@@ -627,8 +627,8 @@ func executeTransformWithSelection(ctx context.Context, source *helium.Document,
 	}
 	ec.setCurrentTemplate(nil) // initialize currentTemplateBaseDir from stylesheet
 
-	if cfg != nil && cfg.msgReceiver != nil {
-		ec.msgReceiver = cfg.msgReceiver
+	if cfg != nil && cfg.msgHandler != nil {
+		ec.msgHandler = cfg.msgHandler
 	}
 
 	// Schema-aware: build schema registry and validate source document.
@@ -719,10 +719,10 @@ func executeTransformWithSelection(ctx context.Context, source *helium.Document,
 		}
 	}
 
-	if cfg != nil && cfg.resultDocReceiver != nil {
+	if cfg != nil && cfg.resultDocHandler != nil {
 		for href, doc := range ec.resultDocuments {
 			outDef := ec.resultDocOutputDefs[href]
-			if err := cfg.resultDocReceiver.HandleResultDocument(href, doc, outDef); err != nil {
+			if err := cfg.resultDocHandler.HandleResultDocument(href, doc, outDef); err != nil {
 				return nil, nil, err
 			}
 		}

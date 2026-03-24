@@ -10,54 +10,54 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var errReceiverAborted = errors.New("receiver aborted transform")
+var errHandlerAborted = errors.New("handler aborted transform")
 
-type messageAbortReceiver struct {
+type messageAbortHandler struct {
 	called bool
 }
 
-func (r *messageAbortReceiver) HandleMessage(msg string, terminate bool) error {
+func (r *messageAbortHandler) HandleMessage(msg string, terminate bool) error {
 	r.called = true
-	return errReceiverAborted
+	return errHandlerAborted
 }
 
-type resultDocumentAbortReceiver struct {
+type resultDocumentAbortHandler struct {
 	called bool
 }
 
-func (r *resultDocumentAbortReceiver) HandleResultDocument(href string, doc *helium.Document, outDef *xslt3.OutputDef) error {
+func (r *resultDocumentAbortHandler) HandleResultDocument(href string, doc *helium.Document, outDef *xslt3.OutputDef) error {
 	r.called = true
-	return errReceiverAborted
+	return errHandlerAborted
 }
 
-type rawResultAbortReceiver struct {
+type rawResultAbortHandler struct {
 	called bool
 }
 
-func (r *rawResultAbortReceiver) HandleRawResult(seq xpath3.Sequence) error {
+func (r *rawResultAbortHandler) HandleRawResult(seq xpath3.Sequence) error {
 	r.called = true
-	return errReceiverAborted
+	return errHandlerAborted
 }
 
-type primaryItemsAbortReceiver struct {
+type primaryItemsAbortHandler struct {
 	called bool
 }
 
-func (r *primaryItemsAbortReceiver) HandlePrimaryItems(seq xpath3.Sequence) error {
+func (r *primaryItemsAbortHandler) HandlePrimaryItems(seq xpath3.Sequence) error {
 	r.called = true
-	return errReceiverAborted
+	return errHandlerAborted
 }
 
-type annotationAbortReceiver struct {
+type annotationAbortHandler struct {
 	called bool
 }
 
-func (r *annotationAbortReceiver) HandleAnnotations(annotations map[helium.Node]string, declarations xpath3.SchemaDeclarations) error {
+func (r *annotationAbortHandler) HandleAnnotations(annotations map[helium.Node]string, declarations xpath3.SchemaDeclarations) error {
 	r.called = true
-	return errReceiverAborted
+	return errHandlerAborted
 }
 
-func TestMessageReceiverErrorAbortsTransform(t *testing.T) {
+func TestMessageHandlerErrorAbortsTransform(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:template match="/">
@@ -66,14 +66,14 @@ func TestMessageReceiverErrorAbortsTransform(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	receiver := &messageAbortReceiver{}
-	_, err := ss.Transform(parseTransformSource(t)).MessageReceiver(receiver).Do(t.Context())
+	handler := &messageAbortHandler{}
+	_, err := ss.Transform(parseTransformSource(t)).MessageHandler(handler).Do(t.Context())
 
-	require.True(t, receiver.called)
-	require.ErrorIs(t, err, errReceiverAborted)
+	require.True(t, handler.called)
+	require.ErrorIs(t, err, errHandlerAborted)
 }
 
-func TestResultDocumentReceiverErrorAbortsTransform(t *testing.T) {
+func TestResultDocumentHandlerErrorAbortsTransform(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:template match="/">
@@ -82,14 +82,14 @@ func TestResultDocumentReceiverErrorAbortsTransform(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	receiver := &resultDocumentAbortReceiver{}
-	_, err := ss.Transform(parseTransformSource(t)).ResultDocumentReceiver(receiver).Do(t.Context())
+	handler := &resultDocumentAbortHandler{}
+	_, err := ss.Transform(parseTransformSource(t)).ResultDocumentHandler(handler).Do(t.Context())
 
-	require.True(t, receiver.called)
-	require.ErrorIs(t, err, errReceiverAborted)
+	require.True(t, handler.called)
+	require.ErrorIs(t, err, errHandlerAborted)
 }
 
-func TestRawResultReceiverErrorAbortsTransform(t *testing.T) {
+func TestRawResultHandlerErrorAbortsTransform(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0"
   xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -99,14 +99,14 @@ func TestRawResultReceiverErrorAbortsTransform(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	receiver := &rawResultAbortReceiver{}
-	_, err := ss.Transform(parseTransformSource(t)).RawResultReceiver(receiver).Do(t.Context())
+	handler := &rawResultAbortHandler{}
+	_, err := ss.Transform(parseTransformSource(t)).RawResultHandler(handler).Do(t.Context())
 
-	require.True(t, receiver.called)
-	require.ErrorIs(t, err, errReceiverAborted)
+	require.True(t, handler.called)
+	require.ErrorIs(t, err, errHandlerAborted)
 }
 
-func TestPrimaryItemsReceiverErrorAbortsTransform(t *testing.T) {
+func TestPrimaryItemsHandlerErrorAbortsTransform(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:output method="adaptive"/>
@@ -115,14 +115,14 @@ func TestPrimaryItemsReceiverErrorAbortsTransform(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	receiver := &primaryItemsAbortReceiver{}
-	_, err := ss.Transform(parseTransformSource(t)).PrimaryItemsReceiver(receiver).Do(t.Context())
+	handler := &primaryItemsAbortHandler{}
+	_, err := ss.Transform(parseTransformSource(t)).PrimaryItemsHandler(handler).Do(t.Context())
 
-	require.True(t, receiver.called)
-	require.ErrorIs(t, err, errReceiverAborted)
+	require.True(t, handler.called)
+	require.ErrorIs(t, err, errHandlerAborted)
 }
 
-func TestAnnotationReceiverErrorAbortsTransform(t *testing.T) {
+func TestAnnotationHandlerErrorAbortsTransform(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0"
   xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -137,9 +137,9 @@ func TestAnnotationReceiverErrorAbortsTransform(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	receiver := &annotationAbortReceiver{}
-	_, err := ss.Transform(parseTransformSource(t)).AnnotationReceiver(receiver).Do(t.Context())
+	handler := &annotationAbortHandler{}
+	_, err := ss.Transform(parseTransformSource(t)).AnnotationHandler(handler).Do(t.Context())
 
-	require.True(t, receiver.called)
-	require.ErrorIs(t, err, errReceiverAborted)
+	require.True(t, handler.called)
+	require.ErrorIs(t, err, errHandlerAborted)
 }

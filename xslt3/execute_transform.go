@@ -90,8 +90,8 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		ec.size = 1
 	}
 
-	if cfg != nil && cfg.msgReceiver != nil {
-		ec.msgReceiver = cfg.msgReceiver
+	if cfg != nil && cfg.msgHandler != nil {
+		ec.msgHandler = cfg.msgHandler
 	}
 	if cfg != nil && cfg.traceWriter != nil {
 		ec.traceWriter = cfg.traceWriter
@@ -377,18 +377,18 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	}
 
 	// Deliver secondary result documents to the receiver.
-	if cfg != nil && cfg.resultDocReceiver != nil {
+	if cfg != nil && cfg.resultDocHandler != nil {
 		for href, doc := range ec.resultDocuments {
 			outDef := ec.resultDocOutputDefs[href]
-			if err := cfg.resultDocReceiver.HandleResultDocument(href, doc, outDef); err != nil {
+			if err := cfg.resultDocHandler.HandleResultDocument(href, doc, outDef); err != nil {
 				return nil, err
 			}
 		}
 	}
 
 	// Deliver the raw XDM result sequence to the receiver.
-	if cfg != nil && cfg.rawResultReceiver != nil && ec.rawResultSequence != nil {
-		if err := cfg.rawResultReceiver.HandleRawResult(ec.rawResultSequence); err != nil {
+	if cfg != nil && cfg.rawResultHandler != nil && ec.rawResultSequence != nil {
+		if err := cfg.rawResultHandler.HandleRawResult(ec.rawResultSequence); err != nil {
 			return nil, err
 		}
 	}
@@ -415,8 +415,8 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 				cfg.rawCapturedItems = out.pendingItems
 			}
 			cfg.primaryItems = out.pendingItems
-			if cfg.primaryItemsReceiver != nil {
-				if err := cfg.primaryItemsReceiver.HandlePrimaryItems(out.pendingItems); err != nil {
+			if cfg.primaryItemsHandler != nil {
+				if err := cfg.primaryItemsHandler.HandlePrimaryItems(out.pendingItems); err != nil {
 					return nil, err
 				}
 			}
@@ -526,12 +526,12 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 
 	// Deliver type annotations and schema declarations to the caller
 	// so that post-transform XPath assertions can use them.
-	if cfg != nil && cfg.annotationReceiver != nil && ec.typeAnnotations != nil {
+	if cfg != nil && cfg.annotationHandler != nil && ec.typeAnnotations != nil {
 		var sd xpath3.SchemaDeclarations
 		if ec.schemaRegistry != nil {
 			sd = ec.schemaRegistry
 		}
-		if err := cfg.annotationReceiver.HandleAnnotations(ec.typeAnnotations, sd); err != nil {
+		if err := cfg.annotationHandler.HandleAnnotations(ec.typeAnnotations, sd); err != nil {
 			return nil, err
 		}
 	}
