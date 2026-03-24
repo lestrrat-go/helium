@@ -319,7 +319,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		if pdErr == nil && pdHref != "" {
 			outDef := &OutputDef{}
 			baseURI := ec.effectiveStaticBaseURI()
-			if loadErr := loadParameterDocumentFromFile(outDef, baseURI, pdHref); loadErr == nil {
+			if loadErr := loadParameterDocumentFromFile(ctx, outDef, baseURI, pdHref); loadErr == nil {
 				inst.ParameterDocOutputDef = outDef
 				if outDef.Method != "" && inst.Method == "" {
 					inst.Method = outDef.Method

@@ -751,10 +751,25 @@ func collectXSITypeIDREFsFromNode(node helium.Node, idrefs *[]string) {
 		for _, attr := range elem.Attributes() {
 			if attr.URI() == lexicon.NamespaceXSI && attr.LocalName() == "type" {
 				xsiType := attr.Value()
-				// Strip prefix to get local type name (e.g., "xs:IDREFS" → "IDREFS").
-				if idx := len(xsiType) - len("IDREFS"); idx >= 0 && xsiType[idx:] == "IDREFS" {
+				localName := xsiType
+				if colonIdx := strings.IndexByte(xsiType, ':'); colonIdx >= 0 {
+					prefix := xsiType[:colonIdx]
+					localName = xsiType[colonIdx+1:]
+					// Verify the prefix resolves to the XSD namespace.
+					nsURI := ""
+					for _, ns := range elem.Namespaces() {
+						if ns.Prefix() == prefix {
+							nsURI = ns.URI()
+							break
+						}
+					}
+					if nsURI != lexicon.NamespaceXSD {
+						continue
+					}
+				}
+				if localName == "IDREFS" {
 					*idrefs = append(*idrefs, splitSpaceSeparated(string(elem.Content()))...)
-				} else if idx := len(xsiType) - len("IDREF"); idx >= 0 && xsiType[idx:] == "IDREF" {
+				} else if localName == "IDREF" {
 					val := string(elem.Content())
 					if val != "" {
 						*idrefs = append(*idrefs, val)

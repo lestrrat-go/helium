@@ -86,6 +86,61 @@ func getInstructionBodies(inst Instruction) [][]Instruction {
 		if v.Body != nil {
 			return [][]Instruction{v.Body}
 		}
+	case *IterateInst:
+		var bodies [][]Instruction
+		if v.Body != nil {
+			bodies = append(bodies, v.Body)
+		}
+		if v.OnCompletion != nil {
+			bodies = append(bodies, v.OnCompletion)
+		}
+		return bodies
+	case *ForkInst:
+		return v.Branches
+	case *ForEachGroupInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *TryCatchInst:
+		var bodies [][]Instruction
+		if v.Try != nil {
+			bodies = append(bodies, v.Try)
+		}
+		for _, c := range v.Catches {
+			if c.Body != nil {
+				bodies = append(bodies, c.Body)
+			}
+		}
+		return bodies
+	case *OnEmptyInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *OnNonEmptyInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *BreakInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *PerformSortInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
+	case *AnalyzeStringInst:
+		var bodies [][]Instruction
+		if v.MatchingBody != nil {
+			bodies = append(bodies, v.MatchingBody)
+		}
+		if v.NonMatchingBody != nil {
+			bodies = append(bodies, v.NonMatchingBody)
+		}
+		return bodies
+	case *WherePopulatedInst:
+		if v.Body != nil {
+			return [][]Instruction{v.Body}
+		}
 	}
 	return nil
 }

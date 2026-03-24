@@ -457,13 +457,13 @@ func (c *compiler) compileOutput(elem *helium.Element) error {
 // and applies its settings to the given OutputDef. Parameters explicitly set on
 // the xsl:output element take precedence; the parameter document provides defaults.
 func (c *compiler) loadParameterDocument(outDef *OutputDef, baseURI, href string) error {
-	return loadParameterDocumentFromFile(outDef, baseURI, href)
+	return loadParameterDocumentFromFile(c.ctx, outDef, baseURI, href)
 }
 
 // loadParameterDocumentFromFile loads a serialization parameter document and
 // applies its settings to the given OutputDef. This standalone version can be
 // called at both compile-time and runtime.
-func loadParameterDocumentFromFile(outDef *OutputDef, baseURI, href string) error {
+func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseURI, href string) error {
 	uri := href
 	if baseURI != "" && !strings.Contains(href, "://") && !filepath.IsAbs(href) {
 		baseDir := filepath.Dir(baseURI)
@@ -474,7 +474,7 @@ func loadParameterDocumentFromFile(outDef *OutputDef, baseURI, href string) erro
 	if err != nil {
 		return staticError(errCodeXTSE0090, "cannot read parameter-document %q: %v", href, err)
 	}
-	doc, err := helium.Parse(context.Background(), data)
+	doc, err := helium.Parse(ctx, data)
 	if err != nil {
 		return staticError(errCodeXTSE0090, "cannot parse parameter-document %q: %v", href, err)
 	}

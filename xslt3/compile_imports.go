@@ -172,9 +172,9 @@ func (c *compiler) loadAndCacheInclude(uri, importKey string) (*helium.Element, 
 	}
 	c.stylesheet.moduleDocs[uri] = doc
 
-	// Handle fragment identifiers
+	// Handle fragment identifiers (importKey = uri + "#" + fragment)
 	var fragment string
-	if uri != importKey {
+	if uri != importKey && len(importKey) > len(uri)+1 && importKey[len(uri)] == '#' {
 		fragment = importKey[len(uri)+1:]
 	}
 
