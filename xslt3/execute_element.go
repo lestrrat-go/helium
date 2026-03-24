@@ -1161,14 +1161,14 @@ func (ec *execContext) execComment(ctx context.Context, inst *commentInst) error
 		if isV2TempOutput {
 			ec.temporaryOutputDepth++
 		}
-		val, err := ec.evaluateBody(ctx, inst.Body)
+		val, err := ec.evaluateBodyAsSequence(ctx, inst.Body)
 		if isV2TempOutput {
 			ec.temporaryOutputDepth--
 		}
 		if err != nil {
 			return err
 		}
-		value = stringifySequence(val)
+		value = stringifySimpleContent(val, " ")
 	}
 
 	// Sanitize comment content per XSLT 3.0 spec §11.1:
@@ -1228,14 +1228,14 @@ func (ec *execContext) execPI(ctx context.Context, inst *piInst) error {
 		if isV2TempOutput {
 			ec.temporaryOutputDepth++
 		}
-		val, err := ec.evaluateBody(ctx, inst.Body)
+		val, err := ec.evaluateBodyAsSequence(ctx, inst.Body)
 		if isV2TempOutput {
 			ec.temporaryOutputDepth--
 		}
 		if err != nil {
 			return err
 		}
-		value = stringifySequence(val)
+		value = stringifySimpleContent(val, " ")
 	}
 
 	// XTDE0890: name must be a valid NCName and PITarget
