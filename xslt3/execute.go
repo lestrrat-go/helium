@@ -1190,6 +1190,19 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 		}
 		return val, true, nil
 	}
+	// When evaluating in a package context, also check the package's own
+	// global variables (including private ones not merged into the stylesheet).
+	if ec.currentPackage != nil {
+		for _, v := range ec.currentPackage.globalVars {
+			if v.Name == name {
+				val, err := ec.evaluateGlobalVar(v)
+				if err != nil {
+					return nil, false, err
+				}
+				return val, true, nil
+			}
+		}
+	}
 	// Try to lazily evaluate a pending global parameter
 	if def, ok := ec.globalParamDefs[name]; ok {
 		val, err := ec.evaluateGlobalParam(def)
