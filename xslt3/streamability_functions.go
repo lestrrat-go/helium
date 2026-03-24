@@ -545,7 +545,8 @@ func derefXPathExpr(expr xpath3.Expr) xpath3.Expr {
 }
 
 // isAtomicTypeConstraint returns true if the "as" type constraint refers to
-// an atomic type (xs:string, xs:integer, etc.) that cannot hold streaming nodes.
+// a type that cannot hold streaming nodes: atomic types (xs:string, etc.),
+// map types (map(*)), array types (array(*)), and function types (function(*)).
 func isAtomicTypeConstraint(as string) bool {
 	if as == "" {
 		return false
@@ -553,7 +554,14 @@ func isAtomicTypeConstraint(as string) bool {
 	// Strip occurrence indicators
 	as = strings.TrimRight(as, "?*+")
 	// Common atomic types
-	return strings.HasPrefix(as, "xs:")
+	if strings.HasPrefix(as, "xs:") {
+		return true
+	}
+	// Map, array, and function types cannot hold streaming nodes
+	if strings.HasPrefix(as, "map(") || strings.HasPrefix(as, "array(") || strings.HasPrefix(as, "function(") {
+		return true
+	}
+	return false
 }
 
 // checkAscentFunction checks that an ascent function's body navigates
