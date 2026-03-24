@@ -2,7 +2,6 @@ package xslt3
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -597,7 +596,10 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *NextMatchInst) e
 		if !ok {
 			return nil
 		}
-		s := fmt.Sprintf("%v", av.Value)
+		s, err := xpath3.AtomicToString(av)
+		if err != nil {
+			return err
+		}
 		text, err := ec.resultDoc.CreateText([]byte(s))
 		if err != nil {
 			return err
