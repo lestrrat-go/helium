@@ -332,6 +332,13 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		if _, overridden := overrideNames[xslElemVariable+":"+v.Name]; overridden {
 			continue
 		}
+		// XTSE3032: check for homonymous variables from different packages
+		for _, existing := range c.stylesheet.globalVars {
+			if existing.Name == v.Name && existing.OwnerPackage != nil && existing.OwnerPackage != pkg {
+				return staticError(errCodeXTSE3032,
+					"variable %q accepted from multiple packages with non-hidden visibility", v.Name)
+			}
+		}
 		v.OwnerPackage = pkg
 		c.stylesheet.globalVars = append(c.stylesheet.globalVars, v)
 	}
