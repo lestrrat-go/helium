@@ -326,8 +326,8 @@ func hasElementOnlyContent(elem *helium.Element) bool {
 	return false
 }
 
-// matchSpaceNameTest checks if an element matches a strip/preserve-space NameTest pattern.
-func matchSpaceNameTest(nt NameTest, elem *helium.Element, nsBindings map[string]string) bool {
+// matchSpaceNameTest checks if an element matches a strip/preserve-space nameTest pattern.
+func matchSpaceNameTest(nt nameTest, elem *helium.Element, nsBindings map[string]string) bool {
 	if nt.Local == "*" && nt.Prefix == "" {
 		return true // "*" matches all
 	}
@@ -345,9 +345,9 @@ func matchSpaceNameTest(nt NameTest, elem *helium.Element, nsBindings map[string
 	return elem.LocalName() == nt.Local && elem.URI() == ""
 }
 
-// nameTestPriority returns the priority of a NameTest for conflict resolution.
+// nameTestPriority returns the priority of a nameTest for conflict resolution.
 // Specific names > prefix:* > *
-func nameTestPriority(nt NameTest) int {
+func nameTestPriority(nt nameTest) int {
 	if nt.Local == "*" && nt.Prefix == "" {
 		return 0 // "*"
 	}

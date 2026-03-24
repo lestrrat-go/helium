@@ -138,7 +138,7 @@ func (ec *execContext) xsltEvaluateFunctionsNS() map[xpath3.QualifiedName]xpath3
 
 // registerUserFunc registers an XSL user function into cachedFnsNS,
 // handling multi-arity overloads by wrapping them in xslMultiArityFunc.
-func (ec *execContext) registerUserFunc(def *XSLFunction) {
+func (ec *execContext) registerUserFunc(def *xslFunction) {
 	qn := def.Name
 	uf := &xslUserFunc{def: def, ec: ec}
 	if existing, ok := ec.cachedFnsNS[qn]; ok {
@@ -158,7 +158,7 @@ func (ec *execContext) registerUserFunc(def *XSLFunction) {
 }
 
 // findXSLFunction finds an xsl:function by QName and arity (-1 = any).
-func (ec *execContext) findXSLFunction(qn xpath3.QualifiedName, arity int) *XSLFunction {
+func (ec *execContext) findXSLFunction(qn xpath3.QualifiedName, arity int) *xslFunction {
 	if arity < 0 {
 		// Any arity: just check if any overload exists
 		for fk, def := range ec.stylesheet.functions {
@@ -173,7 +173,7 @@ func (ec *execContext) findXSLFunction(qn xpath3.QualifiedName, arity int) *XSLF
 }
 
 // findXSLFunctionByArity finds an xsl:function by QName and exact arity.
-func (ec *execContext) findXSLFunctionByArity(qn xpath3.QualifiedName, arity int) *XSLFunction {
+func (ec *execContext) findXSLFunctionByArity(qn xpath3.QualifiedName, arity int) *xslFunction {
 	fk := funcKey{Name: qn, Arity: arity}
 	return ec.stylesheet.functions[fk]
 }

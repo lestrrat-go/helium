@@ -609,13 +609,13 @@ func compileSimplified(ctx context.Context, doc *helium.Document, root *helium.E
 		ctx: ctx,
 		stylesheet: &Stylesheet{
 			version:          "3.0",
-			namedTemplates:   make(map[string]*Template),
-			modeTemplates:    make(map[string][]*Template),
-			keys:             make(map[string][]*KeyDef),
+			namedTemplates:   make(map[string]*template),
+			modeTemplates:    make(map[string][]*template),
+			keys:             make(map[string][]*keyDef),
 			outputs:          make(map[string]*OutputDef),
-			functions:        make(map[funcKey]*XSLFunction),
+			functions:        make(map[funcKey]*xslFunction),
 			namespaces:       make(map[string]string),
-			accumulators:     make(map[string]*AccumulatorDef),
+			accumulators:     make(map[string]*accumulatorDef),
 			accumulatorOrder: make([]string, 0),
 		},
 		nsBindings:    make(map[string]string),
@@ -636,17 +636,17 @@ func compileSimplified(ctx context.Context, doc *helium.Document, root *helium.E
 		return nil, err
 	}
 
-	tmpl := &Template{
-		Match: &Pattern{
+	tmpl := &template{
+		Match: &pattern{
 			source: "/",
-			Alternatives: []*PatternAlt{
+			Alternatives: []*patternAlt{
 				{
 					expr:     xpath3.RootExpr{},
 					priority: -0.5,
 				},
 			},
 		},
-		Body:    []Instruction{inst},
+		Body:    []instruction{inst},
 		BaseURI: c.baseURI,
 	}
 

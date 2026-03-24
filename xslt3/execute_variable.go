@@ -10,7 +10,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
-func (ec *execContext) execVariable(ctx context.Context, inst *VariableInst) error {
+func (ec *execContext) execVariable(ctx context.Context, inst *variableInst) error {
 	// Override static base URI when the variable carries xml:base
 	savedBaseOverride := ec.staticBaseURIOverride
 	if inst.StaticBaseURI != "" {
@@ -101,13 +101,13 @@ func (ec *execContext) execVariable(ctx context.Context, inst *VariableInst) err
 	return nil
 }
 
-func (ec *execContext) execParam(ctx context.Context, inst *ParamInst) error {
+func (ec *execContext) execParam(ctx context.Context, inst *paramInst) error {
 	// Check if already set (by with-param)
 	if _, ok := ec.localVars.lookup(inst.Name); ok {
 		return nil
 	}
 	// Use default
-	return ec.execVariable(ctx, &VariableInst{
+	return ec.execVariable(ctx, &variableInst{
 		Name:   inst.Name,
 		Select: inst.Select,
 		Body:   inst.Body,

@@ -10,7 +10,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
-func (ec *execContext) execIf(ctx context.Context, inst *IfInst) error {
+func (ec *execContext) execIf(ctx context.Context, inst *ifInst) error {
 	result, err := ec.evalXPath(inst.Test, ec.contextNode)
 	if err != nil {
 		return err
@@ -28,7 +28,7 @@ func (ec *execContext) execIf(ctx context.Context, inst *IfInst) error {
 	return nil
 }
 
-func (ec *execContext) execChoose(ctx context.Context, inst *ChooseInst) error {
+func (ec *execContext) execChoose(ctx context.Context, inst *chooseInst) error {
 	// Apply default-collation from xsl:choose
 	savedCollation := ec.defaultCollation
 	if inst.DefaultCollation != "" {
@@ -103,7 +103,7 @@ func (ec *execContext) execChoose(ctx context.Context, inst *ChooseInst) error {
 	return nil
 }
 
-func (ec *execContext) execForEach(ctx context.Context, inst *ForEachInst) error {
+func (ec *execContext) execForEach(ctx context.Context, inst *forEachInst) error {
 	result, err := ec.evalXPath(inst.Select, ec.contextNode)
 	if err != nil {
 		return err
@@ -191,7 +191,7 @@ func (ec *execContext) execForEach(ctx context.Context, inst *ForEachInst) error
 	return nil
 }
 
-func (ec *execContext) execForEachGroup(ctx context.Context, inst *ForEachGroupInst) error {
+func (ec *execContext) execForEachGroup(ctx context.Context, inst *forEachGroupInst) error {
 	result, err := ec.evalXPath(inst.Select, ec.contextNode)
 	if err != nil {
 		return err
@@ -620,7 +620,7 @@ func compositeKeyString(seq xpath3.Sequence) string {
 
 // groupStartingWith implements group-starting-with: a new group starts
 // whenever an item matches the pattern.
-func (ec *execContext) groupStartingWith(seq xpath3.Sequence, pat *Pattern) []fegGroup {
+func (ec *execContext) groupStartingWith(seq xpath3.Sequence, pat *pattern) []fegGroup {
 	var groups []fegGroup
 	var currentItems xpath3.ItemSlice
 	for item := range sequence.Items(seq) {
@@ -638,7 +638,7 @@ func (ec *execContext) groupStartingWith(seq xpath3.Sequence, pat *Pattern) []fe
 
 // groupEndingWith implements group-ending-with: a group ends whenever
 // an item matches the pattern.
-func (ec *execContext) groupEndingWith(seq xpath3.Sequence, pat *Pattern) []fegGroup {
+func (ec *execContext) groupEndingWith(seq xpath3.Sequence, pat *pattern) []fegGroup {
 	var groups []fegGroup
 	var currentItems xpath3.ItemSlice
 	for item := range sequence.Items(seq) {

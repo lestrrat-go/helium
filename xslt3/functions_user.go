@@ -65,7 +65,7 @@ func (f *xslMultiArityFunc) addVariant(v *xslUserFunc) {
 
 // xslUserFunc wraps an xsl:function for use as an xpath3.Function.
 type xslUserFunc struct {
-	def *XSLFunction
+	def *xslFunction
 	ec  *execContext
 }
 
@@ -279,7 +279,7 @@ func cloneXPathSequence(seq xpath3.Sequence) xpath3.Sequence {
 	return append(xpath3.ItemSlice(nil), sequence.Materialize(seq)...)
 }
 
-func (ec *execContext) functionCacheKey(def *XSLFunction, args []xpath3.Sequence) (string, bool) {
+func (ec *execContext) functionCacheKey(def *xslFunction, args []xpath3.Sequence) (string, bool) {
 	if ec == nil || def == nil {
 		return "", false
 	}

@@ -264,7 +264,7 @@ func itemsHaveMixedPosture(items []xpath3.Expr) bool {
 
 // seqItemIsCrawling returns true if a single expression has crawling posture,
 // meaning it uses descendant or descendant-or-self axes from the streaming
-// context. Variable references, literals, and striding expressions (child-only
+// context. variable references, literals, and striding expressions (child-only
 // paths) are not crawling.
 func seqItemIsCrawling(expr xpath3.Expr) bool {
 	expr = derefXPathExpr(expr)
@@ -408,7 +408,7 @@ func argHasStreamingDownwardUngrounded(expr xpath3.Expr) bool {
 // can match element nodes (as opposed to only text, attribute, or other node
 // types). This is used to determine whether the context item in the select
 // expression would be consuming in streaming mode.
-func accRuleMatchesElement(rule *AccumulatorRule) bool {
+func accRuleMatchesElement(rule *accumulatorRule) bool {
 	if rule.Match == nil {
 		return false
 	}
@@ -829,7 +829,7 @@ func walkExprCheckPredicates(ss *Stylesheet, expr xpath3.Expr, grounded bool, fo
 			}
 		}
 	case xpath3.FilterExpr:
-		// Variable references are always grounded — they hold materialized
+		// variable references are always grounded — they hold materialized
 		// sequences, not streaming nodes. Treat them like grounding exprs.
 		_, isVarRef := derefXPathExpr(e.Expr).(xpath3.VariableExpr)
 		g := grounded || isGroundingExprSS(ss, e.Expr) || isAtomicResultExpr(e.Expr) || isVarRef

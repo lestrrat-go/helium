@@ -22,7 +22,7 @@ func checkAtomizable(seq xpath3.Sequence) error {
 	return nil
 }
 
-func (ec *execContext) execValueOf(ctx context.Context, inst *ValueOfInst) error {
+func (ec *execContext) execValueOf(ctx context.Context, inst *valueOfInst) error {
 	var value string
 
 	emptySequence := false
@@ -197,7 +197,7 @@ func mergeAdjacentTextNodes(seq xpath3.Sequence) xpath3.Sequence {
 	return result
 }
 
-func (ec *execContext) execText(inst *TextInst) error {
+func (ec *execContext) execText(inst *textInst) error {
 	value := inst.Value
 	if inst.TVT != nil {
 		ctx := ec.transformCtx
@@ -275,10 +275,10 @@ func (ec *execContext) execText(inst *TextInst) error {
 	return ec.addNode(text)
 }
 
-func (ec *execContext) execLiteralText(inst *LiteralTextInst) error {
+func (ec *execContext) execLiteralText(inst *literalTextInst) error {
 	value := inst.Value
 	if inst.TVT != nil {
-		// Text value template: evaluate like an AVT
+		// Text value template: evaluate like an avt
 		ctx := ec.transformCtx
 		if ctx == nil {
 			ctx = context.Background()
@@ -300,7 +300,7 @@ func (ec *execContext) execLiteralText(inst *LiteralTextInst) error {
 	return ec.addNode(text)
 }
 
-func (ec *execContext) execXSLSequence(ctx context.Context, inst *XSLSequenceInst) error {
+func (ec *execContext) execXSLSequence(ctx context.Context, inst *xslSequenceInst) error {
 	result, err := ec.evalXPath(inst.Select, ec.contextNode)
 	if err != nil {
 		return err

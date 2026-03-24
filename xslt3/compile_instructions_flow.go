@@ -7,7 +7,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
-func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesInst, error) {
+func (c *compiler) compileApplyTemplates(elem *helium.Element) (*applyTemplatesInst, error) {
 	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"select": {}, "mode": {},
 	}); err != nil {
@@ -38,7 +38,7 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 	if mode != modeCurrent {
 		c.recordModeUsage(mode)
 	}
-	inst := &ApplyTemplatesInst{
+	inst := &applyTemplatesInst{
 		Mode: mode,
 	}
 
@@ -99,7 +99,7 @@ func (c *compiler) compileApplyTemplates(elem *helium.Element) (*ApplyTemplatesI
 	return inst, nil
 }
 
-func (c *compiler) compileCallTemplate(elem *helium.Element) (*CallTemplateInst, error) {
+func (c *compiler) compileCallTemplate(elem *helium.Element) (*callTemplateInst, error) {
 	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"name": {},
 	}); err != nil {
@@ -110,7 +110,7 @@ func (c *compiler) compileCallTemplate(elem *helium.Element) (*CallTemplateInst,
 		return nil, staticError(errCodeXTSE0110, "xsl:call-template requires name attribute")
 	}
 
-	inst := &CallTemplateInst{Name: resolveQName(name, c.nsBindings)}
+	inst := &callTemplateInst{Name: resolveQName(name, c.nsBindings)}
 
 	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
@@ -138,7 +138,7 @@ func (c *compiler) compileCallTemplate(elem *helium.Element) (*CallTemplateInst,
 	return inst, nil
 }
 
-func (c *compiler) compileIf(elem *helium.Element) (*IfInst, error) {
+func (c *compiler) compileIf(elem *helium.Element) (*ifInst, error) {
 	testAttr := getAttr(elem, "test")
 	if testAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:if requires test attribute")
@@ -154,11 +154,11 @@ func (c *compiler) compileIf(elem *helium.Element) (*IfInst, error) {
 		return nil, err
 	}
 
-	return &IfInst{Test: expr, Body: body}, nil
+	return &ifInst{Test: expr, Body: body}, nil
 }
 
-func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
-	inst := &ChooseInst{DefaultCollation: c.defaultCollation}
+func (c *compiler) compileChoose(elem *helium.Element) (*chooseInst, error) {
+	inst := &chooseInst{DefaultCollation: c.defaultCollation}
 	hasOtherwise := false
 
 	for child := range helium.Children(elem) {
@@ -223,7 +223,7 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 			}
 			whenCollation := getAttr(childElem, "default-collation")
 			body, err := c.compileChildren(childElem)
-			wc := &WhenClause{Test: expr, Body: body, Namespaces: clauseNS, DefaultCollation: whenCollation}
+			wc := &whenClause{Test: expr, Body: body, Namespaces: clauseNS, DefaultCollation: whenCollation}
 			wc.XPathDefaultNS = c.xpathDefaultNS
 			wc.HasXPathDefaultNS = hasLocal
 			c.nsBindings = savedBindings
@@ -276,7 +276,7 @@ func (c *compiler) compileChoose(elem *helium.Element) (*ChooseInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
+func (c *compiler) compileForEach(elem *helium.Element) (*forEachInst, error) {
 	// xsl:break / xsl:next-iteration not allowed inside xsl:for-each.
 	savedBreak := c.breakAllowed
 	c.breakAllowed = false
@@ -292,7 +292,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 		return nil, err
 	}
 
-	inst := &ForEachInst{Select: expr}
+	inst := &forEachInst{Select: expr}
 
 	// First pass: collect sort keys. Validate sort comes before content.
 	pastSortContent := false
@@ -364,7 +364,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 				continue
 			}
 			if !c.shouldStripText(text) {
-				lit := &LiteralTextInst{Value: text}
+				lit := &literalTextInst{Value: text}
 				if c.expandText && strings.ContainsAny(text, "{}") {
 					avt, err := compileAVT(text, c.nsBindings)
 					if err != nil {
@@ -376,7 +376,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 			}
 		case *helium.CDATASection:
 			text := string(v.Content())
-			lit := &LiteralTextInst{Value: text}
+			lit := &literalTextInst{Value: text}
 			if c.expandText && strings.ContainsAny(text, "{}") {
 				avt, err := compileAVT(text, c.nsBindings)
 				if err != nil {
@@ -391,7 +391,7 @@ func (c *compiler) compileForEach(elem *helium.Element) (*ForEachInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
+func (c *compiler) compileSortKey(elem *helium.Element) (*sortKey, error) {
 	// Evaluate use-when on xsl:sort before compiling the sort key.
 	if uw := getAttr(elem, "use-when"); uw != "" {
 		include, err := c.evaluateUseWhen(uw)
@@ -414,7 +414,7 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 		}
 	}
 
-	sk := &SortKey{}
+	sk := &sortKey{}
 
 	selectAttr := getAttr(elem, "select")
 	// XTSE1015: xsl:sort with select must not have content
@@ -486,7 +486,7 @@ func (c *compiler) compileSortKey(elem *helium.Element) (*SortKey, error) {
 	return sk, nil
 }
 
-func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
+func (c *compiler) compileWithParam(elem *helium.Element) (*withParam, error) {
 	// Check use-when before compiling: skip this with-param if excluded.
 	if uw := getAttr(elem, "use-when"); uw != "" {
 		include, err := c.evaluateUseWhen(uw)
@@ -525,7 +525,7 @@ func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
 		return nil, err
 	}
 
-	wp := &WithParam{
+	wp := &withParam{
 		Name: resolveQName(name, c.nsBindings),
 		As:   asAttr,
 	}
@@ -554,8 +554,8 @@ func (c *compiler) compileWithParam(elem *helium.Element) (*WithParam, error) {
 	return wp, nil
 }
 
-func (c *compiler) compilePerformSort(elem *helium.Element) (*PerformSortInst, error) {
-	inst := &PerformSortInst{}
+func (c *compiler) compilePerformSort(elem *helium.Element) (*performSortInst, error) {
+	inst := &performSortInst{}
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
@@ -625,8 +625,8 @@ func (c *compiler) compilePerformSort(elem *helium.Element) (*PerformSortInst, e
 	return inst, nil
 }
 
-func (c *compiler) compileNextMatch(elem *helium.Element) (*NextMatchInst, error) {
-	inst := &NextMatchInst{}
+func (c *compiler) compileNextMatch(elem *helium.Element) (*nextMatchInst, error) {
+	inst := &nextMatchInst{}
 	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
@@ -645,11 +645,11 @@ func (c *compiler) compileNextMatch(elem *helium.Element) (*NextMatchInst, error
 	return inst, nil
 }
 
-func (c *compiler) compileApplyImports(elem *helium.Element) (*ApplyImportsInst, error) {
+func (c *compiler) compileApplyImports(elem *helium.Element) (*applyImportsInst, error) {
 	if err := c.validateXSLTAttrs(elem, map[string]struct{}{}); err != nil {
 		return nil, err
 	}
-	inst := &ApplyImportsInst{}
+	inst := &applyImportsInst{}
 	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
@@ -675,8 +675,8 @@ func (c *compiler) compileApplyImports(elem *helium.Element) (*ApplyImportsInst,
 	return inst, nil
 }
 
-func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
-	inst := &TryCatchInst{RollbackOutput: true}
+func (c *compiler) compileTry(elem *helium.Element) (*tryCatchInst, error) {
+	inst := &tryCatchInst{RollbackOutput: true}
 
 	if rb := getAttr(elem, "rollback-output"); rb == lexicon.ValueNo {
 		inst.RollbackOutput = false
@@ -705,7 +705,7 @@ func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 			continue
 		}
 		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementCatch {
-			clause := &CatchClause{}
+			clause := &catchClause{}
 
 			// Parse errors attribute (space-separated list of error codes).
 			// Namespace declarations on xsl:catch itself must be visible
@@ -764,7 +764,7 @@ func (c *compiler) compileTry(elem *helium.Element) (*TryCatchInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst, error) {
+func (c *compiler) compileForEachGroup(elem *helium.Element) (*forEachGroupInst, error) {
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:for-each-group requires select attribute")
@@ -811,9 +811,9 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 		return nil, err
 	}
 
-	inst := &ForEachGroupInst{Select: expr}
+	inst := &forEachGroupInst{Select: expr}
 
-	// Compile collation AVT
+	// Compile collation avt
 	if collAttr := getAttr(elem, "collation"); collAttr != "" {
 		collAVT, collErr := compileAVT(collAttr, c.nsBindings)
 		if collErr != nil {
@@ -894,7 +894,7 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 		case *helium.Text:
 			text := string(v.Content())
 			if !c.shouldStripText(text) {
-				lit := &LiteralTextInst{Value: text}
+				lit := &literalTextInst{Value: text}
 				if c.expandText && strings.ContainsAny(text, "{}") {
 					avt, err := compileAVT(text, c.nsBindings)
 					if err != nil {
@@ -910,7 +910,7 @@ func (c *compiler) compileForEachGroup(elem *helium.Element) (*ForEachGroupInst,
 	return inst, nil
 }
 
-func (c *compiler) compileAnalyzeString(elem *helium.Element) (*AnalyzeStringInst, error) {
+func (c *compiler) compileAnalyzeString(elem *helium.Element) (*analyzeStringInst, error) {
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:analyze-string requires select attribute")
@@ -930,7 +930,7 @@ func (c *compiler) compileAnalyzeString(elem *helium.Element) (*AnalyzeStringIns
 		return nil, err
 	}
 
-	inst := &AnalyzeStringInst{
+	inst := &analyzeStringInst{
 		Select: selectExpr,
 		Regex:  regexAVT,
 	}
@@ -997,8 +997,8 @@ func (c *compiler) compileAnalyzeString(elem *helium.Element) (*AnalyzeStringIns
 }
 
 // compileEvaluate compiles xsl:evaluate.
-func (c *compiler) compileEvaluate(elem *helium.Element) (Instruction, error) {
-	inst := &EvaluateInst{}
+func (c *compiler) compileEvaluate(elem *helium.Element) (instruction, error) {
+	inst := &evaluateInst{}
 
 	// xpath attribute is required
 	xpathAttr := getAttr(elem, "xpath")
@@ -1020,7 +1020,7 @@ func (c *compiler) compileEvaluate(elem *helium.Element) (Instruction, error) {
 		inst.ContextItem = ciExpr
 	}
 
-	// base-uri (optional AVT)
+	// base-uri (optional avt)
 	if bu := getAttr(elem, "base-uri"); bu != "" {
 		avt, err := compileAVT(bu, c.nsBindings)
 		if err != nil {
@@ -1050,7 +1050,7 @@ func (c *compiler) compileEvaluate(elem *helium.Element) (Instruction, error) {
 	// as (optional type name)
 	inst.As = getAttr(elem, "as")
 
-	// schema-aware (optional AVT that evaluates to boolean)
+	// schema-aware (optional avt that evaluates to boolean)
 	if saStr, hasSA := elem.GetAttribute("schema-aware"); hasSA {
 		saAVT, err := compileAVT(saStr, c.nsBindings)
 		if err != nil {

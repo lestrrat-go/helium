@@ -9,7 +9,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
-func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStringInst) error {
+func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStringInst) error {
 	// Evaluate the select expression
 	result, err := ec.evalXPath(inst.Select, ec.contextNode)
 	if err != nil {
@@ -44,13 +44,13 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStrin
 		return dynamicError(errCodeXPTY0004, "xsl:analyze-string select must be xs:string: %v", err)
 	}
 
-	// Evaluate regex AVT
+	// Evaluate regex avt
 	regex, err := inst.Regex.evaluate(ctx, ec.contextNode)
 	if err != nil {
 		return err
 	}
 
-	// Evaluate flags AVT
+	// Evaluate flags avt
 	flags := ""
 	if inst.Flags != nil {
 		flags, err = inst.Flags.evaluate(ctx, ec.contextNode)
@@ -169,7 +169,7 @@ func (ec *execContext) execAnalyzeString(ctx context.Context, inst *AnalyzeStrin
 	return nil
 }
 
-func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopulatedInst) error {
+func (ec *execContext) execWherePopulated(ctx context.Context, inst *wherePopulatedInst) error {
 	out := ec.currentOutput()
 
 	// When the outer frame captures items (e.g. inside xsl:variable with
@@ -266,7 +266,7 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *WherePopula
 // execWherePopulatedSequence handles xsl:where-populated inside a sequence
 // context (xsl:variable with as= or similar). The body is evaluated as a
 // sequence and items are filtered using the XSLT 3.0 populated-item rules.
-func (ec *execContext) execWherePopulatedSequence(ctx context.Context, inst *WherePopulatedInst) error {
+func (ec *execContext) execWherePopulatedSequence(ctx context.Context, inst *wherePopulatedInst) error {
 	seq, err := ec.evaluateBodyAsSequence(ctx, inst.Body)
 	if err != nil {
 		return err
@@ -367,7 +367,7 @@ func isItemSignificant(item xpath3.Item) bool {
 	}
 }
 
-func (ec *execContext) evaluateConditionalInstruction(ctx context.Context, selectExpr *xpath3.Expression, body []Instruction) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateConditionalInstruction(ctx context.Context, selectExpr *xpath3.Expression, body []instruction) (xpath3.Sequence, error) {
 	if selectExpr != nil {
 		result, err := ec.evalXPath(selectExpr, ec.contextNode)
 		if err != nil {
@@ -378,7 +378,7 @@ func (ec *execContext) evaluateConditionalInstruction(ctx context.Context, selec
 	return ec.evaluateBodyAsSequence(ctx, body)
 }
 
-func (ec *execContext) execOnEmpty(ctx context.Context, inst *OnEmptyInst) error {
+func (ec *execContext) execOnEmpty(ctx context.Context, inst *onEmptyInst) error {
 	out := ec.currentOutput()
 	if len(out.conditionalScopes) == 0 || out.current == nil {
 		return nil
@@ -405,7 +405,7 @@ func (ec *execContext) execOnEmpty(ctx context.Context, inst *OnEmptyInst) error
 	return nil
 }
 
-func (ec *execContext) execOnNonEmpty(ctx context.Context, inst *OnNonEmptyInst) error {
+func (ec *execContext) execOnNonEmpty(ctx context.Context, inst *onNonEmptyInst) error {
 	out := ec.currentOutput()
 	if len(out.conditionalScopes) == 0 || out.current == nil {
 		return nil
@@ -434,7 +434,7 @@ func (ec *execContext) execOnNonEmpty(ctx context.Context, inst *OnNonEmptyInst)
 
 // execMap executes an xsl:map instruction, producing a MapItem from child
 // xsl:map-entry instructions.
-func (ec *execContext) execMap(ctx context.Context, inst *MapInst) error {
+func (ec *execContext) execMap(ctx context.Context, inst *mapInst) error {
 	tmpDoc := helium.NewDefaultDocument()
 	tmpRoot, err := tmpDoc.CreateElement("_tmp")
 	if err != nil {
@@ -498,7 +498,7 @@ func (ec *execContext) execMap(ctx context.Context, inst *MapInst) error {
 
 // execMapEntry is a no-op when called outside xsl:map; entries are handled
 // by execMap directly.
-func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) error {
+func (ec *execContext) execMapEntry(ctx context.Context, inst *mapEntryInst) error {
 	out := ec.currentOutput()
 	if out.captureItems && out.mapConstructor {
 		keyResult, err := ec.evalXPath(inst.Key, ec.contextNode)
@@ -590,7 +590,7 @@ func (ec *execContext) execMapEntry(ctx context.Context, inst *MapEntryInst) err
 // execAssert implements xsl:assert.
 // If the test expression evaluates to false, an error is raised with the
 // specified error code (default XTMM9001).
-func (ec *execContext) execAssert(ctx context.Context, inst *AssertInst) error {
+func (ec *execContext) execAssert(ctx context.Context, inst *assertInst) error {
 	if inst.Test == nil {
 		return nil
 	}
@@ -627,7 +627,7 @@ func (ec *execContext) execAssert(ctx context.Context, inst *AssertInst) error {
 
 // execEvaluate implements xsl:evaluate — dynamically compile and evaluate
 // an XPath expression string at runtime.
-func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) error {
+func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) error {
 	// 1. Evaluate the xpath attribute expression to get the XPath string.
 	xpathResult, err := ec.evalXPath(inst.XPath, ec.contextNode)
 	if err != nil {
@@ -762,7 +762,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *EvaluateInst) err
 		nsBindings[""] = ec.xpathDefaultNS
 	}
 
-	// 4b. Evaluate schema-aware AVT if present
+	// 4b. Evaluate schema-aware avt if present
 	if inst.SchemaAwareAVT != nil {
 		saStr, saErr := inst.SchemaAwareAVT.evaluate(ctx, ec.contextNode)
 		if saErr != nil {

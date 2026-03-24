@@ -28,7 +28,7 @@ func (c *compiler) compileCharacterMap(elem *helium.Element) error {
 	}
 	name = resolveQName(name, c.nsBindings)
 
-	cm := &CharacterMapDef{
+	cm := &characterMapDef{
 		Name:     name,
 		Mappings: make(map[rune]string),
 	}
@@ -58,7 +58,7 @@ func (c *compiler) compileCharacterMap(elem *helium.Element) error {
 	}
 
 	if c.stylesheet.characterMaps == nil {
-		c.stylesheet.characterMaps = make(map[string]*CharacterMapDef)
+		c.stylesheet.characterMaps = make(map[string]*characterMapDef)
 	}
 	if c.charMapModuleKeys == nil {
 		c.charMapModuleKeys = make(map[string]string)
@@ -133,7 +133,7 @@ func (c *compiler) compileKey(elem *helium.Element) error {
 		}
 	}
 
-	kd := &KeyDef{
+	kd := &keyDef{
 		Name:      expandedName,
 		Match:     matchPat,
 		Composite: composite,
@@ -655,7 +655,7 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 		streamable = v
 	}
 
-	asd := &AttributeSetDef{
+	asd := &attributeSetDef{
 		Name:       name,
 		Visibility: getAttr(elem, "visibility"),
 		Streamable: streamable,
@@ -687,7 +687,7 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 	}
 
 	if c.stylesheet.attributeSets == nil {
-		c.stylesheet.attributeSets = make(map[string]*AttributeSetDef)
+		c.stylesheet.attributeSets = make(map[string]*attributeSetDef)
 	}
 	// Merge same-named attribute-sets (XSLT spec: union of all definitions)
 	if existing, ok := c.stylesheet.attributeSets[name]; ok {
@@ -1012,7 +1012,7 @@ func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) error 
 	}
 
 	for _, name := range strings.Fields(elements) {
-		nt := NameTest{}
+		nt := nameTest{}
 		// Handle EQName syntax: Q{uri}local
 		if strings.HasPrefix(name, "Q{") {
 			if closeIdx := strings.IndexByte(name, '}'); closeIdx > 0 {
@@ -1036,9 +1036,9 @@ func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) error 
 	return nil
 }
 
-// nameTestKey returns a canonical key for a NameTest by resolving the prefix
+// nameTestKey returns a canonical key for a nameTest by resolving the prefix
 // to a URI. EQName prefixes of the form "Q{uri}" are used as-is.
-func (c *compiler) nameTestKey(nt NameTest) string {
+func (c *compiler) nameTestKey(nt nameTest) string {
 	uri := ""
 	if strings.HasPrefix(nt.Prefix, "Q{") {
 		uri = nt.Prefix[2 : len(nt.Prefix)-1]

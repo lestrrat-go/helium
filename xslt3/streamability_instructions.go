@@ -8,9 +8,9 @@ import (
 
 // checkMultipleDownwardInst checks if an instruction has multiple consuming
 // operations that would require reading the stream multiple times.
-func checkMultipleDownwardInst(ss *Stylesheet, inst Instruction) error {
+func checkMultipleDownwardInst(ss *Stylesheet, inst instruction) error {
 	switch v := inst.(type) {
-	case *ForkInst:
+	case *forkInst:
 		// xsl:fork is specifically designed to allow multiple consuming branches.
 		// Each branch processes the input stream independently, so multiple
 		// downward selections across branches are permitted.
@@ -35,7 +35,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst Instruction) error {
 				consumingBranches++
 			}
 			for _, bi := range branch {
-				if seq, ok := bi.(*XSLSequenceInst); ok && seq.Select != nil {
+				if seq, ok := bi.(*xslSequenceInst); ok && seq.Select != nil {
 					ast := seq.Select.AST()
 					// A branch returns streaming nodes if it selects
 					// downward without grounding or atomizing the result.
@@ -52,7 +52,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst Instruction) error {
 				"xsl:fork with multiple consuming branches returns streamed nodes, which is not streamable")
 		}
 
-	case *IterateInst:
+	case *iterateInst:
 		// Within xsl:iterate body, check for multiple downward selections.
 		bodyDown := countDownwardInInstructions(ss, v.Body)
 		if bodyDown > 1 {
@@ -62,7 +62,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst Instruction) error {
 
 		// Check if iterate body returns streamed nodes via xsl:sequence select="."
 		for _, bi := range v.Body {
-			if seq, ok := bi.(*XSLSequenceInst); ok && seq.Select != nil {
+			if seq, ok := bi.(*xslSequenceInst); ok && seq.Select != nil {
 				ast := seq.Select.AST()
 				if _, ok := ast.(xpath3.ContextItemExpr); ok {
 					return staticError(errCodeXTSE3430,
@@ -71,7 +71,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst Instruction) error {
 			}
 		}
 
-	case *ForEachGroupInst:
+	case *forEachGroupInst:
 		// When the select is grounded (copy-of/snapshot), the group items are
 		// in-memory copies.  current-group() and context item both refer to
 		// grounded data, so multiple-consumption checks don't apply.
@@ -134,7 +134,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst Instruction) error {
 					}
 				}
 				// Check LRE attribute AVTs.
-				if lre, ok := bi.(*LiteralResultElement); ok {
+				if lre, ok := bi.(*literalResultElement); ok {
 					for _, attr := range lre.Attrs {
 						if attr.Value != nil {
 							for _, part := range attr.Value.parts {
@@ -196,9 +196,9 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst Instruction) error {
 // mode whose templates use current-group() outside of their own for-each-group.
 // current-group() is not available in applied templates, so using it there is
 // a static streamability error.
-func checkApplyTemplatesCurrentGroup(ss *Stylesheet, body []Instruction) error {
+func checkApplyTemplatesCurrentGroup(ss *Stylesheet, body []instruction) error {
 	for _, inst := range body {
-		if at, ok := inst.(*ApplyTemplatesInst); ok {
+		if at, ok := inst.(*applyTemplatesInst); ok {
 			if at.Select != nil && exprUsesCurrentGroup(at.Select) {
 				modeName := at.Mode
 				if modeName == "" || modeName == "#current" {
@@ -235,10 +235,10 @@ func checkApplyTemplatesCurrentGroup(ss *Stylesheet, body []Instruction) error {
 // bodyUsesCurrentGroupOutsideFEG checks if any instruction in the body uses
 // current-group() outside of a for-each-group instruction.  Usage inside a
 // nested for-each-group refers to that inner group, not the outer one.
-func bodyUsesCurrentGroupOutsideFEG(body []Instruction) bool {
+func bodyUsesCurrentGroupOutsideFEG(body []instruction) bool {
 	for _, bi := range body {
 		// Skip for-each-group — its body establishes a new group context.
-		if _, ok := bi.(*ForEachGroupInst); ok {
+		if _, ok := bi.(*forEachGroupInst); ok {
 			continue
 		}
 		for _, expr := range getInstructionExprs(bi) {
@@ -250,7 +250,7 @@ func bodyUsesCurrentGroupOutsideFEG(body []Instruction) bool {
 			}
 		}
 		// Check LRE attribute AVTs (not covered by getInstructionExprs).
-		if lre, ok := bi.(*LiteralResultElement); ok {
+		if lre, ok := bi.(*literalResultElement); ok {
 			for _, attr := range lre.Attrs {
 				if attr.Value.hasFunction("current-group") {
 					return true
@@ -271,14 +271,14 @@ func bodyUsesCurrentGroupOutsideFEG(body []Instruction) bool {
 // of its attribute instructions contain non-streamable expressions (downward
 // navigation, last(), etc.), or if the combined downward selections from the
 // instruction and attribute set exceed 1.
-func checkUseAttributeSetsStreamable(ss *Stylesheet, inst Instruction) error {
+func checkUseAttributeSetsStreamable(ss *Stylesheet, inst instruction) error {
 	var attrSetNames []string
 	switch v := inst.(type) {
-	case *CopyInst:
+	case *copyInst:
 		attrSetNames = v.UseAttrSets
-	case *ElementInst:
+	case *elementInst:
 		attrSetNames = v.UseAttrSets
-	case *LiteralResultElement:
+	case *literalResultElement:
 		attrSetNames = v.UseAttrSets
 	}
 	if len(attrSetNames) == 0 {
@@ -336,7 +336,7 @@ func checkUseAttributeSetsStreamable(ss *Stylesheet, inst Instruction) error {
 
 // countAttributeSetDownward counts total streaming downward selections in an
 // attribute set's instructions.
-func countAttributeSetDownward(ss *Stylesheet, asDef *AttributeSetDef) int {
+func countAttributeSetDownward(ss *Stylesheet, asDef *attributeSetDef) int {
 	total := 0
 	for _, attrInst := range asDef.Attrs {
 		for _, expr := range getInstructionExprs(attrInst) {
@@ -361,9 +361,9 @@ func countAttributeSetDownward(ss *Stylesheet, asDef *AttributeSetDef) int {
 // When inResultDoc is true, the xsl:sequence select="." check is skipped
 // because nodes flow to a serializer (xsl:result-document) rather than
 // being returned as a sequence that requires materialization.
-func checkForEachStreamable(_ *Stylesheet, inst Instruction, inResultDoc bool) error {
+func checkForEachStreamable(_ *Stylesheet, inst instruction, inResultDoc bool) error {
 	switch v := inst.(type) {
-	case *ForEachInst:
+	case *forEachInst:
 		// Check if select expression is crawling AND body consumes context.
 		// But if the select grounds its result (e.g., snapshot(//...)), the body
 		// operates on grounded data and consuming is fine.
@@ -379,7 +379,7 @@ func checkForEachStreamable(_ *Stylesheet, inst Instruction, inResultDoc bool) e
 		// written to a secondary output (serializer), not returned.
 		if !inResultDoc {
 			for _, bi := range v.Body {
-				if seq, ok := bi.(*XSLSequenceInst); ok && seq.Select != nil {
+				if seq, ok := bi.(*xslSequenceInst); ok && seq.Select != nil {
 					ast := seq.Select.AST()
 					if _, ok := ast.(xpath3.ContextItemExpr); ok {
 						return staticError(errCodeXTSE3430,
@@ -392,7 +392,7 @@ func checkForEachStreamable(_ *Stylesheet, inst Instruction, inResultDoc bool) e
 		if err := checkStreamingVarInLoop(v.Body); err != nil {
 			return err
 		}
-	case *IterateInst:
+	case *iterateInst:
 		// Check for variable bound to streaming context used in loop body
 		if err := checkStreamingVarInLoop(v.Body); err != nil {
 			return err
@@ -408,10 +408,10 @@ func checkForEachStreamable(_ *Stylesheet, inst Instruction, inResultDoc bool) e
 // Grounding instructions (xsl:copy select=".", xsl:copy-of select=".",
 // xsl:copy without select) are excluded because they produce deep copies
 // of the current node and are allowed inside a crawling for-each.
-func forEachBodyConsumesContext(body []Instruction) bool {
+func forEachBodyConsumesContext(body []instruction) bool {
 	for _, inst := range body {
 		// xsl:copy with select="." or no select is a grounding operation.
-		if ci, ok := inst.(*CopyInst); ok {
+		if ci, ok := inst.(*copyInst); ok {
 			if ci.Select == nil {
 				continue // xsl:copy (shallow copy + body) — grounding
 			}
@@ -420,7 +420,7 @@ func forEachBodyConsumesContext(body []Instruction) bool {
 			}
 		}
 		// xsl:copy-of select="." is a grounding operation.
-		if coi, ok := inst.(*CopyOfInst); ok && coi.Select != nil {
+		if coi, ok := inst.(*copyOfInst); ok && coi.Select != nil {
 			if _, isCtx := coi.Select.AST().(xpath3.ContextItemExpr); isCtx {
 				continue // copy-of select="." — grounding
 			}
@@ -450,11 +450,11 @@ func forEachBodyConsumesContext(body []Instruction) bool {
 // node (select=".") and then used consumingly (downward navigation) in a loop body.
 // This is non-streamable because the loop iterates over a non-streaming range but
 // accesses the streamed variable repeatedly.
-func checkStreamingVarInLoop(body []Instruction) error {
+func checkStreamingVarInLoop(body []instruction) error {
 	// Collect variables bound to streaming context (select=".")
 	streamingVars := make(map[string]bool)
 	for _, inst := range body {
-		if vi, ok := inst.(*VariableInst); ok && vi.Select != nil {
+		if vi, ok := inst.(*variableInst); ok && vi.Select != nil {
 			ast := vi.Select.AST()
 			if _, ok := ast.(xpath3.ContextItemExpr); ok {
 				streamingVars[vi.Name] = true
@@ -467,11 +467,11 @@ func checkStreamingVarInLoop(body []Instruction) error {
 	// Check if any subsequent for-each/iterate loop uses these vars consumingly
 	for _, inst := range body {
 		switch v := inst.(type) {
-		case *ForEachInst:
+		case *forEachInst:
 			if err := checkVarConsumingInBody(streamingVars, v.Body); err != nil {
 				return err
 			}
-		case *IterateInst:
+		case *iterateInst:
 			if err := checkVarConsumingInBody(streamingVars, v.Body); err != nil {
 				return err
 			}
@@ -482,7 +482,7 @@ func checkStreamingVarInLoop(body []Instruction) error {
 
 // checkVarConsumingInBody checks if any streaming variable is used consumingly
 // in a set of instructions.
-func checkVarConsumingInBody(streamingVars map[string]bool, body []Instruction) error {
+func checkVarConsumingInBody(streamingVars map[string]bool, body []instruction) error {
 	for _, inst := range body {
 		for _, expr := range getInstructionExprs(inst) {
 			if expr == nil {
@@ -511,8 +511,8 @@ func checkVarConsumingInBody(streamingVars map[string]bool, body []Instruction) 
 // - nested for-each-group consuming current-group()
 // - for-each-group inside fork with crawling select
 // - for-each-group with non-motionless grouping key (e.g., PRICE/text())
-func checkForEachGroupStreamable(_ *Stylesheet, inst Instruction) error {
-	fg, ok := inst.(*ForEachGroupInst)
+func checkForEachGroupStreamable(_ *Stylesheet, inst instruction) error {
+	fg, ok := inst.(*forEachGroupInst)
 	if !ok {
 		return nil
 	}
@@ -581,7 +581,7 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst Instruction) error {
 	// but only when the outer for-each-group select doesn't ground its data.
 	if !selectGrounded {
 		for _, bi := range fg.Body {
-			if innerFg, ok := bi.(*ForEachGroupInst); ok {
+			if innerFg, ok := bi.(*forEachGroupInst); ok {
 				if innerFg.Select != nil {
 					if exprUsesCurrentGroup(innerFg.Select) {
 						// Nested for-each-group selecting from current-group() is consuming
@@ -618,9 +618,9 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst Instruction) error {
 
 // checkSourceDocCurrentGroup recursively checks if any source-document
 // instruction with streaming uses current-group() in its body.
-func checkSourceDocCurrentGroup(body []Instruction) error {
+func checkSourceDocCurrentGroup(body []instruction) error {
 	for _, bi := range body {
-		if sd, ok := bi.(*SourceDocumentInst); ok && sd.Streamable {
+		if sd, ok := bi.(*sourceDocumentInst); ok && sd.Streamable {
 			if sourceDocBodyUsesCurrentGroup(sd.Body) {
 				return staticError(errCodeXTSE3430,
 					"xsl:source-document streamable body uses current-group() from outer for-each-group, which is not streamable")
@@ -638,7 +638,7 @@ func checkSourceDocCurrentGroup(body []Instruction) error {
 
 // sourceDocBodyUsesCurrentGroup checks if any expression in the source-document
 // body uses current-group().
-func sourceDocBodyUsesCurrentGroup(body []Instruction) bool {
+func sourceDocBodyUsesCurrentGroup(body []instruction) bool {
 	for _, inst := range body {
 		for _, expr := range getInstructionExprs(inst) {
 			if exprUsesCurrentGroup(expr) {
@@ -656,7 +656,7 @@ func sourceDocBodyUsesCurrentGroup(body []Instruction) bool {
 
 // patternHasNonMotionlessPredicate returns true if any alternative in the
 // pattern has a predicate that navigates downward (child/descendant steps).
-func patternHasNonMotionlessPredicate(pat *Pattern) bool {
+func patternHasNonMotionlessPredicate(pat *pattern) bool {
 	for _, alt := range pat.Alternatives {
 		if alt.expr == nil {
 			continue
@@ -697,7 +697,7 @@ func patternHasNonMotionlessPredicate(pat *Pattern) bool {
 // (xsl:copy with select, xsl:for-each) in the for-each-group body uses
 // current-group() in its own body.  Per W3C bug 29482, this is a
 // higher-order consumption that is not streamable.
-func checkFocusChangingCurrentGroup(body []Instruction) error {
+func checkFocusChangingCurrentGroup(body []instruction) error {
 	for _, bi := range body {
 		if err := checkFocusChangingCurrentGroupInst(bi); err != nil {
 			return err
@@ -706,9 +706,9 @@ func checkFocusChangingCurrentGroup(body []Instruction) error {
 	return nil
 }
 
-func checkFocusChangingCurrentGroupInst(inst Instruction) error {
+func checkFocusChangingCurrentGroupInst(inst instruction) error {
 	switch v := inst.(type) {
-	case *CopyInst:
+	case *copyInst:
 		// xsl:copy with an explicit select changes focus. If its body
 		// uses current-group(), that's a higher-order consumption.
 		// xsl:copy without select (nil) or with select="." copies the
@@ -746,7 +746,7 @@ func exprIsContextItem(expr *xpath3.Expression) bool {
 
 // bodyUsesCurrentGroup returns true if any instruction in the body
 // uses current-group() in any expression.
-func bodyUsesCurrentGroup(body []Instruction) bool {
+func bodyUsesCurrentGroup(body []instruction) bool {
 	for _, bi := range body {
 		for _, expr := range getInstructionExprs(bi) {
 			if expr == nil {
@@ -863,8 +863,8 @@ func exprUsesCurrentGroup(expr *xpath3.Expression) bool {
 //     because node references become dangling after the fork branch completes.
 //   - Non-map-entry children (like xsl:if wrapping map-entry) break the implicit
 //     fork guarantee and are invalid when consuming entries are present.
-func checkMapStreamable(ss *Stylesheet, inst Instruction) error {
-	mapInst, ok := inst.(*MapInst)
+func checkMapStreamable(ss *Stylesheet, inst instruction) error {
+	mapInst, ok := inst.(*mapInst)
 	if !ok {
 		return nil
 	}
@@ -872,7 +872,7 @@ func checkMapStreamable(ss *Stylesheet, inst Instruction) error {
 	consumingEntries := 0
 	hasNonEntryChildren := false
 	for _, child := range mapInst.Body {
-		if me, ok := child.(*MapEntryInst); ok {
+		if me, ok := child.(*mapEntryInst); ok {
 			// Check if key and select/body EACH consume the stream.
 			// Use ExprHasDownwardStep which counts downward steps even
 			// inside grounding functions — each still consumes the stream.
@@ -931,8 +931,8 @@ func checkMapStreamable(ss *Stylesheet, inst Instruction) error {
 
 // checkIterateStreamable checks xsl:iterate for violations where streamed nodes
 // are accumulated via xsl:with-param, creating non-streamable patterns.
-func checkIterateStreamable(_ *Stylesheet, inst Instruction) error {
-	iter, ok := inst.(*IterateInst)
+func checkIterateStreamable(_ *Stylesheet, inst instruction) error {
+	iter, ok := inst.(*iterateInst)
 	if !ok {
 		return nil
 	}
@@ -965,7 +965,7 @@ func checkIterateStreamable(_ *Stylesheet, inst Instruction) error {
 
 // bodyAccumulatesStreamedNodes checks if an iterate body accumulates streamed
 // nodes by passing context items to element()* parameters via next-iteration.
-func bodyAccumulatesStreamedNodes(body []Instruction, elemParams map[string]bool) bool {
+func bodyAccumulatesStreamedNodes(body []instruction, elemParams map[string]bool) bool {
 	// Collect variables whose select expressions reference "." (context item),
 	// either directly or transitively through other variables.
 	taintedVars := collectTaintedVars(body)
@@ -976,7 +976,7 @@ func bodyAccumulatesStreamedNodes(body []Instruction, elemParams map[string]bool
 // collectTaintedVars finds all variables in the instruction tree whose select
 // expressions reference the context item "." either directly or transitively
 // through other variables that reference ".".
-func collectTaintedVars(body []Instruction) map[string]bool {
+func collectTaintedVars(body []instruction) map[string]bool {
 	// First pass: collect all variable select expressions.
 	varExprs := make(map[string]xpath3.Expr)
 	collectVarExprs(body, varExprs)
@@ -1009,9 +1009,9 @@ func collectTaintedVars(body []Instruction) map[string]bool {
 }
 
 // collectVarExprs collects variable name→expression mappings from instructions.
-func collectVarExprs(body []Instruction, varExprs map[string]xpath3.Expr) {
+func collectVarExprs(body []instruction, varExprs map[string]xpath3.Expr) {
 	for _, inst := range body {
-		if vi, ok := inst.(*VariableInst); ok && vi.Select != nil {
+		if vi, ok := inst.(*variableInst); ok && vi.Select != nil {
 			varExprs[vi.Name] = vi.Select.AST()
 		}
 		for _, children := range getChildInstructions(inst) {
@@ -1039,9 +1039,9 @@ func exprReferencesAnyVar(expr xpath3.Expr, vars map[string]bool) bool {
 	return found
 }
 
-func bodyAccumulatesStreamedNodesInner(body []Instruction, elemParams map[string]bool, taintedVars map[string]bool) bool {
+func bodyAccumulatesStreamedNodesInner(body []instruction, elemParams map[string]bool, taintedVars map[string]bool) bool {
 	for _, inst := range body {
-		if ni, ok := inst.(*NextIterationInst); ok {
+		if ni, ok := inst.(*nextIterationInst); ok {
 			for _, wp := range ni.Params {
 				if !elemParams[wp.Name] {
 					continue

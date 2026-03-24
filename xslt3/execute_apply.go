@@ -10,7 +10,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
-func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTemplatesInst) error {
+func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTemplatesInst) error {
 	var nodes []helium.Node
 
 	var atomicItems xpath3.ItemSlice // XSLT 3.0: atomic values from select
@@ -228,7 +228,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *ApplyTempla
 
 // applyTemplatesToSequence applies templates to each item in a sequence,
 // implementing the built-in template rules for arrays and maps (XSLT 3.0).
-func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.Sequence, inst *ApplyTemplatesInst, mode string) error {
+func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.Sequence, inst *applyTemplatesInst, mode string) error {
 	for item := range sequence.Items(seq) {
 		if ni, ok := item.(xpath3.NodeItem); ok {
 			if err := ec.applyTemplates(ctx, ni.Node, mode, nil); err != nil {
@@ -285,7 +285,7 @@ func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.
 	return nil
 }
 
-func (ec *execContext) evaluateWithParam(ctx context.Context, wp *WithParam) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateWithParam(ctx context.Context, wp *withParam) (xpath3.Sequence, error) {
 	var val xpath3.Sequence
 	if wp.Select != nil {
 		result, err := ec.evalXPath(wp.Select, ec.contextNode)
@@ -336,7 +336,7 @@ func (ec *execContext) evaluateWithParam(ctx context.Context, wp *WithParam) (xp
 //  1. The main stylesheet's namedTemplates map
 //  2. The current package context (if set) - allows private templates
 //     from the package to be called by other templates in the same package
-func (ec *execContext) resolveNamedTemplate(name string) (*Template, bool) {
+func (ec *execContext) resolveNamedTemplate(name string) (*template, bool) {
 	// Handle xsl:original — resolve to the original overridden template
 	if name == "{"+lexicon.NamespaceXSLT+"}original" {
 		if ec.overridingTemplate != nil && ec.overridingTemplate.OriginalTemplate != nil {
@@ -355,7 +355,7 @@ func (ec *execContext) resolveNamedTemplate(name string) (*Template, bool) {
 	return nil, false
 }
 
-func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateInst) error {
+func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateInst) error {
 	ec.depth++
 	if ec.depth > maxRecursionDepth {
 		ec.depth--
@@ -533,7 +533,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *CallTemplateI
 	return ec.executeSequenceConstructor(ctx, tmpl.Body)
 }
 
-func (ec *execContext) execNextMatch(ctx context.Context, inst *NextMatchInst) error {
+func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) error {
 	// XTDE0560: xsl:next-match when the current template rule is absent.
 	if ec.currentTemplate == nil || ec.currentTemplate.Match == nil {
 		return dynamicError(errCodeXTDE0560, "xsl:next-match: no current template rule")
@@ -645,7 +645,7 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *NextMatchInst) e
 	return ec.applyBuiltinRules(ctx, node, mode, pv)
 }
 
-func (ec *execContext) execApplyImports(ctx context.Context, inst *ApplyImportsInst) error {
+func (ec *execContext) execApplyImports(ctx context.Context, inst *applyImportsInst) error {
 	// xsl:apply-imports: find a matching template with lower import precedence
 	// than the currently executing template.
 	// XTDE0560: xsl:apply-imports when the current template rule is absent.
@@ -747,7 +747,7 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *ApplyImportsI
 // checkContextItemType validates the context item against the template's
 // xsl:context-item declaration. Returns XTTE0590 on type mismatch or
 // XPDY0002 when the context item is absent but required.
-func (ec *execContext) checkContextItemType(tmpl *Template) error {
+func (ec *execContext) checkContextItemType(tmpl *template) error {
 	if tmpl.ContextItemAs == "" && tmpl.ContextItemUse == "" {
 		return nil
 	}

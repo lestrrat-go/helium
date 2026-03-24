@@ -14,8 +14,8 @@ import (
 // evaluated on first access to support arbitrary declaration order.
 func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig) error {
 	ec.transformCfg = cfg
-	ec.globalVarDefs = make(map[string]*Variable, len(ec.stylesheet.globalVars))
-	ec.globalParamDefs = make(map[string]*Param, len(ec.stylesheet.globalParams))
+	ec.globalVarDefs = make(map[string]*variable, len(ec.stylesheet.globalVars))
+	ec.globalParamDefs = make(map[string]*param, len(ec.stylesheet.globalParams))
 	ec.globalEvaluating = make(map[string]bool)
 
 	// Register params — set immediately if caller provided a value
@@ -208,7 +208,7 @@ func (ec *execContext) invokeInitialFunction(ctx context.Context, cfg *transform
 }
 
 // evaluateGlobalVar evaluates a global variable on first access.
-func (ec *execContext) evaluateGlobalVar(v *Variable) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
 	if ec.globalEvaluating[v.Name] {
 		return nil, fmt.Errorf("%w: global variable %q", ErrCircularRef, v.Name)
 	}
@@ -337,7 +337,7 @@ func (ec *execContext) evaluateGlobalVar(v *Variable) (xpath3.Sequence, error) {
 }
 
 // evaluateGlobalParam evaluates a global param on first access.
-func (ec *execContext) evaluateGlobalParam(p *Param) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateGlobalParam(p *param) (xpath3.Sequence, error) {
 	if ec.globalEvaluating[p.Name] {
 		return nil, fmt.Errorf("%w: global param %q", ErrCircularRef, p.Name)
 	}
@@ -418,7 +418,7 @@ func (ec *execContext) evaluateGlobalParam(p *Param) (xpath3.Sequence, error) {
 
 // evaluateBody executes instructions and captures the result as a sequence.
 // When instructions produce nodes, they are wrapped as a temporary tree.
-func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateBody(ctx context.Context, body []instruction) (xpath3.Sequence, error) {
 	// Create a temporary document to capture output
 	tmpDoc := helium.NewDefaultDocument()
 	tmpRoot, err := tmpDoc.CreateElement("_tmp")
@@ -475,7 +475,7 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []Instruction) (xp
 // NOT space-separated (itemSeparator=""); the caller controls the join
 // separator via stringifySequenceWithSep. This preserves interleaving
 // order between xsl:text and xsl:sequence output.
-func (ec *execContext) evaluateBodyForAttr(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateBodyForAttr(ctx context.Context, body []instruction) (xpath3.Sequence, error) {
 	tmpDoc := helium.NewDefaultDocument()
 	tmpRoot, err := tmpDoc.CreateElement("_tmp")
 	if err != nil {
@@ -513,7 +513,7 @@ func (ec *execContext) evaluateBodyForAttr(ctx context.Context, body []Instructi
 // text node as a separate string item instead of letting the DOM merge
 // adjacent text nodes.  This is needed by xsl:value-of with separator
 // so that each text value is a distinct item for separator insertion.
-func (ec *execContext) evaluateBodySeparateText(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateBodySeparateText(ctx context.Context, body []instruction) (xpath3.Sequence, error) {
 	tmpDoc := helium.NewDefaultDocument()
 	tmpRoot, err := tmpDoc.CreateElement("_tmp")
 	if err != nil {
@@ -580,7 +580,7 @@ func (ec *execContext) effectiveStaticBaseURI() string {
 	return ec.stylesheet.baseURI
 }
 
-func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []instruction) (xpath3.Sequence, error) {
 	tmpDoc := helium.NewDefaultDocument()
 	// Mark as internal so document-uri() returns empty for temporary trees.
 	tmpDoc.SetProperties(tmpDoc.Properties() | helium.DocInternal)
@@ -695,7 +695,7 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []Instru
 // (text, element, attribute, comment, PI) as a separate item without DOM
 // merging. This is needed for variables/params with an "as" attribute, where
 // the body is a sequence constructor per the XSLT spec.
-func (ec *execContext) evaluateBodyAsSequence(ctx context.Context, body []Instruction) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateBodyAsSequence(ctx context.Context, body []instruction) (xpath3.Sequence, error) {
 	tmpDoc := helium.NewDefaultDocument()
 	tmpRoot, err := tmpDoc.CreateElement("_tmp")
 	if err != nil {

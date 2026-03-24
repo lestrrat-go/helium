@@ -14,15 +14,15 @@ import (
 	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
-// SortKey is a compiled xsl:sort specification.
-type SortKey struct {
+// sortKey is a compiled xsl:sort specification.
+type sortKey struct {
 	Select    *xpath3.Expression
-	Body      []Instruction // sequence constructor (when select is absent)
-	Order     *AVT          // "ascending" or "descending"
-	DataType  *AVT          // "text" or "number"
-	CaseOrder *AVT          // "upper-first" or "lower-first"
-	Lang      *AVT
-	Collation *AVT // collation URI
+	Body      []instruction // sequence constructor (when select is absent)
+	Order     *avt          // "ascending" or "descending"
+	DataType  *avt          // "text" or "number"
+	CaseOrder *avt          // "upper-first" or "lower-first"
+	Lang      *avt
+	Collation *avt // collation URI
 }
 
 // sortMode determines how a sort level compares keys.
@@ -69,7 +69,7 @@ type resolvedLevel struct {
 }
 
 // resolvedSort holds the fully resolved per-level sort configuration.
-// Built once before sorting; no per-comparison AVT evaluation needed.
+// Built once before sorting; no per-comparison avt evaluation needed.
 type resolvedSort struct {
 	levels []resolvedLevel
 }
@@ -106,7 +106,7 @@ func (ks keyedSlice[T]) convertAutoNumeric(level int) {
 // --- Sort level resolution ---
 
 // buildResolvedSort evaluates AVTs for order once and builds a resolvedLevel per sort level.
-func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*SortKey) (resolvedSort, error) {
+func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*sortKey) (resolvedSort, error) {
 	levels := make([]resolvedLevel, len(sortKeys))
 	for i, sk := range sortKeys {
 		order := "ascending"
@@ -144,7 +144,7 @@ func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*SortKey
 	return resolvedSort{levels: levels}, nil
 }
 
-func resolveLevel1(ctx context.Context, ec *execContext, sk *SortKey) (resolvedLevel, error) {
+func resolveLevel1(ctx context.Context, ec *execContext, sk *sortKey) (resolvedLevel, error) {
 	order := "ascending"
 	if sk.Order != nil {
 		var err error
@@ -191,7 +191,7 @@ func resolveLevel1(ctx context.Context, ec *execContext, sk *SortKey) (resolvedL
 
 // buildImplicitCollationURI constructs a UCA collation URI from lang and
 // case-order attributes when no explicit collation is specified.
-func buildImplicitCollationURI(ctx context.Context, ec *execContext, sk *SortKey) string {
+func buildImplicitCollationURI(ctx context.Context, ec *execContext, sk *sortKey) string {
 	var params []string
 	if sk.Lang != nil {
 		lang, err := sk.Lang.evaluate(ctx, ec.contextNode)
@@ -218,7 +218,7 @@ func buildImplicitCollationURI(ctx context.Context, ec *execContext, sk *SortKey
 
 // validateSortKeyAttrs validates sort key attribute values (lang, collation, etc.)
 // regardless of whether there are nodes to sort.
-func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *SortKey) error {
+func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *sortKey) error {
 	if sk.Lang != nil {
 		lang, err := sk.Lang.evaluate(ctx, ec.contextNode)
 		if err != nil {
@@ -363,7 +363,7 @@ func (rs *resolvedSort) compareKeys(aKeys, bKeys []sortValue, aIdx, bIdx int) in
 
 // evaluateSortKey evaluates a single sort key for one item and returns its typed value.
 // Uses EvaluateReuse when evalState is non-nil to avoid per-item evalContext allocation.
-func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node helium.Node, dtMode *dataTypeMode, evalState *xpath3.EvalState) (sortValue, error) {
+func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node helium.Node, dtMode *dataTypeMode, evalState *xpath3.EvalState) (sortValue, error) {
 	savedInSort := ec.inSortKeyEval
 	ec.inSortKeyEval = true
 	defer func() { ec.inSortKeyEval = savedInSort }()
@@ -525,7 +525,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *SortKey, node hel
 }
 
 // extractSortValues evaluates all sort keys for one item, returning a slice.
-func extractSortValues(ctx context.Context, ec *execContext, sortKeys []*SortKey, node helium.Node, dtModes []dataTypeMode, evalState *xpath3.EvalState) ([]sortValue, error) {
+func extractSortValues(ctx context.Context, ec *execContext, sortKeys []*sortKey, node helium.Node, dtModes []dataTypeMode, evalState *xpath3.EvalState) ([]sortValue, error) {
 	keys := make([]sortValue, len(sortKeys))
 	for i, sk := range sortKeys {
 		sv, err := evaluateSortKey(ctx, ec, sk, node, &dtModes[i], evalState)
@@ -640,7 +640,7 @@ func atomicToNumericSortValue(av xpath3.AtomicValue, implicitTZ *time.Location) 
 
 // --- Data type mode resolution ---
 
-func initDataTypeModes(ctx context.Context, ec *execContext, sortKeys []*SortKey) ([]dataTypeMode, error) {
+func initDataTypeModes(ctx context.Context, ec *execContext, sortKeys []*sortKey) ([]dataTypeMode, error) {
 	modes := make([]dataTypeMode, len(sortKeys))
 	for i, sk := range sortKeys {
 		if sk.DataType == nil {
@@ -659,7 +659,7 @@ func initDataTypeModes(ctx context.Context, ec *execContext, sortKeys []*SortKey
 	return modes, nil
 }
 
-func initDataTypeMode1(ctx context.Context, ec *execContext, sk *SortKey) (dataTypeMode, error) {
+func initDataTypeMode1(ctx context.Context, ec *execContext, sk *sortKey) (dataTypeMode, error) {
 	if sk.DataType == nil {
 		return dataTypeAuto, nil
 	}
@@ -704,7 +704,7 @@ func finalizeLevel1[T any](level *resolvedLevel, dtMode dataTypeMode, entries []
 
 // --- Public dispatch ---
 
-func sortNodes(ctx context.Context, ec *execContext, nodes []helium.Node, sortKeys []*SortKey) ([]helium.Node, error) {
+func sortNodes(ctx context.Context, ec *execContext, nodes []helium.Node, sortKeys []*sortKey) ([]helium.Node, error) {
 	// Validate sort key attributes even if there are no nodes (XTDE0030).
 	for _, sk := range sortKeys {
 		if err := validateSortKeyAttrs(ctx, ec, sk); err != nil {
@@ -720,7 +720,7 @@ func sortNodes(ctx context.Context, ec *execContext, nodes []helium.Node, sortKe
 	return sortNodesN(ctx, ec, nodes, sortKeys)
 }
 
-func sortItems(ctx context.Context, ec *execContext, items xpath3.Sequence, sortKeys []*SortKey) (xpath3.Sequence, error) {
+func sortItems(ctx context.Context, ec *execContext, items xpath3.Sequence, sortKeys []*sortKey) (xpath3.Sequence, error) {
 	if len(sortKeys) == 0 || items == nil || sequence.Len(items) == 0 {
 		return items, nil
 	}
@@ -730,7 +730,7 @@ func sortItems(ctx context.Context, ec *execContext, items xpath3.Sequence, sort
 	return sortItemsN(ctx, ec, items, sortKeys)
 }
 
-func sortGroups(ctx context.Context, ec *execContext, groups []fegGroup, sortKeys []*SortKey, hasKey bool) ([]fegGroup, error) {
+func sortGroups(ctx context.Context, ec *execContext, groups []fegGroup, sortKeys []*sortKey, hasKey bool) ([]fegGroup, error) {
 	for _, sk := range sortKeys {
 		if err := validateSortKeyAttrs(ctx, ec, sk); err != nil {
 			return nil, err
@@ -747,7 +747,7 @@ func sortGroups(ctx context.Context, ec *execContext, groups []fegGroup, sortKey
 
 // --- Single-key sort paths ---
 
-func sortNodes1(ctx context.Context, ec *execContext, nodes []helium.Node, sk *SortKey) ([]helium.Node, error) {
+func sortNodes1(ctx context.Context, ec *execContext, nodes []helium.Node, sk *sortKey) ([]helium.Node, error) {
 	dtMode, err := initDataTypeMode1(ctx, ec, sk)
 	if err != nil {
 		return nil, err
@@ -796,7 +796,7 @@ func sortNodes1(ctx context.Context, ec *execContext, nodes []helium.Node, sk *S
 	return nodes, nil
 }
 
-func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk *SortKey) (xpath3.Sequence, error) {
+func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk *sortKey) (xpath3.Sequence, error) {
 	dtMode, err := initDataTypeMode1(ctx, ec, sk)
 	if err != nil {
 		return nil, err
@@ -850,7 +850,7 @@ func sortItems1(ctx context.Context, ec *execContext, items xpath3.Sequence, sk 
 
 // --- Multi-key sort paths ---
 
-func sortNodesN(ctx context.Context, ec *execContext, nodes []helium.Node, sortKeys []*SortKey) ([]helium.Node, error) {
+func sortNodesN(ctx context.Context, ec *execContext, nodes []helium.Node, sortKeys []*sortKey) ([]helium.Node, error) {
 	dtModes, err := initDataTypeModes(ctx, ec, sortKeys)
 	if err != nil {
 		return nil, err
@@ -889,7 +889,7 @@ func sortNodesN(ctx context.Context, ec *execContext, nodes []helium.Node, sortK
 	return nodes, nil
 }
 
-func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sortKeys []*SortKey) (xpath3.Sequence, error) {
+func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sortKeys []*sortKey) (xpath3.Sequence, error) {
 	dtModes, err := initDataTypeModes(ctx, ec, sortKeys)
 	if err != nil {
 		return nil, err
@@ -933,7 +933,7 @@ func sortItemsN(ctx context.Context, ec *execContext, items xpath3.Sequence, sor
 	return result, nil
 }
 
-func sortGroups1(ctx context.Context, ec *execContext, groups []fegGroup, sk *SortKey, hasKey bool) ([]fegGroup, error) {
+func sortGroups1(ctx context.Context, ec *execContext, groups []fegGroup, sk *sortKey, hasKey bool) ([]fegGroup, error) {
 	dtMode, err := initDataTypeMode1(ctx, ec, sk)
 	if err != nil {
 		return nil, err
@@ -974,7 +974,7 @@ func sortGroups1(ctx context.Context, ec *execContext, groups []fegGroup, sk *So
 	return groups, nil
 }
 
-func sortGroupsN(ctx context.Context, ec *execContext, groups []fegGroup, sortKeys []*SortKey, hasKey bool) ([]fegGroup, error) {
+func sortGroupsN(ctx context.Context, ec *execContext, groups []fegGroup, sortKeys []*sortKey, hasKey bool) ([]fegGroup, error) {
 	dtModes, err := initDataTypeModes(ctx, ec, sortKeys)
 	if err != nil {
 		return nil, err

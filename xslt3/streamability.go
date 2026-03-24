@@ -4,7 +4,7 @@ import "github.com/lestrrat-go/helium/xpath3"
 
 // collectAllInstructionExprs recursively walks an instruction tree and calls
 // fn for every XPath expression found, including expressions in nested bodies.
-func collectAllInstructionExprs(insts []Instruction, fn func(*xpath3.Expression)) {
+func collectAllInstructionExprs(insts []instruction, fn func(*xpath3.Expression)) {
 	for _, inst := range insts {
 		for _, expr := range getInstructionExprs(inst) {
 			fn(expr)
@@ -17,18 +17,18 @@ func collectAllInstructionExprs(insts []Instruction, fn func(*xpath3.Expression)
 }
 
 // getInstructionBodies returns all child instruction bodies from an instruction.
-func getInstructionBodies(inst Instruction) [][]Instruction {
+func getInstructionBodies(inst instruction) [][]instruction {
 	switch v := inst.(type) {
-	case *CopyInst:
+	case *copyInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *IfInst:
+	case *ifInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *ChooseInst:
-		var bodies [][]Instruction
+	case *chooseInst:
+		var bodies [][]instruction
 		for _, w := range v.When {
 			if w.Body != nil {
 				bodies = append(bodies, w.Body)
@@ -38,56 +38,56 @@ func getInstructionBodies(inst Instruction) [][]Instruction {
 			bodies = append(bodies, v.Otherwise)
 		}
 		return bodies
-	case *ForEachInst:
+	case *forEachInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *ElementInst:
+	case *elementInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *LiteralResultElement:
+	case *literalResultElement:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *VariableInst:
+	case *variableInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *SequenceInst:
+	case *sequenceInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *ValueOfInst:
+	case *valueOfInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *AttributeInst:
+	case *attributeInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *MessageInst:
+	case *messageInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *ResultDocumentInst:
+	case *resultDocumentInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *MapInst:
+	case *mapInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *MapEntryInst:
+	case *mapEntryInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *DocumentInst:
+	case *documentInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *IterateInst:
-		var bodies [][]Instruction
+	case *iterateInst:
+		var bodies [][]instruction
 		if v.Body != nil {
 			bodies = append(bodies, v.Body)
 		}
@@ -95,14 +95,14 @@ func getInstructionBodies(inst Instruction) [][]Instruction {
 			bodies = append(bodies, v.OnCompletion)
 		}
 		return bodies
-	case *ForkInst:
+	case *forkInst:
 		return v.Branches
-	case *ForEachGroupInst:
+	case *forEachGroupInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *TryCatchInst:
-		var bodies [][]Instruction
+	case *tryCatchInst:
+		var bodies [][]instruction
 		if v.Try != nil {
 			bodies = append(bodies, v.Try)
 		}
@@ -112,24 +112,24 @@ func getInstructionBodies(inst Instruction) [][]Instruction {
 			}
 		}
 		return bodies
-	case *OnEmptyInst:
+	case *onEmptyInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *OnNonEmptyInst:
+	case *onNonEmptyInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *BreakInst:
+	case *breakInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *PerformSortInst:
+	case *performSortInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
-	case *AnalyzeStringInst:
-		var bodies [][]Instruction
+	case *analyzeStringInst:
+		var bodies [][]instruction
 		if v.MatchingBody != nil {
 			bodies = append(bodies, v.MatchingBody)
 		}
@@ -137,9 +137,9 @@ func getInstructionBodies(inst Instruction) [][]Instruction {
 			bodies = append(bodies, v.NonMatchingBody)
 		}
 		return bodies
-	case *WherePopulatedInst:
+	case *wherePopulatedInst:
 		if v.Body != nil {
-			return [][]Instruction{v.Body}
+			return [][]instruction{v.Body}
 		}
 	}
 	return nil
@@ -147,7 +147,7 @@ func getInstructionBodies(inst Instruction) [][]Instruction {
 
 // functionHasConsumingRefInLoop checks if a parameter is used with a positional
 // subscript in a loop construct.
-func functionHasConsumingRefInLoop(fn *XSLFunction) bool {
+func functionHasConsumingRefInLoop(fn *xslFunction) bool {
 	if len(fn.Params) == 0 {
 		return false
 	}
@@ -203,7 +203,7 @@ func exprHasParamInLoop(expr xpath3.Expr, paramNames map[string]bool) bool {
 // is referenced on the right-hand side of a simple mapping expression (! operator),
 // which causes the parameter to be consumed multiple times.
 // E.g., (1 to 5) ! $n — $n is accessed for each item in the range.
-func functionHasParamInSimpleMap(fn *XSLFunction) bool {
+func functionHasParamInSimpleMap(fn *xslFunction) bool {
 	if len(fn.Params) == 0 {
 		return false
 	}
@@ -309,7 +309,7 @@ func countParamDownwardRefs(expr *xpath3.Expression, paramName string) int {
 
 // exprConsumesParam checks if an expression uses a function parameter in a
 // consuming way.
-func exprConsumesParam(expr *xpath3.Expression, params []*Param) bool {
+func exprConsumesParam(expr *xpath3.Expression, params []*param) bool {
 	if len(params) == 0 {
 		return false
 	}
@@ -413,11 +413,11 @@ func exprUsesVarConsumingly(expr *xpath3.Expression, varName string) bool {
 }
 
 // getInstructionExprs extracts all XPath expressions from an instruction.
-func getInstructionExprs(inst Instruction) []*xpath3.Expression {
+func getInstructionExprs(inst instruction) []*xpath3.Expression {
 	var exprs []*xpath3.Expression
 
 	switch v := inst.(type) {
-	case *ApplyTemplatesInst:
+	case *applyTemplatesInst:
 		exprs = append(exprs, v.Select)
 		for _, sk := range v.Sort {
 			exprs = append(exprs, sk.Select)
@@ -425,84 +425,84 @@ func getInstructionExprs(inst Instruction) []*xpath3.Expression {
 		for _, wp := range v.Params {
 			exprs = append(exprs, wp.Select)
 		}
-	case *ValueOfInst:
+	case *valueOfInst:
 		exprs = append(exprs, v.Select)
-	case *CopyOfInst:
+	case *copyOfInst:
 		exprs = append(exprs, v.Select)
-	case *CopyInst:
+	case *copyInst:
 		exprs = append(exprs, v.Select)
-	case *ForEachInst:
+	case *forEachInst:
 		exprs = append(exprs, v.Select)
 		for _, sk := range v.Sort {
 			exprs = append(exprs, sk.Select)
 		}
-	case *IfInst:
+	case *ifInst:
 		exprs = append(exprs, v.Test)
-	case *ChooseInst:
+	case *chooseInst:
 		for _, when := range v.When {
 			exprs = append(exprs, when.Test)
 		}
-	case *VariableInst:
+	case *variableInst:
 		exprs = append(exprs, v.Select)
-	case *XSLSequenceInst:
+	case *xslSequenceInst:
 		exprs = append(exprs, v.Select)
-	case *MapEntryInst:
+	case *mapEntryInst:
 		exprs = append(exprs, v.Key)
 		exprs = append(exprs, v.Select)
-	case *AttributeInst:
+	case *attributeInst:
 		exprs = append(exprs, v.Select)
-	case *CommentInst:
+	case *commentInst:
 		exprs = append(exprs, v.Select)
-	case *PIInst:
+	case *piInst:
 		exprs = append(exprs, v.Select)
-	case *NumberInst:
+	case *numberInst:
 		exprs = append(exprs, v.Value)
 		exprs = append(exprs, v.Select)
-	case *MessageInst:
+	case *messageInst:
 		exprs = append(exprs, v.Select)
-	case *NamespaceInst:
+	case *namespaceInst:
 		exprs = append(exprs, v.Select)
-	case *PerformSortInst:
+	case *performSortInst:
 		exprs = append(exprs, v.Select)
 		for _, sk := range v.Sort {
 			exprs = append(exprs, sk.Select)
 		}
-	case *IterateInst:
+	case *iterateInst:
 		exprs = append(exprs, v.Select)
 		for _, p := range v.Params {
 			exprs = append(exprs, p.Select)
 		}
-	case *BreakInst:
+	case *breakInst:
 		exprs = append(exprs, v.Select)
-	case *ForEachGroupInst:
+	case *forEachGroupInst:
 		exprs = append(exprs, v.Select)
 		exprs = append(exprs, v.GroupBy)
 		exprs = append(exprs, v.GroupAdjacent)
 		for _, sk := range v.Sort {
 			exprs = append(exprs, sk.Select)
 		}
-	case *TryCatchInst:
+	case *tryCatchInst:
 		exprs = append(exprs, v.Select)
 		for _, c := range v.Catches {
 			exprs = append(exprs, c.Select)
 		}
-	case *OnEmptyInst:
+	case *onEmptyInst:
 		exprs = append(exprs, v.Select)
-	case *OnNonEmptyInst:
+	case *onNonEmptyInst:
 		exprs = append(exprs, v.Select)
-	case *CallTemplateInst:
+	case *callTemplateInst:
 		for _, wp := range v.Params {
 			exprs = append(exprs, wp.Select)
 		}
-	case *NextMatchInst:
+	case *nextMatchInst:
 		for _, wp := range v.Params {
 			exprs = append(exprs, wp.Select)
 		}
-	case *ApplyImportsInst:
+	case *applyImportsInst:
 		for _, wp := range v.Params {
 			exprs = append(exprs, wp.Select)
 		}
-	case *AnalyzeStringInst:
+	case *analyzeStringInst:
 		exprs = append(exprs, v.Select)
 	}
 
@@ -517,89 +517,89 @@ func getInstructionExprs(inst Instruction) []*xpath3.Expression {
 }
 
 // getChildInstructions returns all child instruction slices from an instruction.
-func getChildInstructions(inst Instruction) [][]Instruction {
-	var children [][]Instruction
+func getChildInstructions(inst instruction) [][]instruction {
+	var children [][]instruction
 
 	switch v := inst.(type) {
-	case *IfInst:
+	case *ifInst:
 		children = append(children, v.Body)
-	case *ChooseInst:
+	case *chooseInst:
 		for _, when := range v.When {
 			children = append(children, when.Body)
 		}
 		children = append(children, v.Otherwise)
-	case *ForEachInst:
+	case *forEachInst:
 		children = append(children, v.Body)
-	case *VariableInst:
+	case *variableInst:
 		children = append(children, v.Body)
-	case *ElementInst:
+	case *elementInst:
 		children = append(children, v.Body)
-	case *AttributeInst:
+	case *attributeInst:
 		children = append(children, v.Body)
-	case *CommentInst:
+	case *commentInst:
 		children = append(children, v.Body)
-	case *PIInst:
+	case *piInst:
 		children = append(children, v.Body)
-	case *MessageInst:
+	case *messageInst:
 		children = append(children, v.Body)
-	case *SequenceInst:
+	case *sequenceInst:
 		children = append(children, v.Body)
-	case *ResultDocumentInst:
+	case *resultDocumentInst:
 		children = append(children, v.Body)
-	case *MapInst:
+	case *mapInst:
 		children = append(children, v.Body)
-	case *MapEntryInst:
+	case *mapEntryInst:
 		children = append(children, v.Body)
-	case *NamespaceInst:
+	case *namespaceInst:
 		children = append(children, v.Body)
-	case *PerformSortInst:
+	case *performSortInst:
 		children = append(children, v.Body)
-	case *LiteralResultElement:
+	case *literalResultElement:
 		children = append(children, v.Body)
-	case *CopyInst:
+	case *copyInst:
 		children = append(children, v.Body)
-	case *ValueOfInst:
+	case *valueOfInst:
 		children = append(children, v.Body)
-	case *SourceDocumentInst:
+	case *sourceDocumentInst:
 		// Don't recurse into source-document bodies here; they're handled
 		// separately by checkInstructionsForStreamableSourceDoc.
-	case *IterateInst:
+	case *iterateInst:
 		children = append(children, v.Body)
 		children = append(children, v.OnCompletion)
-	case *BreakInst:
+	case *breakInst:
 		children = append(children, v.Body)
-	case *ForkInst:
+	case *forkInst:
 		children = append(children, v.Branches...)
-	case *ForEachGroupInst:
+	case *forEachGroupInst:
 		children = append(children, v.Body)
-	case *TryCatchInst:
+	case *tryCatchInst:
 		children = append(children, v.Try)
 		for _, c := range v.Catches {
 			children = append(children, c.Body)
 		}
-	case *OnEmptyInst:
+	case *onEmptyInst:
 		children = append(children, v.Body)
-	case *OnNonEmptyInst:
+	case *onNonEmptyInst:
 		children = append(children, v.Body)
-	case *WherePopulatedInst:
+	case *wherePopulatedInst:
 		children = append(children, v.Body)
-	case *CallTemplateInst:
+	case *callTemplateInst:
 		for _, wp := range v.Params {
 			children = append(children, wp.Body)
 		}
-	case *ApplyTemplatesInst:
+	case *applyTemplatesInst:
 		for _, wp := range v.Params {
 			children = append(children, wp.Body)
 		}
-	case *NextMatchInst:
+	case *nextMatchInst:
 		for _, wp := range v.Params {
 			children = append(children, wp.Body)
 		}
-	case *ApplyImportsInst:
+	case *applyImportsInst:
 		for _, wp := range v.Params {
 			children = append(children, wp.Body)
 		}
-	case *AnalyzeStringInst:
+	case *analyzeStringInst:
 		children = append(children, v.MatchingBody)
 		children = append(children, v.NonMatchingBody)
 	}
@@ -637,7 +637,7 @@ func patternHasCurrentOnElementStep(expr xpath3.Expr) bool {
 }
 
 // stepMatchesElements returns true if the step's node test could match
-// element nodes (NameTest or generic node() test, but not text()/comment()/etc.).
+// element nodes (nameTest or generic node() test, but not text()/comment()/etc.).
 func stepMatchesElements(step xpath3.Step) bool {
 	switch step.NodeTest.(type) {
 	case xpath3.NameTest:

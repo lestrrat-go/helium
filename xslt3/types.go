@@ -11,24 +11,24 @@ import (
 	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
-// SequenceType represents a parsed XSLT/XPath sequence type declaration
+// sequenceType represents a parsed XSLT/XPath sequence type declaration
 // from the "as" attribute (e.g., "xs:string*", "element()+", "item()?").
-type SequenceType struct {
+type sequenceType struct {
 	ItemType   string // "xs:string", "element()", "node()", "item()", etc.
 	Occurrence rune   // 0 = exactly one, '?' = zero or one, '*' = zero or more, '+' = one or more
 }
 
-// parseSequenceType parses an "as" attribute value into a SequenceType.
+// parseSequenceType parses an "as" attribute value into a sequenceType.
 // Examples: "item()*", "xs:string", "element()+", "xs:integer?", "text()", "empty-sequence()".
-func parseSequenceType(as string) SequenceType {
+func parseSequenceType(as string) sequenceType {
 	s := stripXPathComments(strings.TrimSpace(as))
 	if s == "" {
-		return SequenceType{ItemType: "item()", Occurrence: '*'}
+		return sequenceType{ItemType: "item()", Occurrence: '*'}
 	}
 
 	// empty-sequence() is a special type that matches only the empty sequence
 	if s == "empty-sequence()" {
-		return SequenceType{ItemType: "empty-sequence()", Occurrence: 'E'}
+		return sequenceType{ItemType: "empty-sequence()", Occurrence: 'E'}
 	}
 
 	// Check for occurrence indicator at the end
@@ -40,7 +40,7 @@ func parseSequenceType(as string) SequenceType {
 		s = strings.TrimSpace(s[:len(s)-1])
 	}
 
-	return SequenceType{ItemType: s, Occurrence: occ}
+	return sequenceType{ItemType: s, Occurrence: occ}
 }
 
 // allowsEmptySequence returns true if the given 'as' type string allows
@@ -57,7 +57,7 @@ func allowsEmptySequence(as string) bool {
 
 // checkSequenceType checks that a sequence matches the declared type.
 // Returns the (possibly coerced) sequence on success, or an error on type mismatch.
-func checkSequenceType(seq xpath3.Sequence, st SequenceType, errCode string, context string, ec ...*execContext) (xpath3.Sequence, error) {
+func checkSequenceType(seq xpath3.Sequence, st sequenceType, errCode string, context string, ec ...*execContext) (xpath3.Sequence, error) {
 	var execCtx *execContext
 	if len(ec) > 0 {
 		execCtx = ec[0]
@@ -285,7 +285,7 @@ func coerceItemWithContext(item xpath3.Item, itemType string, ec *execContext) (
 			return item, nil // unparseable → pass through
 		}
 		seq := xpath3.ItemSlice{item}
-		// First try strict SequenceType matching (contravariant params, covariant return).
+		// First try strict sequenceType matching (contravariant params, covariant return).
 		if xpath3.MatchesSequenceType(seq, st) {
 			return item, nil
 		}
@@ -838,15 +838,15 @@ func checkMapItemType(item xpath3.Item, itemType string) (xpath3.Item, error) {
 	return item, nil
 }
 
-func parseMapItemType(itemType string) (string, SequenceType, bool, error) {
+func parseMapItemType(itemType string) (string, sequenceType, bool, error) {
 	inner := strings.TrimSpace(itemType[len("map(") : len(itemType)-1])
 	if inner == "*" {
-		return "", SequenceType{}, false, nil
+		return "", sequenceType{}, false, nil
 	}
 
 	parts := splitTopLevelTypeArgs(inner)
 	if len(parts) != 2 {
-		return "", SequenceType{}, false, fmt.Errorf("invalid map type %q", itemType)
+		return "", sequenceType{}, false, fmt.Errorf("invalid map type %q", itemType)
 	}
 	return strings.TrimSpace(parts[0]), parseSequenceType(strings.TrimSpace(parts[1])), true, nil
 }
@@ -872,7 +872,7 @@ func splitTopLevelTypeArgs(s string) []string {
 	return parts
 }
 
-func sequenceMatchesTypeStrict(seq xpath3.Sequence, st SequenceType) bool {
+func sequenceMatchesTypeStrict(seq xpath3.Sequence, st sequenceType) bool {
 	count := 0
 	if seq != nil {
 		count = sequence.Len(seq)
@@ -971,7 +971,7 @@ func atomicMatchesType(av xpath3.AtomicValue, targetType string) bool {
 	return false
 }
 
-func formatSequenceType(st SequenceType) string {
+func formatSequenceType(st sequenceType) string {
 	if st.Occurrence == 0 {
 		return st.ItemType
 	}

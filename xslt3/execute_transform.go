@@ -153,7 +153,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		ec.stripWhitespaceFromDoc(effectiveSource)
 	}
 
-	// Store exec context in Go context for AVT evaluation
+	// Store exec context in Go context for avt evaluation
 	ctx = withExecContext(ctx, ec)
 
 	// Initialize global variables

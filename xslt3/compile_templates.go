@@ -42,7 +42,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		}
 	}
 
-	tmpl := &Template{
+	tmpl := &template{
 		ImportPrec:    c.importPrec,
 		MinImportPrec: c.minImportPrec,
 		BaseURI:       c.baseURI,
@@ -282,14 +282,14 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		// separate template rules with the same body, one per alternative.
 		// Split union patterns into separate template entries so each gets
 		// its own default priority.
-		templates := []*Template{tmpl}
+		templates := []*template{tmpl}
 		if !hasExplicitPriority && len(tmpl.Match.Alternatives) > 1 {
 			templates = nil
 			for _, alt := range tmpl.Match.Alternatives {
 				split := *tmpl // shallow copy shares Body, Params, etc.
-				split.Match = &Pattern{
+				split.Match = &pattern{
 					source:         tmpl.Match.source,
-					Alternatives:   []*PatternAlt{alt},
+					Alternatives:   []*patternAlt{alt},
 					xpathDefaultNS: tmpl.Match.xpathDefaultNS,
 					nsBindings:     tmpl.Match.nsBindings,
 				}
@@ -309,7 +309,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 }
 
 // registerTemplateInModes adds a template to the appropriate mode template lists.
-func (c *compiler) registerTemplateInModes(tmpl *Template, mode string) {
+func (c *compiler) registerTemplateInModes(tmpl *template, mode string) {
 	if mode == modeAll {
 		// Register in all existing modes plus default
 		for m := range c.stylesheet.modeTemplates {
@@ -350,14 +350,14 @@ type contextItemDecl struct {
 	use string // "required", "optional", "absent"
 }
 
-func (c *compiler) compileTemplateBody(elem *helium.Element) ([]Instruction, []*Param, error) {
+func (c *compiler) compileTemplateBody(elem *helium.Element) ([]instruction, []*param, error) {
 	_, body, params, err := c.compileTemplateBodyEx(elem, false)
 	return body, params, err
 }
 
-func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) (*contextItemDecl, []Instruction, []*Param, error) {
-	var params []*Param
-	var body []Instruction
+func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) (*contextItemDecl, []instruction, []*param, error) {
+	var params []*param
+	var body []instruction
 	var ctxDecl *contextItemDecl
 
 	// Pre-scan: find the last declaration/param child so we can strip
@@ -447,7 +447,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 			if !c.shouldStripText(text) {
 				inParams = false
 				sawContent = true
-				inst := &LiteralTextInst{Value: text}
+				inst := &literalTextInst{Value: text}
 				if c.expandText && strings.ContainsAny(text, "{}") {
 					avt, err := compileAVT(text, c.nsBindings)
 					if err != nil {
@@ -461,7 +461,7 @@ func (c *compiler) compileTemplateBodyEx(elem *helium.Element, isFunction bool) 
 			inParams = false
 			sawContent = true
 			text := string(v.Content())
-			inst := &LiteralTextInst{Value: text}
+			inst := &literalTextInst{Value: text}
 			if c.expandText && strings.ContainsAny(text, "{}") {
 				avt, err := compileAVT(text, c.nsBindings)
 				if err != nil {
@@ -538,7 +538,7 @@ func (c *compiler) validateContextItem(elem *helium.Element) error {
 	return nil
 }
 
-func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
+func (c *compiler) compileParamDef(elem *helium.Element) (*param, error) {
 	savedNS := c.pushElementNamespaces(elem)
 	defer func() { c.nsBindings = savedNS }()
 
@@ -625,7 +625,7 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*Param, error) {
 		return nil, err
 	}
 
-	p := &Param{
+	p := &param{
 		Name:       resolveQName(name, c.nsBindings),
 		As:         asAttr,
 		Required:   required,
@@ -699,7 +699,7 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 		return err
 	}
 
-	v := &Variable{
+	v := &variable{
 		Name:           resolveQName(name, c.nsBindings),
 		As:             asAttr,
 		Visibility:     getAttr(elem, "visibility"),

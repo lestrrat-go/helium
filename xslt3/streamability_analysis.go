@@ -134,7 +134,7 @@ func analyzeStreamability(ss *Stylesheet) error {
 // streamabilityModeNameForTemplate returns the mode name that should be used
 // for streamability checks. Only match templates participate in mode-based
 // streamability; named templates are handled separately where relevant.
-func streamabilityModeNameForTemplate(tmpl *Template) (string, bool) {
+func streamabilityModeNameForTemplate(tmpl *template) (string, bool) {
 	if tmpl == nil || tmpl.Match == nil {
 		return "", false
 	}
@@ -145,10 +145,10 @@ func streamabilityModeNameForTemplate(tmpl *Template) (string, bool) {
 }
 
 // checkInstructionsForStreamableSourceDoc walks instructions looking for
-// SourceDocumentInst with Streamable=true and checks their bodies.
-func checkInstructionsForStreamableSourceDoc(ss *Stylesheet, instructions []Instruction) error {
+// sourceDocumentInst with Streamable=true and checks their bodies.
+func checkInstructionsForStreamableSourceDoc(ss *Stylesheet, instructions []instruction) error {
 	for _, inst := range instructions {
-		if sd, ok := inst.(*SourceDocumentInst); ok && sd.Streamable {
+		if sd, ok := inst.(*sourceDocumentInst); ok && sd.Streamable {
 			if err := checkStreamableTemplateBody(ss, sd.Body); err != nil {
 				return err
 			}
@@ -170,7 +170,7 @@ func checkInstructionsForStreamableSourceDoc(ss *Stylesheet, instructions []Inst
 // a streaming template body. AVTs are evaluated eagerly, so post-descent
 // values are not available. xsl:attribute instructions with accumulator-after
 // are fine because the processor can delay their evaluation.
-func checkAccumulatorAfterPreDescent(body []Instruction) error {
+func checkAccumulatorAfterPreDescent(body []instruction) error {
 	_, err := checkAccAfterPreDescentInner(body)
 	return err
 }
@@ -178,7 +178,7 @@ func checkAccumulatorAfterPreDescent(body []Instruction) error {
 // checkAccAfterPreDescentInner checks for accumulator-after in pre-descent
 // position. Returns (consumed, error) where consumed indicates whether a
 // consuming operation was found at this level or in children.
-func checkAccAfterPreDescentInner(body []Instruction) (bool, error) {
+func checkAccAfterPreDescentInner(body []instruction) (bool, error) {
 	consumed := false
 	for _, inst := range body {
 		if consumed {
@@ -197,7 +197,7 @@ func checkAccAfterPreDescentInner(body []Instruction) (bool, error) {
 		// Check xsl:value-of select expressions (pre-descent, so
 		// accumulator-after is not available). xsl:attribute select
 		// is NOT checked here because attributes can be delayed.
-		if vo, ok := inst.(*ValueOfInst); ok {
+		if vo, ok := inst.(*valueOfInst); ok {
 			if vo.Select != nil && xpath3.ExprUsesFunction(vo.Select, "accumulator-after") {
 				return false, staticError(errCodeXTSE3430,
 					"accumulator-after() used in pre-descent position is not streamable")
@@ -219,33 +219,33 @@ func checkAccAfterPreDescentInner(body []Instruction) (bool, error) {
 
 // instrIsConsuming returns true if the instruction directly consumes the
 // streaming context (navigates downward or processes children).
-func instrIsConsuming(inst Instruction) bool {
+func instrIsConsuming(inst instruction) bool {
 	switch v := inst.(type) {
-	case *ApplyTemplatesInst:
+	case *applyTemplatesInst:
 		// apply-templates without select or with downward select is consuming.
 		// apply-templates select="@*" is motionless, NOT consuming.
 		if v.Select == nil {
 			return true
 		}
 		return xpath3.ExprHasDownwardStep(v.Select) || xpath3.ExprUsesContextItem(v.Select)
-	case *ForEachInst:
+	case *forEachInst:
 		return v.Select != nil && xpath3.ExprHasDownwardStep(v.Select)
-	case *IterateInst:
+	case *iterateInst:
 		return v.Select != nil && xpath3.ExprHasDownwardStep(v.Select)
-	case *ValueOfInst:
+	case *valueOfInst:
 		return v.Select != nil && xpath3.ExprHasDownwardStep(v.Select)
-	case *XSLSequenceInst:
+	case *xslSequenceInst:
 		return v.Select != nil && xpath3.ExprHasDownwardStep(v.Select)
-	case *CopyOfInst:
+	case *copyOfInst:
 		return v.Select != nil && (xpath3.ExprHasDownwardStep(v.Select) || xpath3.ExprUsesContextItem(v.Select))
 	}
 	return false
 }
 
 // checkAccumulatorAfterInLRE checks literal result elements for
-// accumulator-after() in their AVT attributes.
-func checkAccumulatorAfterInLRE(inst Instruction) error {
-	lre, ok := inst.(*LiteralResultElement)
+// accumulator-after() in their avt attributes.
+func checkAccumulatorAfterInLRE(inst instruction) error {
+	lre, ok := inst.(*literalResultElement)
 	if !ok {
 		return nil
 	}
@@ -258,7 +258,7 @@ func checkAccumulatorAfterInLRE(inst Instruction) error {
 	return nil
 }
 
-func checkStreamableTemplateBody(ss *Stylesheet, body []Instruction) error {
+func checkStreamableTemplateBody(ss *Stylesheet, body []instruction) error {
 	for _, inst := range body {
 		if err := checkStreamableInstruction(ss, inst); err != nil {
 			return err
@@ -285,10 +285,10 @@ func checkStreamableTemplateBody(ss *Stylesheet, body []Instruction) error {
 // countDownwardInBody counts consuming downward selections across a sequence
 // of sibling instructions, respecting branching: only the max across
 // xsl:choose branches is counted since only one branch executes.
-func countDownwardInBody(ss *Stylesheet, body []Instruction) int {
+func countDownwardInBody(ss *Stylesheet, body []instruction) int {
 	total := 0
 	for _, inst := range body {
-		if choose, ok := inst.(*ChooseInst); ok {
+		if choose, ok := inst.(*chooseInst); ok {
 			maxBranch := 0
 			for _, when := range choose.When {
 				bc := countDownwardInBody(ss, when.Body)
@@ -305,7 +305,7 @@ func countDownwardInBody(ss *Stylesheet, body []Instruction) int {
 			total += maxBranch
 			continue
 		}
-		if ifInst, ok := inst.(*IfInst); ok {
+		if ifInst, ok := inst.(*ifInst); ok {
 			// xsl:if is like a single branch — its body may or may
 			// not execute, but from a streamability perspective the
 			// consuming operations inside still count.
@@ -320,7 +320,7 @@ func countDownwardInBody(ss *Stylesheet, body []Instruction) int {
 }
 
 // checkStreamableInstruction checks a single instruction for streamability violations.
-func checkStreamableInstruction(ss *Stylesheet, inst Instruction) error {
+func checkStreamableInstruction(ss *Stylesheet, inst instruction) error {
 	return checkStreamableInstructionCtx(ss, inst, false)
 }
 
@@ -328,15 +328,15 @@ func checkStreamableInstruction(ss *Stylesheet, inst Instruction) error {
 // When inResultDoc is true, certain checks are relaxed (e.g., xsl:sequence select="."
 // inside for-each is allowed because nodes flow to a serializer rather than being
 // returned as a sequence).
-func checkStreamableInstructionCtx(ss *Stylesheet, inst Instruction, inResultDoc bool) error {
+func checkStreamableInstructionCtx(ss *Stylesheet, inst instruction, inResultDoc bool) error {
 	switch v := inst.(type) {
-	case *ApplyTemplatesInst:
+	case *applyTemplatesInst:
 		if v.Select != nil && xpath3.ExprUsesDescendantOrSelf(v.Select) &&
 			!exprEndsWithGrounding(v.Select.AST()) {
 			return staticError(errCodeXTSE3430,
 				"xsl:apply-templates with crawling select expression %q is not streamable", v.Select.String())
 		}
-	case *NextMatchInst:
+	case *nextMatchInst:
 		// xsl:next-match with xsl:with-param select="." passes the streaming
 		// context item to another template. The receiving template can navigate
 		// into it, creating a second consumption of the streaming node. This is
@@ -349,7 +349,7 @@ func checkStreamableInstructionCtx(ss *Stylesheet, inst Instruction, inResultDoc
 				}
 			}
 		}
-	case *NumberInst:
+	case *numberInst:
 		// xsl:number without an explicit value computes numbering from node
 		// relationships, which is consuming and therefore not streamable.
 		if v.Value == nil {
@@ -399,7 +399,7 @@ func checkStreamableInstructionCtx(ss *Stylesheet, inst Instruction, inResultDoc
 	// For xsl:for-each whose select does NOT consume the stream (motionless/upward),
 	// skip body checks: the body operates in a new, non-streaming context where
 	// last(), position(), etc. are allowed.
-	if fe, ok := inst.(*ForEachInst); ok {
+	if fe, ok := inst.(*forEachInst); ok {
 		if fe.Select != nil && !xpath3.ExprHasDownwardStep(fe.Select) && !xpath3.ExprUsesDescendantOrSelf(fe.Select) {
 			// Body of for-each over motionless/attribute axis — skip streaming checks.
 			return nil
@@ -409,7 +409,7 @@ func checkStreamableInstructionCtx(ss *Stylesheet, inst Instruction, inResultDoc
 	// that child for-each bodies allow xsl:sequence select="." (nodes flow
 	// to a serializer).
 	childInResultDoc := inResultDoc
-	if _, ok := inst.(*ResultDocumentInst); ok {
+	if _, ok := inst.(*resultDocumentInst); ok {
 		childInResultDoc = true
 	}
 	for _, children := range getChildInstructions(inst) {

@@ -13,7 +13,7 @@ import (
 	"github.com/lestrrat-go/helium/xsd"
 )
 
-func (ec *execContext) execElement(ctx context.Context, inst *ElementInst) error {
+func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error {
 	name, err := inst.Name.evaluate(ctx, ec.contextNode)
 	if err != nil {
 		return err
@@ -616,7 +616,7 @@ func (ec *execContext) annotateAttributesFromType(elem *helium.Element, typeName
 	}
 }
 
-func (ec *execContext) execAttribute(ctx context.Context, inst *AttributeInst) error {
+func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) error {
 	name, err := inst.Name.evaluate(ctx, ec.contextNode)
 	if err != nil {
 		return err
@@ -1146,7 +1146,7 @@ func prefixBoundTo(elem *helium.Element, prefix string) string {
 	return ""
 }
 
-func (ec *execContext) execComment(ctx context.Context, inst *CommentInst) error {
+func (ec *execContext) execComment(ctx context.Context, inst *commentInst) error {
 	var value string
 	if inst.Select != nil {
 		result, err := ec.evalXPath(inst.Select, ec.contextNode)
@@ -1208,7 +1208,7 @@ func sanitizeComment(s string) string {
 	return result
 }
 
-func (ec *execContext) execPI(ctx context.Context, inst *PIInst) error {
+func (ec *execContext) execPI(ctx context.Context, inst *piInst) error {
 	name, err := inst.Name.evaluate(ctx, ec.contextNode)
 	if err != nil {
 		return err
@@ -1259,7 +1259,7 @@ func (ec *execContext) execPI(ctx context.Context, inst *PIInst) error {
 	return ec.addNode(pi)
 }
 
-func (ec *execContext) execNamespace(ctx context.Context, inst *NamespaceInst) error {
+func (ec *execContext) execNamespace(ctx context.Context, inst *namespaceInst) error {
 	name, err := inst.Name.evaluate(ctx, ec.contextNode)
 	if err != nil {
 		return err

@@ -5,7 +5,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
-func (c *compiler) compileLocalVariable(elem *helium.Element) (*VariableInst, error) {
+func (c *compiler) compileLocalVariable(elem *helium.Element) (*variableInst, error) {
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
@@ -16,7 +16,7 @@ func (c *compiler) compileLocalVariable(elem *helium.Element) (*VariableInst, er
 		return nil, err
 	}
 
-	inst := &VariableInst{
+	inst := &variableInst{
 		Name: resolveQName(name, c.nsBindings),
 		As:   asAttr,
 	}
@@ -49,8 +49,8 @@ func (c *compiler) compileLocalVariable(elem *helium.Element) (*VariableInst, er
 	return inst, nil
 }
 
-func (c *compiler) compileMessage(elem *helium.Element) (*MessageInst, error) {
-	inst := &MessageInst{}
+func (c *compiler) compileMessage(elem *helium.Element) (*messageInst, error) {
+	inst := &messageInst{}
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
@@ -73,7 +73,7 @@ func (c *compiler) compileMessage(elem *helium.Element) (*MessageInst, error) {
 		if err != nil {
 			return nil, err
 		}
-		// If the AVT is a static value, validate it is "yes" or "no"
+		// If the avt is a static value, validate it is "yes" or "no"
 		if sv, ok := avt.staticValue(); ok {
 			if sv != lexicon.ValueYes && sv != lexicon.ValueNo {
 				return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:message/@terminate", sv)
@@ -94,16 +94,16 @@ func (c *compiler) compileMessage(elem *helium.Element) (*MessageInst, error) {
 	return inst, nil
 }
 
-func (c *compiler) compileMap(elem *helium.Element) (*MapInst, error) {
+func (c *compiler) compileMap(elem *helium.Element) (*mapInst, error) {
 	body, err := c.compileChildren(elem)
 	if err != nil {
 		return nil, err
 	}
-	return &MapInst{Body: body}, nil
+	return &mapInst{Body: body}, nil
 }
 
-func (c *compiler) compileMapEntry(elem *helium.Element) (*MapEntryInst, error) {
-	inst := &MapEntryInst{}
+func (c *compiler) compileMapEntry(elem *helium.Element) (*mapEntryInst, error) {
+	inst := &mapEntryInst{}
 
 	keyAttr := getAttr(elem, "key")
 	if keyAttr != "" {
@@ -142,7 +142,7 @@ func (c *compiler) compileMapEntry(elem *helium.Element) (*MapEntryInst, error) 
 // Required attribute: test.
 // Optional attributes: select, error-code.
 // The body provides the error message if no select attribute is present.
-func (c *compiler) compileAssert(elem *helium.Element) (Instruction, error) {
+func (c *compiler) compileAssert(elem *helium.Element) (instruction, error) {
 	testAttr := getAttr(elem, "test")
 	if testAttr == "" {
 		return nil, staticError(errCodeXTSE0010, "xsl:assert requires a test attribute")
@@ -153,7 +153,7 @@ func (c *compiler) compileAssert(elem *helium.Element) (Instruction, error) {
 		return nil, err
 	}
 
-	inst := &AssertInst{
+	inst := &assertInst{
 		Test:      testExpr,
 		ErrorCode: errCodeXTMM9001, // default error code per XSLT 3.0 spec
 	}

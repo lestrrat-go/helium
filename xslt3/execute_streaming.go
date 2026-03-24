@@ -18,8 +18,8 @@ var errNextIter = errors.New("xsl:next-iteration")
 
 // execSourceDocument executes xsl:source-document by loading the referenced
 // document into a DOM tree and executing the body with that document as context.
-func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocumentInst) error {
-	// Evaluate the href AVT to get the URI string.
+func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocumentInst) error {
+	// Evaluate the href avt to get the URI string.
 	uri, err := inst.Href.evaluate(ctx, ec.contextNode)
 	if err != nil {
 		return err
@@ -142,7 +142,7 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *SourceDocum
 
 // execIterate executes xsl:iterate, processing each item in the selected
 // sequence with mutable iteration parameters.
-func (ec *execContext) execIterate(ctx context.Context, inst *IterateInst) error {
+func (ec *execContext) execIterate(ctx context.Context, inst *iterateInst) error {
 	// Evaluate the select expression.
 	result, err := ec.evalXPath(inst.Select, ec.contextNode)
 	if err != nil {
@@ -311,7 +311,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *IterateInst) error
 // execFork executes xsl:fork by running each branch sequentially.
 // In a true streaming implementation branches would run concurrently,
 // but for the DOM-materialization strategy sequential execution is correct.
-func (ec *execContext) execFork(ctx context.Context, inst *ForkInst) error {
+func (ec *execContext) execFork(ctx context.Context, inst *forkInst) error {
 	for _, branch := range inst.Branches {
 		for _, child := range branch {
 			if err := ec.executeInstruction(ctx, child); err != nil {
@@ -323,7 +323,7 @@ func (ec *execContext) execFork(ctx context.Context, inst *ForkInst) error {
 }
 
 // execBreak executes xsl:break, which terminates the enclosing xsl:iterate.
-func (ec *execContext) execBreak(ctx context.Context, inst *BreakInst) error {
+func (ec *execContext) execBreak(ctx context.Context, inst *breakInst) error {
 	if inst.Select != nil {
 		result, err := ec.evalXPath(inst.Select, ec.contextNode)
 		if err != nil {
@@ -342,7 +342,7 @@ func (ec *execContext) execBreak(ctx context.Context, inst *BreakInst) error {
 
 // execNextIteration executes xsl:next-iteration, which signals the enclosing
 // xsl:iterate to advance to the next item with updated parameter values.
-func (ec *execContext) execNextIteration(ctx context.Context, inst *NextIterationInst) error {
+func (ec *execContext) execNextIteration(ctx context.Context, inst *nextIterationInst) error {
 	params := make(map[string]xpath3.Sequence, len(inst.Params))
 	for _, wp := range inst.Params {
 		val, err := ec.evaluateWithParam(ctx, wp)
@@ -371,7 +371,7 @@ type mergeSourceItems struct {
 	name            string
 	items           xpath3.ItemSlice
 	keys            [][]mergeKeyValue // keys[i] corresponds to items[i]
-	sortBeforeMerge bool              // from parent MergeSource
+	sortBeforeMerge bool              // from parent mergeSource
 	sourceIdx       int               // index into inst.Sources
 }
 
@@ -520,7 +520,7 @@ func applyNumericMergeKey(mkv *mergeKeyValue) {
 // execMerge executes xsl:merge by loading, sorting, and merging items from
 // multiple sources, then executing the merge-action for each group of items
 // sharing the same key.
-func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
+func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 	// 1. Gather items from all sources.
 	var allSources []mergeSourceItems
 	for srcIdx, src := range inst.Sources {
@@ -844,7 +844,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *MergeInst) error {
 // for a single merge-source definition, returning one mergeSourceItems per
 // source document/item. If for-each-source returns multiple URIs, each becomes
 // a separate mergeSourceItems entry sharing the same source name.
-func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *MergeSource) ([]mergeSourceItems, error) {
+func (ec *execContext) gatherMergeSourceItems(ctx context.Context, src *mergeSource) ([]mergeSourceItems, error) {
 	var result []mergeSourceItems
 
 	if src.ForEachSource != nil {
@@ -969,7 +969,7 @@ func (ec *execContext) storeAccumulatorSnapshot(dst map[helium.Node]map[string]x
 	}
 }
 
-func (ec *execContext) prepareMergeSourceAccumulators(ctx context.Context, src *MergeSource, node helium.Node) error {
+func (ec *execContext) prepareMergeSourceAccumulators(ctx context.Context, src *mergeSource, node helium.Node) error {
 	if len(src.UseAccumulators) == 0 || len(ec.stylesheet.accumulators) == 0 || node == nil {
 		return nil
 	}
@@ -992,7 +992,7 @@ func (ec *execContext) prepareMergeSourceAccumulators(ctx context.Context, src *
 	return ec.computeAccumulatorStates(ctx, doc, names)
 }
 
-func (ec *execContext) prepareSourceDocumentAccumulators(ctx context.Context, inst *SourceDocumentInst, doc helium.Node) error {
+func (ec *execContext) prepareSourceDocumentAccumulators(ctx context.Context, inst *sourceDocumentInst, doc helium.Node) error {
 	if len(inst.UseAccumulators) == 0 || len(ec.stylesheet.accumulators) == 0 || doc == nil {
 		return nil
 	}
@@ -1203,7 +1203,7 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 	return nil
 }
 
-func (ec *execContext) checkAccumulatorType(def *AccumulatorDef, seq xpath3.Sequence) (xpath3.Sequence, error) {
+func (ec *execContext) checkAccumulatorType(def *accumulatorDef, seq xpath3.Sequence) (xpath3.Sequence, error) {
 	if def == nil || def.As == "" {
 		return seq, nil
 	}
@@ -1251,7 +1251,7 @@ func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effect
 
 // evaluateMergeSelect evaluates the select expression of a merge source
 // against a loaded document.
-func (ec *execContext) evaluateMergeSelect(ctx context.Context, src *MergeSource, doc *helium.Document) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateMergeSelect(ctx context.Context, src *mergeSource, doc *helium.Document) (xpath3.Sequence, error) {
 	if src.Select == nil {
 		return xpath3.ItemSlice{xpath3.NodeItem{Node: doc}}, nil
 	}
@@ -1277,7 +1277,7 @@ func (ec *execContext) evaluateMergeSelect(ctx context.Context, src *MergeSource
 
 // evaluateMergeSelectOnNode evaluates the select expression of a merge source
 // against a specific node (used with for-each-item).
-func (ec *execContext) evaluateMergeSelectOnNode(ctx context.Context, src *MergeSource, node helium.Node) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateMergeSelectOnNode(ctx context.Context, src *mergeSource, node helium.Node) (xpath3.Sequence, error) {
 	if src.Select == nil {
 		if node != nil {
 			return xpath3.ItemSlice{xpath3.NodeItem{Node: node}}, nil
@@ -1309,7 +1309,7 @@ func (ec *execContext) evaluateMergeSelectOnNode(ctx context.Context, src *Merge
 // evaluateMergeSelectOnItem evaluates the select expression for a merge source
 // with an atomic item as the context item (used with for-each-item when the
 // items are not nodes).
-func (ec *execContext) evaluateMergeSelectOnItem(_ context.Context, src *MergeSource, item xpath3.Item) (xpath3.Sequence, error) {
+func (ec *execContext) evaluateMergeSelectOnItem(_ context.Context, src *mergeSource, item xpath3.Item) (xpath3.Sequence, error) {
 	if src.Select == nil {
 		return xpath3.ItemSlice{item}, nil
 	}
@@ -1328,7 +1328,7 @@ func (ec *execContext) evaluateMergeSelectOnItem(_ context.Context, src *MergeSo
 }
 
 // evaluateMergeKeys evaluates the merge key expressions for all items in a source.
-func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceItems, keyDefs []*MergeKey) ([][]mergeKeyValue, error) {
+func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceItems, keyDefs []*mergeKey) ([][]mergeKeyValue, error) {
 	keys := make([][]mergeKeyValue, len(src.items))
 
 	savedContext := ec.contextNode

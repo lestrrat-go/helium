@@ -6,7 +6,7 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
-func checkStreamableFunctionBody(ss *Stylesheet, fn *XSLFunction) error {
+func checkStreamableFunctionBody(ss *Stylesheet, fn *xslFunction) error {
 	cat := fn.Streamability
 	switch cat {
 	case "absorbing":
@@ -26,7 +26,7 @@ func checkStreamableFunctionBody(ss *Stylesheet, fn *XSLFunction) error {
 // checkAbsorbingFunction checks that an absorbing function's body doesn't have
 // non-streamable patterns. Absorbing functions CAN use upward axes and navigate
 // freely, but must produce a grounded result and consume streaming params at most once.
-func checkAbsorbingFunction(fn *XSLFunction) error {
+func checkAbsorbingFunction(fn *xslFunction) error {
 	// path() is not streamable even in absorbing functions
 	for _, inst := range fn.Body {
 		for _, expr := range getInstructionExprs(inst) {
@@ -65,7 +65,7 @@ func checkAbsorbingFunction(fn *XSLFunction) error {
 
 // checkInspectionFunction checks that an inspection function's body
 // only inspects properties of the streaming argument without consuming it.
-func checkInspectionFunction(fn *XSLFunction) error {
+func checkInspectionFunction(fn *xslFunction) error {
 	// First param must be a singleton node (node()?), not a sequence (node()*).
 	if err := checkStreamingParamIsSingleton(fn, "inspection"); err != nil {
 		return err
@@ -96,7 +96,7 @@ func checkInspectionFunction(fn *XSLFunction) error {
 
 // checkFilterFunction checks that a filter function's body only filters
 // the streaming argument without consuming it.
-func checkFilterFunction(fn *XSLFunction) error {
+func checkFilterFunction(fn *xslFunction) error {
 	// First param must be a singleton node (node()?), not a sequence (node()*).
 	if err := checkStreamingParamIsSingleton(fn, "filter"); err != nil {
 		return err
@@ -127,7 +127,7 @@ func checkFilterFunction(fn *XSLFunction) error {
 
 // checkShallowDescentFunction checks that a shallow-descent function's body
 // only navigates to children (not deeper descendants) of the streaming argument.
-func checkShallowDescentFunction(fn *XSLFunction) error {
+func checkShallowDescentFunction(fn *xslFunction) error {
 	if len(fn.Params) == 0 {
 		return nil
 	}
@@ -558,7 +558,7 @@ func isAtomicTypeConstraint(as string) bool {
 
 // checkAscentFunction checks that an ascent function's body navigates
 // upward from the streaming argument without consuming it.
-func checkAscentFunction(fn *XSLFunction) error {
+func checkAscentFunction(fn *xslFunction) error {
 	// First param must be a singleton node (node()?), not a sequence (node()*).
 	if err := checkStreamingParamIsSingleton(fn, "ascent"); err != nil {
 		return err
@@ -594,7 +594,7 @@ func checkAscentFunction(fn *XSLFunction) error {
 // function accepts a singleton node (node()?), not a sequence (node()*).
 // Functions declared with streamability categories like filter, inspection, ascent,
 // and absorbing must receive a single streaming node, not a sequence.
-func checkStreamingParamIsSingleton(fn *XSLFunction, category string) error {
+func checkStreamingParamIsSingleton(fn *xslFunction, category string) error {
 	if len(fn.Params) == 0 {
 		return nil
 	}
@@ -616,7 +616,7 @@ func checkStreamingParamIsSingleton(fn *XSLFunction, category string) error {
 // checkAdditionalParamsNotStreaming checks that additional parameters (2nd, 3rd, ...)
 // of a streamable function have atomic type constraints, so they cannot receive
 // streaming nodes from the caller.
-func checkAdditionalParamsNotStreaming(fn *XSLFunction, category string) error {
+func checkAdditionalParamsNotStreaming(fn *xslFunction, category string) error {
 	for i := 1; i < len(fn.Params); i++ {
 		p := fn.Params[i]
 		as := strings.TrimSpace(p.As)
@@ -632,7 +632,7 @@ func checkAdditionalParamsNotStreaming(fn *XSLFunction, category string) error {
 
 // functionReturnsStreamingParam returns true if the function body can return
 // the streaming parameter directly (not wrapped in a grounding function).
-func functionReturnsStreamingParam(fn *XSLFunction) bool {
+func functionReturnsStreamingParam(fn *xslFunction) bool {
 	if len(fn.Params) == 0 {
 		return false
 	}
@@ -650,7 +650,7 @@ func functionReturnsStreamingParam(fn *XSLFunction) bool {
 	}
 
 	for _, inst := range fn.Body {
-		if seq, ok := inst.(*XSLSequenceInst); ok && seq.Select != nil {
+		if seq, ok := inst.(*xslSequenceInst); ok && seq.Select != nil {
 			if exprReturnsParam(seq.Select.AST(), paramNames) {
 				return true
 			}
@@ -661,7 +661,7 @@ func functionReturnsStreamingParam(fn *XSLFunction) bool {
 
 // functionUsesUpwardFromParam returns true if the function navigates upward
 // (parent/ancestor) from a streaming parameter.
-func functionUsesUpwardFromParam(fn *XSLFunction) bool {
+func functionUsesUpwardFromParam(fn *xslFunction) bool {
 	if len(fn.Params) == 0 {
 		return false
 	}
@@ -742,7 +742,7 @@ func exprHasUpwardAxis(expr xpath3.Expr) bool {
 }
 
 // functionBodyIsGrounded returns true if the function body produces grounded output.
-func functionBodyIsGrounded(fn *XSLFunction) bool {
+func functionBodyIsGrounded(fn *xslFunction) bool {
 	if len(fn.Params) == 0 {
 		return true
 	}
@@ -753,7 +753,7 @@ func functionBodyIsGrounded(fn *XSLFunction) bool {
 	}
 
 	for _, inst := range fn.Body {
-		if seq, ok := inst.(*XSLSequenceInst); ok && seq.Select != nil {
+		if seq, ok := inst.(*xslSequenceInst); ok && seq.Select != nil {
 			if exprReturnsParam(seq.Select.AST(), paramNames) {
 				return false
 			}
@@ -782,7 +782,7 @@ func exprReturnsParam(expr xpath3.Expr, paramNames map[string]bool) bool {
 
 // functionHasMultipleConsumingRefs returns true if a function has multiple
 // references to a streaming parameter that involve downward navigation.
-func functionHasMultipleConsumingRefs(fn *XSLFunction) bool {
+func functionHasMultipleConsumingRefs(fn *xslFunction) bool {
 	if len(fn.Params) == 0 {
 		return false
 	}

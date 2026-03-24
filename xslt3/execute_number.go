@@ -14,7 +14,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
-func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
+func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 	node := ec.contextNode
 
 	// XSLT 3.0: select attribute specifies which node to number.
@@ -172,7 +172,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *NumberInst) error {
 
 // numberNodeMatches tests if a node matches the count pattern.
 // If no count pattern, matches nodes with the same type and name as the context node.
-func (ec *execContext) numberNodeMatches(inst *NumberInst, target helium.Node, contextNode helium.Node) bool {
+func (ec *execContext) numberNodeMatches(inst *numberInst, target helium.Node, contextNode helium.Node) bool {
 	if inst.Count != nil {
 		// Special case: count="." matches any non-document node
 		if inst.Count.source == "." && target.Type() != helium.DocumentNode {
@@ -204,7 +204,7 @@ func (ec *execContext) numberNodeMatches(inst *NumberInst, target helium.Node, c
 }
 
 // numberFromMatches tests if a node matches the from pattern.
-func (ec *execContext) numberFromMatches(inst *NumberInst, node helium.Node) bool {
+func (ec *execContext) numberFromMatches(inst *numberInst, node helium.Node) bool {
 	if inst.From == nil {
 		return false
 	}
@@ -219,7 +219,7 @@ func (ec *execContext) numberFromMatches(inst *NumberInst, node helium.Node) boo
 
 // numberSingle implements level="single": find the first ancestor-or-self that
 // matches the count pattern, then count preceding siblings that match.
-func (ec *execContext) numberSingle(inst *NumberInst, node helium.Node) []int {
+func (ec *execContext) numberSingle(inst *numberInst, node helium.Node) []int {
 	// Find the first ancestor-or-self that matches count
 	target := ec.numberFindAncestorOrSelf(inst, node)
 	if target == nil {
@@ -238,7 +238,7 @@ func (ec *execContext) numberSingle(inst *NumberInst, node helium.Node) []int {
 
 // numberMultiple implements level="multiple": find all ancestors-or-self that match
 // count (stopping at from), and for each count preceding siblings.
-func (ec *execContext) numberMultiple(inst *NumberInst, node helium.Node) []int {
+func (ec *execContext) numberMultiple(inst *numberInst, node helium.Node) []int {
 	var ancestors []helium.Node
 	for n := node; n != nil; n = n.Parent() {
 		if ec.numberFromMatches(inst, n) {
@@ -277,7 +277,7 @@ func (ec *execContext) numberMultiple(inst *NumberInst, node helium.Node) []int 
 // numberAny implements level="any": count all matching nodes in document order
 // that precede (or are) the context node, going back to the nearest from match.
 // The from node itself is included in the count if it matches count.
-func (ec *execContext) numberAny(inst *NumberInst, node helium.Node) []int {
+func (ec *execContext) numberAny(inst *numberInst, node helium.Node) []int {
 	count := 0
 	cur := node
 	for cur != nil {
@@ -322,7 +322,7 @@ func (ec *execContext) lastDescendant(node helium.Node) helium.Node {
 
 // numberFindAncestorOrSelf finds the first ancestor-or-self that matches
 // the count pattern.
-func (ec *execContext) numberFindAncestorOrSelf(inst *NumberInst, node helium.Node) helium.Node {
+func (ec *execContext) numberFindAncestorOrSelf(inst *numberInst, node helium.Node) helium.Node {
 	for n := node; n != nil; n = n.Parent() {
 		if ec.numberNodeMatches(inst, n, node) {
 			return n

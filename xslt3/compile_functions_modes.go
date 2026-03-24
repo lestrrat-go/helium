@@ -18,7 +18,7 @@ func (c *compiler) compileGlobalContextItem(elem *helium.Element) error {
 	if err := c.validateAsSequenceType(asAttr, "xsl:global-context-item"); err != nil {
 		return err
 	}
-	def := &GlobalContextItemDef{
+	def := &globalContextItemDef{
 		Use: getAttr(elem, "use"),
 		As:  asAttr,
 	}
@@ -33,7 +33,7 @@ func (c *compiler) compileGlobalContextItem(elem *helium.Element) error {
 		moduleKey = "<main>"
 	}
 	if c.stylesheet.globalContextModules == nil {
-		c.stylesheet.globalContextModules = make(map[string]*GlobalContextItemDef)
+		c.stylesheet.globalContextModules = make(map[string]*globalContextItemDef)
 	}
 	// XTSE3087: more than one declaration in the same stylesheet module.
 	if _, exists := c.stylesheet.globalContextModules[moduleKey]; exists {
@@ -232,7 +232,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 			"xsl:function %q with no parameters must not have streamability=%q (only unclassified allowed)", name, streamability)
 	}
 
-	fn := &XSLFunction{
+	fn := &xslFunction{
 		Name:          qn,
 		Params:        params,
 		Body:          body,
@@ -379,7 +379,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 
 	typed := getAttr(elem, "typed")
 
-	md := &ModeDef{
+	md := &modeDef{
 		Name:            name,
 		OnNoMatch:       onNoMatch,
 		Typed:           typed,
@@ -391,7 +391,7 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	}
 
 	if c.stylesheet.modeDefs == nil {
-		c.stylesheet.modeDefs = make(map[string]*ModeDef)
+		c.stylesheet.modeDefs = make(map[string]*modeDef)
 	}
 
 	// Check for conflicting declarations at the same import precedence

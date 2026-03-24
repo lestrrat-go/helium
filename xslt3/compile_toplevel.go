@@ -643,7 +643,7 @@ func (c *compiler) compileNamespaceAlias(elem *helium.Element) error {
 		resultPfx = resultPrefix
 	}
 
-	c.stylesheet.namespaceAliases = append(c.stylesheet.namespaceAliases, NamespaceAlias{
+	c.stylesheet.namespaceAliases = append(c.stylesheet.namespaceAliases, namespaceAlias{
 		StylesheetURI: stylesheetURI,
 		ResultURI:     resultURI,
 		ResultPrefix:  resultPfx,

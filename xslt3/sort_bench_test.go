@@ -17,10 +17,10 @@ type benchSortEnv struct {
 	ec      *execContext
 	nodes   []helium.Node
 	items   xpath3.Sequence
-	sortKey []*SortKey
+	sortKey []*sortKey
 }
 
-func newBenchSortEnv(b *testing.B, n int, sortKeys []*SortKey) *benchSortEnv {
+func newBenchSortEnv(b *testing.B, n int, sortKeys []*sortKey) *benchSortEnv {
 	b.Helper()
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
@@ -87,7 +87,7 @@ func mustCompileSortXPath(b *testing.B, expr string) *xpath3.Expression {
 	return e
 }
 
-func mustCompileSortAVT(b *testing.B, s string) *AVT {
+func mustCompileSortAVT(b *testing.B, s string) *avt {
 	b.Helper()
 	avt, err := compileAVT(s, nil)
 	if err != nil {
@@ -97,14 +97,14 @@ func mustCompileSortAVT(b *testing.B, s string) *AVT {
 }
 
 func BenchmarkSortNodes(b *testing.B) {
-	textKey := []*SortKey{{
+	textKey := []*sortKey{{
 		Select: mustCompileSortXPath(b, "."),
 	}}
-	numericKey := []*SortKey{{
+	numericKey := []*sortKey{{
 		Select:   mustCompileSortXPath(b, "."),
 		DataType: mustCompileSortAVT(b, "number"),
 	}}
-	autoNumericKey := []*SortKey{{
+	autoNumericKey := []*sortKey{{
 		Select: mustCompileSortXPath(b, "number(.)"),
 	}}
 
@@ -151,7 +151,7 @@ func BenchmarkSortNodes(b *testing.B) {
 }
 
 func BenchmarkSortItems(b *testing.B) {
-	textKey := []*SortKey{{
+	textKey := []*sortKey{{
 		Select: mustCompileSortXPath(b, "."),
 	}}
 
@@ -172,7 +172,7 @@ func BenchmarkSortItems(b *testing.B) {
 }
 
 func BenchmarkSortNodesMultiKey(b *testing.B) {
-	threeKeys := []*SortKey{
+	threeKeys := []*sortKey{
 		{Select: mustCompileSortXPath(b, ".")},
 		{
 			Select:   mustCompileSortXPath(b, "."),

@@ -76,10 +76,10 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 	return ec.applyBuiltinRules(ctx, node, mode, paramValues...)
 }
 
-// lookupModeDef returns the ModeDef for the given mode name.
+// lookupModeDef returns the modeDef for the given mode name.
 // Handles the mismatch where templates use "" for the unnamed mode
 // but mode definitions are stored under "#default".
-func (ec *execContext) lookupModeDef(mode string) *ModeDef {
+func (ec *execContext) lookupModeDef(mode string) *modeDef {
 	if md := ec.stylesheet.modeDefs[mode]; md != nil {
 		return md
 	}
@@ -118,7 +118,7 @@ func (ec *execContext) nodeIsTyped(node helium.Node) bool {
 // findBestTemplate finds the highest-priority matching template for a node.
 // Returns XTRE0540 when on-multiple-match="fail" and two templates match
 // with equal priority and import precedence.
-func (ec *execContext) findBestTemplate(node helium.Node, mode string) (*Template, error) {
+func (ec *execContext) findBestTemplate(node helium.Node, mode string) (*template, error) {
 	// Set currentNode to the candidate so current() works in pattern predicates
 	savedCurrent := ec.currentNode
 	ec.currentNode = node
@@ -149,7 +149,7 @@ func (ec *execContext) findBestTemplate(node helium.Node, mode string) (*Templat
 }
 
 // findFirstMatch returns the first template in the list that matches the node.
-func (ec *execContext) findFirstMatch(templates []*Template, node helium.Node) *Template {
+func (ec *execContext) findFirstMatch(templates []*template, node helium.Node) *template {
 	for _, tmpl := range templates {
 		if tmpl.Match != nil && tmpl.Match.matchPattern(ec, node) {
 			return tmpl
@@ -180,8 +180,8 @@ func (ec *execContext) onMultipleMatchFail(mode string) bool {
 
 // hasConflictingMatch checks whether there is another template (besides best)
 // that matches the same node with equal import precedence and priority.
-func (ec *execContext) hasConflictingMatch(node helium.Node, mode string, best *Template) bool {
-	check := func(templates []*Template) bool {
+func (ec *execContext) hasConflictingMatch(node helium.Node, mode string, best *template) bool {
+	check := func(templates []*template) bool {
 		for _, tmpl := range templates {
 			if tmpl == best {
 				continue
@@ -217,8 +217,8 @@ func (ec *execContext) hasConflictingMatch(node helium.Node, mode string, best *
 
 // findAtomicTemplate finds a template matching an atomic value.
 // XSLT 3.0 patterns like ".[. instance of xs:integer]" can match atomic items.
-func (ec *execContext) findAtomicTemplate(item xpath3.Item, mode string) (*Template, error) {
-	var best *Template
+func (ec *execContext) findAtomicTemplate(item xpath3.Item, mode string) (*template, error) {
+	var best *template
 	templates := ec.stylesheet.modeTemplates[mode]
 	for _, tmpl := range templates {
 		if tmpl.Match != nil && ec.matchAtomicPattern(tmpl.Match, item) {
@@ -249,8 +249,8 @@ func (ec *execContext) findAtomicTemplate(item xpath3.Item, mode string) (*Templ
 
 // hasConflictingAtomicMatch checks whether there is another template (besides best)
 // that matches the same atomic item with equal import precedence and priority.
-func (ec *execContext) hasConflictingAtomicMatch(item xpath3.Item, mode string, best *Template) bool {
-	check := func(templates []*Template) bool {
+func (ec *execContext) hasConflictingAtomicMatch(item xpath3.Item, mode string, best *template) bool {
+	check := func(templates []*template) bool {
 		for _, tmpl := range templates {
 			if tmpl == best {
 				continue
@@ -280,9 +280,9 @@ func (ec *execContext) hasConflictingAtomicMatch(item xpath3.Item, mode string, 
 }
 
 // matchAtomicPattern checks if an atomic item matches a pattern.
-func (ec *execContext) matchAtomicPattern(p *Pattern, item xpath3.Item) bool {
+func (ec *execContext) matchAtomicPattern(p *pattern, item xpath3.Item) bool {
 	for _, alt := range p.Alternatives {
-		// Variable reference patterns (e.g., match="$var") only match nodes,
+		// variable reference patterns (e.g., match="$var") only match nodes,
 		// never atomic items per XSLT 3.0 §5.5.3.
 		if _, isVar := alt.expr.(xpath3.VariableExpr); isVar {
 			continue
@@ -306,7 +306,7 @@ func (ec *execContext) matchAtomicPattern(p *Pattern, item xpath3.Item) bool {
 }
 
 // executeAtomicTemplate executes a template with an atomic item as context.
-func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *Template, item xpath3.Item, mode string) error {
+func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template, item xpath3.Item, mode string) error {
 	savedContext := ec.contextNode
 	savedCurrent := ec.currentNode
 	savedMode := ec.currentMode
@@ -389,7 +389,7 @@ func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *Template
 // executeTemplate executes a template with the given node as context.
 const maxRecursionDepth = 2000
 
-func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node helium.Node, mode string, paramOverrides ...map[string]xpath3.Sequence) error {
+func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node helium.Node, mode string, paramOverrides ...map[string]xpath3.Sequence) error {
 	// XTDE0160: backwards compatibility mode is not supported.
 	// Only XSLT 1.0 triggers backwards compatible behavior. Other versions
 	// (like 1.5) are forward-compatible and don't require BC support.
@@ -567,7 +567,7 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 
 	// Execute template body
 	if tmpl.As != "" {
-		// Template has return type constraint — capture output and validate
+		// template has return type constraint — capture output and validate
 		return ec.executeTemplateBodyWithAs(ctx, tmpl)
 	}
 
@@ -577,7 +577,7 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *Template, node
 // executeTemplateBodyWithAs runs the template body in capture mode,
 // checks the result against the declared as type, then writes the
 // validated items to the real output.
-func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *Template) error {
+func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *template) error {
 	seq, err := ec.evaluateBodyAsSequence(ctx, tmpl.Body)
 	if err != nil {
 		return err

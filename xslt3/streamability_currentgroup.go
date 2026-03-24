@@ -2,7 +2,7 @@ package xslt3
 
 import "github.com/lestrrat-go/helium/xpath3"
 
-func countDownwardInInstructions(ss *Stylesheet, instructions []Instruction) int {
+func countDownwardInInstructions(ss *Stylesheet, instructions []instruction) int {
 	total := 0
 	for _, inst := range instructions {
 		// When a for-each-group select ends with a grounding function
@@ -10,7 +10,7 @@ func countDownwardInInstructions(ss *Stylesheet, instructions []Instruction) int
 		// operate on grounded (in-memory) items, not the streaming source.
 		// Only count the select expression itself as a streaming downward
 		// selection; skip the grouping key and sort expressions.
-		if fg, ok := inst.(*ForEachGroupInst); ok {
+		if fg, ok := inst.(*forEachGroupInst); ok {
 			if fg.Select != nil && exprEndsWithGrounding(fg.Select.AST()) {
 				total += countStreamingDownwardSelections(ss, fg.Select.AST())
 				continue
@@ -29,11 +29,11 @@ func countDownwardInInstructions(ss *Stylesheet, instructions []Instruction) int
 // Uses like current-group()/AUTHOR or copy-of(current-group()) ARE consuming.
 // In choose branches (when/otherwise), only the max is counted since only one
 // branch executes at a time.
-func countCurrentGroupConsumingRefs(body []Instruction) int {
+func countCurrentGroupConsumingRefs(body []instruction) int {
 	count := 0
 	for _, inst := range body {
 		// For choose instructions, take the max across branches, not the sum.
-		if choose, ok := inst.(*ChooseInst); ok {
+		if choose, ok := inst.(*chooseInst); ok {
 			maxBranch := 0
 			for _, when := range choose.When {
 				branchCount := countCurrentGroupConsumingRefs(when.Body)
@@ -53,7 +53,7 @@ func countCurrentGroupConsumingRefs(body []Instruction) int {
 
 		// For fork instructions, each branch gets its own copy of the
 		// stream, so take the max across branches (like choose).
-		if fork, ok := inst.(*ForkInst); ok {
+		if fork, ok := inst.(*forkInst); ok {
 			maxBranch := 0
 			for _, branch := range fork.Branches {
 				branchCount := countCurrentGroupConsumingRefs(branch)
@@ -72,7 +72,7 @@ func countCurrentGroupConsumingRefs(body []Instruction) int {
 			count += countCurrentGroupConsumingInExpr(expr.AST())
 		}
 		// Check LRE attribute AVTs for current-group() references.
-		if lre, ok := inst.(*LiteralResultElement); ok {
+		if lre, ok := inst.(*literalResultElement); ok {
 			for _, attr := range lre.Attrs {
 				if attr.Value != nil {
 					for _, part := range attr.Value.parts {
@@ -85,7 +85,7 @@ func countCurrentGroupConsumingRefs(body []Instruction) int {
 		}
 		// Check child instructions, but don't recurse into nested for-each-group
 		// bodies (their current-group() refers to their own group, not ours).
-		if _, ok := inst.(*ForEachGroupInst); !ok {
+		if _, ok := inst.(*forEachGroupInst); !ok {
 			for _, children := range getChildInstructions(inst) {
 				count += countCurrentGroupConsumingRefs(children)
 			}

@@ -221,7 +221,7 @@ func checkTypedModePatterns(ss *Stylesheet) error {
 
 // checkPatternAgainstSchema checks all alternatives in a pattern for
 // element name tests that don't exist in the imported schemas.
-func checkPatternAgainstSchema(p *Pattern, reg *schemaRegistry) error {
+func checkPatternAgainstSchema(p *pattern, reg *schemaRegistry) error {
 	for _, alt := range p.Alternatives {
 		if err := checkExprAgainstSchema(alt.expr, reg, p.xpathDefaultNS, p.nsBindings); err != nil {
 			return err
@@ -267,7 +267,7 @@ func checkExprAgainstSchema(expr xpath3.Expr, reg *schemaRegistry, xpathDefaultN
 	return nil
 }
 
-// checkStepAgainstSchema checks if a step's NameTest is a declared element.
+// checkStepAgainstSchema checks if a step's nameTest is a declared element.
 func checkStepAgainstSchema(step xpath3.Step, reg *schemaRegistry, xpathDefaultNS string, nsBindings map[string]string) error {
 	// Only check axes whose principal node kind is Element
 	if step.Axis == xpath3.AxisAttribute || step.Axis == xpath3.AxisNamespace {
@@ -352,7 +352,7 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 	return "Q{}" + qname
 }
 
-// validateAsSequenceType checks compile-time validity of an as= SequenceType
+// validateAsSequenceType checks compile-time validity of an as= sequenceType
 // expression when schemas are imported. It detects schema-element(Q) and
 // schema-attribute(Q) references and verifies that Q is declared in at least
 // one imported schema. Raises XTSE0590 when a referenced element or attribute

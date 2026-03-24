@@ -11,12 +11,12 @@ import (
 
 // overrideSet collects compiled override components from xsl:override.
 type overrideSet struct {
-	functions      map[funcKey]*XSLFunction
-	namedTemplates map[string]*Template
-	matchTemplates []*Template
-	variables      map[string]*Variable
-	params         map[string]*Param
-	attributeSets  map[string]*AttributeSetDef
+	functions      map[funcKey]*xslFunction
+	namedTemplates map[string]*template
+	matchTemplates []*template
+	variables      map[string]*variable
+	params         map[string]*param
+	attributeSets  map[string]*attributeSetDef
 }
 
 // processOverrides handles xsl:override children of xsl:use-package.
@@ -24,11 +24,11 @@ type overrideSet struct {
 // validates they match existing package components, and returns the override set.
 func (c *compiler) processOverrides(usePackageElem *helium.Element, pkg *Stylesheet) (*overrideSet, error) {
 	oset := &overrideSet{
-		functions:      make(map[funcKey]*XSLFunction),
-		namedTemplates: make(map[string]*Template),
-		variables:      make(map[string]*Variable),
-		params:         make(map[string]*Param),
-		attributeSets:  make(map[string]*AttributeSetDef),
+		functions:      make(map[funcKey]*xslFunction),
+		namedTemplates: make(map[string]*template),
+		variables:      make(map[string]*variable),
+		params:         make(map[string]*param),
+		attributeSets:  make(map[string]*attributeSetDef),
 	}
 
 	for child := range helium.Children(usePackageElem) {
@@ -124,7 +124,7 @@ func (c *compiler) compileOverrideChildren(overrideElem *helium.Element, pkg *St
 }
 
 // compileOverrideFunction compiles a function inside xsl:override.
-func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet) (*XSLFunction, xpath3.QualifiedName, error) {
+func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet) (*xslFunction, xpath3.QualifiedName, error) {
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE0110, "xsl:function in xsl:override requires name attribute")
@@ -157,7 +157,7 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 	}
 
 	// Check that the function exists in the package (check by name, any arity)
-	var pkgFn *XSLFunction
+	var pkgFn *xslFunction
 	for fk, fn := range pkg.functions {
 		if fk.Name == qn {
 			pkgFn = fn
@@ -206,7 +206,7 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 		return nil, xpath3.QualifiedName{}, err
 	}
 
-	fn := &XSLFunction{
+	fn := &xslFunction{
 		Name:   qn,
 		Params: params,
 		Body:   body,
@@ -226,8 +226,8 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 }
 
 // compileOverrideTemplate compiles a template inside xsl:override.
-func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet) (*Template, error) {
-	tmpl := &Template{
+func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet) (*template, error) {
+	tmpl := &template{
 		ImportPrec:    c.importPrec,
 		MinImportPrec: c.minImportPrec,
 		BaseURI:       c.baseURI,
@@ -332,7 +332,7 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 }
 
 // compileOverrideVariable compiles a variable inside xsl:override.
-func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet) (*Variable, error) {
+func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet) (*variable, error) {
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:variable in xsl:override requires name attribute")
@@ -342,7 +342,7 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 	// Check that the variable or param exists in the package.
 	// In XSLT 3.0, variables and parameters share the same component
 	// namespace, so a variable can override a param (and vice versa).
-	var pkgVar *Variable
+	var pkgVar *variable
 	for _, v := range pkg.globalVars {
 		if v.Name == resolvedName {
 			pkgVar = v
@@ -388,7 +388,7 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 			"cannot override %s variable %q", effectiveVis, name)
 	}
 
-	v := &Variable{Name: resolvedName, As: getAttr(elem, "as")}
+	v := &variable{Name: resolvedName, As: getAttr(elem, "as")}
 
 	// Link the original variable for $xsl:original references
 	if pkgVar != nil {
@@ -414,7 +414,7 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 }
 
 // compileOverrideParam compiles a param inside xsl:override.
-func (c *compiler) compileOverrideParam(elem *helium.Element, pkg *Stylesheet) (*Param, error) {
+func (c *compiler) compileOverrideParam(elem *helium.Element, pkg *Stylesheet) (*param, error) {
 	p, err := c.compileParamDef(elem)
 	if err != nil {
 		return nil, err
@@ -447,7 +447,7 @@ func (c *compiler) compileOverrideParam(elem *helium.Element, pkg *Stylesheet) (
 }
 
 // compileOverrideAttributeSet compiles an attribute-set inside xsl:override.
-func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Stylesheet) (*AttributeSetDef, error) {
+func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Stylesheet) (*attributeSetDef, error) {
 	name := getAttr(elem, "name")
 	if name == "" {
 		return nil, staticError(errCodeXTSE0110, "xsl:attribute-set in xsl:override requires name attribute")
@@ -484,7 +484,7 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 			"cannot override %s attribute-set %q", effectiveVis, name)
 	}
 
-	asd := &AttributeSetDef{Name: resolvedName}
+	asd := &attributeSetDef{Name: resolvedName}
 
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
 		for _, n := range strings.Fields(uas) {
@@ -512,7 +512,7 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 // checkOverrideTemplateCompat validates that an override template is compatible
 // with the base template it replaces. XTSE3070 is raised when parameter types
 // differ or new required parameters are added.
-func checkOverrideTemplateCompat(override, base *Template) error {
+func checkOverrideTemplateCompat(override, base *template) error {
 	// XTSE3070: check return type compatibility.
 	// If both templates have 'as' attributes, they must be compatible
 	// (the override's return type must be a subtype of the base's).
@@ -523,7 +523,7 @@ func checkOverrideTemplateCompat(override, base *Template) error {
 	}
 
 	// Build map of base params by name
-	baseParams := make(map[string]*Param)
+	baseParams := make(map[string]*param)
 	for _, p := range base.Params {
 		baseParams[p.Name] = p
 	}

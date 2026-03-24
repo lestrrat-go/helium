@@ -12,7 +12,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
-func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error {
+func (ec *execContext) execMessage(ctx context.Context, inst *messageInst) error {
 	var value string
 	var bodySeq xpath3.ItemSlice
 	if inst.Select != nil {
@@ -62,7 +62,7 @@ func (ec *execContext) execMessage(ctx context.Context, inst *MessageInst) error
 		case lexicon.ValueNo, "false", "0":
 			terminate = false
 		default:
-			// XTDE0030: AVT value is not a valid xs:boolean
+			// XTDE0030: avt value is not a valid xs:boolean
 			return dynamicError(errCodeXTDE0030,
 				"xsl:message/@terminate value %q is not a valid boolean (yes|no|true|false|1|0)", termStr)
 		}
@@ -151,7 +151,7 @@ func serializeMessageSequence(seq xpath3.Sequence) string {
 	return sb.String()
 }
 
-func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) error {
+func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) error {
 	// When rollback-output="no", write directly to the real output.
 	// If the try fails after producing output, raise XTDE3530.
 	if !inst.RollbackOutput {
@@ -244,7 +244,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	}
 
 	// Extract error code and QName from the error.
-	// Unwrap wrapper errors (e.g., AVT XTDE0045 wrapping FOAR0001) to find
+	// Unwrap wrapper errors (e.g., avt XTDE0045 wrapping FOAR0001) to find
 	// the most specific XPath/XSLT error code for catch clause matching.
 	errNS := lexicon.NamespaceErr
 	errCode := errCodeXSLT0000
@@ -254,7 +254,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 		errCode = xErr.Code
 		errDesc = xErr.Message
 		errQName = xpath3.QNameValue{Prefix: "err", URI: errNS, Local: errCode}
-		// If this is a wrapper error (like XTDE0045 for AVT), check inner
+		// If this is a wrapper error (like XTDE0045 for avt), check inner
 		// cause for a more specific error code.
 		if xErr.Cause != nil {
 			if innerXP, ok := errors.AsType[*xpath3.XPathError](xErr.Cause); ok {
@@ -287,7 +287,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 	ec.localVars = savedVarScope
 
 	// Find matching catch clause
-	var matchedCatch *CatchClause
+	var matchedCatch *catchClause
 	for _, clause := range inst.Catches {
 		if catchMatches(clause, errClark) {
 			matchedCatch = clause
@@ -354,7 +354,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *TryCatchInst) err
 // execTryCatchNoRollback handles xsl:try with rollback-output="no".
 // Output goes directly to the real output. If the try body fails after
 // producing output, XTDE3530 is raised instead of catching the error.
-func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *TryCatchInst) error {
+func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *tryCatchInst) error {
 	out := ec.currentOutput()
 	snapSerial := out.outputSerial
 
@@ -455,7 +455,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *TryCatc
 
 // catchMatches returns true if a catch clause matches the given error code.
 // errClark is the error code in Clark notation: "{uri}local" or just "local" if no namespace.
-func catchMatches(clause *CatchClause, errClark string) bool {
+func catchMatches(clause *catchClause, errClark string) bool {
 	if len(clause.Errors) == 0 {
 		return true // no errors attribute = match all
 	}

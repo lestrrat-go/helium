@@ -7,7 +7,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
-func (ec *execContext) execPerformSort(ctx context.Context, inst *PerformSortInst) error {
+func (ec *execContext) execPerformSort(ctx context.Context, inst *performSortInst) error {
 	var seq xpath3.Sequence
 
 	if inst.Select != nil {

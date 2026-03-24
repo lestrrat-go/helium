@@ -9,9 +9,9 @@ import (
 	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
-// AVT is a compiled Attribute Value Template. It consists of alternating
+// avt is a compiled Attribute Value template. It consists of alternating
 // literal strings and XPath expressions enclosed in curly braces.
-type AVT struct {
+type avt struct {
 	parts []avtPart
 }
 
@@ -20,9 +20,9 @@ type avtPart struct {
 	expr    *xpath3.Expression
 }
 
-// hasFunction returns true if any expression part of the AVT uses the
+// hasFunction returns true if any expression part of the avt uses the
 // named function (no namespace prefix).
-func (a *AVT) hasFunction(name string) bool {
+func (a *avt) hasFunction(name string) bool {
 	if a == nil {
 		return false
 	}
@@ -37,7 +37,7 @@ func (a *AVT) hasFunction(name string) bool {
 // compileAVT compiles an attribute value template string.
 // AVTs contain literal text interspersed with {expr} XPath expressions.
 // {{ and }} are escape sequences for literal { and }.
-func compileAVT(s string, nsBindings map[string]string) (*AVT, error) {
+func compileAVT(s string, nsBindings map[string]string) (*avt, error) {
 	var parts []avtPart
 	i := 0
 	for i < len(s) {
@@ -86,10 +86,10 @@ func compileAVT(s string, nsBindings map[string]string) (*AVT, error) {
 			i = j
 		}
 	}
-	return &AVT{parts: parts}, nil
+	return &avt{parts: parts}, nil
 }
 
-// findAVTExprEnd finds the index of the closing '}' for an AVT expression,
+// findAVTExprEnd finds the index of the closing '}' for an avt expression,
 // tracking brace nesting (for EQName Q{uri}local, map{}, array{}) and
 // skipping braces inside string literals.
 func findAVTExprEnd(s string) int {
@@ -173,10 +173,10 @@ func appendLiteral(parts []avtPart, s string) []avtPart {
 	return append(parts, avtPart{literal: s})
 }
 
-// staticValue returns the literal string value if the AVT contains no
-// dynamic XPath expressions, and true. If the AVT contains any dynamic
+// staticValue returns the literal string value if the avt contains no
+// dynamic XPath expressions, and true. If the avt contains any dynamic
 // parts, it returns ("", false).
-func (a *AVT) staticValue() (string, bool) {
+func (a *avt) staticValue() (string, bool) {
 	if a == nil {
 		return "", false
 	}
@@ -190,8 +190,8 @@ func (a *AVT) staticValue() (string, bool) {
 	return sb.String(), true
 }
 
-// evaluate evaluates the AVT in the given context.
-func (a *AVT) evaluate(ctx context.Context, node helium.Node) (string, error) {
+// evaluate evaluates the avt in the given context.
+func (a *avt) evaluate(ctx context.Context, node helium.Node) (string, error) {
 	if a == nil {
 		return "", nil
 	}
@@ -220,9 +220,9 @@ func (a *AVT) evaluate(ctx context.Context, node helium.Node) (string, error) {
 	return sb.String(), nil
 }
 
-// evaluateStatic evaluates the AVT at compile time using the given Evaluator.
+// evaluateStatic evaluates the avt at compile time using the given Evaluator.
 // This avoids the deprecated Expression.Evaluate(ctx, node) path.
-func (a *AVT) evaluateStatic(eval xpath3.Evaluator, node helium.Node) (string, error) {
+func (a *avt) evaluateStatic(eval xpath3.Evaluator, node helium.Node) (string, error) {
 	if a == nil {
 		return "", nil
 	}

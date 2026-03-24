@@ -14,7 +14,7 @@ import (
 // getParamDocOutputDef returns the effective parameter-document OutputDef for
 // a result-document instruction, checking the per-invocation cache on
 // execContext first, then falling back to the compiled instruction's field.
-func (ec *execContext) getParamDocOutputDef(inst *ResultDocumentInst) *OutputDef {
+func (ec *execContext) getParamDocOutputDef(inst *resultDocumentInst) *OutputDef {
 	if od, ok := ec.paramDocOutputDefs[inst]; ok {
 		return od
 	}
@@ -51,7 +51,7 @@ func validateDocumentStructure(doc *helium.Document) error {
 
 // execDocument implements xsl:document: creates a document node wrapping
 // the result of executing the body.
-func (ec *execContext) execDocument(ctx context.Context, inst *DocumentInst) error {
+func (ec *execContext) execDocument(ctx context.Context, inst *documentInst) error {
 	tmpDoc := helium.NewDefaultDocument()
 	frame := &outputFrame{doc: tmpDoc, current: tmpDoc}
 	ec.outputStack = append(ec.outputStack, frame)
@@ -217,9 +217,9 @@ func (ec *execContext) isItemOutputMethod() bool {
 }
 
 // resolveResultDocFormat returns the effective format name for a result-document
-// instruction, evaluating the format AVT if present.
+// instruction, evaluating the format avt if present.
 // Returns an error for XTDE0290 (prefix not bound) or XTDE1460 (invalid QName).
-func (ec *execContext) resolveResultDocFormat(ctx context.Context, inst *ResultDocumentInst) (string, error) {
+func (ec *execContext) resolveResultDocFormat(ctx context.Context, inst *resultDocumentInst) (string, error) {
 	if inst.FormatAVT != nil {
 		v, err := inst.FormatAVT.evaluate(ctx, ec.contextNode)
 		if err != nil {
@@ -242,10 +242,10 @@ func (ec *execContext) resolveResultDocFormat(ctx context.Context, inst *ResultD
 }
 
 // resolveResultDocMethod returns the effective output method for a result-document
-// instruction, considering the method AVT, compile-time method, named format, and
+// instruction, considering the method avt, compile-time method, named format, and
 // default output definition.
-func (ec *execContext) resolveResultDocMethod(ctx context.Context, inst *ResultDocumentInst) string {
-	// Runtime AVT takes priority.
+func (ec *execContext) resolveResultDocMethod(ctx context.Context, inst *resultDocumentInst) string {
+	// Runtime avt takes priority.
 	if inst.MethodAVT != nil {
 		v, err := inst.MethodAVT.evaluate(ctx, ec.contextNode)
 		if err == nil {
@@ -280,13 +280,13 @@ func isItemSerializationMethod(method string) bool {
 	return method == methodJSON || method == methodAdaptive
 }
 
-func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocumentInst) error {
+func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocumentInst) error {
 	// XTDE1480: xsl:result-document is not allowed in a temporary output state.
 	if ec.temporaryOutputDepth > 0 {
 		return dynamicError(errCodeXTDE1480, "xsl:result-document is not allowed while in temporary output state")
 	}
 
-	// Evaluate the href AVT to determine the output URI.
+	// Evaluate the href avt to determine the output URI.
 	href := ""
 	if inst.Href != nil {
 		var err error
@@ -309,7 +309,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 
 	ec.usedResultURIs[href] = struct{}{}
 
-	// Resolve the effective format name (static or AVT).
+	// Resolve the effective format name (static or avt).
 	effectiveFormat, fmtErr := ec.resolveResultDocFormat(ctx, inst)
 	if fmtErr != nil {
 		return fmtErr
@@ -323,7 +323,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 		}
 	}
 
-	// Resolve parameter-document if specified as AVT. Store the resolved
+	// Resolve parameter-document if specified as avt. Store the resolved
 	// output def on execContext (not on the compiled instruction) to avoid
 	// mutating the stylesheet's instruction tree.
 	if inst.ParameterDocAVT != nil && inst.ParameterDocOutputDef == nil {
@@ -334,7 +334,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 				baseURI := ec.effectiveStaticBaseURI()
 				if loadErr := loadParameterDocumentFromFile(ctx, outDef, baseURI, pdHref); loadErr == nil {
 					if ec.paramDocOutputDefs == nil {
-						ec.paramDocOutputDefs = make(map[*ResultDocumentInst]*OutputDef)
+						ec.paramDocOutputDefs = make(map[*resultDocumentInst]*OutputDef)
 					}
 					ec.paramDocOutputDefs[inst] = outDef
 				}
@@ -347,7 +347,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 	// then the named xsl:output (format), then nil (default).
 	var itemSep *string
 	if inst.ItemSeparatorSet {
-		// Attribute was present on xsl:result-document; evaluate AVT value
+		// Attribute was present on xsl:result-document; evaluate avt value
 		// (nil for #absent, or the evaluated string).
 		if inst.ItemSeparator != nil {
 			sepVal, err := inst.ItemSeparator.evaluate(ctx, ec.contextNode)
@@ -681,7 +681,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *ResultDocum
 // evalResultDocOutputDef evaluates serialization parameter AVTs on
 // xsl:result-document and returns an OutputDef with the overrides.
 // Returns nil if no serialization parameters are specified.
-func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultDocumentInst) (*OutputDef, error) {
+func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultDocumentInst) (*OutputDef, error) {
 	hasAny := inst.MethodAVT != nil || inst.Standalone != nil || inst.Indent != nil ||
 		inst.OmitXMLDeclaration != nil || inst.DoctypeSystem != nil || inst.DoctypePublic != nil ||
 		inst.CDATASectionElements != nil || inst.Encoding != nil || inst.OutputVersion != nil ||
@@ -714,7 +714,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 		}
 	}
 
-	evalAVT := func(avt *AVT) (string, error) {
+	evalAVT := func(avt *avt) (string, error) {
 		if avt == nil {
 			return "", nil
 		}
@@ -877,7 +877,7 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *ResultD
 
 // buildEffectiveOutputDef builds the effective output definition for a secondary
 // result document, combining the named format with result-document overrides.
-func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *ResultDocumentInst, formatName, method string) (*OutputDef, error) {
+func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *resultDocumentInst, formatName, method string) (*OutputDef, error) {
 	var base OutputDef
 	// Start with parameter-document defaults (lowest priority).
 	if pd := ec.getParamDocOutputDef(inst); pd != nil {

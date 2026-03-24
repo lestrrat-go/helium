@@ -380,7 +380,7 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 	// Merge mode definitions
 	if pkg.modeDefs != nil {
 		if c.stylesheet.modeDefs == nil {
-			c.stylesheet.modeDefs = make(map[string]*ModeDef)
+			c.stylesheet.modeDefs = make(map[string]*modeDef)
 		}
 		for name, md := range pkg.modeDefs {
 			if !isVisibleFromOutside(md.Visibility) {
@@ -413,7 +413,7 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 	// Merge attribute sets
 	if pkg.attributeSets != nil {
 		if c.stylesheet.attributeSets == nil {
-			c.stylesheet.attributeSets = make(map[string]*AttributeSetDef)
+			c.stylesheet.attributeSets = make(map[string]*attributeSetDef)
 		}
 		for name, as := range pkg.attributeSets {
 			pkgVis := getComponentVisibility(pkg, xslElemAttributeSet, name)
@@ -467,7 +467,7 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		}
 		for name, as := range oset.attributeSets {
 			if c.stylesheet.attributeSets == nil {
-				c.stylesheet.attributeSets = make(map[string]*AttributeSetDef)
+				c.stylesheet.attributeSets = make(map[string]*attributeSetDef)
 			}
 			c.stylesheet.attributeSets[name] = as
 		}

@@ -11,7 +11,7 @@ import (
 	"github.com/lestrrat-go/helium/xsd"
 )
 
-func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
+func (ec *execContext) execCopy(ctx context.Context, inst *copyInst) error {
 	contextNode := normalizeNode(ec.contextNode)
 
 	// Resolve shadow attributes (AVTs) at runtime; fall back to static values.
@@ -180,7 +180,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *CopyInst) error {
 // applyCopyValidation applies type or validation-mode validation to the element
 // produced by xsl:copy. It handles elements in both the DOM tree and in
 // pendingItems (sequence/capture mode). sourceNode is the original node being copied.
-func (ec *execContext) applyCopyValidation(ctx context.Context, inst *CopyInst, out *outputFrame, lastBefore helium.Node, pendingBefore int, sourceNode helium.Node) error {
+func (ec *execContext) applyCopyValidation(ctx context.Context, inst *copyInst, out *outputFrame, lastBefore helium.Node, pendingBefore int, sourceNode helium.Node) error {
 	// Apply type validation if specified.
 	if inst.TypeName != "" {
 		// XTTE1535: if the type attribute refers to a complex type and
@@ -258,7 +258,7 @@ func (ec *execContext) isComplexType(typeName string) bool {
 }
 
 type copyNodeOpts struct {
-	body              []Instruction
+	body              []instruction
 	useAttrSets       []string
 	copyNamespaces    bool
 	inheritNamespaces bool
@@ -467,7 +467,7 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 	return nil
 }
 
-func (ec *execContext) execCopyOf(ctx context.Context, inst *CopyOfInst) error {
+func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 	result, err := ec.evalXPath(inst.Select, ec.contextNode)
 	if err != nil {
 		return err
@@ -1166,7 +1166,7 @@ func (ec *execContext) checkCopyAccumulators(node helium.Node) error {
 	}
 
 	// Only check mode-level use-accumulators for nodes from the initial
-	// source document. Variable/RTF trees have accumulators computed
+	// source document. variable/RTF trees have accumulators computed
 	// lazily and are always accessible.
 	root := documentRoot(node)
 	if root != ec.sourceDoc {
