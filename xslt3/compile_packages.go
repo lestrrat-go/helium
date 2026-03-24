@@ -49,6 +49,7 @@ func (c *compiler) compileUsePackage(elem *helium.Element) error {
 		baseURI:         pkgBaseURI,
 		resolver:        c.resolver,
 		packageResolver: c.packageResolver,
+		isSubPackage:    true,
 	}
 	pkgSS, err := compile(c.ctx, doc, pkgCfg)
 	if err != nil {
@@ -478,10 +479,8 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 			tmpl.ImportPrec = c.importPrec - 1
 			tmpl.OwnerPackage = pkg
 			c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
-			modes := []string{tmpl.Mode}
-			if tmpl.Mode == modeAll {
-				modes = []string{""}
-			}
+			// Resolve mode list: may be multi-mode (e.g. "m3 m4")
+			modes := resolveTemplateModes(tmpl.Mode)
 			for _, mode := range modes {
 				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
 				// Update the package's mode template list for late binding
@@ -514,48 +513,35 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		}
 	}
 
-	// XTSE3080: check that no abstract components remain unimplemented.
-	// An abstract template/function from the package must be overridden.
-	for _, tmpl := range pkg.templates {
-		if tmpl.Name == "" {
-			continue
-		}
-		vis := getComponentVisibility(pkg, xslElemTemplate, tmpl.Name)
-		// Accept rules may have changed the visibility
-		if len(acceptRules) > 0 {
-			vis = applyAcceptRules(xslElemTemplate, tmpl.Name, acceptRules, vis)
-		}
-		if vis != visAbstract {
-			continue
-		}
-		// Check if it was overridden
-		if oset != nil {
-			if _, ok := oset.namedTemplates[tmpl.Name]; ok {
-				continue // overridden — OK
-			}
-		}
-		return staticError(errCodeXTSE3080,
-			"abstract template %q from used package is not overridden", tmpl.Name)
-	}
-	for fk, fn := range pkg.functions {
-		vis := getComponentVisibility(pkg, xslElemFunction, functionVisKey(fk.Name, len(fn.Params)))
-		if len(acceptRules) > 0 {
-			vis = applyAcceptRules(xslElemFunction, functionVisKey(fk.Name, len(fn.Params)), acceptRules, vis)
-		}
-		if vis != visAbstract {
-			continue
-		}
-		if oset != nil {
-			if _, ok := oset.functions[fk]; ok {
-				continue
-			}
-		}
-		return staticError(errCodeXTSE3080,
-			"abstract function %s#%d from used package is not overridden",
-			fmt.Sprintf("{%s}%s", fk.Name.URI, fk.Name.Name), fk.Arity)
-	}
-
 	return nil
+}
+
+// resolveTemplateModes splits a mode string into individual modes for
+// registration in modeTemplates. Handles multi-mode ("m3 m4"), #all,
+// #default, #unnamed, and the empty string (default mode).
+func resolveTemplateModes(mode string) []string {
+	if mode == modeAll {
+		return []string{""}
+	}
+	fields := strings.Fields(mode)
+	if len(fields) == 0 {
+		return []string{mode}
+	}
+	if len(fields) == 1 {
+		m := fields[0]
+		if m == "#default" || m == "#unnamed" {
+			return []string{""}
+		}
+		return []string{m}
+	}
+	var modes []string
+	for _, m := range fields {
+		if m == "#default" || m == "#unnamed" {
+			m = ""
+		}
+		modes = append(modes, m)
+	}
+	return modes
 }
 
 // isAcceptVisibilityCompatible checks whether changing a component's visibility

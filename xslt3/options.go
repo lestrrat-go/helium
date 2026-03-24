@@ -27,6 +27,7 @@ type compileConfig struct {
 	packageResolver PackageResolver
 	staticParams    map[string]xpath3.Sequence // externally supplied static param values
 	importSchemas   []*xsd.Schema             // pre-compiled schemas for xsl:import-schema resolution
+	isSubPackage    bool                       // true when compiling a sub-package (via xsl:use-package)
 }
 
 // --- Transform configuration (internal) ---

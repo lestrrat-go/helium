@@ -1327,6 +1327,15 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		}
 	}
 
+	// XTSE3080: check that no abstract components remain unimplemented.
+	// Only check for the top-level stylesheet, not sub-packages (which
+	// may intentionally pass abstract components through).
+	if !cfg.isSubPackage {
+		if err := c.checkAbstractComponents(); err != nil {
+			return nil, err
+		}
+	}
+
 	// Sort templates by import precedence (desc) then priority (desc)
 	c.sortTemplates()
 
@@ -1415,6 +1424,27 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	sortAccumulatorOrder(c.stylesheet)
 
 	return c.stylesheet, nil
+}
+
+// checkAbstractComponents checks that no abstract components remain
+// unimplemented in the final compiled stylesheet. XTSE3080.
+func (c *compiler) checkAbstractComponents() error {
+	// Check named templates
+	for name, tmpl := range c.stylesheet.namedTemplates {
+		if tmpl.Visibility == visAbstract {
+			return staticError(errCodeXTSE3080,
+				"abstract template %q has no implementation", name)
+		}
+	}
+	// Check functions
+	for fk, fn := range c.stylesheet.functions {
+		if fn.Visibility == visAbstract {
+			return staticError(errCodeXTSE3080,
+				"abstract function %s#%d has no implementation",
+				fmt.Sprintf("{%s}%s", fk.Name.URI, fk.Name.Name), fk.Arity)
+		}
+	}
+	return nil
 }
 
 // checkDeclaredModes verifies that all modes referenced in the stylesheet
