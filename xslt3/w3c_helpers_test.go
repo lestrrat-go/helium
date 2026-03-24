@@ -1453,27 +1453,6 @@ var w3cImplicitSkips = map[string]string{
 	"xpath-default-namespace-0703": "schema-element with xpath-default-namespace not resolved",
 	"xpath-default-namespace-1202": "xpath-default-namespace on xsl:template match pattern incorrect",
 
-	// collation: xsl:key collation and for-each-group collation not fully implemented
-	"collations-0104": "xsl:for-each-group with UCA collation grouping incorrect",
-	"collations-0105": "xsl:key with collation attribute not implemented",
-	"collations-0106": "xsl:key with collation attribute not implemented",
-	"collations-0107": "xsl:key with collation attribute not implemented",
-	"collations-0111": "xsl:for-each-group with UCA collation grouping incorrect",
-	"collations-0112": "xsl:for-each-group with UCA collation grouping incorrect",
-	"collations-0113": "xsl:for-each-group with UCA collation grouping incorrect",
-	"collations-0114": "xsl:for-each-group with UCA collation grouping incorrect",
-	"collations-0115": "xsl:for-each-group with UCA collation grouping incorrect",
-	"collations-0116": "contains/starts-with/ends-with with UCA collation incorrect",
-	"collations-0117": "xsl:for-each-group with UCA collation grouping incorrect",
-	"collations-0118": "min/max with UCA collation incorrect",
-	"collations-0119": "min/max with UCA collation incorrect",
-	"collations-0120": "index-of with UCA collation incorrect",
-	"collations-0121": "contains/starts-with/ends-with with UCA collation incorrect",
-	"collations-0122": "contains/starts-with/ends-with with UCA collation incorrect",
-	"collations-0123": "contains/starts-with/ends-with with UCA collation incorrect",
-	"collations-0124": "contains/starts-with/ends-with with UCA collation incorrect",
-	"collations-0125": "XTSE1220 unknown collation URI not detected",
-	"collations-0128": "contains/starts-with/ends-with with UCA collation incorrect",
 
 	// strip-space: various whitespace stripping issues
 	"strip-space-002": "XTSE0280 undeclared prefix in strip-space not detected",

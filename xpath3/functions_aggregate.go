@@ -287,7 +287,7 @@ func numericTypeWidth(typeName string) int {
 	}
 }
 
-func fnMax(_ context.Context, args []Sequence) (Sequence, error) {
+func fnMax(ctx context.Context, args []Sequence) (Sequence, error) {
 	atoms, err := AtomizeSequence(args[0])
 	if err != nil {
 		return nil, err
@@ -295,14 +295,17 @@ func fnMax(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(atoms) == 0 {
 		return nil, nil
 	}
-	coll, err := resolveCollationArg(args, 1)
+	coll, err := getCollation(ctx, args, 1)
 	if err != nil {
 		return nil, err
+	}
+	if coll == codepointCollation {
+		coll = nil
 	}
 	return maxMinCommon(atoms, true, coll)
 }
 
-func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
+func fnMin(ctx context.Context, args []Sequence) (Sequence, error) {
 	atoms, err := AtomizeSequence(args[0])
 	if err != nil {
 		return nil, err
@@ -310,9 +313,12 @@ func fnMin(_ context.Context, args []Sequence) (Sequence, error) {
 	if len(atoms) == 0 {
 		return nil, nil
 	}
-	coll, err := resolveCollationArg(args, 1)
+	coll, err := getCollation(ctx, args, 1)
 	if err != nil {
 		return nil, err
+	}
+	if coll == codepointCollation {
+		coll = nil
 	}
 	return maxMinCommon(atoms, false, coll)
 }
@@ -563,6 +569,12 @@ func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
 			continue
 		}
 		if group, key, ok := distinctValueFastKey(a); ok {
+			// When a non-codepoint collation is active, string fast
+			// keys must go through the collation's key function so
+			// that collation-equal strings share the same bucket.
+			if coll != nil && group == distinctGroupString {
+				key = "s:" + string(coll.key(a.StringVal()))
+			}
 			if _, exists := seenFast[key]; exists {
 				continue
 			}

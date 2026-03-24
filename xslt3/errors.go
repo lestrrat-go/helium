@@ -176,6 +176,7 @@ const (
 	errCodeXTSE1130 = "XTSE1130" // xsl:analyze-string missing matching branches
 	errCodeXTSE1205 = "XTSE1205" // xsl:key use/content exclusivity
 	errCodeXTSE1210 = "XTSE1210" // invalid collation URI on xsl:key
+	errCodeXTSE1220 = "XTSE1220" // conflicting xsl:key collation attributes
 	errCodeXTSE1222 = "XTSE1222" // conflicting xsl:key composite attribute values
 	errCodeXTSE1290 = "XTSE1290" // conflicting decimal-format declarations
 	errCodeXTSE1295 = "XTSE1295" // zero-digit is not a Unicode digit-zero character

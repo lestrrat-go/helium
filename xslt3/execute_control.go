@@ -199,7 +199,8 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *forEachGroupI
 
 	seq := result.Sequence()
 
-	// Resolve collation key function if collation attribute is present
+	// Resolve collation key function: explicit collation attribute takes
+	// precedence, then fall back to the default collation in scope.
 	var collationKeyFn func(string) string
 	if inst.Collation != nil {
 		collationURI, collErr := inst.Collation.evaluate(ctx, ec.contextNode)
@@ -207,6 +208,11 @@ func (ec *execContext) execForEachGroup(ctx context.Context, inst *forEachGroupI
 			return collErr
 		}
 		collationKeyFn, err = xpath3.ResolveCollationKeyFunc(collationURI)
+		if err != nil {
+			return err
+		}
+	} else if ec.defaultCollation != "" {
+		collationKeyFn, err = xpath3.ResolveCollationKeyFunc(ec.defaultCollation)
 		if err != nil {
 			return err
 		}

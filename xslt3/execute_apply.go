@@ -466,6 +466,13 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 	ec.pushVarScope()
 	defer ec.popVarScope()
 
+	// Apply default-collation from the called template
+	savedDefaultCollation := ec.defaultCollation
+	if tmpl.DefaultCollation != "" {
+		ec.defaultCollation = tmpl.DefaultCollation
+	}
+	defer func() { ec.defaultCollation = savedDefaultCollation }()
+
 	// Set template params with defaults, overrides, or tunnel values
 	for _, p := range tmpl.Params {
 		var (

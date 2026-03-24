@@ -32,8 +32,62 @@ type keyTable struct {
 	defs           []*keyDef
 	entries        map[string][]keyEntry          // canonicalKey -> entries (non-composite)
 	compositeEntry map[string][]compositeKeyEntry // compositeCanonical -> entries (composite)
+	collationKey   func(string) string            // collation key function (nil = codepoint)
+	collationCmp   func(string, string) int       // collation compare function (nil = codepoint)
 	building       bool
 	built          bool
+}
+
+// collationCanonicalKey produces a canonical key using the collation key
+// function for string/untypedAtomic types. Falls back to canonicalKey
+// for non-string types.
+func collationCanonicalKey(av xpath3.AtomicValue, keyFn func(string) string) string {
+	if keyFn == nil {
+		return canonicalKey(av)
+	}
+	switch av.TypeName {
+	case xpath3.TypeUntypedAtomic, xpath3.TypeString,
+		xpath3.TypeNormalizedString, xpath3.TypeToken,
+		xpath3.TypeLanguage, xpath3.TypeName, xpath3.TypeNCName,
+		xpath3.TypeNMTOKEN, xpath3.TypeNMTOKENS,
+		xpath3.TypeENTITY, xpath3.TypeID, xpath3.TypeIDREF, xpath3.TypeIDREFS,
+		xpath3.TypeAnyURI:
+		s, _ := xpath3.AtomicToString(av)
+		return "S:" + keyFn(s)
+	default:
+		return canonicalKey(av)
+	}
+}
+
+// collationAtomicEquals tests whether two atomic values are equal using
+// the collation compare function for string/untypedAtomic types.
+func collationAtomicEquals(a, b xpath3.AtomicValue, cmpFn func(string, string) int) bool {
+	if cmpFn == nil {
+		return xpath3.AtomicEquals(a, b)
+	}
+	// Only use collation for string-like types
+	aIsStr := isStringLikeType(a.TypeName)
+	bIsStr := isStringLikeType(b.TypeName)
+	if aIsStr && bIsStr {
+		sa, _ := xpath3.AtomicToString(a)
+		sb, _ := xpath3.AtomicToString(b)
+		return cmpFn(sa, sb) == 0
+	}
+	return xpath3.AtomicEquals(a, b)
+}
+
+func isStringLikeType(tn string) bool {
+	switch tn {
+	case xpath3.TypeUntypedAtomic, xpath3.TypeString,
+		xpath3.TypeNormalizedString, xpath3.TypeToken,
+		xpath3.TypeLanguage, xpath3.TypeName, xpath3.TypeNCName,
+		xpath3.TypeNMTOKEN, xpath3.TypeNMTOKENS,
+		xpath3.TypeENTITY, xpath3.TypeID, xpath3.TypeIDREF, xpath3.TypeIDREFS,
+		xpath3.TypeAnyURI:
+		return true
+	default:
+		return false
+	}
 }
 
 // canonicalKey produces a hash key that groups potentially-equal values
@@ -169,6 +223,21 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 		entries:  make(map[string][]keyEntry),
 		building: true,
 	}
+
+	// Resolve collation from the key definition (all defs share the same
+	// collation per XTSE1220).
+	if defs[0].Collation != "" {
+		keyFn, keyErr := xpath3.ResolveCollationKeyFunc(defs[0].Collation)
+		if keyErr != nil {
+			return nil, keyErr
+		}
+		cmpFn, cmpErr := xpath3.ResolveCollationCompareFunc(defs[0].Collation)
+		if cmpErr != nil {
+			return nil, cmpErr
+		}
+		kt.collationKey = keyFn
+		kt.collationCmp = cmpFn
+	}
 	if composite {
 		kt.compositeEntry = make(map[string][]compositeKeyEntry)
 	}
@@ -281,7 +350,7 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 					if av.IsNaN() {
 						continue
 					}
-					ck := canonicalKey(av)
+					ck := collationCanonicalKey(av, kt.collationKey)
 					sk := seenKey{canonical: ck, node: node}
 					if _, dup := seen[sk]; dup {
 						continue
@@ -345,16 +414,16 @@ func (ec *execContext) lookupKey(name string, value xpath3.AtomicValue, root hel
 		return nil, nil
 	}
 
-	ck := canonicalKey(value)
+	ck := collationCanonicalKey(value, kt.collationKey)
 	candidates := kt.entries[ck]
 	if len(candidates) == 0 {
 		return nil, nil
 	}
 
-	// Filter candidates using typed eq comparison.
+	// Filter candidates using typed eq comparison (collation-aware).
 	var result []helium.Node
 	for _, entry := range candidates {
-		if xpath3.AtomicEquals(value, entry.key) {
+		if collationAtomicEquals(value, entry.key, kt.collationCmp) {
 			result = append(result, entry.node)
 		}
 	}
