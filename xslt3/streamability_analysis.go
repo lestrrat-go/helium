@@ -467,15 +467,48 @@ func exprTopLevelReturnsStreamingNodes(expr xpath3.Expr) bool {
 			}
 		}
 	case xpath3.PathExpr:
-		return true // path expression returns nodes
+		// A path whose filter is a grounding function (snapshot, copy-of)
+		// returns grounded data, not streaming nodes.
+		if isGroundingExpr(v.Filter) {
+			return false
+		}
+		return true
 	case xpath3.PathStepExpr:
-		return true // step expression returns nodes
+		// Walk left to find the base of the path chain. If the leftmost
+		// expression is grounding, the entire chain operates on grounded
+		// data and does not return streaming nodes.
+		if exprPathBaseIsGrounding(v) {
+			return false
+		}
+		return true
 	case xpath3.IfExpr:
 		return exprTopLevelReturnsStreamingNodes(v.Then) || exprTopLevelReturnsStreamingNodes(v.Else)
 	case xpath3.ContextItemExpr:
 		return true // "." returns the streaming node itself
 	}
 	return false
+}
+
+// exprPathBaseIsGrounding walks a PathStepExpr chain to find the leftmost
+// base expression and returns true if it is a grounding function call
+// (snapshot, copy-of, etc.). When the base is grounding, subsequent path
+// steps navigate grounded data, not the streaming source.
+func exprPathBaseIsGrounding(expr xpath3.Expr) bool {
+	for {
+		expr = derefXPathExpr(expr)
+		switch e := expr.(type) {
+		case xpath3.PathStepExpr:
+			expr = e.Left
+		case xpath3.PathExpr:
+			return isGroundingExpr(e.Filter)
+		case xpath3.FunctionCall:
+			return isGroundingExpr(e)
+		case xpath3.FilterExpr:
+			expr = e.Expr
+		default:
+			return false
+		}
+	}
 }
 
 // bodyHasDownwardNavigation returns true if any instruction in the body
