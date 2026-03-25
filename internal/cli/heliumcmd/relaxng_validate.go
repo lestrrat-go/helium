@@ -67,7 +67,7 @@ func (c *relaxNGValidateCommand) runContext(ctx context.Context, args []string) 
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	grammar, err := relaxng.CompileFile(ctx, cfg.schemaFile)
+	grammar, err := relaxng.NewCompiler().CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
 	}
@@ -163,7 +163,7 @@ func (c *relaxNGValidateCommand) processInput(ctx context.Context, cfg *relaxNGV
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	err = relaxng.Validate(doc, grammar)
+	err = relaxng.NewValidator(grammar).Validate(ctx, doc)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
 	}
