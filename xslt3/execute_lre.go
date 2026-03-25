@@ -254,7 +254,7 @@ func (ec *execContext) applyAttributeSetsGuarded(ctx context.Context, names []st
 			}
 			continue
 		}
-		asDef := ec.stylesheet.attributeSets[name]
+		asDef := ec.effectiveAttributeSets()[name]
 		if asDef == nil {
 			continue
 		}
@@ -280,6 +280,14 @@ func (ec *execContext) applyOneAttributeSet(ctx context.Context, asDef *attribut
 			"attribute-set %q has a circular use-attribute-sets reference (runtime)", name)
 	}
 	active[name] = struct{}{}
+
+	// Switch to the attribute-set's owning package so that
+	// use-attribute-sets references resolve from the package scope.
+	savedPackage := ec.currentPackage
+	if asDef.OwnerPackage != nil && asDef.OwnerPackage != ec.currentPackage {
+		ec.currentPackage = asDef.OwnerPackage
+	}
+	defer func() { ec.currentPackage = savedPackage }()
 
 	// Track the original attribute-set for use-attribute-sets="xsl:original"
 	savedOriginal := ec.currentAttrSetOriginal

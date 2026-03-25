@@ -385,8 +385,8 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 	// Pre-compute accumulator states for documents loaded via doc()/document()
 	// so that accumulator-before()/accumulator-after() work when processing
 	// these documents (XSLT 3.0 §14.1: accumulators are always applicable).
-	if len(ec.stylesheet.accumulators) > 0 {
-		names := append([]string(nil), ec.stylesheet.accumulatorOrder...)
+	if len(ec.effectiveAccumulators()) > 0 {
+		names := append([]string(nil), ec.effectiveStylesheet().accumulatorOrder...)
 		if err := ec.computeAccumulatorStates(ctx, doc, names); err != nil {
 			return nil, err
 		}

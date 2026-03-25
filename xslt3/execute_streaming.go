@@ -992,18 +992,31 @@ func (ec *execContext) storeAccumulatorSnapshot(dst map[helium.Node]map[string]x
 	if node == nil {
 		return
 	}
-	dst[node] = cloneAccumulatorSnapshot(state)
+	// Merge new state into existing snapshot (preserving values from
+	// other packages' accumulators that were computed earlier).
+	// Use package-scoped keys to isolate same-named accumulators.
+	existing := dst[node]
+	if existing == nil {
+		existing = make(map[string]xpath3.Sequence, len(state))
+		dst[node] = existing
+	}
+	for k, v := range state {
+		existing[ec.accumulatorStateKey(k)] = cloneXPathSequence(v)
+	}
 	if len(stateErr) > 0 {
-		errs := make(map[string]error, len(stateErr))
-		for k, v := range stateErr {
-			errs[k] = v
+		existingErr := dstErr[node]
+		if existingErr == nil {
+			existingErr = make(map[string]error, len(stateErr))
+			dstErr[node] = existingErr
 		}
-		dstErr[node] = errs
+		for k, v := range stateErr {
+			existingErr[ec.accumulatorStateKey(k)] = v
+		}
 	}
 }
 
 func (ec *execContext) prepareMergeSourceAccumulators(ctx context.Context, src *mergeSource, node helium.Node) error {
-	if len(src.UseAccumulators) == 0 || len(ec.stylesheet.accumulators) == 0 || node == nil {
+	if len(src.UseAccumulators) == 0 || len(ec.effectiveAccumulators()) == 0 || node == nil {
 		return nil
 	}
 
@@ -1029,13 +1042,13 @@ func (ec *execContext) prepareMergeSourceAccumulators(ctx context.Context, src *
 	}
 	defer func() { ec.activeAccumulators = savedActiveAccums }()
 
-	names := append([]string(nil), ec.stylesheet.accumulatorOrder...)
+	names := append([]string(nil), ec.effectiveStylesheet().accumulatorOrder...)
 
 	return ec.computeAccumulatorStates(ctx, doc, names)
 }
 
 func (ec *execContext) prepareSourceDocumentAccumulators(ctx context.Context, inst *sourceDocumentInst, doc helium.Node) error {
-	if len(inst.UseAccumulators) == 0 || len(ec.stylesheet.accumulators) == 0 || doc == nil {
+	if len(inst.UseAccumulators) == 0 || len(ec.effectiveAccumulators()) == 0 || doc == nil {
 		return nil
 	}
 	if ec.accumulatorBeforeByNode != nil {
@@ -1044,7 +1057,7 @@ func (ec *execContext) prepareSourceDocumentAccumulators(ctx context.Context, in
 		}
 	}
 
-	names := append([]string(nil), ec.stylesheet.accumulatorOrder...)
+	names := append([]string(nil), ec.effectiveStylesheet().accumulatorOrder...)
 	return ec.computeAccumulatorStates(ctx, doc, names)
 }
 
@@ -1065,7 +1078,7 @@ func (ec *execContext) computeAccumulatorStates(ctx context.Context, doc helium.
 	state := make(map[string]xpath3.Sequence, len(names))
 	stateErr := make(map[string]error, len(names))
 	for _, name := range names {
-		def, ok := ec.stylesheet.accumulators[name]
+		def, ok := ec.effectiveAccumulators()[name]
 		if !ok {
 			continue
 		}
@@ -1074,7 +1087,6 @@ func (ec *execContext) computeAccumulatorStates(ctx context.Context, doc helium.
 		case def.Initial != nil:
 			result, err := ec.evalXPath(def.Initial, doc)
 			if err != nil {
-				// Defer error: store it and use empty sequence as placeholder
 				stateErr[name] = err
 				state[name] = xpath3.EmptySequence()
 				continue
@@ -1168,7 +1180,7 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 	}()
 
 	for _, name := range names {
-		def, ok := ec.stylesheet.accumulators[name]
+		def, ok := ec.effectiveAccumulators()[name]
 		if !ok {
 			continue
 		}

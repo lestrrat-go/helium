@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -350,6 +351,7 @@ func (ec *execContext) accumulatorLookup(
 			return nil, dynamicError(errCodeXTTE3360, "%s cannot be called on an attribute or namespace node", fnName)
 		}
 	}
+	stateKey := ec.accumulatorStateKey(name)
 	if ec.evaluatingAccumulator {
 		if ec.accumulatorStateError != nil {
 			if deferredErr, ok := ec.accumulatorStateError[name]; ok {
@@ -368,7 +370,7 @@ func (ec *execContext) accumulatorLookup(
 	// the after-values map when the before-values have no entry.
 	if ec.evaluatingMergeKey && lookupNode != nil && ec.accumulatorAfterByNode != nil {
 		if values, ok := ec.accumulatorAfterByNode[lookupNode]; ok {
-			if val, ok := values[name]; ok {
+			if val, ok := values[stateKey]; ok {
 				return val, nil
 			}
 		}
@@ -377,14 +379,14 @@ func (ec *execContext) accumulatorLookup(
 		valuesByNode, errorsByNode := nodeMaps()
 		if errorsByNode != nil {
 			if errs, ok := errorsByNode[lookupNode]; ok {
-				if deferredErr, ok := errs[name]; ok {
+				if deferredErr, ok := errs[stateKey]; ok {
 					return nil, deferredErr
 				}
 			}
 		}
 		if valuesByNode != nil {
 			if values, ok := valuesByNode[lookupNode]; ok {
-				if val, ok := values[name]; ok {
+				if val, ok := values[stateKey]; ok {
 					return val, nil
 				}
 			}
@@ -397,14 +399,14 @@ func (ec *execContext) accumulatorLookup(
 		valuesByNode, errorsByNode = nodeMaps()
 		if errorsByNode != nil {
 			if errs, ok := errorsByNode[lookupNode]; ok {
-				if deferredErr, ok := errs[name]; ok {
+				if deferredErr, ok := errs[stateKey]; ok {
 					return nil, deferredErr
 				}
 			}
 		}
 		if valuesByNode != nil {
 			if values, ok := valuesByNode[lookupNode]; ok {
-				if val, ok := values[name]; ok {
+				if val, ok := values[stateKey]; ok {
 					return val, nil
 				}
 			}
@@ -424,16 +426,17 @@ func (ec *execContext) accumulatorLookup(
 // isStreamableMode returns true when the current mode has streamable="yes".
 func (ec *execContext) isStreamableMode() bool {
 	mode := ec.currentMode
-	md := ec.stylesheet.modeDefs[mode]
+	modeDefs := ec.effectiveModeDefs()
+	md := modeDefs[mode]
 	if md == nil && (mode == "" || mode == modeUnnamed) {
-		md = ec.stylesheet.modeDefs[modeDefault]
+		md = modeDefs[modeDefault]
 	}
 	return md != nil && md.Streamable
 }
 
 func (ec *execContext) checkAccumulatorAccess(name string) error {
 	// XTDE3340: the name must correspond to a declared accumulator.
-	if _, ok := ec.stylesheet.accumulators[name]; !ok {
+	if _, ok := ec.effectiveAccumulators()[name]; !ok {
 		return dynamicError(errCodeXTDE3340, "no accumulator %q is declared in this stylesheet", name)
 	}
 	// Document-level accumulator applicability (XTDE3362).
@@ -451,7 +454,7 @@ func (ec *execContext) checkAccumulatorAccess(name string) error {
 	// XTDE3362: check mode-level use-accumulators restriction.
 	// If the current mode explicitly declares use-accumulators, only
 	// those accumulators are accessible from templates in that mode.
-	if md := ec.stylesheet.modeDefs[ec.currentMode]; md != nil && md.UseAccumulators != nil {
+	if md := ec.effectiveModeDefs()[ec.currentMode]; md != nil && md.UseAccumulators != nil {
 		switch *md.UseAccumulators {
 		case "#all":
 			// all accumulators allowed
@@ -473,7 +476,7 @@ func (ec *execContext) checkAccumulatorAccess(name string) error {
 	if !ec.requireStreamableAccums {
 		return nil
 	}
-	def, ok := ec.stylesheet.accumulators[name]
+	def, ok := ec.effectiveAccumulators()[name]
 	if !ok || def.Streamable {
 		return nil
 	}
@@ -521,18 +524,34 @@ func isNilNode(n helium.Node) bool {
 }
 
 func (ec *execContext) ensureAccumulatorStates(ctx context.Context, node helium.Node) error {
-	if isNilNode(node) || len(ec.stylesheet.accumulators) == 0 {
+	if isNilNode(node) || len(ec.effectiveAccumulators()) == 0 {
 		return nil
 	}
 	root := documentRoot(node)
 	if ec.accumulatorComputedDocs == nil {
 		ec.accumulatorComputedDocs = make(map[helium.Node]struct{})
 	}
-	if _, done := ec.accumulatorComputedDocs[root]; done {
-		return nil
+	// Use a package-scoped key so that different packages' accumulators
+	// are computed independently for the same document.
+	cacheKey := root
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		// Create a synthetic key node per package to avoid collision.
+		// We reuse the root but track per-package with a separate map entry.
+		pkgKey := fmt.Sprintf("%p@%p", root, ec.currentPackage)
+		if ec.accumulatorComputedPkgs == nil {
+			ec.accumulatorComputedPkgs = make(map[string]struct{})
+		}
+		if _, done := ec.accumulatorComputedPkgs[pkgKey]; done {
+			return nil
+		}
+		ec.accumulatorComputedPkgs[pkgKey] = struct{}{}
+	} else {
+		if _, done := ec.accumulatorComputedDocs[cacheKey]; done {
+			return nil
+		}
+		ec.accumulatorComputedDocs[cacheKey] = struct{}{}
 	}
-	ec.accumulatorComputedDocs[root] = struct{}{}
-	names := append([]string(nil), ec.stylesheet.accumulatorOrder...)
+	names := append([]string(nil), ec.effectiveStylesheet().accumulatorOrder...)
 	return ec.computeAccumulatorStates(ctx, root, names)
 }
 

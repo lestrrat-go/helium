@@ -720,11 +720,20 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 		Attrs:         asd.Attrs,
 		StaticBaseURI: effectiveBase,
 	}
-	// Merge same-named attribute-sets (XSLT spec: union of all definitions)
+	// Merge same-named attribute-sets (XSLT spec: union of all definitions).
+	// When an existing entry comes from a used package (OwnerPackage != nil)
+	// and the new definition is local, the local definition replaces the
+	// package's private attribute-set rather than merging with it.
 	if existing, ok := c.stylesheet.attributeSets[name]; ok {
-		existing.Attrs = append(existing.Attrs, asd.Attrs...)
-		existing.UseAttrSets = append(existing.UseAttrSets, asd.UseAttrSets...)
-		existing.Parts = append(existing.Parts, part)
+		if existing.OwnerPackage != nil {
+			// Replace package-scoped attribute-set with local definition.
+			asd.Parts = []attributeSetPart{part}
+			c.stylesheet.attributeSets[name] = asd
+		} else {
+			existing.Attrs = append(existing.Attrs, asd.Attrs...)
+			existing.UseAttrSets = append(existing.UseAttrSets, asd.UseAttrSets...)
+			existing.Parts = append(existing.Parts, part)
+		}
 	} else {
 		asd.Parts = []attributeSetPart{part}
 		c.stylesheet.attributeSets[name] = asd

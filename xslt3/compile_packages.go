@@ -300,10 +300,7 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 			}
 		}
 		if tmpl.Match != nil {
-			modes := []string{tmpl.Mode}
-			if tmpl.Mode == modeAll {
-				modes = []string{""}
-			}
+			modes := resolveTemplateModes(tmpl.Mode)
 			for _, mode := range modes {
 				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
 			}
@@ -448,6 +445,7 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 					as.Visibility = visHidden
 				}
 			}
+			as.OwnerPackage = pkg
 			if _, exists := c.stylesheet.attributeSets[name]; !exists {
 				c.stylesheet.attributeSets[name] = as
 			}

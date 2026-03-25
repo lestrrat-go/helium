@@ -12,12 +12,13 @@ import (
 func (ec *execContext) applyBuiltinRules(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
 	// Check for xsl:mode on-no-match behavior
 	onNoMatch := onNoMatchTextOnlyCopy // XSLT 3.0 default
-	if md := ec.stylesheet.modeDefs[mode]; md != nil {
+	modeDefs := ec.effectiveModeDefs()
+	if md := modeDefs[mode]; md != nil {
 		if md.OnNoMatch != "" {
 			onNoMatch = md.OnNoMatch
 		}
 	} else if mode == "" {
-		if md := ec.stylesheet.modeDefs[modeDefault]; md != nil {
+		if md := modeDefs[modeDefault]; md != nil {
 			if md.OnNoMatch != "" {
 				onNoMatch = md.OnNoMatch
 			}
