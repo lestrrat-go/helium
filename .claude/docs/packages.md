@@ -134,8 +134,8 @@ XML Schema (XSD) 1.0 compilation and validation.
 
 RELAX NG schema compilation and validation.
 
-- **Compile(ctx, *Document, ...CompileOption) → (*Grammar, error)** / **CompileFile(ctx, path, ...CompileOption) → (*Grammar, error)**
-- **Validate(*Document, *Grammar, ...ValidateOption) → error**
+- **NewCompiler() → Compiler** — fluent builder; `.SchemaFilename(name)`, `.ErrorHandler(h)`, `.Compile(ctx, doc)`, `.CompileFile(ctx, path)`
+- **NewValidator(grammar) → Validator** — fluent builder; `.Filename(name)`, `.Validate(ctx, doc)`
 - Pattern-based: element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref, data, value, list, mixed, notAllowed
 - Supports: include with override, externalRef, parentRef, anyName/nsName/ncName, data types
 - Group backtracking for greedy pattern over-consumption
@@ -355,7 +355,7 @@ Importable implementation behind `helium` CLI. Used by `cmd/helium` wrapper and 
 - Context behavior: when stdio carriers are absent, defaults to `os.Stdin`, `os.Stdout`, `os.Stderr`, and TTY detection from `os.Stdin`
 - Lint behavior: parse args, detect stdin/TTY, process XML, run XInclude/XSD/XPath/C14N, emit xmllint-style exit codes
 - XPath behavior: mandatory positional expr, default engine `3`, `--engine 1|3`, XML from file args or stdin, type-aware result output for xpath1/xpath3
-- RELAX NG behavior: compile grammar from mandatory positional schema path, parse XML input(s), validate via `relaxng.Validate`, return schema/validation exit codes
+- RELAX NG behavior: compile grammar from mandatory positional schema path, parse XML input(s), validate via `relaxng.NewValidator().Validate`, return schema/validation exit codes
 - Schematron behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `schematron.NewValidator(schema).Validate`, return schema/validation exit codes
 - XSD behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `xsd.Validate`, return schema/validation exit codes
 - Files: `cli.go`, `exitcode.go`, `lint.go`, `xpath.go`, `relaxng_validate.go`, `schematron_validate.go`, `xsd_validate.go`

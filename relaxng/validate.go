@@ -21,7 +21,7 @@ type validator struct {
 
 const maxValidationDepth = 500
 
-func validateDocument(doc *helium.Document, grammar *Grammar, cfg *validateConfig) (string, bool) {
+func validateDocument(doc *helium.Document, grammar *Grammar, cfg *validatorCfg) (string, bool) {
 	if grammar == nil || grammar.start == nil {
 		return cfg.filename + " fails to validate\n", false
 	}

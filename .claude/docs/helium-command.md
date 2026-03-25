@@ -109,8 +109,8 @@ Primary file: `internal/cli/heliumcmd/relaxng_validate.go`
 
 - Usage: `helium relaxng validate [--timing] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
-- Grammar compiled once with `relaxng.CompileFile()`
-- Each XML input parsed with `helium.NewParser()` + validated with `relaxng.Validate()`
+- Grammar compiled once with `relaxng.NewCompiler().CompileFile()`
+- Each XML input parsed with `helium.NewParser()` + validated with `relaxng.NewValidator(grammar).Validate()`
 
 ## `helium schematron validate`
 

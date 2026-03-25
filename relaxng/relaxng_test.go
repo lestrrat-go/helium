@@ -147,7 +147,7 @@ func TestGoldenFiles(t *testing.T) {
 			// Compile schema.
 			rngFilename := "./test/relaxng/" + tc.rngBase
 			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-			grammar, err := relaxng.CompileFile(t.Context(), tc.rngPath, relaxng.WithSchemaFilename(rngFilename), relaxng.WithCompileErrorHandler(collector))
+			grammar, err := relaxng.NewCompiler().SchemaFilename(rngFilename).ErrorHandler(collector).CompileFile(t.Context(), tc.rngPath)
 			require.NoError(t, err, "schema compilation returned error for %s", tc.rngPath)
 			_ = collector.Close()
 			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
@@ -165,7 +165,7 @@ func TestGoldenFiles(t *testing.T) {
 
 				// Validate.
 				filename := "./test/relaxng/" + tc.xmlBase
-				err = relaxng.Validate(doc, grammar, relaxng.WithFilename(filename))
+				err = relaxng.NewValidator(grammar).Filename(filename).Validate(t.Context(), doc)
 				if err != nil {
 					got = compileWarnings + err.Error()
 				} else {
@@ -198,7 +198,7 @@ func TestGetAttrWhitespace(t *testing.T) {
 	require.NoError(t, err)
 
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-	grammar, err := relaxng.Compile(t.Context(), doc, relaxng.WithCompileErrorHandler(collector))
+	grammar, err := relaxng.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
 	require.NoError(t, err)
 	_ = collector.Close()
 	_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -208,7 +208,7 @@ func TestGetAttrWhitespace(t *testing.T) {
 	xmlDoc, err := helium.Parse(t.Context(), xmlData)
 	require.NoError(t, err)
 
-	err = relaxng.Validate(xmlDoc, grammar)
+	err = relaxng.NewValidator(grammar).Validate(t.Context(), xmlDoc)
 	require.NoError(t, err, "valid document should validate")
 }
 
@@ -216,7 +216,7 @@ func TestXmlBaseInclude(t *testing.T) {
 	// Schema uses <div xml:base="xmlbase/"> wrapping <include href="included.rng"/>.
 	// The included file lives in testdata/xmlbase/included.rng.
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-	grammar, err := relaxng.CompileFile(t.Context(), "testdata/xmlbase_include.rng", relaxng.WithCompileErrorHandler(collector))
+	grammar, err := relaxng.NewCompiler().ErrorHandler(collector).CompileFile(t.Context(), "testdata/xmlbase_include.rng")
 	require.NoError(t, err)
 	_ = collector.Close()
 	_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -226,7 +226,7 @@ func TestXmlBaseInclude(t *testing.T) {
 	xmlDoc, err := helium.Parse(t.Context(), xmlData)
 	require.NoError(t, err)
 
-	err = relaxng.Validate(xmlDoc, grammar)
+	err = relaxng.NewValidator(grammar).Validate(t.Context(), xmlDoc)
 	require.NoError(t, err, "valid document should validate")
 }
 
@@ -234,7 +234,7 @@ func TestXmlBaseExternalRef(t *testing.T) {
 	// Schema uses xml:base on the root grammar element to redirect externalRef
 	// resolution to the xmlbase/ subdirectory.
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-	grammar, err := relaxng.CompileFile(t.Context(), "testdata/xmlbase_extref.rng", relaxng.WithCompileErrorHandler(collector))
+	grammar, err := relaxng.NewCompiler().ErrorHandler(collector).CompileFile(t.Context(), "testdata/xmlbase_extref.rng")
 	require.NoError(t, err)
 	_ = collector.Close()
 	_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -244,7 +244,7 @@ func TestXmlBaseExternalRef(t *testing.T) {
 	xmlDoc, err := helium.Parse(t.Context(), xmlData)
 	require.NoError(t, err)
 
-	err = relaxng.Validate(xmlDoc, grammar)
+	err = relaxng.NewValidator(grammar).Validate(t.Context(), xmlDoc)
 	require.NoError(t, err, "valid document should validate")
 }
 
@@ -262,7 +262,7 @@ func TestCheckCombine(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = relaxng.Compile(t.Context(), doc, relaxng.WithCompileErrorHandler(collector))
+		_, err = relaxng.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
 		require.NoError(t, err)
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -282,7 +282,7 @@ func TestCheckCombine(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = relaxng.Compile(t.Context(), doc, relaxng.WithCompileErrorHandler(collector))
+		_, err = relaxng.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
 		require.NoError(t, err)
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -301,7 +301,7 @@ func TestCheckCombine(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = relaxng.Compile(t.Context(), doc, relaxng.WithCompileErrorHandler(collector))
+		_, err = relaxng.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
 		require.NoError(t, err)
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -320,7 +320,7 @@ func TestCheckCombine(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = relaxng.Compile(t.Context(), doc, relaxng.WithCompileErrorHandler(collector))
+		_, err = relaxng.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
 		require.NoError(t, err)
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -340,7 +340,7 @@ func TestCheckCombine(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = relaxng.Compile(t.Context(), doc, relaxng.WithCompileErrorHandler(collector))
+		_, err = relaxng.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
 		require.NoError(t, err)
 		_ = collector.Close()
 		_, compileErrors := partitionCompileErrors(collector.Errors())
@@ -356,7 +356,7 @@ func TestCheckRules(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		_, err = relaxng.Compile(t.Context(), doc, relaxng.WithSchemaFilename("test.rng"), relaxng.WithCompileErrorHandler(collector))
+		_, err = relaxng.NewCompiler().SchemaFilename("test.rng").ErrorHandler(collector).Compile(t.Context(), doc)
 		require.NoError(t, err)
 		_ = collector.Close()
 		compileWarnings, compileErrors = partitionCompileErrors(collector.Errors())
