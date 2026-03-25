@@ -31,7 +31,7 @@ INPUT ([]byte or io.Reader)
     → parseEndTag() → EndElementNS SAX
   → parseMisc() — epilogue
   → EndDocument SAX
-  → DTD validation (if ParseDTDValid)
+  → DTD validation (if ValidateDTD(true))
   → RETURN Document + error
 ```
 
@@ -63,17 +63,17 @@ State affects parsing rules: e.g., external entity refs forbidden in `psAttribut
 - `attsSpecial map[string]enum.AttributeType` — special attributes from DTD
 - `attsDefault map[string][]*Attribute` — default attributes from DTD
 - `inSubset int` — 0=not in subset, 1=internal, 2=external
-- `replaceEntities bool` — expand entity refs (set by ParseNoEnt)
+- `replaceEntities bool` — expand entity refs (set by SubstituteEntities(true))
 
 ### Entity Amplification Guard
 - `sizeentcopy int64` — cumulative entity expansion bytes
-- `maxAmpl int` — max amplification factor (5 default, 0 with ParseHuge)
+- `maxAmpl int` — max amplification factor (5 default, 0 with RelaxLimits(true))
 - `inputSize int64` — original input size
 - Rules: 1MB baseline before ratio check; 20 bytes fixed cost per entity ref
 
 ### Error Recovery
 - `disableSAX bool` — suppress callbacks after fatal
-- `recoverErr error` — first fatal error (ParseRecover mode)
+- `recoverErr error` — first fatal error (RecoverOnError mode)
 - `stopped bool` — StopParser() called
 
 ## Encoding Detection
@@ -104,7 +104,7 @@ Special cases:
 2. `entityCheck(ent, size, replacement)` — amplification guard
    - Baseline: 1MB free
    - Fixed cost: 20 bytes per ref
-   - Max amplification: 5× input (disabled with ParseHuge)
+   - Max amplification: 5× input (disabled with RelaxLimits(true))
    - Already-checked entities use cached `expandedSize`
 3. Parse entity content if needed (`parseBalancedChunkInternal`)
    - Recursively parse entity text
@@ -175,7 +175,7 @@ After parsing start tag:
 3. Apply default `xmlns:prefix="..."` next
 4. Apply remaining defaults (skip if explicit attr exists)
 
-## Recovery Mode (ParseRecover)
+## Recovery Mode (RecoverOnError)
 
 On error in `parseContent()`:
 1. Save error in `recoverErr`
@@ -188,18 +188,18 @@ On error in `parseContent()`:
 
 `StopParser(ctx)` → set `stopped=true`, `instate=psEOF`. Returns parsed document so far, nil error.
 
-## Key ParseOption Effects
+## Key Parser Fluent Method Effects
 
-| Flag | Effect |
-|------|--------|
-| ParseNoBlanks | keepBlanks=false (discard ignorable whitespace) |
-| ParseNoEnt | replaceEntities=true (expand entities inline; external parsed entities are replayed as full SAX node subtrees) |
-| ParseDTDLoad | loadsubset.Set(DetectIDs) (load external DTD; external subset system IDs resolve relative to the DTD base URI) |
-| ParseDTDAttr | loadsubset.Set(CompleteAttrs) (apply default attrs) |
-| ParseDTDValid | validate content models after parse |
-| ParseHuge | maxAmpl=0 (disable amplification checks) |
-| ParseNoCDATA | deliver CDATA as Characters (not CDataBlock) |
-| ParseRecover | error recovery (continue on errors) |
-| ParseIgnoreEnc | don't use XML decl encoding |
-| ParseNoXXE | reject external entity loads |
-| ParseSkipIDs | don't register ID attributes |
+| Method | Effect |
+|--------|--------|
+| StripBlanks(true) | keepBlanks=false (discard ignorable whitespace) |
+| SubstituteEntities(true) | replaceEntities=true (expand entities inline; external parsed entities are replayed as full SAX node subtrees) |
+| LoadExternalDTD(true) | loadsubset.Set(DetectIDs) (load external DTD; external subset system IDs resolve relative to the DTD base URI) |
+| DefaultDTDAttributes(true) | loadsubset.Set(CompleteAttrs) (apply default attrs) |
+| ValidateDTD(true) | validate content models after parse |
+| RelaxLimits(true) | maxAmpl=0 (disable amplification checks) |
+| MergeCDATA(true) | deliver CDATA as Characters (not CDataBlock) |
+| RecoverOnError(true) | error recovery (continue on errors) |
+| IgnoreEncoding(true) | don't use XML decl encoding |
+| BlockXXE(true) | reject external entity loads |
+| SkipIDs(true) | don't register ID attributes |

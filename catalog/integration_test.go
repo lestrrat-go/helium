@@ -37,7 +37,7 @@ func TestCatalogExternalSubset(t *testing.T) {
 	cat, err := catalog.Load(context.Background(), catPath)
 	require.NoError(t, err)
 
-	p := helium.NewParser().DTDLoad(true).DTDAttr(true).Catalog(cat)
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).Catalog(cat)
 
 	doc, err := p.Parse(t.Context(), []byte(xmlContent))
 	require.NoError(t, err)
@@ -80,7 +80,7 @@ func TestCatalogPublicIDResolution(t *testing.T) {
 	cat, err := catalog.Load(context.Background(), catPath)
 	require.NoError(t, err)
 
-	p := helium.NewParser().DTDLoad(true).DTDAttr(true).Catalog(cat)
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).Catalog(cat)
 
 	doc, err := p.Parse(t.Context(), []byte(xmlContent))
 	require.NoError(t, err)
@@ -106,7 +106,7 @@ func TestCatalogNoCatalog(t *testing.T) {
 <!DOCTYPE doc SYSTEM "http://example.com/nonexistent.dtd">
 <doc/>`
 
-	p := helium.NewParser().DTDLoad(true)
+	p := helium.NewParser().LoadExternalDTD(true)
 
 	doc, err := p.Parse(t.Context(), []byte(xmlContent))
 	require.NoError(t, err)

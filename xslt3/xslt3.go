@@ -9,7 +9,7 @@ import (
 )
 
 func parseStylesheetDocument(ctx context.Context, data []byte, baseURI string) (*helium.Document, error) {
-	p := helium.NewParser().DTDLoad(true).NoEnt(true)
+	p := helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true)
 	if baseURI != "" {
 		p = p.BaseURI(baseURI)
 	}

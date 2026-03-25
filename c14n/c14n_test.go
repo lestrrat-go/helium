@@ -35,7 +35,7 @@ func parseTestDoc(t *testing.T, path string) *helium.Document {
 	data, err := os.ReadFile(path)
 	require.NoError(t, err, "reading test file %s", path)
 
-	p := helium.NewParser().NoEnt(true).DTDLoad(true).DTDAttr(true).BaseURI(path)
+	p := helium.NewParser().SubstituteEntities(true).LoadExternalDTD(true).DefaultDTDAttributes(true).BaseURI(path)
 
 	doc, err := p.Parse(t.Context(), data)
 	require.NoError(t, err, "parsing test file %s", path)
@@ -58,7 +58,7 @@ func parseXPathFile(t *testing.T, path string) (string, map[string]string) {
 	require.NoError(t, err, "reading xpath file %s", path)
 
 	// Parse the .xpath file as XML
-	p := helium.NewParser().NoEnt(true).DTDLoad(true).DTDAttr(true)
+	p := helium.NewParser().SubstituteEntities(true).LoadExternalDTD(true).DefaultDTDAttributes(true)
 	doc, err := p.Parse(t.Context(), data)
 	require.NoError(t, err, "parsing xpath file %s", path)
 

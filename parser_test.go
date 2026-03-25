@@ -175,12 +175,12 @@ func findDocumentElement(doc *helium.Document) helium.Node {
 	return doc.DocumentElement()
 }
 
-func TestParseNoBlanks(t *testing.T) {
+func TestStripBlanks(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <root>
   <child>text</child>
 </root>`
-	p := helium.NewParser().NoBlanks(true)
+	p := helium.NewParser().StripBlanks(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed")
 
@@ -193,11 +193,11 @@ func TestParseNoBlanks(t *testing.T) {
 	require.Equal(t, helium.ElementNode, first.Type(), "first child should be element, not blank text")
 }
 
-func TestParseNoCDATA(t *testing.T) {
+func TestMergeCDATA(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <root><![CDATA[hello]]></root>`
 
-	// Without ParseNoCDATA: tree should have a CDATA node
+	// Without MergeCDATA: tree should have a CDATA node
 	p1 := helium.NewParser()
 	doc1, err := p1.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed")
@@ -205,17 +205,17 @@ func TestParseNoCDATA(t *testing.T) {
 	require.NotNil(t, root1)
 	child1 := root1.FirstChild()
 	require.NotNil(t, child1)
-	require.Equal(t, helium.CDATASectionNode, child1.Type(), "without ParseNoCDATA, should be CDATA node")
+	require.Equal(t, helium.CDATASectionNode, child1.Type(), "without MergeCDATA, should be CDATA node")
 
-	// With ParseNoCDATA: CDATA should be delivered as text
-	p2 := helium.NewParser().NoCDATA(true)
+	// With MergeCDATA: CDATA should be delivered as text
+	p2 := helium.NewParser().MergeCDATA(true)
 	doc2, err := p2.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed")
 	root2 := findDocumentElement(doc2)
 	require.NotNil(t, root2)
 	child2 := root2.FirstChild()
 	require.NotNil(t, child2)
-	require.Equal(t, helium.TextNode, child2.Type(), "with ParseNoCDATA, CDATA should be a text node")
+	require.Equal(t, helium.TextNode, child2.Type(), "with MergeCDATA, CDATA should be a text node")
 	require.Equal(t, "hello", string(child2.Content()))
 }
 
@@ -232,26 +232,26 @@ func TestParsePedantic(t *testing.T) {
 	require.NoError(t, err, "without pedantic, relative URI should be accepted")
 
 	// With pedantic: should fail (relative URI)
-	p2 := helium.NewParser().Pedantic(true)
+	p2 := helium.NewParser().PedanticErrors(true)
 	_, err = p2.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "with pedantic, relative URI should be rejected")
 }
 
-func TestParseRecover(t *testing.T) {
+func TestRecoverOnError(t *testing.T) {
 	// Malformed XML: mismatched close tag
 	const input = `<?xml version="1.0"?>
 <root>
   <child>text</chld>
 </root>`
 
-	// Without ParseRecover: error, no document
+	// Without RecoverOnError: error, no document
 	p1 := helium.NewParser()
 	doc1, err := p1.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should fail")
 	require.Nil(t, doc1, "without recover, no document returned")
 
-	// With ParseRecover: error, but partial document returned
-	p2 := helium.NewParser().Recover(true)
+	// With RecoverOnError: error, but partial document returned
+	p2 := helium.NewParser().RecoverOnError(true)
 	doc2, err := p2.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should still return error")
 	require.NotNil(t, doc2, "with recover, partial document should be returned")
@@ -266,7 +266,7 @@ func TestDisableSAXRecoverContinuesParsing(t *testing.T) {
   <after>more</after>
 </root>`
 
-	p := helium.NewParser().Recover(true)
+	p := helium.NewParser().RecoverOnError(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should return error")
 	require.NotNil(t, doc, "Recover should return a partial document")
@@ -291,7 +291,7 @@ func TestDisableSAXCallbacksSuppressed(t *testing.T) {
 		return nil
 	}))
 
-	p := helium.NewParser().SAXHandler(sh).Recover(true)
+	p := helium.NewParser().SAXHandler(sh).RecoverOnError(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err)
 
@@ -313,7 +313,7 @@ func TestDisableSAXNoEffectWithoutRecover(t *testing.T) {
 	p := helium.NewParser()
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should fail")
-	require.Nil(t, doc, "without ParseRecover, no document should be returned")
+	require.Nil(t, doc, "without RecoverOnError, no document should be returned")
 }
 
 func TestParseExternalEntity(t *testing.T) {
@@ -332,7 +332,7 @@ func TestParseExternalEntity(t *testing.T) {
 		return nil, sax.ErrHandlerUnspecified
 	}))
 
-	p := helium.NewParser().SAXHandler(s).NoEnt(true)
+	p := helium.NewParser().SAXHandler(s).SubstituteEntities(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse with external entity should succeed")
 }
@@ -349,7 +349,7 @@ func newStringParseInput(content, uri string) *stringParseInput {
 
 func (s *stringParseInput) URI() string { return s.uri }
 
-func TestParseDTDValidRequiredAttribute(t *testing.T) {
+func TestValidateDTDRequiredAttribute(t *testing.T) {
 	// #REQUIRED attribute missing → validation error
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
@@ -358,7 +358,7 @@ func TestParseDTDValidRequiredAttribute(t *testing.T) {
 ]>
 <doc/>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "missing #REQUIRED attribute should fail validation")
 	require.NotNil(t, doc, "document should still be returned with validation error")
@@ -369,7 +369,7 @@ func TestParseDTDValidRequiredAttribute(t *testing.T) {
 	require.Contains(t, ve.Errors[0], "required")
 }
 
-func TestParseDTDValidRequiredPresent(t *testing.T) {
+func TestValidateDTDRequiredPresent(t *testing.T) {
 	// #REQUIRED attribute present → no error
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
@@ -378,12 +378,12 @@ func TestParseDTDValidRequiredPresent(t *testing.T) {
 ]>
 <doc id="x1"/>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
-func TestParseDTDValidFixedMismatch(t *testing.T) {
+func TestValidateDTDFixedMismatch(t *testing.T) {
 	// #FIXED attribute with wrong value → validation error
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
@@ -392,7 +392,7 @@ func TestParseDTDValidFixedMismatch(t *testing.T) {
 ]>
 <doc version="2.0"/>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "#FIXED attribute value mismatch should fail")
 
@@ -401,7 +401,7 @@ func TestParseDTDValidFixedMismatch(t *testing.T) {
 	require.Contains(t, ve.Error(), "must be")
 }
 
-func TestParseDTDValidFixedCorrect(t *testing.T) {
+func TestValidateDTDFixedCorrect(t *testing.T) {
 	// #FIXED attribute with correct value → no error
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
@@ -410,12 +410,12 @@ func TestParseDTDValidFixedCorrect(t *testing.T) {
 ]>
 <doc version="1.0"/>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
-func TestParseDTDValidEmptyElement(t *testing.T) {
+func TestValidateDTDEmptyElement(t *testing.T) {
 	// EMPTY element with content → validation error
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
@@ -424,7 +424,7 @@ func TestParseDTDValidEmptyElement(t *testing.T) {
 ]>
 <doc><child>text</child></doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "EMPTY element with content should fail")
 
@@ -433,7 +433,7 @@ func TestParseDTDValidEmptyElement(t *testing.T) {
 	require.Contains(t, ve.Error(), "EMPTY")
 }
 
-func TestParseDTDValidElementContent(t *testing.T) {
+func TestValidateDTDElementContent(t *testing.T) {
 	// Element content model (a, b) with correct content → no error
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
@@ -443,12 +443,12 @@ func TestParseDTDValidElementContent(t *testing.T) {
 ]>
 <doc><a>hello</a><b>world</b></doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
-func TestParseDTDValidElementContentMismatch(t *testing.T) {
+func TestValidateDTDElementContentMismatch(t *testing.T) {
 	// Element content model (a, b) with (b, a) → validation error
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
@@ -458,12 +458,12 @@ func TestParseDTDValidElementContentMismatch(t *testing.T) {
 ]>
 <doc><b>world</b><a>hello</a></doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "wrong element order should fail content model")
 }
 
-func TestParseDTDValidMixedContent(t *testing.T) {
+func TestValidateDTDMixedContent(t *testing.T) {
 	// Mixed content (#PCDATA | a)* — text and <a> are allowed
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
@@ -472,12 +472,12 @@ func TestParseDTDValidMixedContent(t *testing.T) {
 ]>
 <doc>hello <a>world</a> end</doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
-func TestParseDTDValidMixedContentBadChild(t *testing.T) {
+func TestValidateDTDMixedContentBadChild(t *testing.T) {
 	// Mixed content (#PCDATA | a)* — <b> is NOT allowed
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
@@ -487,13 +487,13 @@ func TestParseDTDValidMixedContentBadChild(t *testing.T) {
 ]>
 <doc>hello <b>world</b></doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "<b> not allowed in mixed content (a)")
 }
 
-func TestParseDTDValidNoFlag(t *testing.T) {
-	// Same invalid document but WITHOUT ParseDTDValid → should pass
+func TestValidateDTDNoFlag(t *testing.T) {
+	// Same invalid document but WITHOUT ValidateDTD → should pass
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
   <!ELEMENT doc EMPTY>
@@ -502,12 +502,12 @@ func TestParseDTDValidNoFlag(t *testing.T) {
 <doc/>`
 
 	p := helium.NewParser()
-	// Don't set ParseDTDValid
+	// Don't set ValidateDTD
 	_, err := p.Parse(t.Context(), []byte(input))
-	require.NoError(t, err, "without ParseDTDValid, validation should not run")
+	require.NoError(t, err, "without ValidateDTD, validation should not run")
 }
 
-func TestParseDTDValidChoiceContent(t *testing.T) {
+func TestValidateDTDChoiceContent(t *testing.T) {
 	// Choice content model (a | b) with <a> → valid
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
@@ -517,12 +517,12 @@ func TestParseDTDValidChoiceContent(t *testing.T) {
 ]>
 <doc><a>hello</a></doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
-func TestParseDTDValidRepeatContent(t *testing.T) {
+func TestValidateDTDRepeatContent(t *testing.T) {
 	// Repetition content model (a)+ with multiple <a> → valid
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
@@ -531,12 +531,12 @@ func TestParseDTDValidRepeatContent(t *testing.T) {
 ]>
 <doc><a>1</a><a>2</a><a>3</a></doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
-func TestParseDTDValidRepeatContentEmpty(t *testing.T) {
+func TestValidateDTDRepeatContentEmpty(t *testing.T) {
 	// Repetition content model (a)+ with zero <a> → invalid
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
@@ -545,7 +545,7 @@ func TestParseDTDValidRepeatContentEmpty(t *testing.T) {
 ]>
 <doc></doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "(a)+ requires at least one <a>")
 }
@@ -592,7 +592,7 @@ func parseWithDTDAttributeType(t *testing.T, typ enum.AttributeType, value strin
 ]>
 %s`, docDecl, extraDecl, typeName, body)
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	return err
 }
@@ -631,7 +631,7 @@ func TestValidateAttributeValueInternal(t *testing.T) {
 	}
 }
 
-func TestParseDTDValidIDUnique(t *testing.T) {
+func TestValidateDTDIDUnique(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
   <!ELEMENT doc (item, item)>
@@ -640,12 +640,12 @@ func TestParseDTDValidIDUnique(t *testing.T) {
 ]>
 <doc><item id="a"/><item id="b"/></doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
-func TestParseDTDValidIDDuplicate(t *testing.T) {
+func TestValidateDTDIDDuplicate(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
   <!ELEMENT doc (item, item)>
@@ -654,13 +654,13 @@ func TestParseDTDValidIDDuplicate(t *testing.T) {
 ]>
 <doc><item id="a"/><item id="a"/></doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "duplicate ID should fail")
 	require.Contains(t, err.Error(), "duplicate ID")
 }
 
-func TestParseDTDValidIDRefValid(t *testing.T) {
+func TestValidateDTDIDRefValid(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
   <!ELEMENT doc (item, ref)>
@@ -671,12 +671,12 @@ func TestParseDTDValidIDRefValid(t *testing.T) {
 ]>
 <doc><item id="x"/><ref target="x"/></doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
-func TestParseDTDValidIDRefMissing(t *testing.T) {
+func TestValidateDTDIDRefMissing(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
   <!ELEMENT doc (item, ref)>
@@ -687,13 +687,13 @@ func TestParseDTDValidIDRefMissing(t *testing.T) {
 ]>
 <doc><item id="x"/><ref target="y"/></doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "IDREF to missing ID should fail")
 	require.Contains(t, err.Error(), "unknown ID")
 }
 
-func TestParseDTDValidIDRefsValid(t *testing.T) {
+func TestValidateDTDIDRefsValid(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
   <!ELEMENT doc (item, item, refs)>
@@ -704,12 +704,12 @@ func TestParseDTDValidIDRefsValid(t *testing.T) {
 ]>
 <doc><item id="a"/><item id="b"/><refs targets="a b"/></doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
 
-func TestParseDTDValidIDRefsMissing(t *testing.T) {
+func TestValidateDTDIDRefsMissing(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <!DOCTYPE doc [
   <!ELEMENT doc (item, refs)>
@@ -720,7 +720,7 @@ func TestParseDTDValidIDRefsMissing(t *testing.T) {
 ]>
 <doc><item id="a"/><refs targets="a z"/></doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "IDREFS with missing ref should fail")
 	require.Contains(t, err.Error(), "unknown ID")
@@ -843,7 +843,7 @@ func TestParseInNodeContext(t *testing.T) {
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		p := helium.NewParser().NoEnt(true)
+		p := helium.NewParser().SubstituteEntities(true)
 		result, err := p.ParseInNodeContext(t.Context(), root, []byte(`<item>&greeting;</item>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
@@ -885,7 +885,7 @@ func TestParseInNodeContext(t *testing.T) {
 	})
 }
 
-func TestParseNoXXE(t *testing.T) {
+func TestBlockXXE(t *testing.T) {
 	t.Parallel()
 
 	const input = `<?xml version="1.0"?>
@@ -901,15 +901,15 @@ func TestParseNoXXE(t *testing.T) {
 		return newStringParseInput("<inner>hello</inner>", systemID), nil
 	}))
 
-	p := helium.NewParser().SAXHandler(s).NoEnt(true).NoXXE(true)
+	p := helium.NewParser().SAXHandler(s).SubstituteEntities(true).BlockXXE(true)
 	_, err := p.Parse(t.Context(), []byte(input))
-	// With ParseNoXXE, external entity loading is blocked.
+	// With BlockXXE, external entity loading is blocked.
 	// The entity reference remains unresolved; no error but external content not loaded.
 	_ = err
-	require.False(t, resolved, "ResolveEntity should not be called with ParseNoXXE")
+	require.False(t, resolved, "ResolveEntity should not be called with BlockXXE")
 }
 
-func TestParseNoXXEExternalDTD(t *testing.T) {
+func TestBlockXXEExternalDTD(t *testing.T) {
 	t.Parallel()
 
 	const input = `<?xml version="1.0"?>
@@ -923,13 +923,13 @@ func TestParseNoXXEExternalDTD(t *testing.T) {
 		return newStringParseInput("<!ELEMENT doc EMPTY>", systemID), nil
 	}))
 
-	p := helium.NewParser().SAXHandler(s).DTDLoad(true).NoXXE(true)
+	p := helium.NewParser().SAXHandler(s).LoadExternalDTD(true).BlockXXE(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	_ = err
-	require.False(t, resolved, "external DTD should not be loaded with ParseNoXXE")
+	require.False(t, resolved, "external DTD should not be loaded with BlockXXE")
 }
 
-func TestParseSkipIDs(t *testing.T) {
+func TestSkipIDs(t *testing.T) {
 	t.Parallel()
 
 	const input = `<?xml version="1.0"?>
@@ -940,11 +940,11 @@ func TestParseSkipIDs(t *testing.T) {
 ]>
 <doc id="x1" name="n1"/>`
 
-	p := helium.NewParser().DTDLoad(true).DTDAttr(true).SkipIDs(true)
+	p := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true).SkipIDs(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 
-	require.Nil(t, doc.GetElementByID("x1"), "ID should not be interned when ParseSkipIDs is set")
+	require.Nil(t, doc.GetElementByID("x1"), "ID should not be interned when SkipIDs is set")
 	root := doc.DocumentElement()
 	require.NotNil(t, root)
 	name, ok := root.GetAttribute("name")
@@ -963,7 +963,7 @@ func TestEntityBoundaryElementDecl(t *testing.T) {
 ]>
 <doc/>`
 
-	p := helium.NewParser().DTDLoad(true)
+	p := helium.NewParser().LoadExternalDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "boundary-violating PE should cause a parse error")
 }
@@ -979,7 +979,7 @@ func TestEntityBoundaryAttributeListDecl(t *testing.T) {
 ]>
 <doc/>`
 
-	p := helium.NewParser().DTDLoad(true)
+	p := helium.NewParser().LoadExternalDTD(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "boundary-violating PE should cause a parse error")
 }
@@ -994,7 +994,7 @@ func TestEntityBoundaryWellNestedPE(t *testing.T) {
 ]>
 <doc/>`
 
-	p := helium.NewParser().DTDLoad(true)
+	p := helium.NewParser().LoadExternalDTD(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
@@ -1009,7 +1009,7 @@ func TestCurrentInputID(t *testing.T) {
 ]>
 <doc>&x;</doc>`
 
-	p := helium.NewParser().NoEnt(true)
+	p := helium.NewParser().SubstituteEntities(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
@@ -1028,7 +1028,7 @@ func TestConditionalSectionInclude(t *testing.T) {
     <child>text</child>
 </doc>`
 
-	p := helium.NewParser().DTDValid(true)
+	p := helium.NewParser().ValidateDTD(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "INCLUDE conditional section should parse successfully")
 	require.NotNil(t, doc)
@@ -1089,7 +1089,7 @@ func TestConditionalSectionExternalDTD(t *testing.T) {
 	input, err := os.ReadFile(path)
 	require.NoError(t, err)
 
-	p := helium.NewParser().DTDLoad(true).BaseURI(path)
+	p := helium.NewParser().LoadExternalDTD(true).BaseURI(path)
 	doc, err := p.Parse(t.Context(), input)
 	require.NoError(t, err, "external DTD with conditional sections should parse")
 	require.NotNil(t, doc)
@@ -1104,12 +1104,12 @@ func TestConditionalSectionExternalDTD(t *testing.T) {
 }
 
 func TestXMLSpacePreserve(t *testing.T) {
-	t.Run("preserve keeps whitespace with ParseNoBlanks", func(t *testing.T) {
+	t.Run("preserve keeps whitespace with StripBlanks", func(t *testing.T) {
 		const input = `<?xml version="1.0"?>
 <root xml:space="preserve">
   <child>text</child>
 </root>`
-		p := helium.NewParser().NoBlanks(true)
+		p := helium.NewParser().StripBlanks(true)
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed")
 
@@ -1117,7 +1117,7 @@ func TestXMLSpacePreserve(t *testing.T) {
 		require.NotNil(t, root, "document element must exist")
 		first := root.FirstChild()
 		require.NotNil(t, first, "root must have children")
-		// With xml:space="preserve", blank-only text nodes must be kept even with ParseNoBlanks.
+		// With xml:space="preserve", blank-only text nodes must be kept even with StripBlanks.
 		require.Equal(t, helium.TextNode, first.Type(), "first child should be text node (preserved whitespace)")
 	})
 
@@ -1132,7 +1132,7 @@ func TestXMLSpacePreserve(t *testing.T) {
     <leaf>text</leaf>
   </child>
 </root>`
-		p := helium.NewParser().NoBlanks(true)
+		p := helium.NewParser().StripBlanks(true)
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed")
 
@@ -1166,7 +1166,7 @@ func TestXMLSpacePreserve(t *testing.T) {
     <child>text</child>
   </normal>
 </root>`
-		p := helium.NewParser().NoBlanks(true)
+		p := helium.NewParser().StripBlanks(true)
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed")
 

@@ -9,9 +9,9 @@ import (
 
 func Example_html_parse_options() {
 	// Parser options let you tune how forgiving the HTML parser should be.
-	// NoImplied keeps the parser from synthesizing html/head/body elements,
-	// and NoBlanks drops whitespace-only text nodes from the DOM.
-	doc, err := html.NewParser().NoImplied().NoBlanks().Parse(context.Background(), []byte("<div>\n  <span>hi</span>\n</div>"))
+	// SuppressImplied keeps the parser from synthesizing html/head/body elements,
+	// and StripBlanks drops whitespace-only text nodes from the DOM.
+	doc, err := html.NewParser().SuppressImplied(true).StripBlanks(true).Parse(context.Background(), []byte("<div>\n  <span>hi</span>\n</div>"))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return
@@ -20,7 +20,7 @@ func Example_html_parse_options() {
 	root := doc.DocumentElement()
 	fmt.Println(root.Name())
 
-	// Because NoBlanks removed the indentation-only text node, the <div>
+	// Because StripBlanks removed the indentation-only text node, the <div>
 	// has just one child element here.
 	children := 0
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {

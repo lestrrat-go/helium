@@ -73,7 +73,7 @@ These affect multiple packages (especially C14N test skips):
 
 1. **Duplicate namespace declarations** — helium rejects, libxml2 uses last. Affects 7 C14N tests.
 2. **Entity refs in single-quoted attributes** — not expanded. Affects 3 C14N tests.
-3. **External entity resolution** — limited; requires explicit config. External subsets need `ParseDTDLoad`, and inline expansion of parsed external entities needs `ParseNoEnt`. `ParseNoXXE` blocks all.
+3. **External entity resolution** — limited; requires explicit config. External subsets need `LoadExternalDTD(true)`, and inline expansion of parsed external entities needs `SubstituteEntities(true)`. `BlockXXE(true)` blocks all.
 
 ## Feature Status
 
@@ -122,35 +122,35 @@ These affect multiple packages (especially C14N test skips):
 | Global state | xmlInitParser/xmlCleanupParser | Not needed in Go |
 | Memory management | xmlMalloc/xmlFree | Go GC replaces |
 
-## ParseOption Parity
+## Parser Option Parity (Fluent API)
 
-| Option | Status | Notes |
-|--------|--------|-------|
-| ParseRecover | ✅ | Recovery mode on errors |
-| ParseNoEnt | ✅ | Substitute entities |
-| ParseDTDLoad | ✅ | Load external subsets |
-| ParseDTDAttr | ✅ | Default DTD attributes |
-| ParseDTDValid | ✅ | Validate with DTD |
-| ParseNoError | ✅ | Suppress error reports |
-| ParseNoWarning | ✅ | Suppress warnings |
-| ParsePedantic | ✅ | Pedantic error reporting |
-| ParseNoBlanks | ✅ | Remove blank nodes |
-| ParseXInclude | ✅ | XInclude processing |
-| ParseNoNet | ✅ | Forbid network access |
-| ParseNsClean | ✅ | Remove redundant NS decls |
-| ParseNoCDATA | ✅ | Merge CDATA as text |
-| ParseNoXIncNode | ✅ | Skip XInclude markers |
-| ParseNoBaseFix | ✅ | Skip xml:base fixup |
-| ParseHuge | ✅ | Relax limits |
-| ParseIgnoreEnc | ✅ | Ignore encoding hint |
-| ParseNoXXE | ✅ | Block XXE attacks |
-| ParseSkipIDs | ✅ | Skip ID interning |
-| ParseLenientXMLDecl | ✅ | Helium extension: relaxed XML decl attribute order |
-| ParseCompact | no-op | Go memory model |
-| ParseBigLines | no-op | Go ints are 64-bit |
-| ParseNoUnzip | no-op | No decompression support |
-| ParseNoSysCatalog | no-op | No global catalog |
-| ParseCatalogPI | no-op | Not yet implemented |
+| Fluent Method | libxml2 Equivalent | Status | Notes |
+|---------------|-------------------|--------|-------|
+| RecoverOnError(bool) | XML_PARSE_RECOVER | ✅ | Recovery mode on errors |
+| SubstituteEntities(bool) | XML_PARSE_NOENT | ✅ | Substitute entities |
+| LoadExternalDTD(bool) | XML_PARSE_DTDLOAD | ✅ | Load external subsets |
+| DefaultDTDAttributes(bool) | XML_PARSE_DTDATTR | ✅ | Default DTD attributes |
+| ValidateDTD(bool) | XML_PARSE_DTDVALID | ✅ | Validate with DTD |
+| SuppressErrors(bool) | XML_PARSE_NOERROR | ✅ | Suppress error reports |
+| SuppressWarnings(bool) | XML_PARSE_NOWARNING | ✅ | Suppress warnings |
+| PedanticErrors(bool) | XML_PARSE_PEDANTIC | ✅ | Pedantic error reporting |
+| StripBlanks(bool) | XML_PARSE_NOBLANKS | ✅ | Remove blank nodes |
+| ProcessXInclude(bool) | XML_PARSE_XINCLUDE | ✅ | XInclude processing |
+| AllowNetwork(bool) | XML_PARSE_NONET | ✅ | Inverted: false → forbid network |
+| CleanNamespaces(bool) | XML_PARSE_NSCLEAN | ✅ | Remove redundant NS decls |
+| MergeCDATA(bool) | XML_PARSE_NOCDATA | ✅ | Merge CDATA as text |
+| XIncludeNodes(bool) | XML_PARSE_NOXINCNODE | ✅ | Inverted: false → skip markers |
+| FixBaseURIs(bool) | XML_PARSE_NOBASEFIX | ✅ | Inverted: false → skip fixup |
+| RelaxLimits(bool) | XML_PARSE_HUGE | ✅ | Relax limits |
+| IgnoreEncoding(bool) | XML_PARSE_IGNORE_ENC | ✅ | Ignore encoding hint |
+| BlockXXE(bool) | XML_PARSE_NOXXE | ✅ | Block XXE attacks |
+| SkipIDs(bool) | XML_PARSE_SKIP_IDS | ✅ | Skip ID interning |
+| LenientXMLDecl(bool) | *(helium extension)* | ✅ | Relaxed XML decl attribute order |
+| CompactTextNodes(bool) | XML_PARSE_COMPACT | no-op | Go memory model |
+| BigLineNumbers(bool) | XML_PARSE_BIG_LINES | no-op | Go ints are 64-bit |
+| *(dropped)* | XML_PARSE_NOUNZIP | no-op | No decompression support |
+| *(dropped)* | XML_PARSE_NOSYSCATALOG | no-op | No global catalog |
+| *(dropped)* | XML_PARSE_CATALOGPI | no-op | Not yet implemented |
 
 ## Known Issues
 

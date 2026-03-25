@@ -28,7 +28,7 @@ func TestBillionLaughs(t *testing.T) {
 ]>
 <root>&lol9;</root>`
 
-	p := helium.NewParser().NoEnt(true)
+	p := helium.NewParser().SubstituteEntities(true)
 	_, err := p.Parse(t.Context(), []byte(xml))
 	require.Error(t, err, "billion laughs should be rejected")
 	require.Contains(t, err.Error(), "amplification")
@@ -45,7 +45,7 @@ func TestQuadraticBlowup(t *testing.T) {
 ]>
 <root>%s</root>`, bigContent, refs)
 
-	p := helium.NewParser().NoEnt(true)
+	p := helium.NewParser().SubstituteEntities(true)
 	_, err := p.Parse(t.Context(), []byte(xml))
 	require.Error(t, err, "quadratic blowup should be rejected")
 	require.Contains(t, err.Error(), "amplification")
@@ -59,14 +59,14 @@ func TestNormalEntities(t *testing.T) {
 ]>
 <root>&greeting;</root>`
 
-	p := helium.NewParser().NoEnt(true)
+	p := helium.NewParser().SubstituteEntities(true)
 	doc, err := p.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
 }
 
 func TestParseHugeDisablesGuard(t *testing.T) {
-	// With helium.ParseHuge, billion laughs should be allowed (guard disabled).
+	// With RelaxLimits, billion laughs should be allowed (guard disabled).
 	// Use a smaller version to avoid actual memory exhaustion.
 	xml := `<?xml version="1.0"?>
 <!DOCTYPE lolz [
@@ -78,7 +78,7 @@ func TestParseHugeDisablesGuard(t *testing.T) {
 ]>
 <root>&lol5;</root>`
 
-	p := helium.NewParser().NoEnt(true).Huge(true)
+	p := helium.NewParser().SubstituteEntities(true).RelaxLimits(true)
 	doc, err := p.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
@@ -172,7 +172,7 @@ func TestEntityDepthLimit(t *testing.T) {
 	dtd.WriteString("]>\n")
 	dtd.WriteString("<root>&e45;</root>")
 
-	p := helium.NewParser().NoEnt(true).Huge(true) // disable amplification guard to test depth only
+	p := helium.NewParser().SubstituteEntities(true).RelaxLimits(true) // disable amplification guard to test depth only
 	_, err := p.Parse(t.Context(), []byte(dtd.String()))
 	require.Error(t, err, "depth > 40 should still error")
 	require.Contains(t, err.Error(), "entity loop")

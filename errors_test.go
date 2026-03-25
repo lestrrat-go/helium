@@ -144,7 +144,7 @@ func TestParseNoError(t *testing.T) {
 		require.Greater(t, called.Load(), int32(0), "SAX Error handler should be called")
 	})
 
-	t.Run("helium.ParseNoError suppresses SAX Error callback", func(t *testing.T) {
+	t.Run("SuppressErrors suppresses SAX Error callback", func(t *testing.T) {
 		t.Parallel()
 		var called atomic.Int32
 		s := sax.New()
@@ -153,10 +153,10 @@ func TestParseNoError(t *testing.T) {
 			return nil
 		}))
 
-		p := helium.NewParser().SAXHandler(s).NoError(true)
+		p := helium.NewParser().SAXHandler(s).SuppressErrors(true)
 		_, err := p.Parse(t.Context(), []byte(input))
 		require.Error(t, err, "parse should still return error")
-		require.Equal(t, int32(0), called.Load(), "SAX Error handler should NOT be called with ParseNoError")
+		require.Equal(t, int32(0), called.Load(), "SAX Error handler should NOT be called with SuppressErrors")
 	})
 }
 
@@ -199,7 +199,7 @@ func TestWarningLocationInfo(t *testing.T) {
 		require.Contains(t, warnings[0], "undeclared")
 	})
 
-	t.Run("helium.ParseNoWarning suppresses warning callback", func(t *testing.T) {
+	t.Run("SuppressWarnings suppresses warning callback", func(t *testing.T) {
 		t.Parallel()
 		var called atomic.Int32
 		s := sax.New()
@@ -208,9 +208,9 @@ func TestWarningLocationInfo(t *testing.T) {
 			return nil
 		}))
 
-		p := helium.NewParser().SAXHandler(s).NoWarning(true)
+		p := helium.NewParser().SAXHandler(s).SuppressWarnings(true)
 		_, _ = p.Parse(t.Context(), []byte(input))
-		require.Equal(t, int32(0), called.Load(), "warning handler should NOT be called with ParseNoWarning")
+		require.Equal(t, int32(0), called.Load(), "warning handler should NOT be called with SuppressWarnings")
 	})
 }
 
