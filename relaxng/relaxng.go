@@ -22,6 +22,9 @@ func NewCompiler() Compiler {
 }
 
 func (c Compiler) clone() Compiler {
+	if c.cfg == nil {
+		return Compiler{cfg: &compilerCfg{}}
+	}
 	cp := *c.cfg
 	return Compiler{cfg: &cp}
 }
@@ -41,7 +44,7 @@ func (c Compiler) ErrorHandler(h helium.ErrorHandler) Compiler {
 }
 
 func (c Compiler) closeHandler() {
-	if c.cfg.errorHandler != nil {
+	if c.cfg != nil && c.cfg.errorHandler != nil {
 		if cl, ok := c.cfg.errorHandler.(io.Closer); ok {
 			_ = cl.Close()
 		}
@@ -55,6 +58,9 @@ func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Grammar, 
 		ctx = context.Background()
 	}
 	cfg := c.cfg
+	if cfg == nil {
+		cfg = &compilerCfg{}
+	}
 	grammar, err := compileSchema(ctx, doc, "", cfg)
 	c.closeHandler()
 	return grammar, err
@@ -66,6 +72,9 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Grammar, error
 		ctx = context.Background()
 	}
 	cfg := c.cfg
+	if cfg == nil {
+		cfg = &compilerCfg{}
+	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -109,6 +118,9 @@ func NewValidator(grammar *Grammar) Validator {
 }
 
 func (v Validator) clone() Validator {
+	if v.cfg == nil {
+		return Validator{cfg: &validatorCfg{}, grammar: v.grammar}
+	}
 	cp := *v.cfg
 	return Validator{cfg: &cp, grammar: v.grammar}
 }
@@ -133,7 +145,11 @@ func (e *ValidateError) Error() string {
 // It returns nil if the document is valid, or a *ValidateError with details.
 // (libxml2: xmlRelaxNGValidateDoc)
 func (v Validator) Validate(_ context.Context, doc *helium.Document) error {
-	output, valid := validateDocument(doc, v.grammar, v.cfg)
+	cfg := v.cfg
+	if cfg == nil {
+		cfg = &validatorCfg{}
+	}
+	output, valid := validateDocument(doc, v.grammar, cfg)
 	if valid {
 		return nil
 	}
