@@ -585,6 +585,7 @@ type mergeKey struct {
 	DataTypeAVT  *avt   // non-nil when data-type is an avt
 	HasCollation bool   // true when lang, collation, or case-order is specified
 	Collation    string // collation URI (for XTDE2210 mismatch detection)
+	CollationAVT *avt   // non-nil when collation is an AVT
 	Lang         string // lang attribute value
 	CaseOrder    string // case-order attribute value
 }

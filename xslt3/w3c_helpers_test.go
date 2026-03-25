@@ -1324,44 +1324,19 @@ var w3cImplicitSkips = map[string]string{
 	"use-package-152": "xml-to-json package mode template matching not implemented",
 
 
-	// override: xsl:original and override static checks not implemented
-	"override-f-012":    "xsl:override function replacement not fully implemented",
-	"override-f-013":    "xsl:override function replacement not fully implemented",
-	"override-f-015":    "xsl:override function replacement not fully implemented",
-	"override-f-016":    "xsl:original function reference not implemented",
-	"override-f-017":    "xsl:original function reference not implemented",
-	"override-f-018":    "xsl:original function reference not implemented",
-	"override-f-024":    "xsl:override function replacement not fully implemented",
-	"override-f-026":    "xsl:override function visibility not propagated",
-	"override-f-031":    "requires schema-aware union type conversion (xsl:import-schema member type matching)",
-	"override-f-033":    "xsl:override function replacement not fully implemented",
-	"override-t-003a":   "xsl:override template replacement not fully implemented",
-	"override-t-003d":   "XTSE3080 override static check not implemented",
-	"override-t-005":    "XTSE3070 override static check not implemented",
-	"override-t-006":    "XTSE3070 override static check not implemented",
-	"override-t-007":    "xsl:original template reference not implemented",
-	"override-t-008":    "XTSE3050 override static check not implemented",
-	"override-t-009":    "XTSE3050 override static check not implemented",
-	"override-t-015":    "xsl:original template reference not implemented",
-	"override-v-002":    "xsl:override variable visibility not propagated",
-	"override-v-003":    "xsl:original variable reference not implemented",
-	"override-v-006":    "XTSE3070 override variable type subsumption check requires schema-aware union type comparison",
-	"override-v-007":    "XTSE3070 override static check not implemented",
-	"override-v-011":    "XTSE3050 override static check not implemented",
-	"override-v-012":    "XTSE3050 override static check not implemented",
-	"override-m-004":    "XTSE3440 override mode static check not implemented",
-	"override-m-010":    "xsl:override mode replacement not fully implemented",
-	"override-m-012":    "xsl:override mode replacement not fully implemented",
-	"override-m-014":    "xsl:override mode replacement not fully implemented",
-	"override-m-017":    "XTSE3050 override static check not implemented",
-	"override-m-018":    "XTSE3050 override static check not implemented",
-	"override-as-002":   "xsl:override attribute-set replacement not fully implemented",
-	"override-as-003":   "xsl:override attribute-set error detection not implemented",
-	"override-as-005":   "xsl:override attribute-set replacement not fully implemented",
-	"override-misc-004": "xsl:override decimal-format replacement not fully implemented",
-	"override-misc-005": "xsl:override decimal-format replacement not fully implemented",
-	"override-misc-006": "xsl:override decimal-format replacement not fully implemented",
-	"override-misc-007": "xsl:override accumulator replacement not fully implemented",
+	// override: schema-aware union types from xsl:import-schema
+	"override-f-031": "requires schema-aware union type conversion (xsl:import-schema)",
+	"override-v-006": "requires schema-aware union type comparison (xsl:import-schema)",
+
+	// function-lookup: returns overridden function instead of original in package context
+	"function-lookup-005": "function-lookup returns override instead of original in package context",
+
+	// override: package-scoped component isolation not implemented
+	"override-as-005":  "package-scoped attribute-set isolation not implemented",
+	"override-misc-004": "package-scoped key isolation not implemented",
+	"override-misc-005": "package-scoped accumulator isolation not implemented",
+	"override-misc-006": "package-scoped decimal format isolation not implemented",
+	"override-misc-007": "package-scoped accumulator isolation not implemented",
 
 	// resolve-uri: xml:base propagation in parsed documents
 
@@ -1372,21 +1347,28 @@ var w3cImplicitSkips = map[string]string{
 	"error-FODC0002a": "upstream W3C test change: FODC0002 now required (was optional)",
 
 	// merge: schema type annotations not propagated through merge
-	"merge-049":  "merge schema-element instance-of check fails after merge",
-	"merge-051":  "xsl:merge-source type attribute not implemented",
-	"merge-067":  "XTDE3362 merge ordering error not detected",
-	"merge-072":  "merge with multiple sources and key comparison incorrect",
-	"merge-079":  "merge with multiple sources and key comparison incorrect",
-	"merge-096":  "merge with multiple sources and key comparison incorrect",
-	"merge-097":  "uri-collection test data files not available",
-	"merge-097s": "uri-collection test data files not available",
-	"merge-097sf": "uri-collection test data files not available",
+	"merge-049":  "schema-element() instance test requires type annotations on merged items",
+	"merge-051":  "xsl:merge-source type= attribute validation not implemented",
+	"merge-067":  "XTDE3362 merge accumulator applicability not detected",
+	"merge-072":  "XTDE2220 alternate=shifted collation not rejected",
+	"merge-079":  "merge collation-based sort verification false positive with translate()",
+	"merge-096":  "XTTE0780 construct-doc type error in merge",
+	"merge-097":  "missing test data files merge-097-*.xml",
+	"merge-097s": "missing test data files merge-097-*.xml",
+	"merge-097sf": "missing test data files merge-097-*.xml",
 
-	// streamable: XTSE3430/XPDY0002 analysis not yet implemented
-	"streamable-116": "XPDY0002 streaming absent context not detected",
-	"streamable-126": "XTSE3430 up-then-down navigation not detected",
-	"streamable-127": "XTSE3430 up-then-down navigation not detected",
-	"streamable-128": "XTSE3430 streaming node return not detected",
+	// streamable: various streaming and grouping issues
+	"streamable-009": "streaming for-each-group grouping result incorrect",
+	"streamable-015": "streaming for-each-group grouping result incorrect",
+	"streamable-016": "streaming for-each-group grouping result incorrect",
+	"streamable-019": "streaming for-each-group position tracking incorrect",
+	"streamable-035": "streaming for-each-group grouping result incorrect",
+	"streamable-045": "streaming for-each-group sum/avg calculation incorrect",
+	"streamable-054": "streaming for-each-group min calculation incorrect",
+	"streamable-059": "streaming for-each-group value concatenation incorrect",
+	"streamable-107": "XTSE3430 streamability analysis not implemented",
+	"streamable-110": "XTSE3430 streamability analysis not implemented",
+	"streamable-148": "streaming for-each-group grouping result incorrect",
 
 	// package version resolution: lowest_version not supported (we use highest_version)
 

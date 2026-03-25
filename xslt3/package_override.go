@@ -50,6 +50,13 @@ func (c *compiler) compileOverrideChildren(overrideElem *helium.Element, pkg *St
 	// Push namespace bindings from override element
 	c.collectNamespaces(overrideElem)
 
+	// Handle default-mode on xsl:override
+	savedDefaultMode := c.defaultMode
+	if dm := getAttr(overrideElem, "default-mode"); dm != "" {
+		c.defaultMode = c.resolveMode(dm)
+	}
+	defer func() { c.defaultMode = savedDefaultMode }()
+
 	for child := range helium.Children(overrideElem) {
 		elem, ok := child.(*helium.Element)
 		if !ok {
@@ -207,10 +214,12 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 	}
 
 	fn := &xslFunction{
-		Name:   qn,
-		Params: params,
-		Body:   body,
-		As:     getAttr(elem, "as"),
+		Name:       qn,
+		Params:     params,
+		Body:       body,
+		As:         getAttr(elem, "as"),
+		Visibility: getAttr(elem, "visibility"),
+		IsOverride: true,
 	}
 
 	// Inherit the base component's visibility so that processExpose
@@ -266,6 +275,10 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 	modeAttr := getAttr(elem, "mode")
 	if modeAttr != "" {
 		tmpl.Mode = c.resolveMode(modeAttr)
+	} else if tmpl.Match != nil && c.defaultMode != "" {
+		// When no explicit mode is specified and a default-mode is active,
+		// match templates use the default mode.
+		tmpl.Mode = c.defaultMode
 	}
 
 	if prio := getAttr(elem, "priority"); prio != "" {
@@ -278,16 +291,22 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 		tmpl.Priority = tmpl.Match.Alternatives[0].priority
 	}
 
-	// Validate: override match template can only use public/abstract modes
-	if tmpl.Mode != "" && pkg.modeDefs != nil {
-		if md, ok := pkg.modeDefs[tmpl.Mode]; ok {
-			if md.Visibility == visFinal {
-				return nil, staticError(errCodeXTSE3060,
-					"cannot override templates in final mode %q", tmpl.Mode)
+	// XTSE3440: override match template can only use modes that are public
+	// or abstract in the used package. Using a mode that doesn't exist in the
+	// package, or a private/final/hidden mode, is a static error.
+	if tmpl.Match != nil && tmpl.Mode != modeAll {
+		modes := strings.Fields(tmpl.Mode)
+		if len(modes) == 0 {
+			// No explicit mode: check unnamed mode
+			modes = []string{""}
+		}
+		for _, m := range modes {
+			// Resolve special names to empty string for lookup
+			if m == "#unnamed" || m == "#default" {
+				m = ""
 			}
-			if md.Visibility == visPrivate || md.Visibility == visHidden {
-				return nil, staticError(errCodeXTSE3060,
-					"cannot override templates in %s mode %q", md.Visibility, tmpl.Mode)
+			if err := checkOverrideModeVisibility(m, tmpl.Mode, pkg); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -319,7 +338,7 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 		}
 	}
 
-	body, params, err := c.compileTemplateBody(elem)
+	ctxDecl, body, params, err := c.compileTemplateBodyEx(elem, false)
 	c.expandText = savedExpandText
 	if err != nil {
 		return nil, err
@@ -327,6 +346,13 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 	tmpl.Params = params
 	tmpl.Body = body
 	tmpl.As = getAttr(elem, "as")
+	if vis := getAttr(elem, "visibility"); vis != "" {
+		tmpl.Visibility = vis
+	}
+	if ctxDecl != nil {
+		tmpl.ContextItemAs = ctxDecl.as
+		tmpl.ContextItemUse = ctxDecl.use
+	}
 
 	// XTSE3070: check type compatibility of override against base template.
 	if tmpl.Name != "" {
@@ -409,7 +435,19 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 			"cannot override %s variable %q", effectiveVis, name)
 	}
 
-	v := &variable{Name: resolvedName, As: getAttr(elem, "as")}
+	v := &variable{Name: resolvedName, As: getAttr(elem, "as"), Visibility: getAttr(elem, "visibility")}
+
+	// XTSE3070: the required type of the override must match the base.
+	// Only check when both types are standard XSD types (xs: prefix or
+	// built-in names). Custom schema types from xsl:import-schema cannot
+	// be reliably compared by name alone.
+	if pkgVar != nil && v.As != "" && pkgVar.As != "" && v.As != pkgVar.As {
+		if isStandardType(v.As) && isStandardType(pkgVar.As) {
+			return nil, staticError(errCodeXTSE3070,
+				"override variable %q type %q does not match base type %q",
+				name, v.As, pkgVar.As)
+		}
+	}
 
 	// Link the original variable for $xsl:original references.
 	// Inherit the base component's visibility so that processExpose
@@ -566,6 +604,19 @@ func checkOverrideTemplateCompat(override, base *template) error {
 			override.Name, override.As, base.As)
 	}
 
+	// XTSE3070: check context-item compatibility.
+	// The override must have the same context-item type and use as the base.
+	if override.ContextItemAs != "" && override.ContextItemAs != base.ContextItemAs {
+		return staticError(errCodeXTSE3070,
+			"override template %q context-item type %q does not match base type %q",
+			override.Name, override.ContextItemAs, base.ContextItemAs)
+	}
+	if override.ContextItemUse != "" && override.ContextItemUse != base.ContextItemUse {
+		return staticError(errCodeXTSE3070,
+			"override template %q context-item use %q does not match base use %q",
+			override.Name, override.ContextItemUse, base.ContextItemUse)
+	}
+
 	// Build map of base params by name
 	baseParams := make(map[string]*param)
 	for _, p := range base.Params {
@@ -590,6 +641,52 @@ func checkOverrideTemplateCompat(override, base *template) error {
 		}
 	}
 	return nil
+}
+
+// checkOverrideModeVisibility validates that a mode used by an override
+// template is public/abstract in the used package.
+func checkOverrideModeVisibility(mode, displayMode string, pkg *Stylesheet) error {
+	if pkg.modeDefs != nil {
+		if md, ok := pkg.modeDefs[mode]; ok {
+			if md.Visibility == visFinal {
+				return staticError(errCodeXTSE3060,
+					"cannot override templates in final mode %q", displayMode)
+			}
+			if md.Visibility == visPrivate || md.Visibility == visHidden {
+				return staticError(errCodeXTSE3440,
+					"cannot override templates in %s mode %q", md.Visibility, displayMode)
+			}
+			return nil
+		}
+	}
+	// Mode not defined in the package — check default visibility
+	defVis := defaultComponentVisibility(pkg)
+	if defVis == visPrivate {
+		return staticError(errCodeXTSE3440,
+			"mode %q is not defined in the used package (default visibility is private)", displayMode)
+	}
+	return nil
+}
+
+// isStandardType returns true if the type name is a well-known XSD type
+// (xs: prefix) or standard type keyword. Returns false for custom schema
+// types defined via xsl:import-schema.
+func isStandardType(as string) bool {
+	// Strip occurrence indicator
+	name := strings.TrimRight(as, "?*+")
+	name = strings.TrimSpace(name)
+	if strings.HasPrefix(name, "xs:") {
+		return true
+	}
+	// Standard keywords
+	switch name {
+	case "item()", "node()", "element()", "attribute()", "text()",
+		"comment()", "processing-instruction()", "document-node()",
+		"namespace-node()", "schema-element()", "schema-attribute()",
+		"function(*)", "map(*)", "array(*)":
+		return true
+	}
+	return false
 }
 
 func parseFloat(s string) (float64, error) {

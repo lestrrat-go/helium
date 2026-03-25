@@ -183,6 +183,18 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		return nil, err
 	}
 
+	// XPDY0002: when the initial mode is streamable and the principal source
+	// document is provided, global variables whose select expressions depend
+	// on the document context are not allowed — the streamed document is not
+	// available for random access.
+	if effectiveSource != nil && cfg != nil && cfg.initialMode != "" {
+		if md := ss.modeDefs[cfg.initialMode]; md != nil && md.Streamable {
+			if err := checkGlobalVarsStreamingContext(ss); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// Eagerly evaluate all global variables and parameters so that errors
 	// (e.g. FOAR0001 from division by zero) are raised before any template
 	// execution begins.  This ensures that global-variable evaluation errors

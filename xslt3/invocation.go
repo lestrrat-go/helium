@@ -124,7 +124,9 @@ func (inv Invocation) Mode(name string) Invocation {
 	return inv
 }
 
-// Selection sets the initial match selection for apply-templates.
+// Selection sets the initial match selection.
+// Only valid for ApplyTemplates invocations; rejected at validation
+// time for Transform, CallTemplate, and CallFunction.
 func (inv Invocation) Selection(seq xpath3.Sequence) Invocation {
 	inv = inv.clone()
 	inv.cfg.matchSelection = seq
@@ -296,9 +298,9 @@ func (inv Invocation) Do(ctx context.Context) (*helium.Document, error) {
 }
 
 // ResolvedOutputDef returns the effective output definition for the primary
-// result after Do has been called. It includes runtime overrides from
-// xsl:result-document targeting the primary output. Returns nil if Do has
-// not yet been called.
+// result after a terminal method (Do, Serialize, WriteTo) has been called.
+// It includes runtime overrides from xsl:result-document targeting the
+// primary output. Returns nil if no terminal method has been called yet.
 func (inv Invocation) ResolvedOutputDef() *OutputDef {
 	return inv.cfg.resolvedOutputDef
 }
@@ -321,6 +323,7 @@ func (inv Invocation) WriteTo(ctx context.Context, w io.Writer) error {
 	}
 	tcfg := inv.toTransformConfig()
 	resultDoc, err := executeTransform(ctx, inv.cfg.source, inv.cfg.ss, tcfg)
+	inv.cfg.resolvedOutputDef = tcfg.resolvedOutputDef
 	if err != nil {
 		return err
 	}
@@ -341,6 +344,9 @@ func (inv Invocation) validate() error {
 		// nil source is allowed: the stylesheet may use xsl:source-document,
 		// global-context-item use="absent", or an initial template.
 		// executeTransform will raise XTDE0040 if source is truly needed.
+		if c.matchSelection != nil {
+			return fmt.Errorf("xslt3: Selection is not valid for Transform (use ApplyTemplates)")
+		}
 	case InvocationApplyTemplates:
 		// nil source is allowed when a match selection is provided, or when
 		// the stylesheet does not require a source document.

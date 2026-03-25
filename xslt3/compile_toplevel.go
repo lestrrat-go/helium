@@ -76,19 +76,40 @@ func (c *compiler) compileTopLevel(root *helium.Element) error {
 			"default-validation=%q requires xsl:import-schema", dv)
 	}
 
-	// Pre-scan local template names for XTSE3055 validation (override
-	// homonymous with local declaration). This runs before use-packages
-	// so the names are available during mergePackageComponents.
+	// Pre-scan local template/variable/mode names for XTSE3055 and XTSE3050
+	// validation. This runs before use-packages so the names are available
+	// during mergePackageComponents.
 	c.localTemplateNames = make(map[string]struct{})
+	c.localVarNames = make(map[string]struct{})
+	c.localModeNames = make(map[string]struct{})
 	for child := range helium.Children(root) {
 		elem, ok := child.(*helium.Element)
 		if !ok || elem.URI() != lexicon.NamespaceXSLT {
 			continue
 		}
-		if elem.LocalName() == lexicon.XSLTElementTemplate {
+		switch elem.LocalName() {
+		case lexicon.XSLTElementTemplate:
 			if n := getAttr(elem, "name"); n != "" {
 				resolved := resolveQName(n, c.nsBindings)
 				c.localTemplateNames[resolved] = struct{}{}
+			}
+			// Track modes used by local templates (for XTSE3050).
+			// When declared-modes="no", using a mode implicitly declares it.
+			if !c.stylesheet.declaredModes {
+				if m := getAttr(elem, "mode"); m != "" && m != "#default" && m != "#all" && m != "#unnamed" {
+					resolved := resolveQName(m, c.nsBindings)
+					c.localModeNames[resolved] = struct{}{}
+				}
+			}
+		case lexicon.XSLTElementVariable:
+			if n := getAttr(elem, "name"); n != "" {
+				resolved := resolveQName(n, c.nsBindings)
+				c.localVarNames[resolved] = struct{}{}
+			}
+		case xslElemMode:
+			if n := getAttr(elem, "name"); n != "" {
+				resolved := resolveQName(n, c.nsBindings)
+				c.localModeNames[resolved] = struct{}{}
 			}
 		}
 	}

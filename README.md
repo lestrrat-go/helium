@@ -554,7 +554,7 @@ func Example_relaxng_validate() {
     return
   }
 
-  grammar, err := relaxng.Compile(context.Background(), schemaDoc)
+  grammar, err := relaxng.NewCompiler().Compile(context.Background(), schemaDoc)
   if err != nil {
     fmt.Printf("schema compile failed: %s\n", err)
     return
@@ -566,7 +566,7 @@ func Example_relaxng_validate() {
     return
   }
 
-  if err := relaxng.Validate(doc, grammar, relaxng.WithFilename("doc.xml")); err != nil {
+  if err := relaxng.NewValidator(grammar).Filename("doc.xml").Validate(context.Background(), doc); err != nil {
     fmt.Println(err)
   }
   // Output:

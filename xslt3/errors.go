@@ -98,6 +98,7 @@ const (
 	errCodeXTDE1490 = "XTDE1490" // two result documents with same URI
 	errCodeXTDE1665 = "XTDE1665" // validation of copy fails
 	errCodeXTDE2210 = "XTDE2210" // merge input inconsistent or not sorted
+	errCodeXTDE2220 = "XTDE2220" // unsupported collation URI
 	errCodeXTDE3052 = "XTDE3052" // runtime: abstract component invoked
 	errCodeXTDE3086 = "XTDE3086" // required global context item absent
 	errCodeXTDE3160 = "XTDE3160" // xsl:evaluate runtime error
@@ -222,6 +223,7 @@ const (
 	errCodeXTSE3280 = "XTSE3280" // xsl:map-entry select/body exclusivity
 	errCodeXTSE3350 = "XTSE3350" // duplicate accumulator name
 	errCodeXTSE3430 = "XTSE3430" // non-streamable expression in streaming context
+	errCodeXTSE3440 = "XTSE3440" // override template in undeclared or private mode
 	errCodeXTSE3441 = "XTSE3441" // streamability error in accumulator
 	errCodeXTSE3450 = "XTSE3450" // conflicting static variable values
 	errCodeXTSE3470 = "XTSE3470" // merge-key or merge-group disallowed in context
