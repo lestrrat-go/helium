@@ -296,6 +296,88 @@ func (c *UTF8Cursor) Read(buf []byte) (int, error) {
 	return nread + n, err
 }
 
+// ScanNCName scans an XML NCName from the current position. Returns the name
+// string and the rune count. Returns ("", 0) if the current position is not a
+// valid NCName start character. The caller must call Advance(nRunes) after.
+func (c *UTF8Cursor) ScanNCName() (string, int) {
+	if err := c.fillBuffer(1); err != nil {
+		return "", 0
+	}
+
+	// Use offset from bufpos to stay safe across fillBuffer compaction.
+	off := 0
+	// Check first character: must be NameStartChar (without ':').
+	b := c.buf[c.bufpos+off]
+	if b < 0x80 {
+		if !((b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || b == '_') {
+			return "", 0
+		}
+		off++
+	} else {
+		_ = c.fillBuffer(utf8.UTFMax)
+		r, w := utf8.DecodeRune(c.buf[c.bufpos:c.buflen])
+		if r == utf8.RuneError || !isNCNameStartChar(r) {
+			return "", 0
+		}
+		off += w
+	}
+
+	// Scan remaining NameChars.
+	nRunes := 1
+	for {
+		if c.bufpos+off >= c.buflen {
+			if c.fillBuffer(off + 1) != nil {
+				break
+			}
+			if c.bufpos+off >= c.buflen {
+				break
+			}
+		}
+		b = c.buf[c.bufpos+off]
+		if b < 0x80 {
+			if !isASCIINameChar(b) {
+				break
+			}
+			off++
+			nRunes++
+		} else {
+			_ = c.fillBuffer(off + utf8.UTFMax)
+			r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
+			if r == utf8.RuneError || !isNCNameChar(r) {
+				break
+			}
+			off += w
+			nRunes++
+		}
+	}
+
+	return string(c.buf[c.bufpos : c.bufpos+off]), nRunes
+}
+
+// isASCIINameChar checks if b is a valid ASCII XML NameChar (without ':').
+func isASCIINameChar(b byte) bool {
+	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') ||
+		(b >= '0' && b <= '9') || b == '_' || b == '-' || b == '.'
+}
+
+// isNCNameStartChar checks NameStartChar production (without ':').
+func isNCNameStartChar(r rune) bool {
+	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || r == '_' ||
+		(r >= 0xC0 && r <= 0xD6) || (r >= 0xD8 && r <= 0xF6) ||
+		(r >= 0xF8 && r <= 0x2FF) || (r >= 0x370 && r <= 0x37D) ||
+		(r >= 0x37F && r <= 0x1FFF) || (r >= 0x200C && r <= 0x200D) ||
+		(r >= 0x2070 && r <= 0x218F) || (r >= 0x2C00 && r <= 0x2FEF) ||
+		(r >= 0x3001 && r <= 0xD7FF) || (r >= 0xF900 && r <= 0xFDCF) ||
+		(r >= 0xFDF0 && r <= 0xFFFD) || (r >= 0x10000 && r <= 0xEFFFF)
+}
+
+// isNCNameChar checks NameChar production (without ':').
+func isNCNameChar(r rune) bool {
+	return isNCNameStartChar(r) ||
+		(r >= '0' && r <= '9') || r == '-' || r == '.' ||
+		r == 0xB7 || (r >= 0x0300 && r <= 0x036F) || (r >= 0x203F && r <= 0x2040)
+}
+
 // ScanCharDataInto scans XML character data with inline EOL normalization.
 // Does NOT consume — caller must call AdvanceFast(nRunes) after processing.
 // The returned rune count counts \r\n as 2 runes to match what AdvanceFast sees.

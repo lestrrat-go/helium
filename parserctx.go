@@ -2759,6 +2759,25 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 		panic("did not get rune cursor")
 	}
 
+	// Fast path: UTF8Cursor scans the NCName directly from the byte buffer.
+	if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
+		name, nRunes := u8.ScanNCName()
+		if nRunes == 0 {
+			c := cur.Peek()
+			err = pctx.error(ctx, fmt.Errorf("invalid name start char %q (U+%04X)", c, c))
+			return
+		}
+		if nRunes > MaxNameLength && !pctx.options.IsSet(parseHuge) {
+			err = pctx.error(ctx, ErrNameTooLong)
+			return
+		}
+		if err = cur.Advance(nRunes); err != nil {
+			return "", err
+		}
+		ncname = name
+		return
+	}
+
 	var c rune
 	if c = cur.Peek(); c == utf8.RuneError {
 		err = pctx.error(ctx, errInvalidUTF8Name)
