@@ -1232,6 +1232,12 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	// Serialization errors (SE*) are raised during serialization, not
 	// transform. Defer the ExpectError check until after serialization.
 	expectSerializationError := tc.ExpectError && strings.HasPrefix(tc.ErrorCode, "SE")
+	// XTSE3430: a Basic XSLT Processor may fall back to non-streaming
+	// execution instead of raising the error. Both outcomes are valid,
+	// so accept successful transformation as passing.
+	if tc.ExpectError && tc.ErrorCode == "XTSE3430" {
+		return
+	}
 	if tc.ExpectError && !expectSerializationError {
 		t.Fatalf("expected error %s but transformation succeeded", tc.ErrorCode)
 	}
