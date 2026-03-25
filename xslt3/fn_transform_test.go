@@ -21,7 +21,7 @@ func innerXSL(name string) string {
 func compileFnTransformOuter(t *testing.T, xsltSrc string) *xslt3.Stylesheet {
 	t.Helper()
 	ctx := t.Context()
-	doc, err := helium.Parse(ctx, []byte(xsltSrc))
+	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
 	require.NoError(t, err)
 	ss, err := xslt3.CompileStylesheet(ctx, doc)
 	require.NoError(t, err)
@@ -46,7 +46,7 @@ func TestFnTransformStylesheetParams(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, _ := helium.Parse(t.Context(), []byte(`<dummy/>`))
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
 	out, err := ss.Transform(src).
 		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-param.xsl"))).
 		Serialize(t.Context())
@@ -72,7 +72,7 @@ func TestFnTransformStaticParams(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, _ := helium.Parse(t.Context(), []byte(`<dummy/>`))
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
 	out, err := ss.Transform(src).
 		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-static-param.xsl"))).
 		Serialize(t.Context())
@@ -102,7 +102,7 @@ func TestFnTransformInitialMode(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, _ := helium.Parse(t.Context(), []byte(`<dummy/>`))
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
 	out, err := ss.Transform(src).
 		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-modes.xsl"))).
 		Serialize(t.Context())
@@ -129,7 +129,7 @@ func TestFnTransformTemplateParams(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, _ := helium.Parse(t.Context(), []byte(`<dummy/>`))
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
 	out, err := ss.Transform(src).
 		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-template-param.xsl"))).
 		Serialize(t.Context())
@@ -155,7 +155,7 @@ func TestFnTransformTunnelParams(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, _ := helium.Parse(t.Context(), []byte(`<dummy/>`))
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
 	out, err := ss.Transform(src).
 		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-tunnel.xsl"))).
 		Serialize(t.Context())
@@ -184,7 +184,7 @@ func TestFnTransformInitialFunction(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, _ := helium.Parse(t.Context(), []byte(`<dummy/>`))
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
 	out, err := ss.Transform(src).
 		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-function.xsl"))).
 		Serialize(t.Context())
@@ -210,7 +210,7 @@ func TestFnTransformBaseOutputURI(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, _ := helium.Parse(t.Context(), []byte(`<dummy/>`))
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
 	out, err := ss.Transform(src).
 		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-output-uri.xsl"))).
 		Serialize(t.Context())
@@ -266,7 +266,7 @@ func TestFnTransformCustomURIScheme(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	doc, err := helium.Parse(ctx, []byte(resolver.files["mem://pkg/main.xsl"]))
+	doc, err := helium.NewParser().Parse(ctx, []byte(resolver.files["mem://pkg/main.xsl"]))
 	require.NoError(t, err)
 
 	ss, err := xslt3.NewCompiler().
@@ -275,7 +275,7 @@ func TestFnTransformCustomURIScheme(t *testing.T) {
 		Compile(ctx, doc)
 	require.NoError(t, err)
 
-	src, _ := helium.Parse(ctx, []byte(`<dummy/>`))
+	src, _ := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
 	out, err := ss.Transform(src).Serialize(ctx)
 	require.NoError(t, err, "fn:transform with custom URI scheme should succeed")
 	require.Contains(t, out, "resolved")

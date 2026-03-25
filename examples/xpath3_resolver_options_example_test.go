@@ -23,7 +23,7 @@ func (r exampleXPath3MemoryResolver) ResolveURI(uri string) (io.ReadCloser, erro
 }
 
 func Example_xpath3_resolver_options() {
-	doc, err := helium.Parse(context.Background(), []byte(`<root/>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root/>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

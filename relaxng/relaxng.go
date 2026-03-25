@@ -72,7 +72,7 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Grammar, error
 		c.closeHandler()
 		return nil, err
 	}
-	doc, err := helium.Parse(ctx, data)
+	doc, err := helium.NewParser().Parse(ctx, data)
 	if err != nil {
 		if pe, ok := errors.AsType[helium.ErrParseError](err); ok {
 			filename := cfg.filename

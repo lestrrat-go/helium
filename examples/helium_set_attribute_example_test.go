@@ -8,7 +8,7 @@ import (
 )
 
 func Example_helium_set_attribute() {
-	doc, err := helium.Parse(context.Background(), []byte(`<root><item/></root>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root><item/></root>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

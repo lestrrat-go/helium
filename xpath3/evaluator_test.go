@@ -9,7 +9,7 @@ import (
 )
 
 func TestEvaluator(t *testing.T) {
-	doc, err := helium.Parse(t.Context(), []byte(`<root><a>hello</a><b>world</b></root>`))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a>hello</a><b>world</b></root>`))
 	require.NoError(t, err)
 
 	compiler := xpath3.NewCompiler()
@@ -46,7 +46,7 @@ func TestEvaluator(t *testing.T) {
 	})
 
 	t.Run("with namespaces", func(t *testing.T) {
-		nsDoc, err := helium.Parse(t.Context(), []byte(`<root xmlns:ns="http://example.com"><ns:item>found</ns:item></root>`))
+		nsDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns:ns="http://example.com"><ns:item>found</ns:item></root>`))
 		require.NoError(t, err)
 
 		expr, err := compiler.Compile("//ns:item/text()")

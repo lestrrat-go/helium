@@ -59,7 +59,7 @@ func (r testCollectionResolver) ResolveURICollection(uri string) ([]string, erro
 
 func parseTestDoc(t *testing.T) *helium.Document {
 	t.Helper()
-	doc, err := helium.Parse(t.Context(), []byte(testXML))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(testXML))
 	require.NoError(t, err)
 	return doc
 }
@@ -993,7 +993,7 @@ func TestWithVariablesCopiesSequences(t *testing.T) {
 
 func TestContextNamespaces(t *testing.T) {
 	xmlNS := `<root xmlns:ex="http://example.com"><ex:item>hello</ex:item></root>`
-	doc, err := helium.Parse(t.Context(), []byte(xmlNS))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xmlNS))
 	require.NoError(t, err)
 
 	compiled, err := xpath3.NewCompiler().Compile(`/root/e:item`)
@@ -1011,7 +1011,7 @@ func TestContextNamespaces(t *testing.T) {
 
 func TestUndeclaredPrefixInPathStep(t *testing.T) {
 	t.Parallel()
-	doc, err := helium.Parse(t.Context(), []byte(`<root xmlns:b="urn:b"><b:item/></root>`))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns:b="urn:b"><b:item/></root>`))
 	require.NoError(t, err)
 
 	// "p" is not declared in namespaces — must produce XPST0081
@@ -1068,7 +1068,7 @@ func TestRegexFunctions(t *testing.T) {
 }
 
 func BenchmarkMatchesLiteralRegex(b *testing.B) {
-	doc, err := helium.Parse(b.Context(), []byte(testXML))
+	doc, err := helium.NewParser().Parse(b.Context(), []byte(testXML))
 	require.NoError(b, err)
 
 	expr := xpath3.NewCompiler().MustCompile(`matches("hello world", "^hello")`)
@@ -1109,7 +1109,7 @@ func TestExpressionReuse(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, 3.0, n1)
 
-	doc2, err := helium.Parse(t.Context(), []byte(`<library><book/></library>`))
+	doc2, err := helium.NewParser().Parse(t.Context(), []byte(`<library><book/></library>`))
 	require.NoError(t, err)
 	r2, err := eval.Evaluate(t.Context(), expr, doc2)
 	require.NoError(t, err)

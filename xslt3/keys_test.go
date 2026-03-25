@@ -31,7 +31,7 @@ func TestKeyBasicLookup(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, err := helium.Parse(t.Context(), []byte(`<root><item id="a" val="hello"/><item id="b" val="world"/></root>`))
+	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item id="a" val="hello"/><item id="b" val="world"/></root>`))
 	require.NoError(t, err)
 
 	result, err := xslt3.TransformString(t.Context(), src, ss)
@@ -49,7 +49,7 @@ func TestKeyInForEachSelect(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, err := helium.Parse(t.Context(), []byte(`<root><item cat="a"/><item cat="b"/><item cat="a"/></root>`))
+	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item cat="a"/><item cat="b"/><item cat="a"/></root>`))
 	require.NoError(t, err)
 
 	result, err := xslt3.TransformString(t.Context(), src, ss)
@@ -71,7 +71,7 @@ func TestKeyWithGenerateId(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, err := helium.Parse(t.Context(), []byte(`<root><item cat="a"/><item cat="b"/><item cat="a"/></root>`))
+	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item cat="a"/><item cat="b"/><item cat="a"/></root>`))
 	require.NoError(t, err)
 
 	result, err := xslt3.TransformString(t.Context(), src, ss)
@@ -90,7 +90,7 @@ func TestKeyInPredicate(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, err := helium.Parse(t.Context(), []byte(`<root><item cat="a"/><item cat="b"/><item cat="a"/></root>`))
+	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item cat="a"/><item cat="b"/><item cat="a"/></root>`))
 	require.NoError(t, err)
 
 	result, err := xslt3.TransformString(t.Context(), src, ss)

@@ -9,7 +9,7 @@ import (
 )
 
 func Example_xpointer_evaluate() {
-	doc, err := helium.Parse(context.Background(), []byte(`<doc><chapter><section>first</section></chapter><chapter><section>second</section></chapter></doc>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<doc><chapter><section>first</section></chapter><chapter><section>second</section></chapter></doc>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

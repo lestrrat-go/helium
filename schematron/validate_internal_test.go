@@ -11,7 +11,7 @@ import (
 
 func compileTestSchema(t *testing.T, xml string) (*Schema, string) {
 	t.Helper()
-	doc, err := helium.Parse(t.Context(), []byte(xml))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	schema, err := NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
@@ -236,7 +236,7 @@ func TestLetVariableChainedDependency(t *testing.T) {
 		schema, errs := compileTestSchema(t, schemaXML)
 		require.Equal(t, "", errs)
 
-		doc, err := helium.Parse(t.Context(), []byte(`<root><item val="bad"/></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item val="bad"/></root>`))
 		require.NoError(t, err)
 
 		err = NewValidator(schema).Validate(t.Context(), doc)
@@ -269,7 +269,7 @@ func TestLetVariableChainedDependency(t *testing.T) {
 		require.Equal(t, "b", schema.patterns[0].rules[0].lets[0].name)
 		require.Equal(t, "a", schema.patterns[0].rules[0].lets[1].name)
 
-		doc, err := helium.Parse(t.Context(), []byte(`<root><item/></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item/></root>`))
 		require.NoError(t, err)
 
 		err = NewValidator(schema).Validate(t.Context(), doc)
@@ -290,7 +290,7 @@ func TestXpathResultToStringBoolean(t *testing.T) {
 }
 
 func TestXpathResultToStringNodeSet(t *testing.T) {
-	doc, err := helium.Parse(t.Context(), []byte(`<root><a/><b/><c/></root>`))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/><b/><c/></root>`))
 	require.NoError(t, err)
 
 	root := doc.DocumentElement()
@@ -355,7 +355,7 @@ func TestUnionContextIntegration(t *testing.T) {
 	schema, errs := compileTestSchema(t, schemaXML)
 	require.Equal(t, "", errs)
 
-	doc, err := helium.Parse(t.Context(), []byte(`<root><invoice/><credit-note/><other/></root>`))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><invoice/><credit-note/><other/></root>`))
 	require.NoError(t, err)
 
 	err = NewValidator(schema).Validate(t.Context(), doc)

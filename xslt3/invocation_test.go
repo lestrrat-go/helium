@@ -55,7 +55,7 @@ func TestInvocationTunnelParameters(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	source, err := helium.Parse(t.Context(), []byte(`<root/>`))
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
 	require.NoError(t, err)
 
 	p := xslt3.NewParameters()

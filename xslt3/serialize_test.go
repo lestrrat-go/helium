@@ -73,7 +73,7 @@ func TestSerializeItemsAtomics(t *testing.T) {
 }
 
 func TestSerializeItemsWithDocument(t *testing.T) {
-	doc, err := helium.Parse(t.Context(), []byte(`<data>content</data>`))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<data>content</data>`))
 	require.NoError(t, err)
 
 	var buf bytes.Buffer

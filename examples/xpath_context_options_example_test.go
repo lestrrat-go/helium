@@ -9,7 +9,7 @@ import (
 )
 
 func Example_xpath_context_options() {
-	doc, err := helium.Parse(context.Background(), []byte(`<catalog><book price="30"/><book price="45"/></catalog>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<catalog><book price="30"/><book price="45"/></catalog>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

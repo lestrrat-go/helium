@@ -25,7 +25,7 @@ func Example_xsd_validate() {
 </xs:schema>`
 
 	// Compile parses and compiles the XSD schema from an in-memory document.
-	schemaDoc, err := helium.Parse(context.Background(), []byte(schemaSrc))
+	schemaDoc, err := helium.NewParser().Parse(context.Background(), []byte(schemaSrc))
 	if err != nil {
 		fmt.Printf("failed to parse schema: %s\n", err)
 		return
@@ -38,7 +38,7 @@ func Example_xsd_validate() {
 
 	// Parse the XML document to validate.
 	const src = `<root version="1.0"><item>one</item><item>two</item></root>`
-	doc, err := helium.Parse(context.Background(), []byte(src))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(src))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

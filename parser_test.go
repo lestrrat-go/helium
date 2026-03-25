@@ -116,7 +116,7 @@ func TestParseMisc(t *testing.T) {
 }
 
 func TestParseCharRefReplacementCharacter(t *testing.T) {
-	doc, err := helium.Parse(t.Context(), []byte("<root>&#xFFFD;</root>"))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte("<root>&#xFFFD;</root>"))
 	require.NoError(t, err)
 
 	root := doc.DocumentElement()
@@ -180,12 +180,11 @@ func TestParseNoBlanks(t *testing.T) {
 <root>
   <child>text</child>
 </root>`
-	p := helium.NewParser()
-	p.SetOption(helium.ParseNoBlanks)
+	p := helium.NewParser().NoBlanks(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed")
 
-	// With ParseNoBlanks, blank-only text nodes between elements should be stripped.
+	// With NoBlanks, blank-only text nodes between elements should be stripped.
 	// The root element's first child should be <child>, not a whitespace text node.
 	root := findDocumentElement(doc)
 	require.NotNil(t, root, "document element must exist")
@@ -209,8 +208,7 @@ func TestParseNoCDATA(t *testing.T) {
 	require.Equal(t, helium.CDATASectionNode, child1.Type(), "without ParseNoCDATA, should be CDATA node")
 
 	// With ParseNoCDATA: CDATA should be delivered as text
-	p2 := helium.NewParser()
-	p2.SetOption(helium.ParseNoCDATA)
+	p2 := helium.NewParser().NoCDATA(true)
 	doc2, err := p2.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse should succeed")
 	root2 := findDocumentElement(doc2)
@@ -234,8 +232,7 @@ func TestParsePedantic(t *testing.T) {
 	require.NoError(t, err, "without pedantic, relative URI should be accepted")
 
 	// With pedantic: should fail (relative URI)
-	p2 := helium.NewParser()
-	p2.SetOption(helium.ParsePedantic)
+	p2 := helium.NewParser().Pedantic(true)
 	_, err = p2.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "with pedantic, relative URI should be rejected")
 }
@@ -254,8 +251,7 @@ func TestParseRecover(t *testing.T) {
 	require.Nil(t, doc1, "without recover, no document returned")
 
 	// With ParseRecover: error, but partial document returned
-	p2 := helium.NewParser()
-	p2.SetOption(helium.ParseRecover)
+	p2 := helium.NewParser().Recover(true)
 	doc2, err := p2.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should still return error")
 	require.NotNil(t, doc2, "with recover, partial document should be returned")
@@ -270,11 +266,10 @@ func TestDisableSAXRecoverContinuesParsing(t *testing.T) {
   <after>more</after>
 </root>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseRecover)
+	p := helium.NewParser().Recover(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "malformed XML should return error")
-	require.NotNil(t, doc, "ParseRecover should return a partial document")
+	require.NotNil(t, doc, "Recover should return a partial document")
 
 	root := doc.DocumentElement()
 	require.NotNil(t, root, "root element should exist")
@@ -296,9 +291,7 @@ func TestDisableSAXCallbacksSuppressed(t *testing.T) {
 		return nil
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(sh)
-	p.SetOption(helium.ParseRecover)
+	p := helium.NewParser().SAXHandler(sh).Recover(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err)
 
@@ -339,9 +332,7 @@ func TestParseExternalEntity(t *testing.T) {
 		return nil, sax.ErrHandlerUnspecified
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(s)
-	p.SetOption(helium.ParseNoEnt)
+	p := helium.NewParser().SAXHandler(s).NoEnt(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "Parse with external entity should succeed")
 }
@@ -367,8 +358,7 @@ func TestParseDTDValidRequiredAttribute(t *testing.T) {
 ]>
 <doc/>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "missing #REQUIRED attribute should fail validation")
 	require.NotNil(t, doc, "document should still be returned with validation error")
@@ -388,8 +378,7 @@ func TestParseDTDValidRequiredPresent(t *testing.T) {
 ]>
 <doc id="x1"/>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -403,8 +392,7 @@ func TestParseDTDValidFixedMismatch(t *testing.T) {
 ]>
 <doc version="2.0"/>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "#FIXED attribute value mismatch should fail")
 
@@ -422,8 +410,7 @@ func TestParseDTDValidFixedCorrect(t *testing.T) {
 ]>
 <doc version="1.0"/>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -437,8 +424,7 @@ func TestParseDTDValidEmptyElement(t *testing.T) {
 ]>
 <doc><child>text</child></doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "EMPTY element with content should fail")
 
@@ -457,8 +443,7 @@ func TestParseDTDValidElementContent(t *testing.T) {
 ]>
 <doc><a>hello</a><b>world</b></doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -473,8 +458,7 @@ func TestParseDTDValidElementContentMismatch(t *testing.T) {
 ]>
 <doc><b>world</b><a>hello</a></doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "wrong element order should fail content model")
 }
@@ -488,8 +472,7 @@ func TestParseDTDValidMixedContent(t *testing.T) {
 ]>
 <doc>hello <a>world</a> end</doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -504,8 +487,7 @@ func TestParseDTDValidMixedContentBadChild(t *testing.T) {
 ]>
 <doc>hello <b>world</b></doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "<b> not allowed in mixed content (a)")
 }
@@ -535,8 +517,7 @@ func TestParseDTDValidChoiceContent(t *testing.T) {
 ]>
 <doc><a>hello</a></doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -550,8 +531,7 @@ func TestParseDTDValidRepeatContent(t *testing.T) {
 ]>
 <doc><a>1</a><a>2</a><a>3</a></doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -565,8 +545,7 @@ func TestParseDTDValidRepeatContentEmpty(t *testing.T) {
 ]>
 <doc></doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "(a)+ requires at least one <a>")
 }
@@ -613,8 +592,7 @@ func parseWithDTDAttributeType(t *testing.T, typ enum.AttributeType, value strin
 ]>
 %s`, docDecl, extraDecl, typeName, body)
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	return err
 }
@@ -662,8 +640,7 @@ func TestParseDTDValidIDUnique(t *testing.T) {
 ]>
 <doc><item id="a"/><item id="b"/></doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -677,8 +654,7 @@ func TestParseDTDValidIDDuplicate(t *testing.T) {
 ]>
 <doc><item id="a"/><item id="a"/></doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "duplicate ID should fail")
 	require.Contains(t, err.Error(), "duplicate ID")
@@ -695,8 +671,7 @@ func TestParseDTDValidIDRefValid(t *testing.T) {
 ]>
 <doc><item id="x"/><ref target="x"/></doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -712,8 +687,7 @@ func TestParseDTDValidIDRefMissing(t *testing.T) {
 ]>
 <doc><item id="x"/><ref target="y"/></doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "IDREF to missing ID should fail")
 	require.Contains(t, err.Error(), "unknown ID")
@@ -730,8 +704,7 @@ func TestParseDTDValidIDRefsValid(t *testing.T) {
 ]>
 <doc><item id="a"/><item id="b"/><refs targets="a b"/></doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 }
@@ -747,8 +720,7 @@ func TestParseDTDValidIDRefsMissing(t *testing.T) {
 ]>
 <doc><item id="a"/><refs targets="a z"/></doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "IDREFS with missing ref should fail")
 	require.Contains(t, err.Error(), "unknown ID")
@@ -756,13 +728,13 @@ func TestParseDTDValidIDRefsMissing(t *testing.T) {
 
 func TestParseInNodeContext(t *testing.T) {
 	t.Run("basic fragment", func(t *testing.T) {
-		doc, err := helium.Parse(t.Context(), []byte(`<root/>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
 		require.NotNil(t, root)
 
-		result, err := helium.ParseInNodeContext(t.Context(), root, []byte(`<child/>`))
+		result, err := helium.NewParser().ParseInNodeContext(t.Context(), root, []byte(`<child/>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, helium.ElementNode, result.Type())
@@ -771,11 +743,11 @@ func TestParseInNodeContext(t *testing.T) {
 	})
 
 	t.Run("multiple sibling nodes", func(t *testing.T) {
-		doc, err := helium.Parse(t.Context(), []byte(`<root/>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		result, err := helium.ParseInNodeContext(t.Context(), root, []byte(`<a/><b/>text`))
+		result, err := helium.NewParser().ParseInNodeContext(t.Context(), root, []byte(`<a/><b/>text`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "a", result.Name())
@@ -791,11 +763,11 @@ func TestParseInNodeContext(t *testing.T) {
 	})
 
 	t.Run("namespace inheritance", func(t *testing.T) {
-		doc, err := helium.Parse(t.Context(), []byte(`<root xmlns:ns="http://example.com/ns"><child/></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns:ns="http://example.com/ns"><child/></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		result, err := helium.ParseInNodeContext(t.Context(), root, []byte(`<ns:item>hello</ns:item>`))
+		result, err := helium.NewParser().ParseInNodeContext(t.Context(), root, []byte(`<ns:item>hello</ns:item>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, helium.ElementNode, result.Type())
@@ -806,7 +778,7 @@ func TestParseInNodeContext(t *testing.T) {
 	})
 
 	t.Run("nested namespace inheritance", func(t *testing.T) {
-		doc, err := helium.Parse(t.Context(), []byte(`<root xmlns:a="http://a.example.com"><middle xmlns:b="http://b.example.com"><child/></middle></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns:a="http://a.example.com"><middle xmlns:b="http://b.example.com"><child/></middle></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
@@ -814,7 +786,7 @@ func TestParseInNodeContext(t *testing.T) {
 		require.NotNil(t, middle)
 
 		// Parse fragment in context of middle — should see both a: and b: prefixes
-		result, err := helium.ParseInNodeContext(t.Context(), middle, []byte(`<a:x/><b:y/>`))
+		result, err := helium.NewParser().ParseInNodeContext(t.Context(), middle, []byte(`<a:x/><b:y/>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "a:x", result.Name())
@@ -824,28 +796,28 @@ func TestParseInNodeContext(t *testing.T) {
 	})
 
 	t.Run("fragment with own namespaces", func(t *testing.T) {
-		doc, err := helium.Parse(t.Context(), []byte(`<root/>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		result, err := helium.ParseInNodeContext(t.Context(), root, []byte(`<ns:item xmlns:ns="http://example.com/ns">hello</ns:item>`))
+		result, err := helium.NewParser().ParseInNodeContext(t.Context(), root, []byte(`<ns:item xmlns:ns="http://example.com/ns">hello</ns:item>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "ns:item", result.Name())
 	})
 
 	t.Run("document as context", func(t *testing.T) {
-		doc, err := helium.Parse(t.Context(), []byte(`<root/>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
-		result, err := helium.ParseInNodeContext(t.Context(), doc, []byte(`<elem/>`))
+		result, err := helium.NewParser().ParseInNodeContext(t.Context(), doc, []byte(`<elem/>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "elem", result.Name())
 	})
 
 	t.Run("non-element context walks up", func(t *testing.T) {
-		doc, err := helium.Parse(t.Context(), []byte(`<root xmlns:ns="http://example.com/ns"><child>some text</child></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns:ns="http://example.com/ns"><child>some text</child></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
@@ -856,14 +828,14 @@ func TestParseInNodeContext(t *testing.T) {
 		require.Equal(t, helium.TextNode, textNode.Type())
 
 		// Parse in context of text node — should walk up to <child> then <root>
-		result, err := helium.ParseInNodeContext(t.Context(), textNode, []byte(`<ns:item/>`))
+		result, err := helium.NewParser().ParseInNodeContext(t.Context(), textNode, []byte(`<ns:item/>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, "ns:item", result.Name())
 	})
 
 	t.Run("DTD entity resolution", func(t *testing.T) {
-		doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <!DOCTYPE doc [
   <!ENTITY greeting "hello world">
 ]>
@@ -871,8 +843,7 @@ func TestParseInNodeContext(t *testing.T) {
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		p := helium.NewParser()
-		p.SetOption(helium.ParseNoEnt)
+		p := helium.NewParser().NoEnt(true)
 		result, err := p.ParseInNodeContext(t.Context(), root, []byte(`<item>&greeting;</item>`))
 		require.NoError(t, err)
 		require.NotNil(t, result)
@@ -882,26 +853,26 @@ func TestParseInNodeContext(t *testing.T) {
 	})
 
 	t.Run("empty fragment", func(t *testing.T) {
-		doc, err := helium.Parse(t.Context(), []byte(`<root/>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		result, err := helium.ParseInNodeContext(t.Context(), root, []byte(``))
+		result, err := helium.NewParser().ParseInNodeContext(t.Context(), root, []byte(``))
 		require.NoError(t, err)
 		require.Nil(t, result)
 	})
 
 	t.Run("nil node", func(t *testing.T) {
-		_, err := helium.ParseInNodeContext(t.Context(), nil, []byte(`<child/>`))
+		_, err := helium.NewParser().ParseInNodeContext(t.Context(), nil, []byte(`<child/>`))
 		require.Error(t, err)
 	})
 
 	t.Run("original document preserved", func(t *testing.T) {
-		doc, err := helium.Parse(t.Context(), []byte(`<root><existing/></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><existing/></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		_, err = helium.ParseInNodeContext(t.Context(), root, []byte(`<new/>`))
+		_, err = helium.NewParser().ParseInNodeContext(t.Context(), root, []byte(`<new/>`))
 		require.NoError(t, err)
 
 		// Original document should still have its children
@@ -930,9 +901,7 @@ func TestParseNoXXE(t *testing.T) {
 		return newStringParseInput("<inner>hello</inner>", systemID), nil
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(s)
-	p.SetOption(helium.ParseNoEnt | helium.ParseNoXXE)
+	p := helium.NewParser().SAXHandler(s).NoEnt(true).NoXXE(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	// With ParseNoXXE, external entity loading is blocked.
 	// The entity reference remains unresolved; no error but external content not loaded.
@@ -954,9 +923,7 @@ func TestParseNoXXEExternalDTD(t *testing.T) {
 		return newStringParseInput("<!ELEMENT doc EMPTY>", systemID), nil
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(s)
-	p.SetOption(helium.ParseDTDLoad | helium.ParseNoXXE)
+	p := helium.NewParser().SAXHandler(s).DTDLoad(true).NoXXE(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	_ = err
 	require.False(t, resolved, "external DTD should not be loaded with ParseNoXXE")
@@ -973,8 +940,7 @@ func TestParseSkipIDs(t *testing.T) {
 ]>
 <doc id="x1" name="n1"/>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDLoad | helium.ParseDTDAttr | helium.ParseSkipIDs)
+	p := helium.NewParser().DTDLoad(true).DTDAttr(true).SkipIDs(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 
@@ -997,8 +963,7 @@ func TestEntityBoundaryElementDecl(t *testing.T) {
 ]>
 <doc/>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDLoad)
+	p := helium.NewParser().DTDLoad(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "boundary-violating PE should cause a parse error")
 }
@@ -1014,8 +979,7 @@ func TestEntityBoundaryAttributeListDecl(t *testing.T) {
 ]>
 <doc/>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDLoad)
+	p := helium.NewParser().DTDLoad(true)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "boundary-violating PE should cause a parse error")
 }
@@ -1030,8 +994,7 @@ func TestEntityBoundaryWellNestedPE(t *testing.T) {
 ]>
 <doc/>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDLoad)
+	p := helium.NewParser().DTDLoad(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
@@ -1046,8 +1009,7 @@ func TestCurrentInputID(t *testing.T) {
 ]>
 <doc>&x;</doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseNoEnt)
+	p := helium.NewParser().NoEnt(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 	require.NotNil(t, doc)
@@ -1066,8 +1028,7 @@ func TestConditionalSectionInclude(t *testing.T) {
     <child>text</child>
 </doc>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDValid)
+	p := helium.NewParser().DTDValid(true)
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "INCLUDE conditional section should parse successfully")
 	require.NotNil(t, doc)
@@ -1128,9 +1089,7 @@ func TestConditionalSectionExternalDTD(t *testing.T) {
 	input, err := os.ReadFile(path)
 	require.NoError(t, err)
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDLoad)
-	p.SetBaseURI(path)
+	p := helium.NewParser().DTDLoad(true).BaseURI(path)
 	doc, err := p.Parse(t.Context(), input)
 	require.NoError(t, err, "external DTD with conditional sections should parse")
 	require.NotNil(t, doc)
@@ -1150,8 +1109,7 @@ func TestXMLSpacePreserve(t *testing.T) {
 <root xml:space="preserve">
   <child>text</child>
 </root>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseNoBlanks)
+		p := helium.NewParser().NoBlanks(true)
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed")
 
@@ -1174,8 +1132,7 @@ func TestXMLSpacePreserve(t *testing.T) {
     <leaf>text</leaf>
   </child>
 </root>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseNoBlanks)
+		p := helium.NewParser().NoBlanks(true)
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed")
 
@@ -1209,8 +1166,7 @@ func TestXMLSpacePreserve(t *testing.T) {
     <child>text</child>
   </normal>
 </root>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseNoBlanks)
+		p := helium.NewParser().NoBlanks(true)
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "Parse should succeed")
 

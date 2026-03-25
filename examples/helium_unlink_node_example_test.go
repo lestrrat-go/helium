@@ -9,7 +9,7 @@ import (
 )
 
 func Example_helium_unlink_node() {
-	doc, err := helium.Parse(context.Background(), []byte(`<root><a/><b/></root>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root><a/><b/></root>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

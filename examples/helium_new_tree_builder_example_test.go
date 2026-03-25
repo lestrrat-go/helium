@@ -12,8 +12,7 @@ func Example_helium_new_tree_builder() {
 	// Use it when you want parser-level control (custom SAX handlers, push
 	// parsing, parser options) but still want a finished *helium.Document.
 	tb := helium.NewTreeBuilder()
-	p := helium.NewParser()
-	p.SetSAXHandler(tb)
+	p := helium.NewParser().SAXHandler(tb)
 
 	// Because the tree builder is installed as the SAX handler, Parse still
 	// returns a document even though the parser is running in SAX mode.

@@ -23,8 +23,7 @@ func Example_helium_stop_parser() {
 		return nil
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(s)
+	p := helium.NewParser().SAXHandler(s)
 
 	// Gotcha: stopping the parser this way is treated as an intentional early
 	// exit, so Parse returns successfully and you inspect whatever state the

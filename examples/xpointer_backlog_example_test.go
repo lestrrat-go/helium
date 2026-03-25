@@ -8,7 +8,7 @@ import (
 )
 
 func Example_xpointer_copy_node() {
-	src, err := helium.Parse(context.Background(), []byte(`<doc><section>intro</section></doc>`))
+	src, err := helium.NewParser().Parse(context.Background(), []byte(`<doc><section>intro</section></doc>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

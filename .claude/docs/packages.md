@@ -6,15 +6,16 @@ Go implementation of libxml2. Module: `github.com/lestrrat-go/helium`
 
 XML parsing, DOM tree, serialization. Entry point for all XML processing.
 
-- **Parse(ctx, []byte) → (*Document, error)** / **ParseReader(ctx, io.Reader) → (*Document, error)** — main parse entry points
-- **NewParser()** — configurable parser with SetOption(), SetSAXHandler(), SetCatalog(), SetBaseURI(), SetMaxDepth()
+- **NewParser() → Parser** — create fluent builder for XML parsing (clone-on-write value type)
+  - Flag methods: `Recover(bool)`, `NoEnt(bool)`, `DTDLoad(bool)`, `DTDAttr(bool)`, `DTDValid(bool)`, `NoError(bool)`, `NoWarning(bool)`, `Pedantic(bool)`, `NoBlanks(bool)`, `XInclude(bool)`, `NoNet(bool)`, `NsClean(bool)`, `NoCDATA(bool)`, `NoXIncNode(bool)`, `NoBaseFix(bool)`, `Huge(bool)`, `IgnoreEnc(bool)`, `NoXXE(bool)`, `SkipIDs(bool)`, `LenientXMLDecl(bool)`
+  - Config methods: `SAXHandler(sax.SAX2Handler)`, `BaseURI(string)`, `CharBufferSize(int)`, `MaxDepth(int)`, `Catalog(icatalog.Resolver)`
+  - Terminal methods: `Parse(ctx, []byte) → (*Document, error)`, `ParseReader(ctx, io.Reader) → (*Document, error)`, `ParseInNodeContext(ctx, Node, []byte) → (Node, error)`, `NewPushParser(ctx) → *PushParser`
 - **NewWriter(opts) → *Writer** — XML serializer; Writer.WriteDoc(io.Writer, *Document), Writer.WriteNode(io.Writer, Node)
-- **ParseInNodeContext(ctx, Node, []byte) → (Node, error)** — parse fragment in existing node context
 - **Element.FindAttribute(AttributePredicate) → (*Attribute, bool)** — attribute-node lookup by matcher; built-in matchers: `QNamePredicate`, `LocalNamePredicate`, `NSPredicate`
 - **Element.GetAttribute(qname) → (string, bool)** / **Element.GetAttributeNS(local, nsURI) → (string, bool)** — attribute value lookup by QName or expanded name
 - Key types: `Document`, `Element`, `Attribute`, `Namespace`, `DTD`, `Entity`, `Text`, `CDATASection`, `Comment`, `PI`
 - `Node` interface — common for all node types; use ElementType enum to distinguish
-- `ParseOption` bitmask — ParseNoEnt, ParseDTDLoad, ParseDTDAttr, ParseDTDValid, ParseNoBlanks, ParseXInclude, ParseNoXXE, ParseRecover, ParseLenientXMLDecl, etc.
+- Parse flags configured via fluent methods on Parser (internal bitset, not public)
 - `ErrorHandler` interface — async error delivery during parsing
 - `Document.GetElementByID(id)` — O(1) via hash table, O(n) fallback
 - `Walk(doc, fn)`, `Children(node)`, `Descendants(node)` — tree traversal

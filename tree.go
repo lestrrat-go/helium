@@ -503,7 +503,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 
 	ctx := getParserCtx(ctxif)
 
-	if ctx.options.IsSet(ParseNoXXE) {
+	if ctx.options.IsSet(parseNoXXE) {
 		return nil
 	}
 

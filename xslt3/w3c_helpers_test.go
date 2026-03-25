@@ -476,13 +476,13 @@ func w3cCheckXPath(expr string) w3cCheck {
 	}
 	return w3cCheck{
 		fn: func(result string, _ []string, _ map[string]*helium.Document) bool {
-			doc, err := helium.Parse(context.TODO(), []byte(result))
+			doc, err := helium.NewParser().Parse(context.TODO(), []byte(result))
 			if err != nil {
 				// Result may be plain text or an XML fragment with multiple
 				// root elements (e.g. from xsl:message). Wrap in a temporary
 				// element to parse, then promote children to a new document
 				// so XPath like "/elem" can address top-level elements.
-				doc, err = helium.Parse(context.TODO(), []byte("<_r>"+result+"</_r>"))
+				doc, err = helium.NewParser().Parse(context.TODO(), []byte("<_r>"+result+"</_r>"))
 				if err != nil {
 					return false
 				}
@@ -653,9 +653,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		if readErr != nil {
 			t.Fatalf("read stylesheet: %v", readErr)
 		}
-		ssParser := helium.NewParser()
-		ssParser.SetOption(helium.ParseDTDLoad | helium.ParseNoEnt)
-		ssParser.SetBaseURI(absPath)
+		ssParser := helium.NewParser().DTDLoad(true).NoEnt(true).BaseURI(absPath)
 		doc, parseErr := ssParser.Parse(t.Context(), data)
 		if parseErr != nil {
 			if tc.ExpectError {
@@ -694,7 +692,6 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 
 	var sourceDoc *helium.Document
 	if hasExplicitSource {
-		sourceParser := helium.NewParser()
 		// Enable DTD attribute defaults so that #FIXED and #DEFAULT attributes
 		// from internal/external DTDs appear on elements (required by W3C tests
 		// such as attribute-0501 whose source DTD declares fixed attributes).
@@ -702,13 +699,12 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		// external entity references (e.g. &extEnt;) are expanded inline, and
 		// suppress xml:base fixup on the expanded content so synthetic
 		// xml:base attributes do not leak into the XSLT result tree.
-		sourceOpts := helium.ParseDTDLoad | helium.ParseDTDAttr
+		sourceParser := helium.NewParser().DTDLoad(true).DTDAttr(true)
 		if tc.SourceDocPath != "" {
-			sourceOpts |= helium.ParseNoEnt | helium.ParseNoBaseFix
+			sourceParser = sourceParser.NoEnt(true).NoBaseFix(true)
 			srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-			sourceParser.SetBaseURI(srcAbsPath)
+			sourceParser = sourceParser.BaseURI(srcAbsPath)
 		}
-		sourceParser.SetOption(sourceOpts)
 		sourceDoc, err = sourceParser.Parse(t.Context(), sourceData)
 		if err != nil {
 			if tc.ExpectError {
@@ -1481,18 +1477,18 @@ func domEqual(a, b string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	docA, errA := helium.Parse(ctx, []byte(wrapA))
-	docB, errB := helium.Parse(ctx, []byte(wrapB))
+	docA, errA := helium.NewParser().Parse(ctx, []byte(wrapA))
+	docB, errB := helium.NewParser().Parse(ctx, []byte(wrapB))
 	if errA != nil || errB != nil {
 		// XML 1.1 prefix undeclarations (xmlns:prefix="") are not valid
 		// XML 1.0. Strip them and retry so that DOM comparison still works.
 		if errA != nil {
 			wrapA = stripPrefixUndecls(wrapA)
-			docA, errA = helium.Parse(ctx, []byte(wrapA))
+			docA, errA = helium.NewParser().Parse(ctx, []byte(wrapA))
 		}
 		if errB != nil {
 			wrapB = stripPrefixUndecls(wrapB)
-			docB, errB = helium.Parse(ctx, []byte(wrapB))
+			docB, errB = helium.NewParser().Parse(ctx, []byte(wrapB))
 		}
 		if errA != nil || errB != nil {
 			return false
@@ -1666,7 +1662,7 @@ func normalizeSpace(s string) string {
 // similar to XPath string-value of the root node.
 func extractTextContent(xmlStr string) string {
 	wrapped := wrapXMLFragment(xmlStr)
-	doc, err := helium.Parse(context.TODO(), []byte(wrapped))
+	doc, err := helium.NewParser().Parse(context.TODO(), []byte(wrapped))
 	if err != nil {
 		return strings.TrimSpace(xmlStr)
 	}
@@ -1750,7 +1746,7 @@ func evalXPathAssertWithDoc(t *testing.T, expr string, doc *helium.Document) boo
 func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 	t.Helper()
 
-	doc, err := helium.Parse(context.TODO(), []byte(resultXML))
+	doc, err := helium.NewParser().Parse(context.TODO(), []byte(resultXML))
 	if err != nil {
 		// The result may be a well-formed document fragment (multiple top-level
 		// elements) which is valid in the XDM but not well-formed XML. Wrap in a
@@ -1758,7 +1754,7 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 		// children promoted to top-level so that absolute XPath expressions like
 		// /foo[1] resolve correctly.
 		wrapped := "<_w3c_wrap_>" + resultXML + "</_w3c_wrap_>"
-		wrapDoc, wrapErr := helium.Parse(context.TODO(), []byte(wrapped))
+		wrapDoc, wrapErr := helium.NewParser().Parse(context.TODO(), []byte(wrapped))
 		if wrapErr != nil {
 			// The result may be HTML output with void elements
 			// (e.g. <meta>, <img>) that are not valid XML. Try
@@ -1943,10 +1939,10 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
 func evalXPathAssertWithRawResult(t *testing.T, expr string, resultXML string, rawResult xpath3.Sequence) bool {
 	t.Helper()
 
-	doc, err := helium.Parse(context.TODO(), []byte(resultXML))
+	doc, err := helium.NewParser().Parse(context.TODO(), []byte(resultXML))
 	if err != nil {
 		wrapped := "<_w3c_wrap_>" + resultXML + "</_w3c_wrap_>"
-		wrapDoc, wrapErr := helium.Parse(context.TODO(), []byte(wrapped))
+		wrapDoc, wrapErr := helium.NewParser().Parse(context.TODO(), []byte(wrapped))
 		if wrapErr != nil {
 			htmlDoc, htmlErr := htmlparser.NewParser().Parse(context.TODO(), []byte(resultXML))
 			if htmlErr != nil {
@@ -2274,9 +2270,7 @@ func w3cCompileCached(ctx context.Context, path string) (*xslt3.Stylesheet, erro
 	if err != nil {
 		return nil, err
 	}
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDLoad | helium.ParseNoEnt)
-	p.SetBaseURI(absPath)
+	p := helium.NewParser().DTDLoad(true).NoEnt(true).BaseURI(absPath)
 	doc, err := p.Parse(ctx, data)
 	if err != nil {
 		return nil, err
@@ -2388,7 +2382,7 @@ func w3cBuildCollectionResolver(t *testing.T, collections []w3cCollection) *w3cC
 			require.NoError(t, err)
 			data, err := os.ReadFile(absPath)
 			require.NoError(t, err, "reading collection doc %s", docPath)
-			doc, err := helium.Parse(t.Context(), data)
+			doc, err := helium.NewParser().Parse(t.Context(), data)
 			require.NoError(t, err, "parsing collection doc %s", docPath)
 			doc.SetURL(absPath)
 			node := helium.Node(doc)

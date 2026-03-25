@@ -497,8 +497,7 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 			require.NoError(t, err, "reading expected SAX2 file")
 
 			var buf bytes.Buffer
-			p := helium.NewParser()
-			p.SetSAXHandler(newLibxml2EventEmitter(&buf))
+			p := helium.NewParser().SAXHandler(newLibxml2EventEmitter(&buf))
 
 			_, err = p.Parse(t.Context(), input)
 			if err != nil {

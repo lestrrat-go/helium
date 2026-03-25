@@ -36,7 +36,7 @@ func TestAtomicValueAccessors(t *testing.T) {
 	})
 
 	t.Run("schema-derived fallback atomization", func(t *testing.T) {
-		doc, err := helium.Parse(t.Context(), []byte(`<root>-0</root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>-0</root>`))
 		require.NoError(t, err)
 
 		root := doc.FirstChild()

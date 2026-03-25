@@ -382,7 +382,7 @@ func (c *compiler) parseInclude(elem *helium.Element) {
 		c.errorCount++
 		return
 	}
-	doc, err := helium.Parse(c.compileContext(), data)
+	doc, err := helium.NewParser().Parse(c.compileContext(), data)
 	if err != nil {
 		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
 		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))
@@ -791,7 +791,7 @@ func (c *compiler) parseExternalRef(node *helium.Element) *pattern {
 		c.errorCount++
 		return nil
 	}
-	doc, err := helium.Parse(c.compileContext(), data)
+	doc, err := helium.NewParser().Parse(c.compileContext(), data)
 	if err != nil {
 		msg := fmt.Sprintf("xmlRelaxNGParse: could not load %s", href)
 		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(rngParserError(msg), helium.ErrorLevelFatal))

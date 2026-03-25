@@ -59,8 +59,7 @@ func Example_xinclude_process() {
 		if err != nil {
 			return nil, err
 		}
-		p := helium.NewParser()
-		p.SetBaseURI(mainPath)
+		p := helium.NewParser().BaseURI(mainPath)
 		return p.Parse(context.Background(), data)
 	}
 

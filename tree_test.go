@@ -283,8 +283,7 @@ func TestDocumentURL(t *testing.T) {
 
 	t.Run("URL set during parsing", func(t *testing.T) {
 		const input = `<?xml version="1.0"?><root/>`
-		p := helium.NewParser()
-		p.SetBaseURI("/some/path/doc.xml")
+		p := helium.NewParser().BaseURI("/some/path/doc.xml")
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		require.Equal(t, "/some/path/doc.xml", doc.URL())

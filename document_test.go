@@ -45,8 +45,7 @@ func TestGetElementByID(t *testing.T) {
   <item eid="x1">alpha</item>
   <item eid="x2">beta</item>
 </root>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDLoad | helium.ParseDTDAttr)
+		p := helium.NewParser().DTDLoad(true).DTDAttr(true)
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 

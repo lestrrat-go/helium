@@ -15,7 +15,7 @@ func Example_c14n_exclusive() {
 	// or attribute names.
 	const src = `<root xmlns:a="http://a" xmlns:b="http://b"><child xmlns:c="http://c"><a:item/></child></root>`
 
-	doc, err := helium.Parse(context.Background(), []byte(src))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(src))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

@@ -22,7 +22,7 @@ func FuzzCompile(f *testing.F) {
 		if len(data) > 1<<20 {
 			return
 		}
-		doc, err := helium.Parse(t.Context(), data)
+		doc, err := helium.NewParser().Parse(t.Context(), data)
 		if err != nil {
 			return
 		}
@@ -45,7 +45,7 @@ func FuzzValidate(f *testing.F) {
 			return
 		}
 		ctx := t.Context()
-		schemaDom, err := helium.Parse(ctx, schemaData)
+		schemaDom, err := helium.NewParser().Parse(ctx, schemaData)
 		if err != nil {
 			return
 		}
@@ -55,7 +55,7 @@ func FuzzValidate(f *testing.F) {
 			return
 		}
 
-		instanceDom, err := helium.Parse(ctx, instanceData)
+		instanceDom, err := helium.NewParser().Parse(ctx, instanceData)
 		if err != nil {
 			return
 		}

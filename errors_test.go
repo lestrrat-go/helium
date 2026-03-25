@@ -79,7 +79,7 @@ func TestErrParseErrorErrorString(t *testing.T) {
 }
 
 func TestErrParseErrorLevel(t *testing.T) {
-	_, err := helium.Parse(t.Context(), []byte("<broken"))
+	_, err := helium.NewParser().Parse(t.Context(), []byte("<broken"))
 	require.Error(t, err)
 
 	var pe helium.ErrParseError
@@ -100,8 +100,7 @@ func TestErrParseErrorWarningLevel(t *testing.T) {
 		return errors.New("warning escalated")
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(s)
+	p := helium.NewParser().SAXHandler(s)
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err)
 
@@ -140,8 +139,7 @@ func TestParseNoError(t *testing.T) {
 			return nil
 		}))
 
-		p := helium.NewParser()
-		p.SetSAXHandler(s)
+		p := helium.NewParser().SAXHandler(s)
 		_, _ = p.Parse(t.Context(), []byte(input))
 		require.Greater(t, called.Load(), int32(0), "SAX Error handler should be called")
 	})
@@ -155,12 +153,10 @@ func TestParseNoError(t *testing.T) {
 			return nil
 		}))
 
-		p := helium.NewParser()
-		p.SetSAXHandler(s)
-		p.SetOption(helium.ParseNoError)
+		p := helium.NewParser().SAXHandler(s).NoError(true)
 		_, err := p.Parse(t.Context(), []byte(input))
 		require.Error(t, err, "parse should still return error")
-		require.Equal(t, int32(0), called.Load(), "SAX Error handler should NOT be called with helium.ParseNoError")
+		require.Equal(t, int32(0), called.Load(), "SAX Error handler should NOT be called with ParseNoError")
 	})
 }
 
@@ -177,8 +173,7 @@ func TestWarningLocationInfo(t *testing.T) {
 			return handlerErr
 		}))
 
-		p := helium.NewParser()
-		p.SetSAXHandler(s)
+		p := helium.NewParser().SAXHandler(s)
 		_, err := p.Parse(t.Context(), []byte(input))
 		require.Error(t, err)
 
@@ -197,8 +192,7 @@ func TestWarningLocationInfo(t *testing.T) {
 			return nil
 		}))
 
-		p := helium.NewParser()
-		p.SetSAXHandler(s)
+		p := helium.NewParser().SAXHandler(s)
 		_, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		require.NotEmpty(t, warnings, "warning handler should be called")
@@ -214,11 +208,9 @@ func TestWarningLocationInfo(t *testing.T) {
 			return nil
 		}))
 
-		p := helium.NewParser()
-		p.SetSAXHandler(s)
-		p.SetOption(helium.ParseNoWarning)
+		p := helium.NewParser().SAXHandler(s).NoWarning(true)
 		_, _ = p.Parse(t.Context(), []byte(input))
-		require.Equal(t, int32(0), called.Load(), "warning handler should NOT be called with helium.ParseNoWarning")
+		require.Equal(t, int32(0), called.Load(), "warning handler should NOT be called with ParseNoWarning")
 	})
 }
 
@@ -300,7 +292,7 @@ func TestErrorDomainDefault(t *testing.T) {
 func TestNamespaceErrorDomain(t *testing.T) {
 	const input = `<root xmlns:a="urn:a"><a:child xmlns:a="">text</a:child></root>`
 
-	_, err := helium.Parse(t.Context(), []byte(input))
+	_, err := helium.NewParser().Parse(t.Context(), []byte(input))
 	require.Error(t, err)
 
 	var pe helium.ErrParseError

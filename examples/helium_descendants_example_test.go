@@ -8,7 +8,7 @@ import (
 )
 
 func Example_helium_descendants() {
-	doc, err := helium.Parse(context.Background(), []byte(`<a><b><c/></b><d/></a>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<a><b><c/></b><d/></a>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

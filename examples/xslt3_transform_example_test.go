@@ -36,7 +36,7 @@ func Example_xslt3_transform() {
 	// 2. compile it to *xslt3.Stylesheet
 	// 3. parse the source document
 	// 4. call stylesheet.Transform(source).Do(ctx)
-	stylesheetDoc, err := helium.Parse(ctx, []byte(stylesheetSrc))
+	stylesheetDoc, err := helium.NewParser().Parse(ctx, []byte(stylesheetSrc))
 	if err != nil {
 		fmt.Printf("failed to parse stylesheet: %s\n", err)
 		return
@@ -48,7 +48,7 @@ func Example_xslt3_transform() {
 		return
 	}
 
-	sourceDoc, err := helium.Parse(ctx, []byte(sourceSrc))
+	sourceDoc, err := helium.NewParser().Parse(ctx, []byte(sourceSrc))
 	if err != nil {
 		fmt.Printf("failed to parse source: %s\n", err)
 		return

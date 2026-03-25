@@ -10,7 +10,7 @@ import (
 
 func compileWithErrors(t *testing.T, schemaXML string) (*xsd.Schema, string) {
 	t.Helper()
-	schemaDOC, err := helium.Parse(t.Context(), []byte(schemaXML))
+	schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
 	require.NoError(t, err)
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	schema, err := xsd.NewCompiler().SchemaFilename("test.xsd").ErrorHandler(collector).Compile(t.Context(), schemaDOC)
@@ -24,7 +24,7 @@ func compileAndValidate(t *testing.T, schemaXML, instanceXML string) error {
 	t.Helper()
 	schema, errs := compileWithErrors(t, schemaXML)
 	require.Empty(t, errs, "unexpected compile errors")
-	doc, err := helium.Parse(t.Context(), []byte(instanceXML))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
 	require.NoError(t, err)
 	return xsd.NewValidator(schema).Filename("test.xml").Validate(t.Context(), doc) //nolint:wrapcheck // test helper: caller uses require.NoError
 }

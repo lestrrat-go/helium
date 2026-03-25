@@ -37,7 +37,7 @@ func TestAttributeSetCycleDetection(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := t.Context()
-			doc, err := helium.Parse(ctx, []byte(tc.xsl))
+			doc, err := helium.NewParser().Parse(ctx, []byte(tc.xsl))
 			require.NoError(t, err)
 
 			_, err = xslt3.CompileStylesheet(ctx, doc)

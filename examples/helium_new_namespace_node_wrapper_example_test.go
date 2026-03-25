@@ -8,7 +8,7 @@ import (
 )
 
 func Example_helium_new_namespace_node_wrapper() {
-	doc, err := helium.Parse(context.Background(), []byte(`<root/>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root/>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

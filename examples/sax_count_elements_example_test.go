@@ -27,8 +27,7 @@ func Example_sax_count_elements() {
 		return nil
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(handler)
+	p := helium.NewParser().SAXHandler(handler)
 
 	_, err := p.Parse(context.Background(), []byte(src))
 	if err != nil {

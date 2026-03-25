@@ -22,8 +22,7 @@ func TestExtSubsetLookup_ElementInExtSubset(t *testing.T) {
 <!DOCTYPE root SYSTEM "` + dtdPath + `">
 <root><child role="main"/></root>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDLoad | helium.ParseDTDValid)
+	p := helium.NewParser().DTDLoad(true).DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err, "validation should pass when declarations are in extSubset")
 }
@@ -40,8 +39,7 @@ func TestExtSubsetLookup_EntityInExtSubset(t *testing.T) {
 <!DOCTYPE root SYSTEM "` + dtdPath + `">
 <root/>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDLoad)
+	p := helium.NewParser().DTDLoad(true)
 	doc, err := p.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
@@ -63,8 +61,7 @@ func TestExtSubsetLookup_AttributeInExtSubset(t *testing.T) {
 <!DOCTYPE root SYSTEM "` + dtdPath + `">
 <root><child/></root>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDLoad | helium.ParseDTDValid)
+	p := helium.NewParser().DTDLoad(true).DTDValid(true)
 	_, err := p.Parse(t.Context(), []byte(xml))
 	require.Error(t, err, "missing REQUIRED attribute from extSubset should fail")
 	require.Contains(t, err.Error(), "attribute role is required")
@@ -83,8 +80,7 @@ func TestExtSubsetLookup_StandaloneYesPreventsExtSubset(t *testing.T) {
 <!DOCTYPE root SYSTEM "` + dtdPath + `">
 <root><child/></root>`
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDLoad)
+	p := helium.NewParser().DTDLoad(true)
 	doc, err := p.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
@@ -104,8 +100,7 @@ func TestEnumerationAttributeValidation(t *testing.T) {
   <!ATTLIST root color (red|green|blue) #REQUIRED>
 ]>
 <root color="green"/>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
+		p := helium.NewParser().DTDValid(true).DTDAttr(true)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
@@ -119,8 +114,7 @@ func TestEnumerationAttributeValidation(t *testing.T) {
   <!ATTLIST root color (red|green|blue) #REQUIRED>
 ]>
 <root color="yellow"/>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
+		p := helium.NewParser().DTDValid(true).DTDAttr(true)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not among the enumerated set")
@@ -135,8 +129,7 @@ func TestEnumerationAttributeValidation(t *testing.T) {
   <!ATTLIST root color (red|green|blue) "red">
 ]>
 <root/>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
+		p := helium.NewParser().DTDValid(true).DTDAttr(true)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
@@ -156,8 +149,7 @@ func TestEntityAttributeValidation(t *testing.T) {
   <!ATTLIST root img ENTITY #REQUIRED>
 ]>
 <root img="logo"/>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
+		p := helium.NewParser().DTDValid(true).DTDAttr(true)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
@@ -171,8 +163,7 @@ func TestEntityAttributeValidation(t *testing.T) {
   <!ATTLIST root img ENTITY #REQUIRED>
 ]>
 <root img="noSuchEntity"/>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
+		p := helium.NewParser().DTDValid(true).DTDAttr(true)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "undeclared entity")
@@ -188,8 +179,7 @@ func TestEntityAttributeValidation(t *testing.T) {
   <!ATTLIST root img ENTITY #REQUIRED>
 ]>
 <root img="internalEnt"/>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
+		p := helium.NewParser().DTDValid(true).DTDAttr(true)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not unparsed")
@@ -211,8 +201,7 @@ func TestEntitiesAttributeValidation(t *testing.T) {
   <!ATTLIST root imgs ENTITIES #REQUIRED>
 ]>
 <root imgs="logo1 logo2"/>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
+		p := helium.NewParser().DTDValid(true).DTDAttr(true)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
@@ -228,8 +217,7 @@ func TestEntitiesAttributeValidation(t *testing.T) {
   <!ATTLIST root imgs ENTITIES #REQUIRED>
 ]>
 <root imgs="logo1 noSuchEntity"/>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
+		p := helium.NewParser().DTDValid(true).DTDAttr(true)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "undeclared entity")
@@ -250,8 +238,7 @@ func TestNotationAttributeValidation(t *testing.T) {
   <!ATTLIST root fmt NOTATION (gif|png) #REQUIRED>
 ]>
 <root fmt="gif"/>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
+		p := helium.NewParser().DTDValid(true).DTDAttr(true)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 	})
@@ -266,8 +253,7 @@ func TestNotationAttributeValidation(t *testing.T) {
   <!ATTLIST root fmt NOTATION (gif|png) #REQUIRED>
 ]>
 <root fmt="png"/>`
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDValid | helium.ParseDTDAttr)
+		p := helium.NewParser().DTDValid(true).DTDAttr(true)
 		_, err := p.Parse(t.Context(), []byte(xml))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "undeclared notation")

@@ -160,7 +160,7 @@ func TestGoldenFiles(t *testing.T) {
 				// Parse instance.
 				xmlData, err := os.ReadFile(tc.xmlPath)
 				require.NoError(t, err)
-				doc, err := helium.Parse(t.Context(), xmlData)
+				doc, err := helium.NewParser().Parse(t.Context(), xmlData)
 				require.NoError(t, err, "XML parse failed for %s", tc.xmlPath)
 
 				// Validate.
@@ -194,7 +194,7 @@ func TestGetAttrWhitespace(t *testing.T) {
     <element name="a"><empty/></element>
   </define>
 </grammar>`
-	doc, err := helium.Parse(t.Context(), []byte(input))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
@@ -205,7 +205,7 @@ func TestGetAttrWhitespace(t *testing.T) {
 	require.Empty(t, compileErrors, "schema with whitespace-padded names should compile without errors")
 
 	xmlData := []byte(`<a/>`)
-	xmlDoc, err := helium.Parse(t.Context(), xmlData)
+	xmlDoc, err := helium.NewParser().Parse(t.Context(), xmlData)
 	require.NoError(t, err)
 
 	err = relaxng.NewValidator(grammar).Validate(t.Context(), xmlDoc)
@@ -223,7 +223,7 @@ func TestXmlBaseInclude(t *testing.T) {
 	require.Empty(t, compileErrors, "include via xml:base should compile without errors")
 
 	xmlData := []byte(`<sub/>`)
-	xmlDoc, err := helium.Parse(t.Context(), xmlData)
+	xmlDoc, err := helium.NewParser().Parse(t.Context(), xmlData)
 	require.NoError(t, err)
 
 	err = relaxng.NewValidator(grammar).Validate(t.Context(), xmlDoc)
@@ -241,7 +241,7 @@ func TestXmlBaseExternalRef(t *testing.T) {
 	require.Empty(t, compileErrors, "externalRef via xml:base should compile without errors")
 
 	xmlData := []byte(`<sub/>`)
-	xmlDoc, err := helium.Parse(t.Context(), xmlData)
+	xmlDoc, err := helium.NewParser().Parse(t.Context(), xmlData)
 	require.NoError(t, err)
 
 	err = relaxng.NewValidator(grammar).Validate(t.Context(), xmlDoc)
@@ -259,7 +259,7 @@ func TestCheckCombine(t *testing.T) {
     <element name="b"><empty/></element>
   </define>
 </grammar>`
-		doc, err := helium.Parse(t.Context(), []byte(input))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = relaxng.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
@@ -279,7 +279,7 @@ func TestCheckCombine(t *testing.T) {
     <element name="b"><empty/></element>
   </define>
 </grammar>`
-		doc, err := helium.Parse(t.Context(), []byte(input))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = relaxng.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
@@ -298,7 +298,7 @@ func TestCheckCombine(t *testing.T) {
     <element name="b"><empty/></element>
   </start>
 </grammar>`
-		doc, err := helium.Parse(t.Context(), []byte(input))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = relaxng.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
@@ -317,7 +317,7 @@ func TestCheckCombine(t *testing.T) {
     <element name="b"><empty/></element>
   </start>
 </grammar>`
-		doc, err := helium.Parse(t.Context(), []byte(input))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = relaxng.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
@@ -337,7 +337,7 @@ func TestCheckCombine(t *testing.T) {
     <element name="b"><empty/></element>
   </define>
 </grammar>`
-		doc, err := helium.Parse(t.Context(), []byte(input))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = relaxng.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
@@ -353,7 +353,7 @@ func TestCheckRules(t *testing.T) {
 
 	compile := func(t *testing.T, input string) (compileErrors, compileWarnings string) {
 		t.Helper()
-		doc, err := helium.Parse(t.Context(), []byte(input))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		_, err = relaxng.NewCompiler().SchemaFilename("test.rng").ErrorHandler(collector).Compile(t.Context(), doc)

@@ -505,7 +505,7 @@ func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	parser := helium.NewParser()
 	if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
-		parser.SetBaseURI(ec.baseURI)
+		parser = parser.BaseURI(ec.baseURI)
 	}
 	doc, err := parser.Parse(ctx, []byte(s))
 	if err != nil {
@@ -535,7 +535,7 @@ func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) 
 		doc.SetURL(ec.baseURI)
 	}
 
-	first, err := helium.ParseInNodeContext(ctx, doc, []byte(s))
+	first, err := helium.NewParser().ParseInNodeContext(ctx, doc, []byte(s))
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
 	}
@@ -958,7 +958,7 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot retrieve resource: %v", err)}
 	}
 
-	doc, err := helium.Parse(ctx, data)
+	doc, err := helium.NewParser().Parse(ctx, data)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot parse document: %v", err)}
 	}

@@ -391,7 +391,7 @@ func qt3ParseDoc(t *testing.T, path string) helium.Node {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	require.NoError(t, err, "reading %s", path)
-	doc, err := helium.Parse(t.Context(), data)
+	doc, err := helium.NewParser().Parse(t.Context(), data)
 	require.NoError(t, err, "parsing %s", path)
 	absPath, err := filepath.Abs(path)
 	if err == nil {

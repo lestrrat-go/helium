@@ -32,7 +32,7 @@ const idSubtypeStylesheet = `
 func TestIDRecognizesSchemaValidatedIDSubtype(t *testing.T) {
 	ss := compileStylesheetString(t, idSubtypeStylesheet)
 
-	source, err := helium.Parse(t.Context(), []byte(`<root id="alpha"/>`))
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<root id="alpha"/>`))
 	require.NoError(t, err)
 
 	result, err := xslt3.TransformString(t.Context(), source, ss)

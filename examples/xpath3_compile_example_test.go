@@ -19,7 +19,7 @@ func Example_xpath3_compile() {
 
 	fmt.Printf("expression: %s\n", expr.String())
 
-	doc, err := helium.Parse(context.Background(), []byte(`<root><a><x/><y/></a><b><z/></b></root>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root><a><x/><y/></a><b><z/></b></root>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

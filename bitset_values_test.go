@@ -1,10 +1,8 @@
-package helium_test
+package helium
 
 import (
 	"fmt"
 	"testing"
-
-	"github.com/lestrrat-go/helium"
 
 	"github.com/lestrrat-go/helium/internal/bitset"
 	"github.com/stretchr/testify/require"
@@ -14,108 +12,108 @@ func TestParseOptionBitPositions(t *testing.T) {
 	t.Parallel()
 
 	// Verify bit positions match libxml2's XML_PARSE_* constants.
-	require.Equal(t, helium.ParseOption(1), helium.ParseRecover)
-	require.Equal(t, helium.ParseOption(2), helium.ParseNoEnt)
-	require.Equal(t, helium.ParseOption(4), helium.ParseDTDLoad)
-	require.Equal(t, helium.ParseOption(8), helium.ParseDTDAttr)
-	require.Equal(t, helium.ParseOption(16), helium.ParseDTDValid)
-	require.Equal(t, helium.ParseOption(32), helium.ParseNoError)
-	require.Equal(t, helium.ParseOption(64), helium.ParseNoWarning)
-	require.Equal(t, helium.ParseOption(128), helium.ParsePedantic)
-	require.Equal(t, helium.ParseOption(256), helium.ParseNoBlanks)
-	require.Equal(t, helium.ParseOption(1024), helium.ParseXInclude)
-	require.Equal(t, helium.ParseOption(2048), helium.ParseNoNet)
-	require.Equal(t, helium.ParseOption(4096), helium.ParseNoDict)
-	require.Equal(t, helium.ParseOption(8192), helium.ParseNsClean)
-	require.Equal(t, helium.ParseOption(16384), helium.ParseNoCDATA)
-	require.Equal(t, helium.ParseOption(32768), helium.ParseNoXIncNode)
-	require.Equal(t, helium.ParseOption(65536), helium.ParseCompact)
-	require.Equal(t, helium.ParseOption(262144), helium.ParseNoBaseFix)
-	require.Equal(t, helium.ParseOption(524288), helium.ParseHuge)
-	require.Equal(t, helium.ParseOption(2097152), helium.ParseIgnoreEnc)
-	require.Equal(t, helium.ParseOption(4194304), helium.ParseBigLines)
-	require.Equal(t, helium.ParseOption(8388608), helium.ParseNoXXE)
-	require.Equal(t, helium.ParseOption(16777216), helium.ParseNoUnzip)
-	require.Equal(t, helium.ParseOption(33554432), helium.ParseNoSysCatalog)
-	require.Equal(t, helium.ParseOption(67108864), helium.ParseCatalogPI)
-	require.Equal(t, helium.ParseOption(134217728), helium.ParseSkipIDs)
-	require.Equal(t, helium.ParseOption(268435456), helium.ParseLenientXMLDecl)
+	require.Equal(t, parseOption(1), parseRecover)
+	require.Equal(t, parseOption(2), parseNoEnt)
+	require.Equal(t, parseOption(4), parseDTDLoad)
+	require.Equal(t, parseOption(8), parseDTDAttr)
+	require.Equal(t, parseOption(16), parseDTDValid)
+	require.Equal(t, parseOption(32), parseNoError)
+	require.Equal(t, parseOption(64), parseNoWarning)
+	require.Equal(t, parseOption(128), parsePedantic)
+	require.Equal(t, parseOption(256), parseNoBlanks)
+	require.Equal(t, parseOption(1024), parseXInclude)
+	require.Equal(t, parseOption(2048), parseNoNet)
+	require.Equal(t, parseOption(4096), parseNoDict)
+	require.Equal(t, parseOption(8192), parseNsClean)
+	require.Equal(t, parseOption(16384), parseNoCDATA)
+	require.Equal(t, parseOption(32768), parseNoXIncNode)
+	require.Equal(t, parseOption(65536), parseCompact)
+	require.Equal(t, parseOption(262144), parseNoBaseFix)
+	require.Equal(t, parseOption(524288), parseHuge)
+	require.Equal(t, parseOption(2097152), parseIgnoreEnc)
+	require.Equal(t, parseOption(4194304), parseBigLines)
+	require.Equal(t, parseOption(8388608), parseNoXXE)
+	require.Equal(t, parseOption(16777216), parseNoUnzip)
+	require.Equal(t, parseOption(33554432), parseNoSysCatalog)
+	require.Equal(t, parseOption(67108864), parseCatalogPI)
+	require.Equal(t, parseOption(134217728), parseSkipIDs)
+	require.Equal(t, parseOption(268435456), parseLenientXMLDecl)
 }
 
 func TestParseOptionFlagsAreUnique(t *testing.T) {
 	t.Parallel()
 
-	assertUniqueFlags(t, []helium.ParseOption{
-		helium.ParseRecover,
-		helium.ParseNoEnt,
-		helium.ParseDTDLoad,
-		helium.ParseDTDAttr,
-		helium.ParseDTDValid,
-		helium.ParseNoError,
-		helium.ParseNoWarning,
-		helium.ParsePedantic,
-		helium.ParseNoBlanks,
-		helium.ParseXInclude,
-		helium.ParseNoNet,
-		helium.ParseNoDict,
-		helium.ParseNsClean,
-		helium.ParseNoCDATA,
-		helium.ParseNoXIncNode,
-		helium.ParseCompact,
-		helium.ParseNoBaseFix,
-		helium.ParseHuge,
-		helium.ParseIgnoreEnc,
-		helium.ParseBigLines,
-		helium.ParseNoXXE,
-		helium.ParseNoUnzip,
-		helium.ParseNoSysCatalog,
-		helium.ParseCatalogPI,
-		helium.ParseSkipIDs,
-		helium.ParseLenientXMLDecl,
+	assertUniqueFlags(t, []parseOption{
+		parseRecover,
+		parseNoEnt,
+		parseDTDLoad,
+		parseDTDAttr,
+		parseDTDValid,
+		parseNoError,
+		parseNoWarning,
+		parsePedantic,
+		parseNoBlanks,
+		parseXInclude,
+		parseNoNet,
+		parseNoDict,
+		parseNsClean,
+		parseNoCDATA,
+		parseNoXIncNode,
+		parseCompact,
+		parseNoBaseFix,
+		parseHuge,
+		parseIgnoreEnc,
+		parseBigLines,
+		parseNoXXE,
+		parseNoUnzip,
+		parseNoSysCatalog,
+		parseCatalogPI,
+		parseSkipIDs,
+		parseLenientXMLDecl,
 	})
 }
 
 func TestLoadSubsetOptionFlagsAreUnique(t *testing.T) {
 	t.Parallel()
 
-	assertUniqueFlags(t, []helium.LoadSubsetOption{
-		helium.DetectIDs,
-		helium.CompleteAttrs,
-		helium.SkipIDs,
+	assertUniqueFlags(t, []LoadSubsetOption{
+		DetectIDs,
+		CompleteAttrs,
+		SkipIDs,
 	})
 }
 
 func TestSetAndIsSet(t *testing.T) {
 	t.Parallel()
 
-	t.Run("helium.ParseOption", func(t *testing.T) {
+	t.Run("parseOption", func(t *testing.T) {
 		t.Parallel()
 
-		var p helium.ParseOption
-		require.False(t, p.IsSet(helium.ParseNoEnt))
+		var p parseOption
+		require.False(t, p.IsSet(parseNoEnt))
 
-		p.Set(helium.ParseNoEnt)
-		require.True(t, p.IsSet(helium.ParseNoEnt))
-		require.False(t, p.IsSet(helium.ParseDTDLoad))
+		p.Set(parseNoEnt)
+		require.True(t, p.IsSet(parseNoEnt))
+		require.False(t, p.IsSet(parseDTDLoad))
 
-		p.Set(helium.ParseDTDLoad)
-		require.True(t, p.IsSet(helium.ParseNoEnt))
-		require.True(t, p.IsSet(helium.ParseDTDLoad))
+		p.Set(parseDTDLoad)
+		require.True(t, p.IsSet(parseNoEnt))
+		require.True(t, p.IsSet(parseDTDLoad))
 	})
 
-	t.Run("helium.LoadSubsetOption", func(t *testing.T) {
+	t.Run("LoadSubsetOption", func(t *testing.T) {
 		t.Parallel()
 
-		var l helium.LoadSubsetOption
-		require.False(t, l.IsSet(helium.DetectIDs))
+		var l LoadSubsetOption
+		require.False(t, l.IsSet(DetectIDs))
 
-		l.Set(helium.DetectIDs)
-		require.True(t, l.IsSet(helium.DetectIDs))
-		require.False(t, l.IsSet(helium.CompleteAttrs))
+		l.Set(DetectIDs)
+		require.True(t, l.IsSet(DetectIDs))
+		require.False(t, l.IsSet(CompleteAttrs))
 
-		l.Set(helium.CompleteAttrs)
-		require.True(t, l.IsSet(helium.DetectIDs))
-		require.True(t, l.IsSet(helium.CompleteAttrs))
+		l.Set(CompleteAttrs)
+		require.True(t, l.IsSet(DetectIDs))
+		require.True(t, l.IsSet(CompleteAttrs))
 	})
 }
 

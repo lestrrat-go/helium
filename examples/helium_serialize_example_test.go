@@ -9,7 +9,7 @@ import (
 )
 
 func Example_helium_serialize() {
-	doc, err := helium.Parse(context.Background(), []byte(`<root><child>text</child></root>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root><child>text</child></root>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

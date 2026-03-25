@@ -69,7 +69,7 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 	if err != nil {
 		return nil, fmt.Errorf("schematron: read file: %w", err)
 	}
-	doc, err := helium.Parse(ctx, data)
+	doc, err := helium.NewParser().Parse(ctx, data)
 	if err != nil {
 		return nil, fmt.Errorf("schematron: parse document: %w", err)
 	}

@@ -26,8 +26,7 @@ func TestAttributeAType(t *testing.T) {
 ]>
 <person name="Alice" id="p1" ref="p1" refs="p1" tok="abc" toks="abc def"/>`
 
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDAttr)
+		p := helium.NewParser().DTDAttr(true)
 		doc, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 
@@ -62,8 +61,7 @@ func TestAttributeAType(t *testing.T) {
 ]>
 <person/>`
 
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDAttr)
+		p := helium.NewParser().DTDAttr(true)
 		doc, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 
@@ -110,8 +108,7 @@ func TestAttributeAType(t *testing.T) {
 ]>
 <root color="green"/>`
 
-		p := helium.NewParser()
-		p.SetOption(helium.ParseDTDAttr)
+		p := helium.NewParser().DTDAttr(true)
 		doc, err := p.Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 

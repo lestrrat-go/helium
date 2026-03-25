@@ -8,7 +8,7 @@ import (
 )
 
 func Example_helium_node_get_base() {
-	doc, err := helium.Parse(context.Background(), []byte(`<root xml:base="http://example.com/a/"><child xml:base="b/"/></root>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root xml:base="http://example.com/a/"><child xml:base="b/"/></root>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return
