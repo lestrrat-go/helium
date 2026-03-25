@@ -244,6 +244,12 @@ var knownSkips = map[string]string{
 	"analyze-string-090a": "implementation handles zero-length matches (XSLT 3.0)",
 	"analyze-string-091a": "implementation handles zero-length matches (XSLT 3.0)",
 
+	// Package-scoped strip-space: override template currentPackage=nil but
+	// the using package's strip rules are not on the main stylesheet (they're
+	// in the package's own Stylesheet object, which is merged differently).
+	"document-2401": "package-scoped strip-space: using package rules not on main stylesheet",
+	"document-2402": "package-scoped strip-space: using package rules not on main stylesheet",
+
 	// XSLT 2.0 test expects XTSE0870 for empty xsl:value-of, but XSLT 3.0 allows it.
 	"select-7502a": "XSLT 2.0 test; XSLT 3.0 correctly accepts empty xsl:value-of",
 
