@@ -1583,28 +1583,25 @@ var w3cImplicitSkips = map[string]string{
 	"override-f-031": "schema-aware union type conversion fails",
 	"override-v-006": "schema-aware union type comparison fails",
 
-	// function-lookup: spec §20.3.3 requires original (not override) in package context
-	"function-lookup-005": "function-lookup returns override instead of original per spec §20.3.3",
+
 
 	// package-scoped component isolation: same-named components in different packages
-	"override-as-005":   "package-scoped attribute-set isolation not implemented",
-	"override-misc-005": "package-scoped accumulator isolation not implemented",
-	"override-misc-007": "package-scoped accumulator isolation not implemented",
-
-	// use-package: variable isolation across versioned package instances
-	"use-package-176": "variable from multiple package versions not isolated per-package",
+	"override-as-005":   "package-scoped attribute-set: use-attribute-sets cannot find private attr-set from package",
+	"override-misc-005": "package-scoped accumulator override not applied to package-internal template",
+	"override-misc-007": "package-scoped accumulator override not applied to package-internal template",
 
 	// use-package: character map namespace serialization in package context
 	"use-package-108":  "package-scoped output format namespace serialization",
 	"use-package-108b": "package-scoped output format namespace serialization",
 
-	// use-package: xml-to-json package mode template matching
-	"use-package-150": "xml-to-json package mode template matching not implemented",
-	"use-package-151": "xml-to-json package mode template matching not implemented",
-	"use-package-152": "xml-to-json package mode template matching not implemented",
 
-	// package: upstream test data uses on-no-match=fail as primary stylesheet
-	"package-015": "upstream W3C test: on-no-match=fail primary stylesheet",
+	// use-package: xml-to-json package mode template matching
+	"use-package-150": "xml-to-json package: XTTE0780 sequence cardinality error in template application",
+	"use-package-151": "xml-to-json package: XTTE0780 sequence cardinality error in template application",
+	"use-package-152": "xml-to-json package: XTTE0780 sequence cardinality error in template application",
+
+
+
 
 	// error: upstream test now expects mandatory error we don't raise
 	"error-FODC0002a": "upstream W3C test change: FODC0002 now required (was optional)",
@@ -1692,11 +1689,6 @@ var w3cImplicitSkips = map[string]string{
 	"output-0214": "HTML output include-content-type=no not suppressing meta tag",
 	"output-0215": "HTML output include-content-type=no not suppressing meta tag",
 
-	// use-package: lowest-version package resolution not implemented
-	"use-package-203b": "package version resolution: lowest_version not supported",
-	"use-package-204b": "package version resolution: lowest_version not supported",
-	"use-package-206b": "package version resolution: lowest_version not supported",
-	"use-package-210b": "package version resolution: lowest_version not supported",
 
 	// avt-0701: attribute value template namespace resolution
 	"avt-0701": "AVT namespace resolution with xpath-default-namespace not implemented",
@@ -1705,10 +1697,6 @@ var w3cImplicitSkips = map[string]string{
 	"validation-1301":  "XSD 1.1 xs:override not fully implemented",
 	"import-schema-164": "XSD 1.1 xs:override attribute validation not implemented",
 	"strip-space-009":  "XSD 1.1 schema-aware whitespace stripping fails",
-	"package-910":      "XSD 1.1 package static error XTSE0165 not detected",
-	"package-913":      "XSD 1.1 package static error XTSE0165 not detected",
-	"package-913a":     "XSD 1.1 package static error XTSE0165 not detected",
-	"package-913b":     "XSD 1.1 package static error XTSE0165 not detected",
 	"error-0905b":      "XSD 1.1 xs:anyURI validation rejects #### (should accept)",
 
 	// streaming-fallback: XTSE3430 raised as compile error instead of falling back to non-streaming

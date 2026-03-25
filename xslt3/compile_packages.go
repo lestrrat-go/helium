@@ -130,6 +130,14 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 	// Parse xsl:accept rules
 	acceptRules := parseAcceptRules(usePackageElem, nsBindings)
 
+	// XTSE3032: if xsl:accept has component="*", names must be a wildcard.
+	for _, rule := range acceptRules {
+		if rule.component == xslWildcard && !isWildcard(rule.names) {
+			return staticError(errCodeXTSE3032,
+				"xsl:accept with component='*' requires names to be a wildcard, got %q", rule.names)
+		}
+	}
+
 	// Parse xsl:override children (collect overridden component names)
 	overrideNames := c.collectOverrideNames(usePackageElem, nsBindings)
 
@@ -354,13 +362,6 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		if _, local := c.localVarNames[v.Name]; local {
 			return staticError(errCodeXTSE3050,
 				"local variable %q conflicts with public component from used package", v.Name)
-		}
-		// XTSE3032: check for homonymous variables from different packages
-		for _, existing := range c.stylesheet.globalVars {
-			if existing.Name == v.Name && existing.OwnerPackage != nil && existing.OwnerPackage != pkg {
-				return staticError(errCodeXTSE3032,
-					"variable %q accepted from multiple packages with non-hidden visibility", v.Name)
-			}
 		}
 		v.OwnerPackage = pkg
 		c.stylesheet.globalVars = append(c.stylesheet.globalVars, v)

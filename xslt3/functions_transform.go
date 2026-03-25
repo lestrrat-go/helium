@@ -96,6 +96,14 @@ func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Functio
 
 	ec.registerSchemaConstructors(ec.cachedFnsNS)
 
+	// Per spec §20.3.3, function-lookup within a package must return the
+	// original (pre-override) function, not the override. Register a
+	// custom function-lookup that handles this when in a package context.
+	if ec.currentPackage != nil {
+		ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "function-lookup"}] =
+			&xsltFunc{min: 2, max: 2, fn: ec.fnFunctionLookupPackage}
+	}
+
 	if ec.currentPackage != nil {
 		// Per-package function scope: all functions from the current
 		// package (including private), plus public functions from
@@ -170,6 +178,50 @@ func (ec *execContext) registerUserFunc(def *xslFunction) {
 	} else {
 		ec.cachedFnsNS[qn] = uf
 	}
+}
+
+// fnFunctionLookupPackage is a package-aware implementation of function-lookup
+// per spec §20.3.3. Within a package, function-lookup must return the original
+// (pre-override) function definition, not the override. This implementation
+// looks up the function, and if it's an overridden xsl:function, substitutes
+// the original definition.
+func (ec *execContext) fnFunctionLookupPackage(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	// Delegate to the standard function-lookup implementation first
+	result, err := xpath3.CallFunctionLookup(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || result.Len() == 0 {
+		return result, nil
+	}
+	// Extract the QName and arity from the arguments to look up the
+	// original function definition in the current package.
+	fi, ok := result.Get(0).(xpath3.FunctionItem)
+	if !ok {
+		return result, nil
+	}
+	qn := xpath3.QualifiedName{URI: fi.Namespace, Name: fi.Name}
+	fk := funcKey{Name: qn, Arity: fi.Arity}
+	pkgFn, exists := ec.currentPackage.functions[fk]
+	if !exists {
+		return result, nil // not a package function
+	}
+	if pkgFn.OriginalFunc == nil {
+		return result, nil // not overridden
+	}
+	origDef := pkgFn.OriginalFunc
+	if origDef.Visibility == visAbstract {
+		// Original is abstract — no implementation to look up
+		return nil, nil
+	}
+	origUF := &xslUserFunc{def: origDef, ec: ec}
+	origFI := xpath3.FunctionItem{
+		Arity:     fi.Arity,
+		Name:      fi.Name,
+		Namespace: fi.Namespace,
+		Invoke:    origUF.Call,
+	}
+	return xpath3.ItemSlice{origFI}, nil
 }
 
 // findXSLFunction finds an xsl:function by QName and arity (-1 = any).
