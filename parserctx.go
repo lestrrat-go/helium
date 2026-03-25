@@ -120,6 +120,7 @@ type parserCtx struct {
 	maxElemDepth     int               // max allowed element nesting depth (0 = unlimited)
 	currentEntityURI string            // URI of the external entity currently being replayed (for base-uri tracking)
 	nameCache        map[string]string // per-parse string interning for element/attribute names
+	charBuf          []byte            // reusable buffer for parseCharDataContent
 }
 
 type parserCtxKey struct{}
@@ -1157,17 +1158,52 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		defer g.IRelease("END parseCharDataContent")
 	}
 
-	buf := bufferPool.Get()
-	defer releaseBuffer(buf)
-
 	cur := pctx.getCursor()
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
 
+	// Fast path: UTF8Cursor can scan directly into a []byte slice,
+	// avoiding the bytes.Buffer intermediate.
+	if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
+		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0])
+		if i <= 0 {
+			if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
+				return pctx.error(ctx, ErrMisplacedCDATAEnd)
+			}
+			pdebug.Dump(cur)
+			return errors.New("invalid char data")
+		}
+
+		if err := cur.AdvanceFast(i); err != nil {
+			return err
+		}
+
+		// Keep the grown buffer for next call.
+		pctx.charBuf = data
+
+		if pctx.areBlanksBytes(data, false) {
+			if s := pctx.sax; s != nil && !pctx.disableSAX {
+				if err := pctx.deliverCharacters(ctx, s.IgnorableWhitespace, data); err != nil {
+					return err
+				}
+			}
+		} else {
+			if s := pctx.sax; s != nil && !pctx.disableSAX {
+				if err := pctx.deliverCharacters(ctx, s.Characters, data); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	// Fallback: use bytes.Buffer for non-UTF8 cursors.
+	buf := bufferPool.Get()
+	defer releaseBuffer(buf)
+
 	i := cur.ScanCharDataInto(buf)
 	if i <= 0 {
-		// ScanCharDataInto stops at ]]> but doesn't error — check for it.
 		if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
 			return pctx.error(ctx, ErrMisplacedCDATAEnd)
 		}
@@ -1179,8 +1215,6 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		return err
 	}
 
-	// Work with bytes directly to avoid buf.String() + []byte(str) allocations.
-	// EOL normalization was already applied by ScanCharDataInto.
 	data := buf.Bytes()
 	if pctx.areBlanksBytes(data, false) {
 		if s := pctx.sax; s != nil && !pctx.disableSAX {
