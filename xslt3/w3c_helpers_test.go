@@ -1538,29 +1538,17 @@ var w3cImplicitSkips = map[string]string{
 	// embedded-stylesheet-015: use-when='false()' on imported xsl:transform root not honored
 	"embedded-stylesheet-015": "use-when on imported stylesheet root element not honored",
 
-	// nodetest: schema-aware tests requiring import-schema + schema-element/attribute
-	"nodetest-019": "schema-element/attribute node test fails (wrong output)",
-	"nodetest-020": "schema-element/attribute node test fails (wrong output)",
-	"nodetest-023": "schema-element/attribute node test fails (wrong output)",
-	"nodetest-024": "schema-element/attribute node test fails (wrong output)",
-	"nodetest-026": "schema-element/attribute node test fails (wrong output)",
-	"nodetest-027": "schema-element/attribute node test fails (wrong output)",
-	"nodetest-028": "schema-element/attribute node test fails (wrong output)",
-	"nodetest-029": "schema-element/attribute node test fails (wrong output)",
-	"nodetest-030": "schema-element/attribute node test fails (wrong output)",
-	"nodetest-031": "schema-element/attribute node test fails (wrong output)",
-	"nodetest-032": "schema-element/attribute node test fails (wrong output)",
-	"nodetest-033": "schema-element/attribute node test fails (wrong output)",
-	"nodetest-037": "schema-element/attribute node test fails (wrong output)",
+	// nodetest: child::schema-attribute axis conversion produces non-empty result
+	"nodetest-032": "child::schema-attribute axis conversion vs XPath 2.0 expected output mismatch",
 
-	// json-to-xml typed tests: require instance of element(name, type)
-	"json-to-xml-typed-001": "instance of element(name, type) returns false",
-	"json-to-xml-typed-002": "instance of element(name, type) returns false",
-	"json-to-xml-typed-003": "instance of element(name, type) returns false",
-	"json-to-xml-typed-004": "instance of element(name, type) returns false",
-	"json-to-xml-typed-005": "instance of element(name, type) returns false",
-	"json-to-xml-typed-006": "instance of element(name, type) returns false",
-	"json-to-xml-typed-007": "instance of element(name, type) returns false",
+	// json-to-xml typed tests: fn:json-to-xml validate option does not type-annotate result
+	"json-to-xml-typed-001": "json-to-xml validate option does not annotate result nodes",
+	"json-to-xml-typed-002": "json-to-xml validate option does not annotate result nodes",
+	"json-to-xml-typed-003": "json-to-xml validate option does not annotate result nodes",
+	"json-to-xml-typed-004": "json-to-xml validate option does not annotate result nodes",
+	"json-to-xml-typed-005": "json-to-xml validate option does not annotate result nodes",
+	"json-to-xml-typed-006": "json-to-xml validate option does not annotate result nodes",
+	"json-to-xml-typed-007": "json-to-xml validate option does not annotate result nodes",
 
 	// function tests: TVT namespace resolution
 	"function-1034": "text value template with expand-text fails to resolve user function in AVT",
@@ -1584,8 +1572,6 @@ var w3cImplicitSkips = map[string]string{
 	"validation-0501": "schema-aware XSLT schema querying fails",
 	"validation-0601": "schema-aware XSLT schema querying fails",
 	"validation-0701": "schema-aware XSLT schema querying fails",
-	"validation-0801": "instance of schema-element fails",
-	"validation-1002": "instance of schema-element fails",
 	"validation-1202": "instance of schema-element fails",
 	"validation-1204": "instance of schema-element fails",
 
@@ -1674,19 +1660,16 @@ var w3cImplicitSkips = map[string]string{
 	// arrays: array construction and apply-templates on arrays
 
 	// schema-aware match tests: pattern matching with schema types
-	"match-054": "schema-element pattern match produces wrong output",
-	"match-055": "schema-element pattern match produces wrong output",
-	"match-174": "schema-aware user type pattern match fails",
-	"match-181": "schema-aware user type pattern match fails",
-	"match-205": "schema-aware type pattern match returns extra items",
-	"match-206": "schema-aware type pattern match returns extra items",
-	"match-207": "schema-aware type pattern match returns extra items",
+	"match-054": "element-with-id pattern match returns child instead of parent",
+	"match-055": "element-with-id pattern match returns child instead of parent",
+	"match-174": "xsl:type annotation on constructed elements not propagated",
+	"match-181": "xsl:type annotation on constructed elements not propagated",
 	"match-210": "schema-aware attribute type pattern match fails",
 	"match-221": "schema-aware numeric type pattern match fails",
 	"match-232": "schema-aware type pattern match missing items",
 	"match-244": "expected error XTSE3105 not raised for schema pattern",
-	"match-262": "schema-aware instance test returns false",
-	"match-263": "schema-aware variable binding fails (empty sequence)",
+	"match-262": "deep-copy does not preserve type annotations",
+	"match-263": "deep-copy does not preserve type annotations",
 	"match-287": "schema-attribute pattern match fails (XTTE0780)",
 
 	// evaluate tests requiring schema-aware processing

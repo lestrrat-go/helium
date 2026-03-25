@@ -33,7 +33,9 @@ func (r *schemaRegistry) LookupElement(local, ns string) (typeName string, ok bo
 			if td, tdFound := s.LookupType(local, ns); tdFound {
 				return xsdTypeNameFromDef(td), true
 			}
-			return "xs:untyped", true
+			// Per XSD spec, elements without an explicit type default to
+			// xs:anyType (the universal base type), not xs:untyped.
+			return "xs:anyType", true
 		}
 	}
 	return "", false

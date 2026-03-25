@@ -1385,8 +1385,17 @@ func matchAttributeTest(ctx *execContext, at xpath3.AttributeTest, node helium.N
 			uri = ctx.resolvePrefix(prefix)
 		}
 		nameMatch = attrLocal == local && attr.URI() == uri
+	} else if strings.HasPrefix(name, "Q{") {
+		// URIQualifiedName: Q{uri}local
+		closeIdx := strings.IndexByte(name, '}')
+		if closeIdx >= 0 {
+			uri := name[2:closeIdx]
+			local := name[closeIdx+1:]
+			nameMatch = attrLocal == local && attr.URI() == uri
+		}
 	} else {
-		nameMatch = attrLocal == name
+		// Bare name (no prefix): matches only attributes in no namespace.
+		nameMatch = attrLocal == name && attr.URI() == ""
 	}
 	if !nameMatch {
 		return false

@@ -534,8 +534,23 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 			return ixpath.LocalNameOf(n) == local
 		}
 		local, ns := resolveSchemaTestName(test.Name, ec)
-		if ixpath.LocalNameOf(n) != local || ixpath.NodeNamespaceURI(n) != ns {
-			return false
+		nameMatch := ixpath.LocalNameOf(n) == local && ixpath.NodeNamespaceURI(n) == ns
+		if !nameMatch {
+			// Check substitution group membership: the node's element
+			// must be in the substitution group headed by (local, ns)
+			// and its type annotation must be a subtype of the head's type.
+			headType, headFound := ec.schemaDeclarations.LookupSchemaElement(local, ns)
+			if !headFound {
+				return false
+			}
+			ann := nodeTypeAnnotation(n, ec)
+			if ann == "" {
+				ann = TypeUntyped
+			}
+			if ann == TypeUntyped {
+				return false
+			}
+			return isSubtypeOf(ann, headType) || ec.schemaDeclarations.IsSubtypeOf(ann, headType)
 		}
 		typeName, found := ec.schemaDeclarations.LookupSchemaElement(local, ns)
 		if !found {
@@ -544,6 +559,38 @@ func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) b
 		ann := nodeTypeAnnotation(n, ec)
 		if ann == "" {
 			ann = TypeUntyped
+		}
+		if isSubtypeOf(ann, typeName) {
+			return true
+		}
+		return ec.schemaDeclarations.IsSubtypeOf(ann, typeName)
+	case SchemaAttributeTest:
+		attr, ok := n.(*helium.Attribute)
+		if !ok {
+			return false
+		}
+		if ec == nil || ec.schemaDeclarations == nil {
+			if test.Name == "" || test.Name == "*" {
+				return true
+			}
+			_, local := splitQName(test.Name)
+			return attr.LocalName() == local
+		}
+		local, ns := resolveSchemaTestName(test.Name, ec)
+		if attr.LocalName() != local || attr.URI() != ns {
+			return false
+		}
+		typeName, found := ec.schemaDeclarations.LookupSchemaAttribute(local, ns)
+		if !found {
+			return false
+		}
+		ann := nodeTypeAnnotation(n, ec)
+		if ann == "" {
+			ann = TypeUntypedAtomic
+		}
+		// Untyped attributes have not been validated — they do NOT match schema-attribute().
+		if ann == TypeUntypedAtomic {
+			return false
 		}
 		if isSubtypeOf(ann, typeName) {
 			return true
