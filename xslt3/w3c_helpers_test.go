@@ -1394,33 +1394,22 @@ var w3cImplicitSkips = map[string]string{
 	// error: upstream test now expects mandatory error we don't raise
 	"error-FODC0002a": "upstream W3C test change: FODC0002 now required (was optional)",
 
-	// merge: URI collection file resolution and merge ordering
-	"merge-049":  "merge key ordering with mixed types incorrect",
-	"merge-051":  "merge key ordering with mixed types incorrect",
+	// merge: schema type annotations not propagated through merge
+	"merge-049":  "merge schema-element instance-of check fails after merge",
+	"merge-051":  "xsl:merge-source type attribute not implemented",
 	"merge-067":  "XTDE3362 merge ordering error not detected",
 	"merge-072":  "merge with multiple sources and key comparison incorrect",
 	"merge-079":  "merge with multiple sources and key comparison incorrect",
 	"merge-096":  "merge with multiple sources and key comparison incorrect",
-	"merge-097":  "uri-collection file pattern resolution not implemented",
-	"merge-097s": "uri-collection file pattern resolution not implemented",
-	"merge-097sf": "uri-collection file pattern resolution not implemented",
+	"merge-097":  "uri-collection test data files not available",
+	"merge-097s": "uri-collection test data files not available",
+	"merge-097sf": "uri-collection test data files not available",
 
-	// streamable: various streaming and grouping issues
-	"streamable-009": "streaming for-each-group grouping result incorrect",
-	"streamable-015": "streaming for-each-group grouping result incorrect",
-	"streamable-016": "streaming for-each-group grouping result incorrect",
-	"streamable-019": "streaming for-each-group position tracking incorrect",
-	"streamable-035": "streaming for-each-group grouping result incorrect",
-	"streamable-045": "streaming for-each-group sum/avg calculation incorrect",
-	"streamable-054": "streaming for-each-group min calculation incorrect",
-	"streamable-059": "streaming for-each-group value concatenation incorrect",
-	"streamable-107": "XTSE3430 streamability analysis not implemented",
-	"streamable-110": "XTSE3430 streamability analysis not implemented",
+	// streamable: XTSE3430/XPDY0002 analysis not yet implemented
 	"streamable-116": "XPDY0002 streaming absent context not detected",
-	"streamable-126": "XTSE3430 streamability analysis not implemented",
-	"streamable-127": "XTSE3430 streamability analysis not implemented",
-	"streamable-128": "XTSE3430 streamability analysis not implemented",
-	"streamable-148": "streaming for-each-group grouping result incorrect",
+	"streamable-126": "XTSE3430 up-then-down navigation not detected",
+	"streamable-127": "XTSE3430 up-then-down navigation not detected",
+	"streamable-128": "XTSE3430 streaming node return not detected",
 
 	// package version resolution: lowest_version not supported (we use highest_version)
 	"use-package-203b": "package_version_resolution=lowest_version not supported",
@@ -1889,12 +1878,13 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 		ns["g"] = "http://www.w3.org/xsl-tests/grouped-transactions"
 	}
 	// Also check for -e variant used by some streaming tests.
-	// If the default namespace matches and g: doesn't, add the mapping.
-	if defNS, ok := ns[""]; ok {
-		if defNS == "http://www.w3.org/xsl-tests/grouped-transactions-e" {
-			if _, ok := ns["g"]; !ok || ns["g"] != defNS {
-				ns["g"] = defNS
-			}
+	// The -e namespace may appear as the default namespace (stored under
+	// "o" by gatherDocNamespaces) or as an explicit prefix binding.
+	geNS := "http://www.w3.org/xsl-tests/grouped-transactions-e"
+	for _, uri := range ns {
+		if uri == geNS {
+			ns["g"] = geNS
+			break
 		}
 	}
 	if len(ns) > 0 {
@@ -1949,11 +1939,12 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
 	if _, ok := ns["g"]; !ok {
 		ns["g"] = "http://www.w3.org/xsl-tests/grouped-transactions"
 	}
-	if defNS, ok := ns[""]; ok {
-		if defNS == "http://www.w3.org/xsl-tests/grouped-transactions-e" {
-			if _, ok := ns["g"]; !ok || ns["g"] != defNS {
-				ns["g"] = defNS
-			}
+	// Also check for -e variant used by some streaming tests.
+	geNS2 := "http://www.w3.org/xsl-tests/grouped-transactions-e"
+	for _, uri := range ns {
+		if uri == geNS2 {
+			ns["g"] = geNS2
+			break
 		}
 	}
 	if len(ns) > 0 {

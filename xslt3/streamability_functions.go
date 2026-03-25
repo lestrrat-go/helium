@@ -283,6 +283,16 @@ func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, gro
 				return count
 			}
 		}
+		// Built-in consuming functions (string, data, number, boolean,
+		// normalize-space) that explicitly read the context item via "."
+		// count as a consuming operation on the streaming input.
+		// The zero-arg form (e.g., string() inside a path like @nr/string())
+		// is NOT counted here because in that case the context is the
+		// navigated-to node, not the streaming context.
+		if e.Prefix == "" && isConsumingBuiltinFunc(e.Name) && len(e.Args) > 0 && isContextItemArg(e.Args[0]) {
+			count++
+			break
+		}
 		g := isGroundingExpr(e)
 		for _, arg := range e.Args {
 			count += countStreamingDownwardSelectionsInner(ss, arg, g)
@@ -399,6 +409,25 @@ func countStreamingDownwardSelectionsInner(ss *Stylesheet, expr xpath3.Expr, gro
 		}
 	}
 	return count
+}
+
+// isConsumingBuiltinFunc returns true for built-in functions that consume
+// the string/typed value of their argument. When called with an explicit
+// context item reference (.), these count as consuming operations in
+// streaming analysis.
+func isConsumingBuiltinFunc(name string) bool {
+	switch name {
+	case "string", "data", "number", "boolean", "normalize-space":
+		return true
+	}
+	return false
+}
+
+// isContextItemArg returns true if the expression is a simple context item
+// reference (`.`).
+func isContextItemArg(expr xpath3.Expr) bool {
+	_, ok := derefXPathExpr(expr).(xpath3.ContextItemExpr)
+	return ok
 }
 
 // countCrawlingSelectionsInner counts only crawling (descendant/descendant-or-self)
