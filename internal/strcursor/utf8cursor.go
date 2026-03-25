@@ -98,18 +98,25 @@ func (c *UTF8Cursor) nthRuneOffset(n int) (int, error) {
 }
 
 func (c *UTF8Cursor) Done() bool {
+	if c.bufpos < c.buflen {
+		return false
+	}
 	return c.fillBuffer(1) != nil
 }
 
 func (c *UTF8Cursor) Peek() rune {
-	if err := c.fillBuffer(1); err != nil {
-		return utf8.RuneError
+	if c.bufpos >= c.buflen {
+		if c.fillBuffer(1) != nil {
+			return utf8.RuneError
+		}
 	}
 	b := c.buf[c.bufpos]
 	if b < 0x80 {
 		return rune(b)
 	}
-	_ = c.fillBuffer(utf8.UTFMax)
+	if c.buflen-c.bufpos < utf8.UTFMax {
+		_ = c.fillBuffer(utf8.UTFMax)
+	}
 	r, _ := utf8.DecodeRune(c.buf[c.bufpos:c.buflen])
 	return r
 }
@@ -118,8 +125,10 @@ func (c *UTF8Cursor) PeekN(n int) rune {
 	// Fast path: if the first n bytes from bufpos are all ASCII, then byte
 	// position == rune position. This is the common case for XML names,
 	// delimiters, and most content.
-	if err := c.fillBuffer(n); err != nil {
-		return utf8.RuneError
+	if c.buflen-c.bufpos < n {
+		if c.fillBuffer(n) != nil {
+			return utf8.RuneError
+		}
 	}
 	allASCII := true
 	for i := 0; i < n; i++ {
@@ -262,11 +271,13 @@ func (c *UTF8Cursor) HasPrefix(b []byte) bool {
 
 func (c *UTF8Cursor) HasPrefixString(s string) bool {
 	n := len(s)
-	if err := c.fillBuffer(n); err != nil {
-		return false
-	}
 	if c.buflen-c.bufpos < n {
-		return false
+		if c.fillBuffer(n) != nil {
+			return false
+		}
+		if c.buflen-c.bufpos < n {
+			return false
+		}
 	}
 	return string(c.buf[c.bufpos:c.bufpos+n]) == s
 }
