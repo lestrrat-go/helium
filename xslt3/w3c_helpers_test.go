@@ -1394,16 +1394,16 @@ var w3cImplicitSkips = map[string]string{
 	// error: upstream test now expects mandatory error we don't raise
 	"error-FODC0002a": "upstream W3C test change: FODC0002 now required (was optional)",
 
-	// merge: URI collection file resolution and merge ordering
-	"merge-049":  "merge key ordering with mixed types incorrect",
-	"merge-051":  "merge key ordering with mixed types incorrect",
-	"merge-067":  "XTDE3362 merge ordering error not detected",
+	// merge: schema type annotations not propagated through merge
+	"merge-049":  "schema-element() instance test requires type annotations on merged items",
+	"merge-051":  "xsl:merge-source type= attribute validation not implemented",
+	"merge-067":  "XTDE3362 merge accumulator applicability not detected",
 	"merge-072":  "XTDE2220 alternate=shifted collation not rejected",
 	"merge-079":  "merge collation-based sort verification false positive with translate()",
 	"merge-096":  "XTTE0780 construct-doc type error in merge",
-	"merge-097":  "uri-collection file pattern resolution not implemented",
-	"merge-097s": "uri-collection file pattern resolution not implemented",
-	"merge-097sf": "uri-collection file pattern resolution not implemented",
+	"merge-097":  "missing test data files merge-097-*.xml",
+	"merge-097s": "missing test data files merge-097-*.xml",
+	"merge-097sf": "missing test data files merge-097-*.xml",
 
 	// streamable: various streaming and grouping issues
 	"streamable-009": "streaming for-each-group grouping result incorrect",
