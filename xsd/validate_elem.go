@@ -696,7 +696,7 @@ func matchesDeclDirect(child childElem, edecl *ElementDecl) bool {
 // elementDisplayForExpected formats an element declaration name for error messages.
 func elementDisplayForExpected(edecl *ElementDecl) string {
 	if edecl.Name.NS != "" {
-		return "{" + edecl.Name.NS + "}" + edecl.Name.Local
+		return helium.ClarkName(edecl.Name.NS, edecl.Name.Local)
 	}
 	return edecl.Name.Local
 }

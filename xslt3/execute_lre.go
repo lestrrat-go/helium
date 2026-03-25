@@ -237,7 +237,7 @@ func (ec *execContext) applyAttributeSets(ctx context.Context, names []string) e
 // applyAttributeSetsGuarded is the recursive core that tracks which attribute
 // sets are currently being expanded via use-attribute-sets (defense in depth).
 func (ec *execContext) applyAttributeSetsGuarded(ctx context.Context, names []string, active map[string]struct{}) error {
-	xslOriginalName := "{" + lexicon.NamespaceXSLT + "}original"
+	xslOriginalName := helium.ClarkName(lexicon.NamespaceXSLT, "original")
 	for _, name := range names {
 		// Handle use-attribute-sets="xsl:original": apply the original
 		// attribute-set that was overridden via xsl:override.

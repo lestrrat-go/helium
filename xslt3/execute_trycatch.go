@@ -279,7 +279,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) err
 	// Build Clark-notation error code for matching against compiled catch patterns
 	errClark := errCode
 	if errQName.URI != "" {
-		errClark = "{" + errQName.URI + "}" + errQName.Local
+		errClark = helium.ClarkName(errQName.URI, errQName.Local)
 	}
 
 	// Restore variable scope to before the try body.
@@ -333,12 +333,12 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) err
 		}
 	}
 
-	ec.setVar("{"+errNS+"}code", errCodeSeq)
-	ec.setVar("{"+errNS+"}description", xpath3.SingleString(errDesc))
-	ec.setVar("{"+errNS+"}value", errValueSeq)
-	ec.setVar("{"+errNS+"}module", xpath3.SingleString(ec.errSourceModule))
-	ec.setVar("{"+errNS+"}line-number", xpath3.SingleInteger(int64(ec.errSourceLine)))
-	ec.setVar("{"+errNS+"}column-number", xpath3.SingleInteger(0))
+	ec.setVar(helium.ClarkName(errNS, "code"), errCodeSeq)
+	ec.setVar(helium.ClarkName(errNS, "description"), xpath3.SingleString(errDesc))
+	ec.setVar(helium.ClarkName(errNS, "value"), errValueSeq)
+	ec.setVar(helium.ClarkName(errNS, "module"), xpath3.SingleString(ec.errSourceModule))
+	ec.setVar(helium.ClarkName(errNS, "line-number"), xpath3.SingleInteger(int64(ec.errSourceLine)))
+	ec.setVar(helium.ClarkName(errNS, "column-number"), xpath3.SingleInteger(0))
 
 	// Execute matched catch body
 	if matchedCatch.Select != nil {
@@ -430,7 +430,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *tryCatc
 	// Build Clark-notation error code for matching against compiled catch patterns
 	errClark := errCode
 	if errQName.URI != "" {
-		errClark = "{" + errQName.URI + "}" + errQName.Local
+		errClark = helium.ClarkName(errQName.URI, errQName.Local)
 	}
 
 	errCodeSeq := xpath3.ItemSlice{xpath3.AtomicValue{
@@ -438,12 +438,12 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *tryCatc
 		Value:    errQName,
 	}}
 
-	ec.setVar("{"+errNS+"}code", errCodeSeq)
-	ec.setVar("{"+errNS+"}description", xpath3.SingleString(errDesc))
-	ec.setVar("{"+errNS+"}value", xpath3.EmptySequence())
-	ec.setVar("{"+errNS+"}module", xpath3.SingleString(ec.errSourceModule))
-	ec.setVar("{"+errNS+"}line-number", xpath3.SingleInteger(int64(ec.errSourceLine)))
-	ec.setVar("{"+errNS+"}column-number", xpath3.SingleInteger(0))
+	ec.setVar(helium.ClarkName(errNS, "code"), errCodeSeq)
+	ec.setVar(helium.ClarkName(errNS, "description"), xpath3.SingleString(errDesc))
+	ec.setVar(helium.ClarkName(errNS, "value"), xpath3.EmptySequence())
+	ec.setVar(helium.ClarkName(errNS, "module"), xpath3.SingleString(ec.errSourceModule))
+	ec.setVar(helium.ClarkName(errNS, "line-number"), xpath3.SingleInteger(int64(ec.errSourceLine)))
+	ec.setVar(helium.ClarkName(errNS, "column-number"), xpath3.SingleInteger(0))
 
 	for _, c := range inst.Catches {
 		if catchMatches(c, errClark) {

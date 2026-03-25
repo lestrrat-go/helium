@@ -30,6 +30,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lestrrat-go/helium"
 	"golang.org/x/net/html/charset"
 )
 
@@ -988,10 +989,10 @@ func resolveQNameWithAttrs(name string, attrs []xml.Attr) string {
 		local := name[idx+1:]
 		for _, attr := range attrs {
 			if attr.Name.Space == "xmlns" && attr.Name.Local == prefix {
-				return "{" + attr.Value + "}" + local
+				return helium.ClarkName(attr.Value, local)
 			}
 			if attr.Name.Space == "" && attr.Name.Local == "xmlns" && prefix == "" {
-				return "{" + attr.Value + "}" + local
+				return helium.ClarkName(attr.Value, local)
 			}
 		}
 	}

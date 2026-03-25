@@ -1251,7 +1251,7 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	// The name may come as either the expanded form "{uri}original" or the
 	// prefixed form "xsl:original" depending on whether namespace resolution
 	// happened in the XPath evaluator.
-	isXSLOriginal := name == "{"+lexicon.NamespaceXSLT+"}original" || name == "xsl:original"
+	isXSLOriginal := name == helium.ClarkName(lexicon.NamespaceXSLT, "original") || name == "xsl:original"
 	if isXSLOriginal && ec.overridingVarDef != nil && ec.overridingVarDef.OriginalVar != nil {
 		// Temporarily clear the "evaluating" flag for the overriding
 		// variable so the original can be evaluated without triggering
@@ -1274,11 +1274,11 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	if !strings.HasPrefix(name, "{") && strings.Contains(name, ":") {
 		parts := strings.SplitN(name, ":", 2)
 		if uri, ok := ec.stylesheet.namespaces[parts[0]]; ok {
-			expandedName = "{" + uri + "}" + parts[1]
+			expandedName = helium.ClarkName(uri, parts[1])
 		}
 		if expandedName == name && ec.currentPackage != nil {
 			if uri, ok := ec.currentPackage.namespaces[parts[0]]; ok {
-				expandedName = "{" + uri + "}" + parts[1]
+				expandedName = helium.ClarkName(uri, parts[1])
 			}
 		}
 	}

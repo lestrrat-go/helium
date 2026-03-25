@@ -1479,7 +1479,7 @@ func (ic *xmlIndentCtx) writeIndent(sw *stream.Writer) error {
 // expandedElemName returns the expanded name for matching suppress-indentation.
 func expandedElemName(elem *helium.Element) string {
 	if uri := string(elem.URI()); uri != "" {
-		return "{" + uri + "}" + string(elem.LocalName())
+		return helium.ClarkName(uri, string(elem.LocalName()))
 	}
 	return string(elem.LocalName())
 }
@@ -2337,7 +2337,7 @@ func inCDATAElement(parent helium.Node, cdataElems map[string]struct{}) bool {
 		return false
 	}
 	// Check Clark notation: {uri}local
-	clark := "{" + string(elem.URI()) + "}" + string(elem.LocalName())
+	clark := helium.ClarkName(string(elem.URI()), string(elem.LocalName()))
 	if _, ok := cdataElems[clark]; ok {
 		return true
 	}

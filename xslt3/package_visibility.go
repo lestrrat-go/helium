@@ -200,7 +200,7 @@ func resolveComponentName(name string, nsBindings map[string]string, elem *heliu
 			if local == "*" {
 				return "{" + uri + "}*" + arity
 			}
-			return "{" + uri + "}" + local + arity
+			return helium.ClarkName(uri, local) + arity
 		}
 		// If no URI found, return as-is (may be an error in the stylesheet)
 		return name + arity

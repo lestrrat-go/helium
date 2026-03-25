@@ -757,7 +757,7 @@ func checkAttributeSetCycles(ss *Stylesheet) error {
 				// use-attribute-sets="xsl:original" refers to the
 				// original attribute-set being overridden, not a
 				// named attribute-set in the stylesheet.
-				if ref == "{"+lexicon.NamespaceXSLT+"}original" && asd.OriginalAttrSet != nil {
+				if ref == helium.ClarkName(lexicon.NamespaceXSLT, "original") && asd.OriginalAttrSet != nil {
 					continue
 				}
 				if _, ok := ss.attributeSets[ref]; !ok {
@@ -1104,7 +1104,7 @@ func (c *compiler) nameTestKey(nt nameTest) string {
 	} else if nt.HasURI {
 		uri = nt.URI
 	}
-	return "{" + uri + "}" + nt.Local
+	return helium.ClarkName(uri, nt.Local)
 }
 
 // checkSpaceConflicts detects NameTests that appear in both xsl:strip-space

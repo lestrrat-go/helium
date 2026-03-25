@@ -92,7 +92,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 
 	// XTSE0080: template name must not be in the XSLT namespace
 	// Exception: xsl:initial-template is explicitly allowed (XSLT 3.0 §3.11).
-	if tmpl.Name != "" && strings.HasPrefix(tmpl.Name, "{"+lexicon.NamespaceXSLT+"}") && tmpl.Name != "{"+lexicon.NamespaceXSLT+"}initial-template" {
+	if tmpl.Name != "" && strings.HasPrefix(tmpl.Name, "{"+lexicon.NamespaceXSLT+"}") && tmpl.Name != helium.ClarkName(lexicon.NamespaceXSLT, "initial-template") {
 		return staticError(errCodeXTSE0080, "xsl:template name %q is in the XSLT namespace", getAttr(elem, "name"))
 	}
 
