@@ -80,8 +80,10 @@ func serializeExampleDocument(doc *helium.Document) (string, error) {
 	return buf.String(), nil
 }
 
+var exampleParser = helium.NewParser()
+
 func compileExampleStylesheet(ctx context.Context, src string) (*xslt3.Stylesheet, error) {
-	doc, err := helium.NewParser().Parse(ctx, []byte(src))
+	doc, err := exampleParser.Parse(ctx, []byte(src))
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +91,7 @@ func compileExampleStylesheet(ctx context.Context, src string) (*xslt3.Styleshee
 }
 
 func parseExampleDocument(ctx context.Context, src string) (*helium.Document, error) {
-	return helium.NewParser().Parse(ctx, []byte(src))
+	return exampleParser.Parse(ctx, []byte(src))
 }
 
 func serializeExampleResult(doc *helium.Document, outDef *xslt3.OutputDef) (string, error) {

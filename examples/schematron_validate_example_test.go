@@ -9,8 +9,10 @@ import (
 )
 
 func Example_schematron_validate() {
+	p := helium.NewParser()
+
 	// Compile a minimal Schematron schema with one assertion.
-	schemaDoc, err := helium.NewParser().Parse(context.Background(), []byte(
+	schemaDoc, err := p.Parse(context.Background(), []byte(
 		`<schema xmlns="http://www.ascc.net/xml/schematron">
   <pattern name="book-check">
     <rule context="book">
@@ -29,7 +31,7 @@ func Example_schematron_validate() {
 		return
 	}
 
-	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
+	doc, err := p.Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
 	if err != nil {
 		fmt.Printf("xml parse failed: %s\n", err)
 		return
