@@ -5,7 +5,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -91,35 +90,16 @@ func (f *regexGroupFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpat
 }
 
 func (f *regexGroupFunc) DynamicRefSnapshot(_ context.Context, arity int) (xpath3.FunctionItem, bool) {
-	// Capture the current regex groups at reference creation time.
-	// Per XSLT 3.0 Section 20.2.5, a function reference regex-group#1
-	// is bound to the captured substrings in scope at creation time.
-	capturedGroups := make([]string, len(f.ec.regexGroups))
-	copy(capturedGroups, f.ec.regexGroups)
+	// Per XSLT 3.0 §5.3.4, a dynamic function reference regex-group#1
+	// does NOT capture the regex context. When called dynamically it
+	// always returns a zero-length string, because the call is not
+	// lexically within xsl:matching-substring.
 	fi := xpath3.FunctionItem{
 		Arity:     arity,
 		Name:      "regex-group",
 		Namespace: "http://www.w3.org/1999/XSL/Transform",
 		Invoke: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
-			if len(args) == 0 || args[0] == nil || sequence.Len(args[0]) == 0 {
-				return xpath3.SingleString(""), nil
-			}
-			av, err := xpath3.AtomizeItem(args[0].Get(0))
-			if err != nil {
-				return xpath3.SingleString(""), nil
-			}
-			s, err := xpath3.AtomicToString(av)
-			if err != nil {
-				return xpath3.SingleString(""), nil
-			}
-			idx, err := strconv.Atoi(strings.TrimSpace(s))
-			if err != nil {
-				return xpath3.SingleString(""), nil
-			}
-			if idx < 0 || idx >= len(capturedGroups) {
-				return xpath3.SingleString(""), nil
-			}
-			return xpath3.SingleString(capturedGroups[idx]), nil
+			return xpath3.SingleString(""), nil
 		},
 	}
 	return fi, true

@@ -1512,10 +1512,6 @@ var w3cImplicitSkips = map[string]string{
 	"whitespace-011": "parser limitation: external parameter entity resolution not supported",
 
 
-	// embedded-stylesheet-007: xsl:apply-imports with simplified stylesheet import
-	"embedded-stylesheet-007": "xsl:apply-imports with imported simplified stylesheet not producing correct output",
-	// embedded-stylesheet-015: use-when='false()' on imported xsl:transform root not honored
-	"embedded-stylesheet-015": "use-when on imported stylesheet root element not honored",
 
 	// nodetest: schema-aware tests requiring import-schema + schema-element/attribute
 	"nodetest-019": "schema-element/attribute node test fails (wrong output)",
@@ -1542,7 +1538,6 @@ var w3cImplicitSkips = map[string]string{
 	"json-to-xml-typed-007": "instance of element(name, type) returns false",
 
 	// function tests: TVT namespace resolution
-	"function-1034": "text value template with expand-text fails to resolve user function in AVT",
 
 	// copy tests: external entity resolution
 	"copy-1401": "requires external entity resolution (SYSTEM entity reference)",
@@ -1606,6 +1601,13 @@ var w3cImplicitSkips = map[string]string{
 	// error-FODC0002a-ignore: processor now raises FODC0002 (ignore_doc_failure=false)
 	"error-FODC0002a-ignore": "processor raises FODC0002 instead of ignoring document failures",
 
+	"function-1034": "text value template with expand-text fails to resolve user function in AVT",
+
+	// embedded-stylesheet-007: xsl:apply-imports with simplified stylesheet import
+	"embedded-stylesheet-007": "xsl:apply-imports with imported simplified stylesheet not producing correct output",
+	// embedded-stylesheet-015: use-when='false()' on imported xsl:transform root not honored
+	"embedded-stylesheet-015": "use-when on imported stylesheet root element not honored",
+
 	// merge: schema-element instance test on merged items
 	"merge-049": "schema-element() instance test on merged items fails",
 	"merge-051": "schema-element() instance test on merged items fails",
@@ -1632,8 +1634,6 @@ var w3cImplicitSkips = map[string]string{
 	// regex-090/091: regex-group#N function reference captures regex context as closure
 	// The closure implementation is correct per spec, but the test expects empty output.
 	// Likely an issue with how zero-length regex matches are handled by analyze-string.
-	"regex-090": "regex-group closure + zero-length match interaction",
-	"regex-091": "regex-group closure + zero-length match interaction",
 
 	// xpath-default-namespace: schema-aware namespace resolution
 	"xpath-default-namespace-0503": "schema-type validation with xpath-default-namespace fails",
