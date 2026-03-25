@@ -1147,9 +1147,10 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 		}
 	}
 
-	// Fast path: when there are no local variables and globals haven't
-	// changed since the last call, return the cached map directly.
-	if ec.localVars == nil && ec.cachedVarsGen == ec.globalVarsGen && ec.cachedVarsMap != nil {
+	// Fast path: when there are no local variables, globals haven't
+	// changed, and we're not in a package context, return the cached map.
+	inPackage := ec.currentPackage != nil && ec.currentPackage != ec.stylesheet
+	if ec.localVars == nil && !inPackage && ec.cachedVarsGen == ec.globalVarsGen && ec.cachedVarsMap != nil {
 		return ec.cachedVarsMap
 	}
 
@@ -1169,8 +1170,24 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 		}
 	}
 
+	// When executing in a used package, remove private variables that
+	// the package defines so they fall through to ResolveVariable which
+	// handles package-scoped isolation. This ensures that a package's
+	// private variable overrides take precedence over same-named
+	// public variables from other packages in the main stylesheet.
+	// Only private variables need this treatment — public/final
+	// variables use the main stylesheet's version (which includes
+	// any overrides applied by the using stylesheet).
+	if inPackage {
+		for _, v := range ec.currentPackage.globalVars {
+			if v.Visibility == visPrivate {
+				delete(vars, v.Name)
+			}
+		}
+	}
+
 	// Cache the result when it's globals-only (no local scopes and no package)
-	if ec.localVars == nil && (ec.currentPackage == nil || ec.currentPackage == ec.stylesheet) {
+	if ec.localVars == nil && !inPackage {
 		ec.cachedVarsMap = vars
 		ec.cachedVarsGen = ec.globalVarsGen
 	}

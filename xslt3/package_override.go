@@ -390,9 +390,26 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 
 	v := &variable{Name: resolvedName, As: getAttr(elem, "as")}
 
-	// Link the original variable for $xsl:original references
+	// Link the original variable for $xsl:original references.
+	// Inherit the base component's visibility so that processExpose
+	// in the using package does not default it to private. Abstract
+	// becomes public since the override provides an implementation.
 	if pkgVar != nil {
 		v.OriginalVar = pkgVar
+		if pkgVar.Visibility != "" {
+			if pkgVar.Visibility == visAbstract {
+				v.Visibility = visPublic
+			} else {
+				v.Visibility = pkgVar.Visibility
+			}
+		}
+	}
+
+	// The override's own visibility attribute takes precedence over the
+	// inherited base visibility. This allows e.g. visibility="private"
+	// on the override to hide the variable from the using package.
+	if overrideVis := getAttr(elem, "visibility"); overrideVis != "" {
+		v.Visibility = overrideVis
 	}
 
 	selectAttr := getAttr(elem, "select")
