@@ -1125,6 +1125,12 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 				if !ok {
 					continue
 				}
+				// Skip package-owned variables: they may be homonymous
+				// with variables from other packages and must be evaluated
+				// in the correct package context via ResolveVariable.
+				if v.OwnerPackage != nil {
+					continue
+				}
 				if _, err := ec.evaluateGlobalVar(v); err == nil {
 					progress = true
 				}
@@ -1172,19 +1178,15 @@ func (ec *execContext) collectAllVars() map[string]xpath3.Sequence {
 		}
 	}
 
-	// When executing in a used package, remove private variables that
-	// the package defines so they fall through to ResolveVariable which
+	// When executing in a used package, remove variables that the
+	// package defines so they fall through to ResolveVariable which
 	// handles package-scoped isolation. This ensures that a package's
-	// private variable overrides take precedence over same-named
-	// public variables from other packages in the main stylesheet.
-	// Only private variables need this treatment — public/final
-	// variables use the main stylesheet's version (which includes
-	// any overrides applied by the using stylesheet).
+	// own variables (including private ones and homonymous variables
+	// from different package instances) take precedence over the
+	// main stylesheet's global variable cache.
 	if inPackage {
 		for _, v := range ec.currentPackage.globalVars {
-			if v.Visibility == visPrivate {
-				delete(vars, v.Name)
-			}
+			delete(vars, v.Name)
 		}
 	}
 
@@ -1295,23 +1297,16 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 	for _, n := range lookupNames {
 		if v, ok := ec.globalVars[n]; ok {
 			// When executing in a used package, check if the package has
-			// its own definition of this variable. If the package's variable
-			// is a different object from what was merged into globalVars,
-			// it means the package has its own value (e.g. a private
-			// override). Use the package's version in that case.
+			// its own definition of this variable. Package-scoped variables
+			// may be homonymous with variables from other packages, so we
+			// must use the package's own definition to get the correct value.
 			if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
 				if pkgVar := findPackageVar(ec.currentPackage, n, nil); pkgVar != nil {
-					// Check if the package's variable definition was the
-					// source of the value in globalVars. Walk the main
-					// stylesheet's globalVars defs to find the matching def.
-					isFromMainSS := false
-					for _, mainVar := range ec.stylesheet.globalVars {
-						if mainVar.Name == n && mainVar == pkgVar {
-							isFromMainSS = true
-							break
-						}
-					}
-					if !isFromMainSS {
+					// If the package variable's OwnerPackage differs from
+					// the current package, it was defined in a sub-package
+					// and should be evaluated in that sub-package's context.
+					// Use evaluatePackageVar to get the correct per-package value.
+					if pkgVar.OwnerPackage != nil && pkgVar.OwnerPackage != ec.stylesheet {
 						val, err := ec.evaluatePackageVar(pkgVar)
 						if err != nil {
 							return nil, false, err
@@ -1334,6 +1329,21 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 			}
 		}
 	}
+	// When evaluating in a package context, check the package's own
+	// global variables first (including private ones not merged into the
+	// stylesheet). This ensures that homonymous variables from different
+	// packages resolve to the correct package-scoped definition.
+	if ec.currentPackage != nil {
+		for _, v := range ec.currentPackage.globalVars {
+			if v.Name == name {
+				val, err := ec.evaluatePackageVar(v)
+				if err != nil {
+					return nil, false, err
+				}
+				return val, true, nil
+			}
+		}
+	}
 	// Try to lazily evaluate a pending global variable
 	for _, n := range lookupNames {
 		if def, ok := ec.globalVarDefs[n]; ok {
@@ -1342,19 +1352,6 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 				return nil, false, err
 			}
 			return val, true, nil
-		}
-	}
-	// When evaluating in a package context, also check the package's own
-	// global variables (including private ones not merged into the stylesheet).
-	if ec.currentPackage != nil {
-		for _, v := range ec.currentPackage.globalVars {
-			if v.Name == name {
-				val, err := ec.evaluateGlobalVar(v)
-				if err != nil {
-					return nil, false, err
-				}
-				return val, true, nil
-			}
 		}
 	}
 	// Try to lazily evaluate a pending global parameter

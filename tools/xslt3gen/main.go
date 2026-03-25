@@ -220,6 +220,7 @@ type generatedTest struct {
 	SourceSchemaPath            string
 	ImportSchemaPaths           []string // schemas for xsl:import-schema resolution
 	EmbeddedStylesheet          bool     // source document contains <?xml-stylesheet?> PI
+	VersionResolution           string   // "lowest" for lowest matching package version (default: highest)
 }
 
 // packageDep maps a package URI+version to its file path.
@@ -408,6 +409,9 @@ func main() {
 			// Extract on-multiple-match dependency
 			gt.OnMultipleMatch = getOnMultipleMatch(ts.Dependencies, tc.Dependencies)
 
+			// Extract package version resolution dependency
+			gt.VersionResolution = getVersionResolution(ts.Dependencies, tc.Dependencies)
+
 			// Find primary and secondary stylesheets
 			for _, ss := range tc.Test.Stylesheets {
 				relPath := filepath.Join(tsDir, ss.File)
@@ -417,12 +421,9 @@ func main() {
 					gt.StylesheetPath = relPath
 				}
 			}
-			// If only one stylesheet and no explicit role, it's the primary
-			if gt.StylesheetPath == "" && len(tc.Test.Stylesheets) == 1 {
-				gt.StylesheetPath = filepath.Join(tsDir, tc.Test.Stylesheets[0].File)
-			}
-
-			// Find primary and secondary packages from test-level
+			// Find primary and secondary packages from test-level.
+			// Process packages before the single-stylesheet fallback so
+			// that a principal package takes priority.
 			for _, pkg := range tc.Test.Packages {
 				relPath := filepath.Join(tsDir, pkg.File)
 				if pkg.Role == "principal" {
@@ -444,6 +445,11 @@ func main() {
 						assetFiles[relDep] = struct{}{}
 					}
 				}
+			}
+
+			// If only one stylesheet and no explicit role, it's the primary
+			if gt.StylesheetPath == "" && len(tc.Test.Stylesheets) == 1 {
+				gt.StylesheetPath = filepath.Join(tsDir, tc.Test.Stylesheets[0].File)
 			}
 
 			// Fall back to environment-level stylesheet/packages if test has none
@@ -887,6 +893,8 @@ func getDepsSkipReason(deps *xslDependencies) string {
 			}
 		case "on-multiple-match":
 			// Handled separately via getOnMultipleMatch
+		case "package_version_resolution":
+			// Handled separately via getVersionResolution
 		case "enable_assertions":
 			// We evaluate assertions; skip tests that require them disabled
 			if d.Satisfied == "false" {
@@ -909,6 +917,29 @@ func getOnMultipleMatch(setDeps *xslDependencies, caseDeps *xslDependencies) str
 			if d.XMLName.Local == "on-multiple-match" {
 				if d.Value == "error" {
 					return "fail"
+				}
+			}
+		}
+		return ""
+	}
+	if v := check(caseDeps); v != "" {
+		return v
+	}
+	return check(setDeps)
+}
+
+// getVersionResolution extracts the package_version_resolution dependency
+// from test-set and test-case dependencies. Returns "lowest" when the test
+// requires lowest_version selection, empty string otherwise.
+func getVersionResolution(setDeps *xslDependencies, caseDeps *xslDependencies) string {
+	check := func(deps *xslDependencies) string {
+		if deps == nil {
+			return ""
+		}
+		for _, d := range deps.Children {
+			if d.XMLName.Local == "package_version_resolution" {
+				if d.Value == "lowest_version" {
+					return "lowest"
 				}
 			}
 		}
@@ -1590,6 +1621,9 @@ func generateTestFile(tests []generatedTest) string {
 			}
 			if tc.OnMultipleMatch != "" {
 				fmt.Fprintf(&b, ", OnMultipleMatch: %q", tc.OnMultipleMatch)
+			}
+			if tc.VersionResolution != "" {
+				fmt.Fprintf(&b, ", VersionResolution: %q", tc.VersionResolution)
 			}
 
 			b.WriteString("},\n")

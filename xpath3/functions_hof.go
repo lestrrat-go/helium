@@ -145,6 +145,14 @@ func fnApply(ctx context.Context, args []Sequence) (Sequence, error) {
 	return fi.Invoke(ctx, fnArgs)
 }
 
+// CallFunctionLookup is an exported wrapper around the built-in
+// function-lookup implementation. It is used by the XSLT layer to
+// delegate to the standard function-lookup before applying
+// package-specific adjustments.
+func CallFunctionLookup(ctx context.Context, args []Sequence) (Sequence, error) {
+	return fnFunctionLookup(ctx, args)
+}
+
 func fnFunctionLookup(ctx context.Context, args []Sequence) (Sequence, error) {
 	nameArg, err := extractSingleAtomicArg(args[0], "function-lookup()")
 	if err != nil {
