@@ -602,6 +602,16 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 			g.IRelease("END document.stringToNodeList '%s'", content)
 		}()
 	}
+
+	// Fast path: no entity references — create a single text node directly.
+	if strings.IndexByte(value, '&') < 0 {
+		t, terr := d.CreateText([]byte(value))
+		if terr != nil {
+			return nil, terr
+		}
+		return t, nil
+	}
+
 	rdr := strings.NewReader(value)
 	buf := bytes.Buffer{}
 	var last Node
