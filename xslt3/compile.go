@@ -92,6 +92,9 @@ func NewCompiler() Compiler {
 }
 
 func (c Compiler) clone() Compiler {
+	if c.cfg == nil {
+		return Compiler{cfg: &xsltCompilerCfg{}}
+	}
 	cp := *c.cfg
 	return Compiler{cfg: &cp}
 }
@@ -178,6 +181,9 @@ func (c Compiler) MustCompile(ctx context.Context, doc *helium.Document) *Styles
 // toCompileConfig converts the Compiler config to the internal compileConfig
 // used by the existing compile function.
 func (c Compiler) toCompileConfig() *compileConfig {
+	if c.cfg == nil {
+		return &compileConfig{}
+	}
 	cfg := &compileConfig{
 		baseURI:         c.cfg.baseURI,
 		resolver:        c.cfg.uriResolver,
