@@ -436,6 +436,15 @@ func (ec *execContext) checkAccumulatorAccess(name string) error {
 	if _, ok := ec.stylesheet.accumulators[name]; !ok {
 		return dynamicError(errCodeXTDE3340, "no accumulator %q is declared in this stylesheet", name)
 	}
+	// Document-level accumulator applicability (XTDE3362).
+	// This check must be performed even during accumulator evaluation
+	// so that an accumulator rule referencing a non-applicable peer
+	// (e.g. one not listed in use-accumulators) is rejected.
+	if ec.activeAccumulators != nil {
+		if _, ok := ec.activeAccumulators[name]; !ok {
+			return dynamicError(errCodeXTDE3362, "accumulator %q is not applicable in the current source-document", name)
+		}
+	}
 	if ec.evaluatingAccumulator {
 		return nil
 	}
@@ -459,12 +468,6 @@ func (ec *execContext) checkAccumulatorAccess(name string) error {
 				return dynamicError(errCodeXTDE3362,
 					"accumulator %q is not applicable in mode %q (not in use-accumulators)", name, ec.currentMode)
 			}
-		}
-	}
-	// Document-level accumulator applicability
-	if ec.activeAccumulators != nil {
-		if _, ok := ec.activeAccumulators[name]; !ok {
-			return dynamicError(errCodeXTDE3362, "accumulator %q is not applicable in the current source-document", name)
 		}
 	}
 	if !ec.requireStreamableAccums {

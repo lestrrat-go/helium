@@ -1348,14 +1348,12 @@ var w3cImplicitSkips = map[string]string{
 
 	// merge: schema type annotations not propagated through merge
 	"merge-049":  "schema-element() instance test requires type annotations on merged items",
-	"merge-051":  "xsl:merge-source type= attribute validation not implemented",
-	"merge-067":  "XTDE3362 merge accumulator applicability not detected",
-	"merge-072":  "XTDE2220 alternate=shifted collation not rejected",
-	"merge-079":  "merge collation-based sort verification false positive with translate()",
-	"merge-096":  "XTTE0780 construct-doc type error in merge",
-	"merge-097":  "missing test data files merge-097-*.xml",
-	"merge-097s": "missing test data files merge-097-*.xml",
-	"merge-097sf": "missing test data files merge-097-*.xml",
+	"merge-051":  "xsl:merge-source type= attribute: schema-element() instance test requires type annotations on merged items",
+	"merge-072":  "XTDE2220 alternate=shifted collation sort-order verification not supported",
+	"merge-079":  "DOM-materialized merge exposes ancestor::record outside streaming snapshot",
+	"merge-097":  "uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable)",
+	"merge-097s": "uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable)",
+	"merge-097sf": "uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable)",
 
 	// streamable: various streaming and grouping issues
 	"streamable-009": "streaming for-each-group grouping result incorrect",
