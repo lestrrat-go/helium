@@ -138,43 +138,6 @@ func (ec *execContext) xsltEvaluateFunctionsNS() map[xpath3.QualifiedName]xpath3
 	return result
 }
 
-// registerLateBindingFunc registers a package function that has been overridden.
-// The registered wrapper reports the original function's type signature (for
-// function-lookup) but dispatches to the override when called.
-func (ec *execContext) registerLateBindingFunc(original, override *xslFunction) {
-	qn := original.Name
-	wrapper := &xslLateBindingFunc{
-		original: &xslUserFunc{def: original, ec: ec},
-		override: &xslUserFunc{def: override, ec: ec},
-	}
-	ec.cachedFnsNS[qn] = wrapper
-}
-
-// xslLateBindingFunc wraps an original function and its override. It reports
-// the original function's type signature but dispatches calls to the override.
-// This allows function-lookup to return the wrapper (which looks like the
-// original) while direct calls use the override.
-type xslLateBindingFunc struct {
-	original *xslUserFunc
-	override *xslUserFunc
-}
-
-func (f *xslLateBindingFunc) MinArity() int { return f.original.MinArity() }
-func (f *xslLateBindingFunc) MaxArity() int { return f.original.MaxArity() }
-
-func (f *xslLateBindingFunc) FuncParamTypes() []xpath3.SequenceType {
-	return f.original.FuncParamTypes()
-}
-
-func (f *xslLateBindingFunc) FuncReturnType() *xpath3.SequenceType {
-	return f.original.FuncReturnType()
-}
-
-func (f *xslLateBindingFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
-	// Dispatch to the override function
-	return f.override.Call(ctx, args)
-}
-
 // registerUserFunc registers an XSL user function into cachedFnsNS,
 // handling multi-arity overloads by wrapping them in xslMultiArityFunc.
 func (ec *execContext) registerUserFunc(def *xslFunction) {
