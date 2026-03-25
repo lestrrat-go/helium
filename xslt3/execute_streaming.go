@@ -1535,21 +1535,6 @@ func mergeKeyValueToSequence(mkv mergeKeyValue) xpath3.Sequence {
 	return xpath3.EmptySequence()
 }
 
-// resolveCollationURIOnly resolves the collation URI string for a merge key
-// definition at runtime (evaluating any AVT), but does not build a compare
-// function. Returns "" when no explicit collation is specified.
-func (ec *execContext) resolveCollationURIOnly(ctx context.Context, mk *mergeKey) (string, error) {
-	collURI := mk.Collation
-	if mk.CollationAVT != nil {
-		evaluated, err := mk.CollationAVT.evaluate(ctx, ec.contextNode)
-		if err != nil {
-			return "", err
-		}
-		collURI = evaluated
-	}
-	return collURI, nil
-}
-
 // resolveMergeKeyCollation resolves the collation URI for a merge key
 // definition at runtime. Returns nil compare function if no collation is
 // specified or if the collation is the default codepoint collation.
@@ -1574,9 +1559,10 @@ func (ec *execContext) resolveMergeKeyCollationURI(ctx context.Context, mk *merg
 		// No explicit collation — use lang/case-order to build a UCA URI.
 		if mk.Lang != "" {
 			collURI = "http://www.w3.org/2013/collation/UCA?lang=" + mk.Lang
-			if mk.CaseOrder == "upper-first" {
+			switch mk.CaseOrder {
+			case "upper-first":
 				collURI += ";caseFirst=upper"
-			} else if mk.CaseOrder == "lower-first" {
+			case "lower-first":
 				collURI += ";caseFirst=lower"
 			}
 		}
