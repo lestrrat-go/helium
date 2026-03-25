@@ -11,7 +11,7 @@ import (
 )
 
 func TestOptionsNoImplied(t *testing.T) {
-	doc, err := html.NewParser().NoImplied().Parse(t.Context(), []byte(`<p>hello</p>`))
+	doc, err := html.NewParser().SuppressImplied(true).Parse(t.Context(), []byte(`<p>hello</p>`))
 	require.NoError(t, err)
 
 	// Without NoImplied, the parser would insert <html><body> around <p>.
@@ -100,7 +100,7 @@ func TestDuplicateAttrCaseInsensitive(t *testing.T) {
 
 func TestOptionsNoBlanks(t *testing.T) {
 	input := `<html> <body> <p>text</p> </body> </html>`
-	doc, err := html.NewParser().NoBlanks().Parse(t.Context(), []byte(input))
+	doc, err := html.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -126,7 +126,7 @@ func TestOptionsNoError(t *testing.T) {
 	// Parse malformed HTML that would normally trigger errors
 	// (e.g., unexpected end tag)
 	input := `<html><body></nonexistent></body></html>`
-	err := html.NewParser().NoError().ParseWithSAX(t.Context(), []byte(input), sax)
+	err := html.NewParser().SuppressErrors(true).ParseWithSAX(t.Context(), []byte(input), sax)
 	require.NoError(t, err)
 	require.False(t, errorCalled, "error handler should not be called with WithNoError")
 }
@@ -156,13 +156,13 @@ func TestOptionsNoWarning(t *testing.T) {
 
 	// Parse valid HTML with WithNoWarning
 	input := `<html><body><p>hello</p></body></html>`
-	err := html.NewParser().NoWarning().ParseWithSAX(t.Context(), []byte(input), sax)
+	err := html.NewParser().SuppressWarnings(true).ParseWithSAX(t.Context(), []byte(input), sax)
 	require.NoError(t, err)
 	require.False(t, warningCalled, "warning handler should not be called with WithNoWarning")
 }
 
 func TestOptionsPushParserCarriesOptions(t *testing.T) {
-	pp := html.NewParser().NoImplied().NewPushParser(t.Context())
+	pp := html.NewParser().SuppressImplied(true).NewPushParser(t.Context())
 	require.NoError(t, pp.Push([]byte(`<p>hello</p>`)))
 	doc, err := pp.Close()
 	require.NoError(t, err)

@@ -56,228 +56,340 @@ func (p Parser) clone() Parser {
 
 // --- Flag methods (each sets/clears the corresponding bit) ---
 
-// Recover enables recovery on parse errors (libxml2: XML_PARSE_RECOVER).
-func (p Parser) Recover(v bool) Parser {
+// RecoverOnError controls whether the parser attempts to recover from
+// well-formedness errors and returns a partial document.
+// libxml2: XML_PARSE_RECOVER
+// Default: false
+func (p Parser) RecoverOnError(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseRecover)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseRecover)
+		return p
 	}
+	p.cfg.options.Set(parseRecover)
 	return p
 }
 
-// NoEnt enables entity substitution (libxml2: XML_PARSE_NOENT).
-func (p Parser) NoEnt(v bool) Parser {
+// SubstituteEntities controls whether entity references are replaced
+// with their substitution text during parsing.
+// libxml2: XML_PARSE_NOENT
+// Default: false
+func (p Parser) SubstituteEntities(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseNoEnt)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseNoEnt)
+		return p
 	}
+	p.cfg.options.Set(parseNoEnt)
 	return p
 }
 
-// DTDLoad enables loading the external DTD subset (libxml2: XML_PARSE_DTDLOAD).
-func (p Parser) DTDLoad(v bool) Parser {
+// LoadExternalDTD controls whether the parser loads the external DTD subset.
+// libxml2: XML_PARSE_DTDLOAD
+// Default: false
+func (p Parser) LoadExternalDTD(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseDTDLoad)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseDTDLoad)
+		return p
 	}
+	p.cfg.options.Set(parseDTDLoad)
 	return p
 }
 
-// DTDAttr enables defaulting DTD attributes (libxml2: XML_PARSE_DTDATTR).
-// Also implies DTDLoad.
-func (p Parser) DTDAttr(v bool) Parser {
+// DefaultDTDAttributes controls whether the parser adds default attributes
+// defined in the DTD. When set to true, also enables LoadExternalDTD.
+// libxml2: XML_PARSE_DTDATTR
+// Default: false
+func (p Parser) DefaultDTDAttributes(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseDTDAttr)
-		p.cfg.options.Set(parseDTDLoad)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseDTDAttr)
+		return p
 	}
+	p.cfg.options.Set(parseDTDAttr)
+	p.cfg.options.Set(parseDTDLoad)
 	return p
 }
 
-// DTDValid enables DTD validation (libxml2: XML_PARSE_DTDVALID).
-// Also implies DTDLoad.
-func (p Parser) DTDValid(v bool) Parser {
+// ValidateDTD controls whether the parser validates the document against
+// its DTD after parsing. When set to true, also enables LoadExternalDTD.
+// libxml2: XML_PARSE_DTDVALID
+// Default: false
+func (p Parser) ValidateDTD(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseDTDValid)
-		p.cfg.options.Set(parseDTDLoad)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseDTDValid)
+		return p
 	}
+	p.cfg.options.Set(parseDTDValid)
+	p.cfg.options.Set(parseDTDLoad)
 	return p
 }
 
-// NoError suppresses error reports (libxml2: XML_PARSE_NOERROR).
-func (p Parser) NoError(v bool) Parser {
+// SuppressErrors controls whether error reports from the parser are
+// suppressed. When true, the SAX error callback is not invoked.
+// libxml2: XML_PARSE_NOERROR
+// Default: false
+func (p Parser) SuppressErrors(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseNoError)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseNoError)
+		return p
 	}
+	p.cfg.options.Set(parseNoError)
 	return p
 }
 
-// NoWarning suppresses warning reports (libxml2: XML_PARSE_NOWARNING).
-func (p Parser) NoWarning(v bool) Parser {
+// SuppressWarnings controls whether warning reports from the parser are
+// suppressed. When true, the SAX warning callback is not invoked.
+// libxml2: XML_PARSE_NOWARNING
+// Default: false
+func (p Parser) SuppressWarnings(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseNoWarning)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseNoWarning)
+		return p
 	}
+	p.cfg.options.Set(parseNoWarning)
 	return p
 }
 
-// Pedantic enables pedantic error reporting (libxml2: XML_PARSE_PEDANTIC).
-func (p Parser) Pedantic(v bool) Parser {
+// PedanticErrors controls whether the parser reports pedantic warnings
+// for minor specification violations.
+// libxml2: XML_PARSE_PEDANTIC
+// Default: false
+func (p Parser) PedanticErrors(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parsePedantic)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parsePedantic)
+		return p
 	}
+	p.cfg.options.Set(parsePedantic)
 	return p
 }
 
-// NoBlanks removes blank nodes (libxml2: XML_PARSE_NOBLANKS).
-func (p Parser) NoBlanks(v bool) Parser {
+// StripBlanks controls whether whitespace-only text nodes are removed
+// from the resulting DOM tree.
+// libxml2: XML_PARSE_NOBLANKS
+// Default: false
+func (p Parser) StripBlanks(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseNoBlanks)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseNoBlanks)
+		return p
 	}
+	p.cfg.options.Set(parseNoBlanks)
 	return p
 }
 
-// XInclude enables XInclude substitution (libxml2: XML_PARSE_XINCLUDE).
-func (p Parser) XInclude(v bool) Parser {
+// ProcessXInclude controls whether XInclude substitution is performed
+// during parsing.
+// libxml2: XML_PARSE_XINCLUDE
+// Default: false
+func (p Parser) ProcessXInclude(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseXInclude)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseXInclude)
+		return p
 	}
+	p.cfg.options.Set(parseXInclude)
 	return p
 }
 
-// NoNet forbids network access (libxml2: XML_PARSE_NONET).
-func (p Parser) NoNet(v bool) Parser {
+// AllowNetwork controls whether the parser is allowed to fetch resources
+// over the network (e.g. external DTDs, entities). When set to false,
+// all network access is forbidden.
+// libxml2: XML_PARSE_NONET (note: semantics are inverted — libxml2 sets
+// this flag to *forbid* network access, whereas AllowNetwork(true)
+// *permits* it)
+// Default: true (network access is allowed)
+func (p Parser) AllowNetwork(v bool) Parser {
 	p = p.clone()
-	if v {
+	if !v {
 		p.cfg.options.Set(parseNoNet)
-	} else {
-		p.cfg.options.Clear(parseNoNet)
+		return p
 	}
+	p.cfg.options.Clear(parseNoNet)
 	return p
 }
 
-// NsClean removes redundant namespace declarations (libxml2: XML_PARSE_NSCLEAN).
-func (p Parser) NsClean(v bool) Parser {
+// CleanNamespaces controls whether redundant namespace declarations are
+// removed from the resulting DOM tree.
+// libxml2: XML_PARSE_NSCLEAN
+// Default: false
+func (p Parser) CleanNamespaces(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseNsClean)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseNsClean)
+		return p
 	}
+	p.cfg.options.Set(parseNsClean)
 	return p
 }
 
-// NoCDATA merges CDATA as text nodes (libxml2: XML_PARSE_NOCDATA).
-func (p Parser) NoCDATA(v bool) Parser {
+// MergeCDATA controls whether CDATA sections are merged into adjacent
+// text nodes instead of being represented as separate CDATA nodes.
+// libxml2: XML_PARSE_NOCDATA
+// Default: false
+func (p Parser) MergeCDATA(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseNoCDATA)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseNoCDATA)
+		return p
 	}
+	p.cfg.options.Set(parseNoCDATA)
 	return p
 }
 
-// NoXIncNode suppresses XINCLUDE START/END nodes (libxml2: XML_PARSE_NOXINCNODE).
-func (p Parser) NoXIncNode(v bool) Parser {
+// XIncludeNodes controls whether XINCLUDE START/END marker nodes are
+// generated in the DOM tree during XInclude processing.
+// libxml2: XML_PARSE_NOXINCNODE (note: semantics are inverted — libxml2
+// sets this flag to *suppress* marker nodes, whereas XIncludeNodes(false)
+// suppresses them)
+// Default: true (marker nodes are generated)
+func (p Parser) XIncludeNodes(v bool) Parser {
 	p = p.clone()
-	if v {
+	if !v {
 		p.cfg.options.Set(parseNoXIncNode)
-	} else {
-		p.cfg.options.Clear(parseNoXIncNode)
+		return p
 	}
+	p.cfg.options.Clear(parseNoXIncNode)
 	return p
 }
 
-// NoBaseFix disables xml:base fixup for XInclude (libxml2: XML_PARSE_NOBASEFIX).
-func (p Parser) NoBaseFix(v bool) Parser {
+// CompactTextNodes controls whether the parser compacts small text nodes
+// to reduce memory usage.
+// libxml2: XML_PARSE_COMPACT
+// Default: false
+func (p Parser) CompactTextNodes(v bool) Parser {
 	p = p.clone()
-	if v {
+	if !v {
+		p.cfg.options.Clear(parseCompact)
+		return p
+	}
+	p.cfg.options.Set(parseCompact)
+	return p
+}
+
+// FixBaseURIs controls whether xml:base URIs are fixed up during
+// XInclude processing. When set to false, xml:base attributes are
+// not adjusted on included content.
+// libxml2: XML_PARSE_NOBASEFIX (note: semantics are inverted — libxml2
+// sets this flag to *disable* fixup, whereas FixBaseURIs(false)
+// disables it)
+// Default: true (xml:base URIs are fixed up)
+func (p Parser) FixBaseURIs(v bool) Parser {
+	p = p.clone()
+	if !v {
 		p.cfg.options.Set(parseNoBaseFix)
-	} else {
-		p.cfg.options.Clear(parseNoBaseFix)
+		return p
 	}
+	p.cfg.options.Clear(parseNoBaseFix)
 	return p
 }
 
-// Huge relaxes hardcoded parser limits (libxml2: XML_PARSE_HUGE).
-func (p Parser) Huge(v bool) Parser {
+// RelaxLimits controls whether hardcoded parser limits (name length,
+// entity expansion) are relaxed. Use with caution — disabling limits
+// may expose the parser to denial-of-service attacks.
+// libxml2: XML_PARSE_HUGE
+// Default: false
+func (p Parser) RelaxLimits(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseHuge)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseHuge)
+		return p
 	}
+	p.cfg.options.Set(parseHuge)
 	return p
 }
 
-// IgnoreEnc ignores internal document encoding hint (libxml2: XML_PARSE_IGNORE_ENC).
-func (p Parser) IgnoreEnc(v bool) Parser {
+// IgnoreEncoding controls whether the parser ignores the encoding
+// declaration inside the document and uses the transport-level encoding
+// instead.
+// libxml2: XML_PARSE_IGNORE_ENC
+// Default: false
+func (p Parser) IgnoreEncoding(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseIgnoreEnc)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseIgnoreEnc)
+		return p
 	}
+	p.cfg.options.Set(parseIgnoreEnc)
 	return p
 }
 
-// NoXXE blocks external entity/DTD loading (libxml2: XML_PARSE_NOXXE).
-func (p Parser) NoXXE(v bool) Parser {
+// BigLineNumbers controls whether large line numbers are stored in the
+// text PSVI field, allowing line numbers above 65535.
+// libxml2: XML_PARSE_BIG_LINES
+// Default: false
+func (p Parser) BigLineNumbers(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseNoXXE)
-	} else {
-		p.cfg.options.Clear(parseNoXXE)
+	if !v {
+		p.cfg.options.Clear(parseBigLines)
+		return p
 	}
+	p.cfg.options.Set(parseBigLines)
 	return p
 }
 
-// SkipIDs skips ID attribute interning (libxml2: XML_PARSE_SKIP_IDS).
+// BlockXXE controls whether loading of external entities and DTDs is
+// blocked, preventing XML External Entity (XXE) attacks.
+// libxml2: XML_PARSE_NOXXE
+// Default: false
+func (p Parser) BlockXXE(v bool) Parser {
+	p = p.clone()
+	if !v {
+		p.cfg.options.Clear(parseNoXXE)
+		return p
+	}
+	p.cfg.options.Set(parseNoXXE)
+	return p
+}
+
+// ReuseDict controls whether the parser reuses the context dictionary
+// for interned strings. When set to false, a fresh dictionary is used.
+// libxml2: XML_PARSE_NODICT (note: semantics are inverted — libxml2
+// sets this flag to *disable* dictionary reuse, whereas ReuseDict(false)
+// disables it)
+// Default: true (dictionary is reused)
+func (p Parser) ReuseDict(v bool) Parser {
+	p = p.clone()
+	if !v {
+		p.cfg.options.Set(parseNoDict)
+		return p
+	}
+	p.cfg.options.Clear(parseNoDict)
+	return p
+}
+
+// SkipIDs controls whether ID attribute interning is skipped during
+// parsing. When true, the parser does not build the ID table.
+// libxml2: XML_PARSE_SKIP_IDS
+// Default: false
 func (p Parser) SkipIDs(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseSkipIDs)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseSkipIDs)
+		return p
 	}
+	p.cfg.options.Set(parseSkipIDs)
 	return p
 }
 
-// LenientXMLDecl relaxes XML declaration parsing so pseudo-attributes
-// may appear in any order (helium extension).
+// LenientXMLDecl relaxes XML declaration parsing so that the version,
+// encoding, and standalone pseudo-attributes may appear in any order.
+// Per the XML spec (section 2.8) the order MUST be version, encoding,
+// standalone, but some real-world producers emit them differently.
+// This is a helium extension not present in libxml2.
+// Default: false
 func (p Parser) LenientXMLDecl(v bool) Parser {
 	p = p.clone()
-	if v {
-		p.cfg.options.Set(parseLenientXMLDecl)
-	} else {
+	if !v {
 		p.cfg.options.Clear(parseLenientXMLDecl)
+		return p
 	}
+	p.cfg.options.Set(parseLenientXMLDecl)
 	return p
 }
 

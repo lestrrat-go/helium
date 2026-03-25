@@ -33,35 +33,43 @@ func (p Parser) clone() Parser {
 	return Parser{cfg: &cp}
 }
 
-// NoImplied suppresses automatic insertion of implied html/head/body elements.
-// (libxml2: HTML_PARSE_NOIMPLIED)
-func (p Parser) NoImplied() Parser {
+// SuppressImplied controls whether automatic insertion of implied
+// html/head/body elements is suppressed.
+// libxml2: HTML_PARSE_NOIMPLIED
+// Default: false (implied elements are inserted)
+func (p Parser) SuppressImplied(v bool) Parser {
 	p = p.clone()
-	p.cfg.noImplied = true
+	p.cfg.noImplied = v
 	return p
 }
 
-// NoBlanks removes whitespace-only text nodes from the DOM.
-// (libxml2: HTML_PARSE_NOBLANKS)
-func (p Parser) NoBlanks() Parser {
+// StripBlanks controls whether whitespace-only text nodes are removed
+// from the DOM.
+// libxml2: HTML_PARSE_NOBLANKS
+// Default: false (whitespace nodes are preserved)
+func (p Parser) StripBlanks(v bool) Parser {
 	p = p.clone()
-	p.cfg.noBlanks = true
+	p.cfg.noBlanks = v
 	return p
 }
 
-// NoError suppresses error messages from the SAX error handler.
-// (libxml2: HTML_PARSE_NOERROR)
-func (p Parser) NoError() Parser {
+// SuppressErrors controls whether error messages from the SAX error
+// handler are suppressed.
+// libxml2: HTML_PARSE_NOERROR
+// Default: false (errors are reported)
+func (p Parser) SuppressErrors(v bool) Parser {
 	p = p.clone()
-	p.cfg.noError = true
+	p.cfg.noError = v
 	return p
 }
 
-// NoWarning suppresses warning messages from the SAX warning handler.
-// (libxml2: HTML_PARSE_NOWARNING)
-func (p Parser) NoWarning() Parser {
+// SuppressWarnings controls whether warning messages from the SAX
+// warning handler are suppressed.
+// libxml2: HTML_PARSE_NOWARNING
+// Default: false (warnings are reported)
+func (p Parser) SuppressWarnings(v bool) Parser {
 	p = p.clone()
-	p.cfg.noWarning = true
+	p.cfg.noWarning = v
 	return p
 }
 

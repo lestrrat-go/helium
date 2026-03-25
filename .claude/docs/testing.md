@@ -78,7 +78,7 @@ testdata/libxml2-compat/
 
 | Function | Purpose |
 |----------|---------|
-| `parseTestDoc(t, path) *Document` | Parse XML with ParseNoEnt, ParseDTDLoad, ParseDTDAttr |
+| `parseTestDoc(t, path) *Document` | Parse XML with SubstituteEntities, LoadExternalDTD, DefaultDTDAttributes |
 | `readExpected(t, path) []byte` | Read expected result file |
 | `parseXPathFile(t, path) (string, map[string]string)` | Parse .xpath sidecar → expression + namespace bindings |
 | `parseNSFile(t, path) []string` | Parse .ns sidecar → inclusive namespace prefixes |
@@ -136,7 +136,7 @@ Run specific test subsets via env vars:
 ### 3. C14N Tests
 
 ```
-1. Parse test XML with ParseNoEnt + ParseDTDLoad + ParseDTDAttr
+1. Parse test XML with SubstituteEntities + LoadExternalDTD + DefaultDTDAttributes
 2. Check for .xpath sidecar → evaluate XPath for node set
 3. Check for .ns sidecar → read inclusive namespace prefixes
 4. Canonicalize with mode and options

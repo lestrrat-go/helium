@@ -32,7 +32,7 @@ func TestCompileFileLoadsDTDDefinedExternalEntityInIncludedStylesheet(t *testing
 <xsl:variable xmlns:xsl="http://www.w3.org/1999/XSL/Transform" name="var" select="'from-dtd-entity'"/>`), 0o644))
 
 	mainPath := filepath.Join(tmpDir, "main.xsl")
-	p := helium.NewParser().DTDLoad(true).NoEnt(true).BaseURI(mainPath)
+	p := helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true).BaseURI(mainPath)
 	mainData, err := os.ReadFile(mainPath)
 	require.NoError(t, err)
 	doc, err := p.Parse(t.Context(), mainData)

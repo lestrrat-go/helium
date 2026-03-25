@@ -931,9 +931,9 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	}
 
 	if hasExplicitSource {
-		sourceParser := helium.NewParser().DTDLoad(true).DTDAttr(true)
+		sourceParser := helium.NewParser().LoadExternalDTD(true).DefaultDTDAttributes(true)
 		if tc.SourceDocPath != "" {
-			sourceParser = sourceParser.NoEnt(true).NoBaseFix(true)
+			sourceParser = sourceParser.SubstituteEntities(true).FixBaseURIs(false)
 			srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
 			sourceParser = sourceParser.BaseURI(srcAbsPath)
 		}
@@ -1001,7 +1001,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		if readErr != nil {
 			t.Fatalf("read stylesheet: %v", readErr)
 		}
-		ssParser := helium.NewParser().DTDLoad(true).NoEnt(true).BaseURI(absPath)
+		ssParser := helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true).BaseURI(absPath)
 		doc, parseErr := ssParser.Parse(t.Context(), data)
 		if parseErr != nil {
 			if tc.ExpectError {
@@ -2581,7 +2581,7 @@ func w3cCompileCached(ctx context.Context, path string) (*xslt3.Stylesheet, erro
 	if err != nil {
 		return nil, err
 	}
-	p := helium.NewParser().DTDLoad(true).NoEnt(true).BaseURI(absPath)
+	p := helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true).BaseURI(absPath)
 	doc, err := p.Parse(ctx, data)
 	if err != nil {
 		return nil, err

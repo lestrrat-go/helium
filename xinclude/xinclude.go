@@ -556,9 +556,9 @@ func (p *processor) loadXMLDoc(ctx context.Context, uri string, substituteEntiti
 }
 
 func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, substituteEntities bool) (*helium.Document, error) {
-	parser := helium.NewParser().DTDLoad(true).BaseURI(uri)
+	parser := helium.NewParser().LoadExternalDTD(true).BaseURI(uri)
 	if substituteEntities {
-		parser = parser.NoEnt(true)
+		parser = parser.SubstituteEntities(true)
 	}
 	doc, err := parser.Parse(ctx, data)
 	if err != nil {

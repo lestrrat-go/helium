@@ -215,32 +215,32 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		case "--version":
 			cfg.version = true
 		case "--recover":
-			cfg.parser = cfg.parser.Recover(true)
+			cfg.parser = cfg.parser.RecoverOnError(true)
 		case "--noent":
-			cfg.parser = cfg.parser.NoEnt(true)
+			cfg.parser = cfg.parser.SubstituteEntities(true)
 		case "--loaddtd":
-			cfg.parser = cfg.parser.DTDLoad(true)
+			cfg.parser = cfg.parser.LoadExternalDTD(true)
 		case "--dtdattr":
-			cfg.parser = cfg.parser.DTDAttr(true)
+			cfg.parser = cfg.parser.DefaultDTDAttributes(true)
 		case "--valid":
-			cfg.parser = cfg.parser.DTDValid(true)
+			cfg.parser = cfg.parser.ValidateDTD(true)
 			cfg.dtdValid = true
 		case "--nowarning":
-			cfg.parser = cfg.parser.NoWarning(true)
+			cfg.parser = cfg.parser.SuppressWarnings(true)
 		case "--pedantic":
-			cfg.parser = cfg.parser.Pedantic(true)
+			cfg.parser = cfg.parser.PedanticErrors(true)
 		case "--noblanks":
-			cfg.parser = cfg.parser.NoBlanks(true)
+			cfg.parser = cfg.parser.StripBlanks(true)
 		case "--nsclean":
-			cfg.parser = cfg.parser.NsClean(true)
+			cfg.parser = cfg.parser.CleanNamespaces(true)
 		case "--nocdata":
-			cfg.parser = cfg.parser.NoCDATA(true)
+			cfg.parser = cfg.parser.MergeCDATA(true)
 		case "--nonet":
-			cfg.parser = cfg.parser.NoNet(true)
+			cfg.parser = cfg.parser.AllowNetwork(false)
 		case "--huge":
-			cfg.parser = cfg.parser.Huge(true)
+			cfg.parser = cfg.parser.RelaxLimits(true)
 		case "--noenc":
-			cfg.parser = cfg.parser.IgnoreEnc(true)
+			cfg.parser = cfg.parser.IgnoreEncoding(true)
 		case "--noxincludenode":
 			cfg.noXIncNode = true
 		case "--nofixup-base-uris":
@@ -257,7 +257,7 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 			cfg.c14nMode = 3
 		case "--xinclude":
 			cfg.doXInclude = true
-			cfg.parser = cfg.parser.XInclude(true)
+			cfg.parser = cfg.parser.ProcessXInclude(true)
 		case "--catalogs":
 			cfg.catalogs = true
 		case "--nocatalogs":

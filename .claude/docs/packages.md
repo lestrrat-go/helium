@@ -174,7 +174,7 @@ HTML 4.01 parser producing helium DOM or SAX events.
 XInclude 1.0 processing with recursive inclusion and fallback.
 
 - **NewProcessor() → Processor** — create fluent builder
-- Processor methods: NoXIncludeMarkers(), NoBaseFixup(), Resolver(Resolver), BaseURI(string), ParseFlags(ParseOption), WarningHandler(func)
+- Processor methods: NoXIncludeMarkers(), NoBaseFixup(), Resolver(Resolver), BaseURI(string), WarningHandler(func)
 - Terminal: **Process(ctx, *Document) → (int, error)**, **ProcessTree(ctx, Node) → (int, error)**
 - `Resolver` interface — custom resource loader
 - Max depth 40, max URI 2000 chars, circular detection, doc/text caching

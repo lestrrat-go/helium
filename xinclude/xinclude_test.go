@@ -960,7 +960,7 @@ func TestXIncludeEntityMerge(t *testing.T) {
 func TestXIncludeEntityMergeConflict(t *testing.T) {
 	// Target and included document both define the same entity with different content.
 	// Target's definition should win (first-definition-wins) and warning should fire.
-	doc, err := helium.NewParser().DTDLoad(true).Parse(t.Context(), []byte(`<?xml version="1.0"?>
+	doc, err := helium.NewParser().LoadExternalDTD(true).Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ENTITY greeting "target-value">
 ]>

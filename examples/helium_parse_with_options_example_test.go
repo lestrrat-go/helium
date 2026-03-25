@@ -17,9 +17,9 @@ func Example_helium_parse_with_options() {
 	// Create a parser instance to configure parsing options.
 	// helium.NewParser() returns a reusable parser that can be customized
 	// before calling Parse.
-	// NoBlanks tells the parser to discard whitespace-only text nodes.
+	// StripBlanks tells the parser to discard whitespace-only text nodes.
 	// This is useful when you want a compact DOM without insignificant whitespace.
-	p := helium.NewParser().NoBlanks(true)
+	p := helium.NewParser().StripBlanks(true)
 
 	doc, err := p.Parse(context.Background(), []byte(src))
 	if err != nil {
@@ -28,7 +28,7 @@ func Example_helium_parse_with_options() {
 	}
 
 	// The output will be compact (no whitespace between elements)
-	// because ParseNoBlanks stripped the whitespace-only text nodes.
+	// because StripBlanks stripped the whitespace-only text nodes.
 	s, err := doc.XMLString()
 	if err != nil {
 		fmt.Printf("failed to serialize: %s\n", err)
