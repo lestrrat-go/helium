@@ -159,6 +159,7 @@ type w3cTest struct {
 	BaseOutputURI               string // base output URI for current-output-uri(); empty = not set
 	SourceSchemaPath            string   // path to XSD schema for source document validation (relative to testdata dir)
 	ImportSchemaPaths           []string // schema paths for xsl:import-schema resolution (relative to testdata dir)
+	VersionResolution           string   // "lowest" to select lowest matching package version (default: highest)
 }
 
 // w3cAssertion is an assertion to check against the transform result.
@@ -620,7 +621,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		absPath, _ := filepath.Abs(ssPath)
 		compiler := xslt3.NewCompiler().BaseURI(absPath)
 		if len(tc.PackageDeps) > 0 {
-			compiler = compiler.PackageResolver(w3cPackageResolver{deps: tc.PackageDeps})
+			compiler = compiler.PackageResolver(w3cPackageResolver{deps: tc.PackageDeps, versionResolution: tc.VersionResolution})
 		}
 		if len(tc.ImportSchemaPaths) > 0 {
 			var importSchemas []*xsd.Schema
@@ -1302,21 +1303,13 @@ var w3cImplicitSkips = map[string]string{
 	"accept-047a": "override function not visible in package scope via function-lookup",
 
 	// package: xsl:expose visibility control not implemented
-	"package-001j": "xsl:expose mode visibility control not implemented",
 
 	// package: unnamed mode on-no-match with xsl:import precedence
-	"package-013": "unnamed mode built-in on-no-match with import precedence incorrect",
 
 	// package: static error detection not implemented
 	"package-909":  "XTSE0020 package static error detection not implemented",
-	"package-910":  "XTSE0165 xsl:import in package static check not implemented",
-	"package-912":  "XPDY0002 absent context item in package not detected",
-	"package-913":  "XTSE3008 package use-package conflict detection not implemented",
-	"package-913a": "XTSE3008 package use-package conflict detection not implemented",
-	"package-913b": "XTSE3008 package use-package conflict detection not implemented",
-	"package-022err": "XTSE3050 package xsl:override static check not implemented",
 	"package-100":    "package cross-reference variable resolution not implemented",
-	"package-101":    "package cross-reference variable resolution not implemented",
+	"package-101":    "package cross-reference variable resolution (used-package private vars not accessible)",
 
 	// use-package: package-scoped component isolation not implemented
 	"use-package-101": "package-scoped decimal format isolation not implemented",
@@ -1342,7 +1335,7 @@ var w3cImplicitSkips = map[string]string{
 	"override-f-018":    "xsl:original function reference not implemented",
 	"override-f-024":    "xsl:override function replacement not fully implemented",
 	"override-f-026":    "xsl:override function visibility not propagated",
-	"override-f-031":    "xsl:original function reference not implemented",
+	"override-f-031":    "requires schema-aware union type conversion (xsl:import-schema member type matching)",
 	"override-f-033":    "xsl:override function replacement not fully implemented",
 	"override-t-003a":   "xsl:override template replacement not fully implemented",
 	"override-t-003d":   "XTSE3080 override static check not implemented",
@@ -1354,7 +1347,7 @@ var w3cImplicitSkips = map[string]string{
 	"override-t-015":    "xsl:original template reference not implemented",
 	"override-v-002":    "xsl:override variable visibility not propagated",
 	"override-v-003":    "xsl:original variable reference not implemented",
-	"override-v-006":    "XTSE3070 override static check not implemented",
+	"override-v-006":    "XTSE3070 override variable type subsumption check requires schema-aware union type comparison",
 	"override-v-007":    "XTSE3070 override static check not implemented",
 	"override-v-011":    "XTSE3050 override static check not implemented",
 	"override-v-012":    "XTSE3050 override static check not implemented",
@@ -1398,10 +1391,6 @@ var w3cImplicitSkips = map[string]string{
 	"streamable-128": "XTSE3430 streaming node return not detected",
 
 	// package version resolution: lowest_version not supported (we use highest_version)
-	"use-package-203b": "package_version_resolution=lowest_version not supported",
-	"use-package-204b": "package_version_resolution=lowest_version not supported",
-	"use-package-206b": "package_version_resolution=lowest_version not supported",
-	"use-package-210b": "package_version_resolution=lowest_version not supported",
 
 	// castable tests: schema-aware union/list type casting
 	"castable-005": "requires schema-aware union type casting (import-schema)",
@@ -2123,7 +2112,8 @@ func gatherDocNamespaces(doc *helium.Document) map[string]string {
 
 // w3cPackageResolver resolves package URIs to files based on W3C test deps.
 type w3cPackageResolver struct {
-	deps []w3cPackageDep
+	deps              []w3cPackageDep
+	versionResolution string // "lowest" for lowest matching version; default = highest
 }
 
 func (r w3cPackageResolver) ResolvePackage(name string, version string) (io.ReadCloser, string, error) {
@@ -2194,11 +2184,18 @@ func (r w3cPackageResolver) ResolvePackage(name string, version string) (io.Read
 		return nil, "", fmt.Errorf("package %q version %q not found in test deps", name, version)
 	}
 
-	// Select the highest matching version (implementation-defined per spec)
+	// Select the best matching version (implementation-defined per spec).
+	// Default is highest; "lowest" selects the lowest.
 	best := matches[0]
 	for _, m := range matches[1:] {
-		if m.version.Compare(best.version) > 0 {
-			best = m
+		if r.versionResolution == "lowest" {
+			if m.version.Compare(best.version) < 0 {
+				best = m
+			}
+		} else {
+			if m.version.Compare(best.version) > 0 {
+				best = m
+			}
 		}
 	}
 

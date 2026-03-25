@@ -195,12 +195,13 @@ type attributeSetPart struct {
 
 // attributeSetDef is a compiled xsl:attribute-set.
 type attributeSetDef struct {
-	Name        string
-	UseAttrSets []string           // flattened: all use-attribute-sets (legacy, used by streamability)
-	Attrs       []instruction      // flattened: all xsl:attribute instructions (legacy, used by streamability)
-	Parts       []attributeSetPart // ordered parts from same-named declarations
-	Visibility  string             // "public", "private", "final", "abstract"
-	Streamable  bool               // streamable="yes" on the attribute-set
+	Name            string
+	UseAttrSets     []string           // flattened: all use-attribute-sets (legacy, used by streamability)
+	Attrs           []instruction      // flattened: all xsl:attribute instructions (legacy, used by streamability)
+	Parts           []attributeSetPart // ordered parts from same-named declarations
+	Visibility      string             // "public", "private", "final", "abstract"
+	Streamable      bool               // streamable="yes" on the attribute-set
+	OriginalAttrSet *attributeSetDef   // original attribute-set being overridden (for xsl:original)
 }
 
 // xslFunction is a compiled xsl:function.
@@ -214,6 +215,7 @@ type xslFunction struct {
 	Visibility    string      // "public", "private", "final", "abstract"
 	NewEachTime   string      // "yes", "no", "maybe"; "" = unspecified (defaults to "maybe")
 	OwnerPackage  *Stylesheet   // package that defined this function (nil = main stylesheet)
+	AcceptedFrom  *Stylesheet  // use-package that accepted this function (for XTSE3050 detection)
 	ImportPrec    int           // import precedence for XTSE0770 conflict detection
 	OriginalFunc  *xslFunction // original function being overridden (for xsl:original calls)
 }
