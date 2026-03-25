@@ -222,6 +222,12 @@ func TestInvocationCallFunctionValidation(t *testing.T) {
 		SetInitialModeParameter("p", xpath3.SingleString("v")).Do(t.Context())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "SetInitialModeParameter is not valid for CallFunction")
+
+	// TunnelParameters is invalid for CallFunction.
+	_, err = ss.CallFunction("{http://example.com/f}id", xpath3.SingleString("a")).
+		SetTunnelParameter("t", xpath3.SingleString("v")).Do(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "TunnelParameters is not valid for CallFunction")
 }
 
 func TestInvocationInitialTemplateParamRejectedForTransform(t *testing.T) {
