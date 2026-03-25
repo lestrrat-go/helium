@@ -335,7 +335,17 @@ func (ec *execContext) writeFunctionCacheItem(b *strings.Builder, item xpath3.It
 		b.WriteString("a:")
 		b.WriteString(v.TypeName)
 		b.WriteByte('=')
-		b.WriteString(s)
+		// AtomicToString for QName returns prefix:local, which omits the
+		// namespace URI. Two QNames can share a local name but differ in URI,
+		// so we must include the URI in the cache key.
+		if q, ok := v.Value.(xpath3.QNameValue); ok {
+			b.WriteString("{")
+			b.WriteString(q.URI)
+			b.WriteString("}")
+			b.WriteString(q.Local)
+		} else {
+			b.WriteString(s)
+		}
 		return true
 	case xpath3.NodeItem:
 		b.WriteString("n:")

@@ -1582,9 +1582,6 @@ var w3cImplicitSkips = map[string]string{
 	"json-to-xml-typed-006": "json-to-xml validate option does not annotate result nodes",
 	"json-to-xml-typed-007": "json-to-xml validate option does not annotate result nodes",
 
-	// function tests: QName eq comparison ignores namespace URI
-	"function-1034": "QName eq comparison incorrectly returns true for different namespace URIs",
-
 	// copy tests: external entity resolution
 	"copy-1401": "requires external entity resolution (SYSTEM entity reference)",
 
@@ -1636,8 +1633,6 @@ var w3cImplicitSkips = map[string]string{
 
 	// embedded-stylesheet-007: xsl:apply-imports with simplified stylesheet import
 	"embedded-stylesheet-007": "xsl:apply-imports with imported simplified stylesheet not producing correct output",
-	// embedded-stylesheet-015: use-when='false()' on imported xsl:transform root not honored
-	"embedded-stylesheet-015": "use-when on imported stylesheet root element not honored",
 
 	// merge: schema-element instance test on merged items
 	"merge-049": "schema-element() instance test on merged items fails",
