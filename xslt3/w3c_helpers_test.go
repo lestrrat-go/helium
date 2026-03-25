@@ -230,6 +230,23 @@ func w3cAssertMessage(checks ...w3cCheck) w3cAssertion {
 			t.Helper()
 			combined := strings.Join(messages, "")
 			for _, chk := range checks {
+				// If the check has a rawFn (e.g. assert-eq), try it with each
+				// message converted to an xs:string atomic value.
+				if chk.rawFn != nil {
+					passed := false
+					for _, msg := range messages {
+						seq := xpath3.ItemSlice{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: msg}}
+						if chk.rawFn(seq) {
+							passed = true
+							break
+						}
+					}
+					if !passed {
+						t.Errorf("assert-message failed: messages=%q", messages)
+						return false
+					}
+					continue
+				}
 				if chk.fn(combined, messages, resultDocs) {
 					continue
 				}
@@ -1462,10 +1479,11 @@ func w3cImplicitSkipReason(name string) string {
 // w3cImplicitSkips maps individual test names to skip reasons for tests
 // blocked by known parser or runtime limitations.
 var w3cImplicitSkips = map[string]string{
-	// default_html_version=4: these tests require the processor to default to
-	// HTML 4.x; our XSLT 3.0 processor defaults to html-version=5 per spec.
-	"output-0195":           "requires default_html_version=4; XSLT 3.0 default is 5",
-	"result-document-1402":  "requires default_html_version=4; XSLT 3.0 default is 5",
+	// W3C dependency: default_html_version=4 / feature=HTML4
+	// These tests require the processor to default html-version to 4; ours defaults to 5.
+	// HTML5 companion tests (output-0195a, result-document-1402b) already pass.
+	"output-0195":          "W3C dependency default_html_version=4; HTML5 companion output-0195a passes",
+	"result-document-1402": "W3C dependency default_html_version=4; HTML5 companion result-document-1402b passes",
 
 	// XML 1.1 features: namespace undeclaration (xmlns:a="") not supported
 	"xml-version-026": "XML 1.1: namespace undeclaration not supported by parser",
@@ -1683,23 +1701,11 @@ var w3cImplicitSkips = map[string]string{
 	// transform-009: fn:transform() secondary output documents not properly captured
 	"transform-009": "fn:transform() xsl:result-document secondary output not captured",
 
-	// output-0602: HTML namespace serialization not suppressed on known HTML elements
-	"output-0602a": "HTML serializer emits xmlns on svg/body elements (should be suppressed)",
-	"output-0602b": "HTML serializer emits xmlns on math elements (should be suppressed)",
-
-	// output-0213..0215: HTML include-content-type meta tag not being excluded
-	"output-0213": "HTML output include-content-type=no not suppressing meta tag",
-	"output-0214": "HTML output include-content-type=no not suppressing meta tag",
-	"output-0215": "HTML output include-content-type=no not suppressing meta tag",
-
 	// use-package: lowest-version package resolution not implemented
 	"use-package-203b": "package version resolution: lowest_version not supported",
 	"use-package-204b": "package version resolution: lowest_version not supported",
 	"use-package-206b": "package version resolution: lowest_version not supported",
 	"use-package-210b": "package version resolution: lowest_version not supported",
-
-	// avt-0701: attribute value template namespace resolution
-	"avt-0701": "AVT namespace resolution with xpath-default-namespace not implemented",
 
 	// XSD 1.1 features: newly unlocked but failing
 	"validation-1301":  "XSD 1.1 xs:override not fully implemented",

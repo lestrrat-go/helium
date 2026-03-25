@@ -1764,6 +1764,13 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 		insertHTMLMeta(doc, outDef)
 	}
 
+	// For HTML5: normalize SVG and MathML namespaces so that elements in
+	// those namespaces use the default namespace (unprefixed) per the
+	// HTML5 serialization spec.
+	if isHTML5 {
+		normalizeForeignNamespaces(doc)
+	}
+
 	// For HTML5 without explicit doctype attrs, we need to serialize
 	// children manually to insert <!DOCTYPE html> before the first element.
 	noEscapeURI := outDef.EscapeURIAttributes != nil && !*outDef.EscapeURIAttributes
@@ -1822,22 +1829,27 @@ func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMa
 
 	// For HTML5: only use explicit doctype when doctype-system is specified.
 	// Without doctype-system (even if doctype-public is set), use <!DOCTYPE html>.
+	// Only emit the HTML5 DOCTYPE when the root element is "html" in the XHTML namespace.
 	if isHTML5 && outDef.DoctypeSystem == "" {
-		// Remove existing DTD and replace with HTML5 DOCTYPE.
-		// Use the root element's local name to preserve case (e.g. "HTML" vs "html").
-		dtdName := "html"
-		if root := doc.DocumentElement(); root != nil {
-			dtdName = string(root.LocalName())
+		root := doc.DocumentElement()
+		if root != nil && strings.EqualFold(string(root.LocalName()), "html") &&
+			string(root.URI()) == lexicon.NamespaceXHTML {
+			dtdName := string(root.LocalName())
+			if dtd := doc.IntSubset(); dtd != nil {
+				helium.UnlinkNode(dtd)
+			}
+			_, _ = doc.CreateInternalSubset(dtdName, "", "")
 		}
-		if dtd := doc.IntSubset(); dtd != nil {
-			helium.UnlinkNode(dtd)
-		}
-		_, _ = doc.CreateInternalSubset(dtdName, "", "")
 	}
 
-	// Insert <meta http-equiv="Content-Type"> in <head>
+	// Insert <meta http-equiv="Content-Type"> in <head>, but only when the
+	// root element is in the XHTML namespace (non-XHTML documents should not
+	// get an injected meta tag).
 	if outDef.IncludeContentType == nil || *outDef.IncludeContentType {
-		insertHTMLMeta(doc, outDef)
+		root := doc.DocumentElement()
+		if root != nil && string(root.URI()) == lexicon.NamespaceXHTML {
+			insertHTMLMeta(doc, outDef)
+		}
 	}
 
 	// Normalize XHTML namespace: elements in http://www.w3.org/1999/xhtml
