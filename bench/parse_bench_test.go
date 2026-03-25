@@ -78,7 +78,7 @@ func BenchmarkHeliumParse(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				_ = doc
+				doc.Free()
 			}
 		})
 	}

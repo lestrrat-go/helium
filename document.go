@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -54,10 +55,17 @@ type Document struct {
 	// Slab allocators for high-frequency node types.
 	// These reduce per-node heap allocation overhead by allocating
 	// nodes in chunks and handing them out one at a time.
+	// Chunks are obtained from global pools and returned on Free().
 	elemSlab  []Element
 	textSlab  []Text
 	nsSlab    []Namespace
 	attrSlab  []Attribute
+
+	// Track allocated chunks for pool return.
+	elemChunks []*[slabSize]Element
+	textChunks []*[slabSize]Text
+	nsChunks   []*[slabSize]Namespace
+	attrChunks []*[slabSize]Attribute
 }
 
 // NewDefaultDocument creates a minimal user-built document with version "1.0",
@@ -89,6 +97,32 @@ func NewDocument(version, encoding string, standalone DocumentStandaloneType) *D
 	doc.etype = DocumentNode
 	doc.name = "(document)"
 	return doc
+}
+
+// Free returns pooled slab chunks for reuse by future parse calls.
+// This is optional — if not called, GC handles cleanup normally.
+// Calling Free on a document that is still in use causes undefined behavior.
+func (d *Document) Free() {
+	for _, c := range d.elemChunks {
+		elemChunkPool.Put(c)
+	}
+	for _, c := range d.textChunks {
+		textChunkPool.Put(c)
+	}
+	for _, c := range d.nsChunks {
+		nsChunkPool.Put(c)
+	}
+	for _, c := range d.attrChunks {
+		attrChunkPool.Put(c)
+	}
+	d.elemChunks = nil
+	d.textChunks = nil
+	d.nsChunks = nil
+	d.attrChunks = nil
+	d.elemSlab = nil
+	d.textSlab = nil
+	d.nsSlab = nil
+	d.attrSlab = nil
 }
 
 func (d Document) XMLString(options ...WriteOption) (string, error) {
@@ -291,18 +325,24 @@ func (d *Document) CreateNamespace(prefix, uri string) (*Namespace, error) {
 
 func (d *Document) allocNamespace() *Namespace {
 	if len(d.nsSlab) == 0 {
-		d.nsSlab = make([]Namespace, slabSize)
+		chunk := nsChunkPool.Get().(*[slabSize]Namespace)
+		d.nsChunks = append(d.nsChunks, chunk)
+		d.nsSlab = chunk[:]
 	}
 	ns := &d.nsSlab[0]
+	*ns = Namespace{}
 	d.nsSlab = d.nsSlab[1:]
 	return ns
 }
 
 func (d *Document) allocAttribute(name string, ns *Namespace) *Attribute {
 	if len(d.attrSlab) == 0 {
-		d.attrSlab = make([]Attribute, slabSize)
+		chunk := attrChunkPool.Get().(*[slabSize]Attribute)
+		d.attrChunks = append(d.attrChunks, chunk)
+		d.attrSlab = chunk[:]
 	}
 	attr := &d.attrSlab[0]
+	*attr = Attribute{}
 	d.attrSlab = d.attrSlab[1:]
 	attr.etype = AttributeNode
 	attr.name = name
@@ -384,6 +424,13 @@ func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD
 
 const slabSize = 256
 
+var (
+	elemChunkPool = sync.Pool{New: func() any { return new([slabSize]Element) }}
+	textChunkPool = sync.Pool{New: func() any { return new([slabSize]Text) }}
+	nsChunkPool   = sync.Pool{New: func() any { return new([slabSize]Namespace) }}
+	attrChunkPool = sync.Pool{New: func() any { return new([slabSize]Attribute) }}
+)
+
 func (d *Document) CreateElement(name string) (*Element, error) {
 	var e *Element
 	if d != nil {
@@ -399,9 +446,12 @@ func (d *Document) CreateElement(name string) (*Element, error) {
 
 func (d *Document) allocElement() *Element {
 	if len(d.elemSlab) == 0 {
-		d.elemSlab = make([]Element, slabSize)
+		chunk := elemChunkPool.Get().(*[slabSize]Element)
+		d.elemChunks = append(d.elemChunks, chunk)
+		d.elemSlab = chunk[:]
 	}
 	e := &d.elemSlab[0]
+	*e = Element{}
 	d.elemSlab = d.elemSlab[1:]
 	return e
 }
@@ -423,9 +473,12 @@ func (d *Document) CreateText(value []byte) (*Text, error) {
 
 func (d *Document) allocText() *Text {
 	if len(d.textSlab) == 0 {
-		d.textSlab = make([]Text, slabSize)
+		chunk := textChunkPool.Get().(*[slabSize]Text)
+		d.textChunks = append(d.textChunks, chunk)
+		d.textSlab = chunk[:]
 	}
 	t := &d.textSlab[0]
+	*t = Text{}
 	d.textSlab = d.textSlab[1:]
 	return t
 }
