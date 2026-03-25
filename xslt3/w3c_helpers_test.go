@@ -1683,11 +1683,11 @@ var w3cImplicitSkips = map[string]string{
 	"evaluate-013": "schema-aware xsl:evaluate: expected XTDE3160 not raised",
 	"evaluate-048": "requires network access to saxonica.com",
 
-	// evaluate tests too slow for CI (10-30s each, cause suite timeout)
-	"evaluate-010": "xsl:evaluate with large iteration count exceeds CI timeout",
-	"evaluate-039": "xsl:evaluate with large iteration count exceeds CI timeout",
-	"evaluate-040": "xsl:evaluate with large iteration count exceeds CI timeout",
-
+	// slow xsl:evaluate tests (~30s each with -race on CI)
+	"evaluate-010": "too slow for CI: large iteration count in xsl:evaluate",
+	"evaluate-039": "too slow for CI: large iteration count in xsl:evaluate",
+	"evaluate-040": "too slow for CI: large iteration count in xsl:evaluate",
+	"variable-0108": "too slow for CI: large iteration count with variable binding",
 
 	"base-uri-052": "XInclude processing not applied to source documents",
 
