@@ -23,7 +23,7 @@ func Example_xslt3_transform_with_message_handler() {
 	ctx := context.Background()
 
 	// Compile the stylesheet once, then reuse the returned *xslt3.Stylesheet
-	// across multiple calls to xslt3.Transform. The receiver itself is not stored
+	// across multiple calls to xslt3.Transform. The handler itself is not stored
 	// on the stylesheet; it is supplied per transformation through the fluent
 	// invocation API (see the .MessageHandler() call below).
 	stylesheet, err := compileExampleStylesheet(ctx, stylesheetSrc)
@@ -41,15 +41,15 @@ func Example_xslt3_transform_with_message_handler() {
 		return
 	}
 
-	// Attach a message receiver to the invocation to capture xsl:message
+	// Attach a message handler to the invocation to capture xsl:message
 	// output during execution. This is the place to connect logging, progress
 	// reporting, or application-specific diagnostics.
 	//
-	// Gotcha: the receiver is notified when xsl:message runs, but terminate="yes"
+	// Gotcha: the handler is notified when xsl:message runs, but terminate="yes"
 	// still causes Do to return an error afterward. The terminate flag
 	// tells you whether the message was informational or fatal.
 	resultDoc, err := stylesheet.Transform(sourceDoc).
-		MessageHandler(&exampleMessageReceiver{}).
+		MessageHandler(&exampleMessageHandler{}).
 		Do(ctx)
 	if err != nil {
 		fmt.Printf("transform failed: %s\n", err)

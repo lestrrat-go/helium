@@ -49,7 +49,7 @@ func Example_xslt3_transform_with_result_document_handler() {
 	// The OutputDef captures details such as method="text",
 	// omit-xml-declaration, indentation, or named output formats selected by
 	// the stylesheet that would otherwise be lost when re-serializing.
-	recv := newExampleResultDocReceiver()
+	recv := newExampleResultDocHandler()
 
 	resultDoc, err := stylesheet.Transform(sourceDoc).
 		ResultDocumentHandler(recv).

@@ -32,16 +32,16 @@ func Example_xslt3_transform_with_raw_result_handler() {
 		return
 	}
 
-	// Use a raw-result receiver to keep the original typed XDM sequence
+	// Use a raw-result handler to keep the original typed XDM sequence
 	// before it is serialized into the result document.
 	//
 	// Use this when the type matters to your application, for example if you
 	// need to preserve xs:integer/xs:date/xs:decimal values instead of consuming
 	// only their text form after serialization.
 	//
-	// Gotcha: Do still returns a result document, so the raw receiver is a
+	// Gotcha: Do still returns a result document, so the raw handler is a
 	// supplement to normal output handling, not a replacement for it.
-	recv := &exampleRawResultReceiver{}
+	recv := &exampleRawResultHandler{}
 
 	resultDoc, err := stylesheet.CallTemplate("numbers").
 		SourceDocument(sourceDoc).

@@ -13,48 +13,48 @@ import (
 	"github.com/lestrrat-go/helium/xslt3"
 )
 
-// exampleMessageReceiver implements xslt3.MessageHandler for examples.
-type exampleMessageReceiver struct{}
+// exampleMessageHandler implements xslt3.MessageHandler for examples.
+type exampleMessageHandler struct{}
 
-func (r *exampleMessageReceiver) HandleMessage(msg string, terminate bool) error {
+func (r *exampleMessageHandler) HandleMessage(msg string, terminate bool) error {
 	fmt.Printf("message: %s (terminate=%t)\n", msg, terminate)
 	return nil
 }
 
-// examplePrimaryItemsReceiver implements xslt3.PrimaryItemsHandler.
-type examplePrimaryItemsReceiver struct {
+// examplePrimaryItemsHandler implements xslt3.PrimaryItemsHandler.
+type examplePrimaryItemsHandler struct {
 	items xpath3.Sequence
 }
 
-func (r *examplePrimaryItemsReceiver) HandlePrimaryItems(seq xpath3.Sequence) error {
+func (r *examplePrimaryItemsHandler) HandlePrimaryItems(seq xpath3.Sequence) error {
 	r.items = xpath3.ItemSlice(append([]xpath3.Item(nil), seq.Materialize()...))
 	return nil
 }
 
-// exampleRawResultReceiver implements xslt3.RawResultHandler.
-type exampleRawResultReceiver struct {
+// exampleRawResultHandler implements xslt3.RawResultHandler.
+type exampleRawResultHandler struct {
 	result xpath3.Sequence
 }
 
-func (r *exampleRawResultReceiver) HandleRawResult(seq xpath3.Sequence) error {
+func (r *exampleRawResultHandler) HandleRawResult(seq xpath3.Sequence) error {
 	r.result = xpath3.ItemSlice(append([]xpath3.Item(nil), seq.Materialize()...))
 	return nil
 }
 
-// exampleResultDocReceiver implements xslt3.ResultDocumentHandler.
-type exampleResultDocReceiver struct {
+// exampleResultDocHandler implements xslt3.ResultDocumentHandler.
+type exampleResultDocHandler struct {
 	docs    map[string]*helium.Document
 	outDefs map[string]*xslt3.OutputDef
 }
 
-func newExampleResultDocReceiver() *exampleResultDocReceiver {
-	return &exampleResultDocReceiver{
+func newExampleResultDocHandler() *exampleResultDocHandler {
+	return &exampleResultDocHandler{
 		docs:    make(map[string]*helium.Document),
 		outDefs: make(map[string]*xslt3.OutputDef),
 	}
 }
 
-func (r *exampleResultDocReceiver) HandleResultDocument(href string, doc *helium.Document, outDef *xslt3.OutputDef) error {
+func (r *exampleResultDocHandler) HandleResultDocument(href string, doc *helium.Document, outDef *xslt3.OutputDef) error {
 	r.docs[href] = doc
 	if outDef != nil {
 		r.outDefs[href] = outDef
