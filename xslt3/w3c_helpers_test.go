@@ -160,6 +160,7 @@ type w3cTest struct {
 	SourceSchemaPath            string   // path to XSD schema for source document validation (relative to testdata dir)
 	ImportSchemaPaths           []string // schema paths for xsl:import-schema resolution (relative to testdata dir)
 	VersionResolution           string   // "lowest" to select lowest matching package version (default: highest)
+	EmbeddedStylesheet          bool     // source document contains <?xml-stylesheet?> PI defining the stylesheet
 }
 
 // w3cAssertion is an assertion to check against the transform result.
@@ -910,17 +911,62 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		return
 	}
 
-	if tc.StylesheetPath == "" {
+	if tc.StylesheetPath == "" && !tc.EmbeddedStylesheet {
 		t.Skip("no stylesheet")
 		return
 	}
 
+	// Parse source document early so it is available for embedded stylesheet
+	// extraction (before stylesheet compilation).
+	var sourceDoc *helium.Document
+	var sourceData []byte
+	hasExplicitSource := false
+	if tc.SourceDocPath != "" {
+		srcPath := w3cResolvePath(tc.SourceDocPath)
+		sourceData = w3cReadSourceCached(t, srcPath)
+		hasExplicitSource = true
+	} else if tc.SourceContent != "" {
+		sourceData = []byte(tc.SourceContent)
+		hasExplicitSource = true
+	}
+
+	if hasExplicitSource {
+		sourceParser := helium.NewParser().DTDLoad(true).DTDAttr(true)
+		if tc.SourceDocPath != "" {
+			sourceParser = sourceParser.NoEnt(true).NoBaseFix(true)
+			srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
+			sourceParser = sourceParser.BaseURI(srcAbsPath)
+		}
+		var parseErr error
+		sourceDoc, parseErr = sourceParser.Parse(t.Context(), sourceData)
+		if parseErr != nil {
+			if tc.ExpectError {
+				return
+			}
+			t.Fatalf("cannot parse source: %v", parseErr)
+		}
+		if tc.SourceDocPath != "" {
+			srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
+			sourceDoc.SetURL(srcAbsPath)
+		} else if tc.SourceContent != "" && tc.StylesheetPath != "" {
+			ssAbsPath, _ := filepath.Abs(w3cResolvePath(tc.StylesheetPath))
+			sourceDoc.SetURL(ssAbsPath)
+		}
+	}
+
 	// Compile stylesheet
-	ssPath := w3cResolvePath(tc.StylesheetPath)
 	var ss *xslt3.Stylesheet
 	var err error
-	if len(tc.PackageDeps) > 0 || len(tc.Params) > 0 || len(tc.ImportSchemaPaths) > 0 {
+
+	if tc.EmbeddedStylesheet && tc.StylesheetPath == "" {
+		// Extract embedded stylesheet from source document
+		ssDoc := w3cExtractEmbeddedStylesheet(t, sourceDoc)
+		srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
+		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath)
+		ss, err = compiler.Compile(t.Context(), ssDoc)
+	} else if len(tc.PackageDeps) > 0 || len(tc.Params) > 0 || len(tc.ImportSchemaPaths) > 0 {
 		// When package deps, external params, or import schemas exist, compile without caching.
+		ssPath := w3cResolvePath(tc.StylesheetPath)
 		absPath, _ := filepath.Abs(ssPath)
 		compiler := xslt3.NewCompiler().BaseURI(absPath)
 		if len(tc.PackageDeps) > 0 {
@@ -944,7 +990,6 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 				result, evalErr := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), expr, nil)
 				if evalErr == nil {
 					seq := result.Sequence()
-					// If the catalog specifies an as type, cast the value
 					if asType, ok := tc.ParamTypes[pName]; ok {
 						seq = castSequenceForParam(seq, asType)
 					}
@@ -965,7 +1010,16 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 			t.Fatalf("parse stylesheet: %v", parseErr)
 		}
 		ss, err = compiler.Compile(t.Context(), doc)
+	} else if tc.EmbeddedStylesheet && tc.StylesheetPath != "" {
+		// Embedded stylesheet with a standalone primary stylesheet (tests 005-015).
+		// The source doc has an embedded stylesheet that imports/includes the
+		// standalone stylesheet. Extract and compile the embedded one.
+		ssDoc := w3cExtractEmbeddedStylesheet(t, sourceDoc)
+		srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
+		compiler := xslt3.NewCompiler().BaseURI(srcAbsPath)
+		ss, err = compiler.Compile(t.Context(), ssDoc)
 	} else {
+		ssPath := w3cResolvePath(tc.StylesheetPath)
 		ss, err = w3cCompileCached(t.Context(), ssPath)
 	}
 
@@ -979,53 +1033,6 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 			return
 		}
 		t.Fatalf("compile error: %v", err)
-	}
-
-	// Prepare source document (file bytes cached across tests sharing the same path)
-	var sourceData []byte
-	hasExplicitSource := false
-	if tc.SourceDocPath != "" {
-		srcPath := w3cResolvePath(tc.SourceDocPath)
-		sourceData = w3cReadSourceCached(t, srcPath)
-		hasExplicitSource = true
-	} else if tc.SourceContent != "" {
-		sourceData = []byte(tc.SourceContent)
-		hasExplicitSource = true
-	}
-
-	var sourceDoc *helium.Document
-	if hasExplicitSource {
-		// Enable DTD attribute defaults so that #FIXED and #DEFAULT attributes
-		// from internal/external DTDs appear on elements (required by W3C tests
-		// such as attribute-0501 whose source DTD declares fixed attributes).
-		// When the source is a file, also enable entity substitution so that
-		// external entity references (e.g. &extEnt;) are expanded inline, and
-		// suppress xml:base fixup on the expanded content so synthetic
-		// xml:base attributes do not leak into the XSLT result tree.
-		sourceParser := helium.NewParser().DTDLoad(true).DTDAttr(true)
-		if tc.SourceDocPath != "" {
-			sourceParser = sourceParser.NoEnt(true).NoBaseFix(true)
-			srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-			sourceParser = sourceParser.BaseURI(srcAbsPath)
-		}
-		sourceDoc, err = sourceParser.Parse(t.Context(), sourceData)
-		if err != nil {
-			if tc.ExpectError {
-				return // expected error during source parse
-			}
-			t.Fatalf("cannot parse source: %v", err)
-		}
-		// Set document URL for entity URI resolution (unparsed-entity-uri).
-		if tc.SourceDocPath != "" {
-			srcAbsPath, _ := filepath.Abs(w3cResolvePath(tc.SourceDocPath))
-			sourceDoc.SetURL(srcAbsPath)
-		} else if tc.SourceContent != "" && tc.StylesheetPath != "" {
-			// For inline source content, use the stylesheet directory as
-			// base URI so that xsi:schemaLocation and
-			// xsi:noNamespaceSchemaLocation can resolve relative paths.
-			ssAbsPath, _ := filepath.Abs(w3cResolvePath(tc.StylesheetPath))
-			sourceDoc.SetURL(ssAbsPath)
-		}
 	}
 
 	// Build the invocation based on entry mode
@@ -1508,18 +1515,10 @@ var w3cImplicitSkips = map[string]string{
 	"expression-0932": "XPTY0018 detection for mixed node/non-node path results not implemented",
 	"expression-0933": "XPTY0018 detection for mixed node/non-node path results not implemented",
 
-	// embedded-stylesheet tests: <?xml-stylesheet?> PI-based embedded stylesheet
-	// extraction not supported; test generator cannot extract embedded stylesheet
-	"embedded-stylesheet-005": "embedded stylesheet extraction from source doc not supported",
-	"embedded-stylesheet-006": "embedded stylesheet extraction from source doc not supported",
-	"embedded-stylesheet-007": "embedded stylesheet extraction from source doc not supported",
-	"embedded-stylesheet-009": "embedded stylesheet extraction from source doc not supported",
-	"embedded-stylesheet-010": "embedded stylesheet extraction from source doc not supported",
-	"embedded-stylesheet-011": "embedded stylesheet extraction from source doc not supported",
-	"embedded-stylesheet-012": "embedded stylesheet extraction from source doc not supported",
-	"embedded-stylesheet-013": "embedded stylesheet extraction from source doc not supported",
-	"embedded-stylesheet-014": "embedded stylesheet extraction from source doc not supported",
-	"embedded-stylesheet-015": "embedded stylesheet extraction from source doc not supported",
+	// embedded-stylesheet-007: xsl:apply-imports with simplified stylesheet import
+	"embedded-stylesheet-007": "xsl:apply-imports with imported simplified stylesheet not producing correct output",
+	// embedded-stylesheet-015: use-when='false()' on imported xsl:transform root not honored
+	"embedded-stylesheet-015": "use-when on imported stylesheet root element not honored",
 
 	// nodetest: schema-aware tests requiring import-schema + schema-element/attribute
 	"nodetest-007": "requires full schema-aware processing (import-schema)",
@@ -2746,4 +2745,69 @@ func w3cEvaluateParamSequence(ctx context.Context, exprText string) xpath3.Seque
 		exprText = exprText[1 : len(exprText)-1]
 	}
 	return xpath3.ItemSlice{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: exprText}}
+}
+
+// w3cExtractEmbeddedStylesheet extracts an embedded stylesheet from a source
+// document that contains a <?xml-stylesheet type="text/xsl" href="#id">
+// processing instruction. It returns a new Document rooted at the embedded
+// xsl:stylesheet/xsl:transform element, suitable for compilation.
+func w3cExtractEmbeddedStylesheet(t *testing.T, doc *helium.Document) *helium.Document {
+	t.Helper()
+
+	// Find <?xml-stylesheet?> PI with href="#id"
+	var targetID string
+	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
+		pi, ok := n.(*helium.ProcessingInstruction)
+		if !ok {
+			continue
+		}
+		if pi.Name() != "xml-stylesheet" {
+			continue
+		}
+		data := string(pi.Content())
+		if !strings.Contains(data, "type=\"text/xsl\"") {
+			continue
+		}
+		// Extract href value
+		idx := strings.Index(data, "href=\"")
+		if idx < 0 {
+			continue
+		}
+		hrefStart := idx + len("href=\"")
+		hrefEnd := strings.Index(data[hrefStart:], "\"")
+		if hrefEnd < 0 {
+			continue
+		}
+		href := data[hrefStart : hrefStart+hrefEnd]
+		if !strings.HasPrefix(href, "#") {
+			continue
+		}
+		targetID = href[1:]
+		break
+	}
+	if targetID == "" {
+		t.Fatal("embedded stylesheet: no <?xml-stylesheet?> PI with href=\"#id\" found")
+	}
+
+	// Find element with matching ID
+	elem := doc.GetElementByID(targetID)
+	if elem == nil {
+		t.Fatalf("embedded stylesheet: element with id=%q not found", targetID)
+	}
+
+	// Create a new document with the stylesheet element as root
+	ssDoc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	if url := doc.URL(); url != "" {
+		ssDoc.SetURL(url)
+	}
+
+	copied, err := helium.CopyNode(elem, ssDoc)
+	if err != nil {
+		t.Fatalf("embedded stylesheet: copy element: %v", err)
+	}
+	if err := ssDoc.AddChild(copied); err != nil {
+		t.Fatalf("embedded stylesheet: add child: %v", err)
+	}
+
+	return ssDoc
 }
