@@ -260,14 +260,15 @@ type variable struct {
 
 // param is a compiled xsl:param.
 type param struct {
-	Name       string
-	Select     *xpath3.Expression
-	Body       []instruction // used when select is absent
-	As         string        // type declaration (e.g., "xs:integer")
-	Required   bool
-	Tunnel     bool
-	Visibility string // "public", "private", "final", "abstract" (for global params)
-	ImportPrec int    // import precedence for XTSE0630 duplicate detection
+	Name          string
+	Select        *xpath3.Expression
+	Body          []instruction // used when select is absent
+	As            string        // type declaration (e.g., "xs:integer")
+	Required      bool
+	Tunnel        bool
+	Visibility    string // "public", "private", "final", "abstract" (for global params)
+	ImportPrec    int    // import precedence for XTSE0630 duplicate detection
+	StaticBaseURI string // effective static base URI from xml:base (non-empty when overridden)
 }
 
 // keyDef is a compiled xsl:key.
