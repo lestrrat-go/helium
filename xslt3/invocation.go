@@ -386,6 +386,9 @@ func (inv Invocation) validate() error {
 		if c.initialModeParams != nil {
 			return fmt.Errorf("xslt3: SetInitialModeParameter is not valid for CallFunction (use Transform or ApplyTemplates)")
 		}
+		if c.tunnelParameters != nil {
+			return fmt.Errorf("xslt3: TunnelParameters is not valid for CallFunction")
+		}
 	default:
 		return fmt.Errorf("xslt3: invalid invocation kind %d", c.kind)
 	}
