@@ -343,9 +343,12 @@ func (c *UTF8Cursor) Read(buf []byte) (int, error) {
 // ScanNCName scans an XML NCName from the current position. Returns the name
 // string and the rune count. Returns ("", 0) if the current position is not a
 // valid NCName start character. The caller must call Advance(nRunes) after.
-func (c *UTF8Cursor) ScanNCName() (string, int) {
+// ScanNCNameBytes scans an XML NCName and returns the raw bytes (a slice into
+// the cursor's buffer). The caller must copy or intern the bytes before the
+// next cursor operation that could trigger buffer compaction.
+func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 	if err := c.fillBuffer(1); err != nil {
-		return "", 0
+		return nil, 0
 	}
 
 	// Use offset from bufpos to stay safe across fillBuffer compaction.
@@ -354,14 +357,14 @@ func (c *UTF8Cursor) ScanNCName() (string, int) {
 	b := c.buf[c.bufpos+off]
 	if b < 0x80 {
 		if !((b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || b == '_') {
-			return "", 0
+			return nil, 0
 		}
 		off++
 	} else {
 		_ = c.fillBuffer(utf8.UTFMax)
 		r, w := utf8.DecodeRune(c.buf[c.bufpos:c.buflen])
 		if r == utf8.RuneError || !isNCNameStartChar(r) {
-			return "", 0
+			return nil, 0
 		}
 		off += w
 	}
@@ -395,7 +398,7 @@ func (c *UTF8Cursor) ScanNCName() (string, int) {
 		}
 	}
 
-	return string(c.buf[c.bufpos : c.bufpos+off]), nRunes
+	return c.buf[c.bufpos : c.bufpos+off], nRunes
 }
 
 // isASCIINameChar checks if b is a valid ASCII XML NameChar (without ':').

@@ -119,6 +119,7 @@ type parserCtx struct {
 	elemDepth        int    // current element nesting depth
 	maxElemDepth     int    // max allowed element nesting depth (0 = unlimited)
 	currentEntityURI string // URI of the external entity currently being replayed (for base-uri tracking)
+	nameCache        map[string]string // per-parse string interning for element/attribute names
 }
 
 type parserCtxKey struct{}
@@ -2776,7 +2777,7 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 
 	// Fast path: UTF8Cursor scans the NCName directly from the byte buffer.
 	if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
-		name, nRunes := u8.ScanNCName()
+		nameBytes, nRunes := u8.ScanNCNameBytes()
 		if nRunes == 0 {
 			c := cur.Peek()
 			err = pctx.error(ctx, fmt.Errorf("invalid name start char %q (U+%04X)", c, c))
@@ -2786,10 +2787,12 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 			err = pctx.error(ctx, ErrNameTooLong)
 			return
 		}
+		// Intern BEFORE Advance, since Advance may compact the buffer
+		// and invalidate nameBytes.
+		ncname = pctx.internNameBytes(nameBytes)
 		if err = cur.Advance(nRunes); err != nil {
 			return "", err
 		}
-		ncname = name
 		return
 	}
 
@@ -2821,7 +2824,7 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 		return
 	}
 	// Extract the name string directly from the cursor ring buffer.
-	ncname = cur.PeekString(i)
+	ncname = pctx.internName(cur.PeekString(i))
 	if err := cur.Advance(i); err != nil {
 		return "", err
 	}
