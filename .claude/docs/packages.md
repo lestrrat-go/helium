@@ -27,9 +27,9 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 
 W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
 
-- **Canonicalize(io.Writer, *Document, Mode, ...Option) → error** — write canonical form
-- **CanonicalizeTo(*Document, Mode, ...Option) → ([]byte, error)** — return canonical form
-- Options: WithComments(), WithNodeSet([]Node), WithInclusiveNamespaces([]string), WithBaseURI(string)
+- **NewCanonicalizer(Mode) → Canonicalizer** — create fluent builder for the given mode
+- Canonicalizer methods: Comments(), NodeSet([]Node), InclusiveNamespaces([]string), BaseURI(string)
+- Terminal: **Canonicalize(*Document, io.Writer) → error**, **CanonicalizeTo(*Document) → ([]byte, error)**
 - Files: `c14n.go` (API), `canonicalizer.go` (engine), `nsstack.go`, `sort.go`, `escape.go`
 - Imports: helium
 
@@ -161,9 +161,9 @@ HTML 4.01 parser producing helium DOM or SAX events.
 
 XInclude 1.0 processing with recursive inclusion and fallback.
 
-- **Process(*Document, ...Option) → (int, error)** — process entire document
-- **ProcessTree(Node, ...Option) → (int, error)** — process subtree
-- Options: WithNoXIncludeMarkers(), WithNoBaseFixup(), WithResolver(Resolver), WithBaseURI(string), WithParseFlags(), WithWarningHandler()
+- **NewProcessor() → Processor** — create fluent builder
+- Processor methods: NoXIncludeMarkers(), NoBaseFixup(), Resolver(Resolver), BaseURI(string), ParseFlags(ParseOption), WarningHandler(func)
+- Terminal: **Process(ctx, *Document) → (int, error)**, **ProcessTree(ctx, Node) → (int, error)**
 - `Resolver` interface — custom resource loader
 - Max depth 40, max URI 2000 chars, circular detection, doc/text caching
 - Files: `xinclude.go`

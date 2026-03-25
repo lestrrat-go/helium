@@ -6,9 +6,11 @@ import (
 	"math"
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
@@ -78,6 +80,10 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 		for elem := range vr.NilledElements {
 			ec.markNilled(elem)
 		}
+		// Strip whitespace-only text nodes in element-only content.
+		// The XDM produced by schema validation should not include
+		// insignificant whitespace in element-only content models.
+		ec.stripSchemaWhitespace(doc, vr.Annotations)
 	}
 
 	// Apply input-type-annotations="strip": remove all type annotations so
@@ -1509,4 +1515,49 @@ func mergeKeyValueToSequence(mkv mergeKeyValue) xpath3.Sequence {
 		return xpath3.SingleString(mkv.str)
 	}
 	return xpath3.EmptySequence()
+}
+
+// stripSchemaWhitespace removes whitespace-only text nodes from elements
+// whose schema type has element-only content. This matches the XDM
+// specification which excludes insignificant whitespace from the data
+// model when schema validation is applied.
+func (ec *execContext) stripSchemaWhitespace(doc *helium.Document, annotations xsd.TypeAnnotations) {
+	if ec.schemaRegistry == nil {
+		return
+	}
+	stack := make([]helium.Node, 0, 32)
+	stack = append(stack, doc)
+	for len(stack) > 0 {
+		node := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		elem, ok := node.(*helium.Element)
+		if !ok {
+			// Document node — push its children
+			for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+				stack = append(stack, child)
+			}
+			continue
+		}
+		// Check if this element has element-only content.
+		typeName := annotations[elem]
+		isElementOnly := false
+		if typeName != "" {
+			td, _, found := ec.schemaRegistry.LookupTypeDef(typeName)
+			if found && td.ContentType == xsd.ContentTypeElementOnly {
+				isElementOnly = true
+			}
+		}
+		child := elem.FirstChild()
+		for child != nil {
+			next := child.NextSibling()
+			if isElementOnly && (child.Type() == helium.TextNode || child.Type() == helium.CDATASectionNode) {
+				if strings.TrimSpace(string(child.Content())) == "" {
+					helium.UnlinkNode(child)
+				}
+			} else if child.Type() == helium.ElementNode {
+				stack = append(stack, child)
+			}
+			child = next
+		}
+	}
 }

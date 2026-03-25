@@ -21,65 +21,98 @@ const (
 	C14N11                      // Canonical XML 1.1 (libxml2: XML_C14N_1_1)
 )
 
-// Option configures the canonicalizer.
-type Option func(*canonicalizer)
-
-// WithComments enables comment output in the canonical form.
-func WithComments() Option {
-	return func(c *canonicalizer) { c.withComments = true }
+// canonicalizerCfg holds the configuration for a Canonicalizer.
+type canonicalizerCfg struct {
+	mode              Mode
+	withComments      bool
+	nodeSet           []helium.Node
+	inclusivePrefixes []string
+	baseURI           string
 }
 
-// WithNodeSet restricts canonicalization to the given set of nodes.
-func WithNodeSet(nodes []helium.Node) Option {
-	return func(c *canonicalizer) {
-		c.nodeSet = make(map[helium.Node]struct{}, len(nodes))
-		for _, n := range nodes {
-			c.nodeSet[n] = struct{}{}
-		}
-	}
+// Canonicalizer configures XML canonicalization. It is a value-style
+// wrapper: fluent methods return updated copies and the original is
+// never mutated. The terminal methods Canonicalize and CanonicalizeTo
+// execute the canonicalization.
+type Canonicalizer struct {
+	cfg *canonicalizerCfg
 }
 
-// WithBaseURI specifies the document's base URI. This is needed for
+// NewCanonicalizer creates a new Canonicalizer for the given mode.
+func NewCanonicalizer(mode Mode) Canonicalizer {
+	return Canonicalizer{cfg: &canonicalizerCfg{mode: mode}}
+}
+
+func (c Canonicalizer) clone() Canonicalizer {
+	cp := *c.cfg
+	return Canonicalizer{cfg: &cp}
+}
+
+// Comments enables comment output in the canonical form.
+func (c Canonicalizer) Comments() Canonicalizer {
+	c = c.clone()
+	c.cfg.withComments = true
+	return c
+}
+
+// NodeSet restricts canonicalization to the given set of nodes.
+func (c Canonicalizer) NodeSet(nodes []helium.Node) Canonicalizer {
+	c = c.clone()
+	c.cfg.nodeSet = append([]helium.Node(nil), nodes...)
+	return c
+}
+
+// BaseURI specifies the document's base URI. This is needed for
 // C14N 1.1 xml:base fixup when using node-set filtering. If not provided,
 // xml:base fixup uses an empty base.
-func WithBaseURI(uri string) Option {
-	return func(c *canonicalizer) { c.baseURI = uri }
+func (c Canonicalizer) BaseURI(uri string) Canonicalizer {
+	c = c.clone()
+	c.cfg.baseURI = uri
+	return c
 }
 
-// WithInclusiveNamespaces specifies prefixes that should be treated as
+// InclusiveNamespaces specifies prefixes that should be treated as
 // inclusive when using ExclusiveC14N10 mode. Use "" (empty string) or
 // "#default" for the default namespace.
-func WithInclusiveNamespaces(prefixes []string) Option {
-	return func(c *canonicalizer) {
-		c.inclusivePrefixes = make(map[string]struct{}, len(prefixes))
-		for _, p := range prefixes {
-			if p == "#default" {
-				p = ""
-			}
-			c.inclusivePrefixes[p] = struct{}{}
-		}
-	}
+func (c Canonicalizer) InclusiveNamespaces(prefixes []string) Canonicalizer {
+	c = c.clone()
+	c.cfg.inclusivePrefixes = append([]string(nil), prefixes...)
+	return c
 }
 
 // Canonicalize writes the canonical form of doc to out.
 // (libxml2: xmlC14NDocSaveTo)
-func Canonicalize(out io.Writer, doc *helium.Document, mode Mode, opts ...Option) error {
-	c := &canonicalizer{
+func (c Canonicalizer) Canonicalize(doc *helium.Document, out io.Writer) error {
+	can := &canonicalizer{
 		doc:  doc,
-		mode: mode,
+		mode: c.cfg.mode,
 		out:  out,
 	}
-	for _, o := range opts {
-		o(c)
+	can.withComments = c.cfg.withComments
+	can.baseURI = c.cfg.baseURI
+	if len(c.cfg.nodeSet) > 0 {
+		can.nodeSet = make(map[helium.Node]struct{}, len(c.cfg.nodeSet))
+		for _, n := range c.cfg.nodeSet {
+			can.nodeSet[n] = struct{}{}
+		}
 	}
-	return c.process()
+	if len(c.cfg.inclusivePrefixes) > 0 {
+		can.inclusivePrefixes = make(map[string]struct{}, len(c.cfg.inclusivePrefixes))
+		for _, p := range c.cfg.inclusivePrefixes {
+			if p == "#default" {
+				p = ""
+			}
+			can.inclusivePrefixes[p] = struct{}{}
+		}
+	}
+	return can.process()
 }
 
 // CanonicalizeTo returns the canonical form of doc as a byte slice.
 // (libxml2: xmlC14NDocSaveTo)
-func CanonicalizeTo(doc *helium.Document, mode Mode, opts ...Option) ([]byte, error) {
+func (c Canonicalizer) CanonicalizeTo(doc *helium.Document) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := Canonicalize(&buf, doc, mode, opts...); err != nil {
+	if err := c.Canonicalize(doc, &buf); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil

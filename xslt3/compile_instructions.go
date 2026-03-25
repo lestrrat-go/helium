@@ -248,12 +248,15 @@ func (c *compiler) compileInstruction(elem *helium.Element) (instruction, error)
 	defer func() { c.expandText = savedExpandText }()
 
 	// Handle per-instruction xpath-default-namespace
-	// Check both unprefixed (on XSLT elements) and xsl:-prefixed (on LREs)
+	// On XSLT elements: check unprefixed attribute.
+	// On LREs: only check xsl:-prefixed (in XSLT namespace).
 	savedXPathDefaultNS := c.xpathDefaultNS
 	hasLocalXPNS := false
-	if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
-		c.xpathDefaultNS = xdn
-		hasLocalXPNS = true
+	if elem.URI() == lexicon.NamespaceXSLT {
+		if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
+			c.xpathDefaultNS = xdn
+			hasLocalXPNS = true
+		}
 	} else if xdn, ok := elem.GetAttributeNS("xpath-default-namespace", lexicon.NamespaceXSLT); ok {
 		c.xpathDefaultNS = xdn
 		hasLocalXPNS = true
@@ -350,6 +353,19 @@ func (c *compiler) compileInstruction(elem *helium.Element) (instruction, error)
 			module = doc.URL()
 		}
 		si.setSourceInfo(elem.Line(), module)
+	}
+	// Compute effective static base URI from xml:base on the stylesheet element.
+	// This is set generically so that static-base-uri() returns the correct
+	// value for any XSLT instruction or LRE that carries xml:base.
+	if effectiveBase := stylesheetBaseURI(elem, c.baseURI); effectiveBase != c.baseURI {
+		if si, ok := inst.(interface{ getStaticBaseURI() string }); ok {
+			// Only set if not already set by a specific compile function
+			if si.getStaticBaseURI() == "" {
+				if setter, ok2 := inst.(interface{ setStaticBaseURI(string) }); ok2 {
+					setter.setStaticBaseURI(effectiveBase)
+				}
+			}
+		}
 	}
 	// Wrap in collation scope if default-collation changed on this element.
 	// This ensures the runtime ec.defaultCollation is set correctly for

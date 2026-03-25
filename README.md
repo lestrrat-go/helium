@@ -414,10 +414,10 @@ func Example_xinclude_process() {
     return
   }
 
-  n, err := xinclude.Process(context.Background(), doc,
-    xinclude.WithBaseURI(mainPath),
-    xinclude.WithNoBaseFixup(),
-  )
+  n, err := xinclude.NewProcessor().
+    BaseURI(mainPath).
+    NoBaseFixup().
+    Process(context.Background(), doc)
   if err != nil {
     fmt.Printf("xinclude error: %s\n", err)
     return
@@ -442,11 +442,11 @@ func Example_xinclude_process() {
     return
   }
 
-  n, err = xinclude.Process(context.Background(), doc,
-    xinclude.WithBaseURI(mainPath),
-    xinclude.WithNoBaseFixup(),
-    xinclude.WithNoXIncludeMarkers(),
-  )
+  n, err = xinclude.NewProcessor().
+    BaseURI(mainPath).
+    NoBaseFixup().
+    NoXIncludeMarkers().
+    Process(context.Background(), doc)
   if err != nil {
     fmt.Printf("xinclude error: %s\n", err)
     return
@@ -512,7 +512,7 @@ func Example_c14n_canonicalize() {
   //   - Attributes sorted by namespace URI then local name
   //   - Empty elements use start-tag + end-tag (not self-closing)
   //   - Whitespace in attribute values is normalized
-  out, err := c14n.CanonicalizeTo(doc, c14n.C14N10)
+  out, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
   if err != nil {
     fmt.Printf("failed to canonicalize: %s\n", err)
     return

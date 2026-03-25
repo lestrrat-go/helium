@@ -346,6 +346,13 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 			return staticError(errCodeXTSE3050,
 				"local variable %q conflicts with public component from used package", v.Name)
 		}
+		// XTSE3032: check for homonymous variables from different packages
+		for _, existing := range c.stylesheet.globalVars {
+			if existing.Name == v.Name && existing.OwnerPackage != nil && existing.OwnerPackage != pkg {
+				return staticError(errCodeXTSE3032,
+					"variable %q accepted from multiple packages with non-hidden visibility", v.Name)
+			}
+		}
 		v.OwnerPackage = pkg
 		c.stylesheet.globalVars = append(c.stylesheet.globalVars, v)
 	}
@@ -440,12 +447,15 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 				continue
 			}
 			pkgVis := getComponentVisibility(pkg, xslElemAttributeSet, name)
-			if isVisibleFromOutside(pkgVis) {
-				if len(acceptRules) > 0 {
-					acceptVis := applyAcceptRules(xslElemAttributeSet, name, acceptRules, pkgVis)
-					if acceptVis == visHidden {
-						continue
-					}
+			if !isVisibleFromOutside(pkgVis) {
+				continue
+			}
+			if len(acceptRules) > 0 {
+				acceptVis := applyAcceptRules(xslElemAttributeSet, name, acceptRules, pkgVis)
+				if acceptVis == visHidden {
+					// Mark as hidden but still merge so that package-
+					// internal use-attribute-sets references resolve.
+					as.Visibility = visHidden
 				}
 			}
 			if _, exists := c.stylesheet.attributeSets[name]; !exists {

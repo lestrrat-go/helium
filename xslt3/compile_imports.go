@@ -257,6 +257,13 @@ func (c *compiler) compileIncludeTemplates(elem *helium.Element) error {
 	}
 	defer func() { c.defaultMode = savedDefaultMode }()
 
+	// Apply xpath-default-namespace from included module root
+	savedXPathDefaultNS := c.xpathDefaultNS
+	if xdn := getAttr(root, "xpath-default-namespace"); xdn != "" {
+		c.xpathDefaultNS = xdn
+	}
+	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
+
 	// XTSE0265: conflicting input-type-annotations across included modules.
 	if includedITA := getAttr(root, "input-type-annotations"); includedITA != "" && includedITA != validationUnspecified {
 		mainITA := c.stylesheet.inputTypeAnnotations
@@ -397,6 +404,14 @@ func stylesheetBaseURI(n helium.Node, fallback string) string {
 		elem, ok := cur.(*helium.Element)
 		if !ok {
 			continue
+		}
+		// Stop before the document element (stylesheet root).
+		// Its xml:base is already factored into the compiler's baseURI
+		// (the fallback parameter), so including it again would double-count.
+		if p := elem.Parent(); p != nil {
+			if _, isDoc := p.(*helium.Document); isDoc {
+				break
+			}
 		}
 		if xmlBase, ok := elem.GetAttributeNS("base", helium.XMLNamespace); ok && xmlBase != "" {
 			bases = append(bases, xmlBase)

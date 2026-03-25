@@ -222,6 +222,17 @@ func (c *compiler) compileOverrideFunction(elem *helium.Element, pkg *Stylesheet
 		IsOverride: true,
 	}
 
+	// Inherit the base component's visibility so that processExpose
+	// in the using package does not default it to private. Abstract
+	// becomes public since the override provides an implementation.
+	if pkgFn != nil && pkgFn.Visibility != "" {
+		if pkgFn.Visibility == visAbstract {
+			fn.Visibility = visPublic
+		} else {
+			fn.Visibility = pkgFn.Visibility
+		}
+	}
+
 	// Link the original function for xsl:original() calls.
 	// Try exact arity match first, then fall back to any match by name.
 	exactKey := funcKey{Name: qn, Arity: len(params)}
@@ -351,6 +362,16 @@ func (c *compiler) compileOverrideTemplate(elem *helium.Element, pkg *Stylesheet
 			}
 			// Link the original template for xsl:original calls
 			tmpl.OriginalTemplate = existing
+			// Inherit the base component's visibility so that processExpose
+			// in the using package does not default it to private. Abstract
+			// becomes public since the override provides an implementation.
+			if existing.Visibility != "" {
+				if existing.Visibility == visAbstract {
+					tmpl.Visibility = visPublic
+				} else {
+					tmpl.Visibility = existing.Visibility
+				}
+			}
 		}
 	}
 
@@ -428,9 +449,19 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 		}
 	}
 
-	// Link the original variable for $xsl:original references
+	// Link the original variable for $xsl:original references.
+	// Inherit the base component's visibility so that processExpose
+	// in the using package does not default it to private. Abstract
+	// becomes public since the override provides an implementation.
 	if pkgVar != nil {
 		v.OriginalVar = pkgVar
+		if pkgVar.Visibility != "" {
+			if pkgVar.Visibility == visAbstract {
+				v.Visibility = visPublic
+			} else {
+				v.Visibility = pkgVar.Visibility
+			}
+		}
 	}
 
 	selectAttr := getAttr(elem, "select")
@@ -524,6 +555,7 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 
 	asd := &attributeSetDef{Name: resolvedName}
 
+	var useAttrSets []string
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
 		for _, n := range strings.Fields(uas) {
 			resolved := resolveQName(n, c.nsBindings)
@@ -538,9 +570,11 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 				continue
 			}
 			asd.UseAttrSets = append(asd.UseAttrSets, resolved)
+			useAttrSets = append(useAttrSets, resolved)
 		}
 	}
 
+	var attrs []instruction
 	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
@@ -552,8 +586,10 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 				return nil, err
 			}
 			asd.Attrs = append(asd.Attrs, inst)
+			attrs = append(attrs, inst)
 		}
 	}
+	asd.Parts = []attributeSetPart{{UseAttrSets: useAttrSets, Attrs: attrs}}
 
 	return asd, nil
 }

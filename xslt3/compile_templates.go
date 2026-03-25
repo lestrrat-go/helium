@@ -42,10 +42,18 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 		}
 	}
 
+	// Compute effective base URI considering xml:base on the template element.
+	// Only check the template element itself (not ancestors), since c.baseURI
+	// already accounts for xml:base on the stylesheet root and includes.
+	templateBaseURI := c.baseURI
+	if xmlBase, ok := elem.GetAttributeNS("base", helium.XMLNamespace); ok && xmlBase != "" {
+		templateBaseURI = helium.BuildURI(xmlBase, c.baseURI)
+	}
+
 	tmpl := &template{
 		ImportPrec:    c.importPrec,
 		MinImportPrec: c.minImportPrec,
-		BaseURI:       c.baseURI,
+		BaseURI:       templateBaseURI,
 	}
 	tmpl.XPathDefaultNS = c.xpathDefaultNS
 	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
@@ -707,6 +715,11 @@ func (c *compiler) compileGlobalVariable(elem *helium.Element) error {
 	}
 	if c.stylesheet.isPackage {
 		v.OwnerPackage = c.stylesheet
+	}
+
+	// Capture xml:base for static base URI override during body evaluation.
+	if effectiveBase := stylesheetBaseURI(elem, c.baseURI); effectiveBase != c.baseURI {
+		v.StaticBaseURI = effectiveBase
 	}
 
 	// For static variables, use the pre-computed value from compile-time

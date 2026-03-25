@@ -1382,8 +1382,14 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	}
 
 	// XTSE0710: validate all use-attribute-sets references point to declared attribute sets.
+	// Hidden attribute-sets from packages are in the map for internal reference
+	// resolution but must not be directly used from the using stylesheet.
 	for _, ref := range c.usedAttrSetRefs {
-		if _, ok := c.stylesheet.attributeSets[ref]; !ok {
+		asd, ok := c.stylesheet.attributeSets[ref]
+		if !ok {
+			return nil, staticError(errCodeXTSE0710, "use-attribute-sets references undeclared attribute-set %q", ref)
+		}
+		if asd != nil && asd.Visibility == visHidden {
 			return nil, staticError(errCodeXTSE0710, "use-attribute-sets references undeclared attribute-set %q", ref)
 		}
 	}

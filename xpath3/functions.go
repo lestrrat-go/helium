@@ -26,6 +26,14 @@ type DynamicRefRestricted interface {
 	DynRefErrorCode() string
 }
 
+// DynamicRefSnapshotProvider marks a Function that needs to capture
+// state at reference creation time.  When the XPath evaluator creates
+// a NamedFunctionRef for such a function, it calls Snapshot() to obtain
+// a FunctionItem whose Invoke closure captures the current state.
+type DynamicRefSnapshotProvider interface {
+	DynamicRefSnapshot(ctx context.Context, arity int) (FunctionItem, bool)
+}
+
 // TypedFunction extends Function with type signature information.
 // Implementations that expose parameter and return types enable
 // correct instance-of checks and function coercion for user-defined functions.
