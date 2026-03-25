@@ -382,7 +382,7 @@ func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD
 	return cur, nil
 }
 
-const slabSize = 64
+const slabSize = 256
 
 func (d *Document) CreateElement(name string) (*Element, error) {
 	var e *Element
