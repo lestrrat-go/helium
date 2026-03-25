@@ -922,25 +922,16 @@ func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *result
 		base.Method = method
 		base.MethodExplicit = true
 	}
-	// Apply overrides from xsl:result-document
+	// Apply overrides from xsl:result-document.
+	// evalResultDocOutputDef already starts from the named format base and
+	// applies all xsl:result-document attribute overrides, so use it as the
+	// complete effective output def when available.
 	overrides, err := ec.evalResultDocOutputDef(ctx, inst)
 	if err != nil {
 		return nil, err
 	}
 	if overrides != nil {
-		if overrides.Method != "" {
-			base.Method = overrides.Method
-			base.MethodExplicit = true
-		}
-		if overrides.Encoding != "" {
-			base.Encoding = overrides.Encoding
-		}
-		if overrides.JSONNodeOutputMethod != "" {
-			base.JSONNodeOutputMethod = overrides.JSONNodeOutputMethod
-		}
-		if len(overrides.ResolvedCharMap) > 0 && base.ResolvedCharMap == nil {
-			base.ResolvedCharMap = overrides.ResolvedCharMap
-		}
+		base = *overrides
 	}
 	// Resolve character maps from the format and instruction.
 	var allMaps []string

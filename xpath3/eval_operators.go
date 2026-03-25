@@ -448,7 +448,8 @@ func evalPathStepExpr(evalFn exprEvaluator, ec *evalContext, e PathStepExpr) (Se
 	}
 	var allNodes []helium.Node
 	var allItems ItemSlice
-	isNodeResult := true
+	hasNodes := false
+	hasNonNodes := false
 
 	for i, n := range baseNodes {
 		frame := ec.pushNodeContext(n, i+1, len(baseNodes))
@@ -457,24 +458,27 @@ func evalPathStepExpr(evalFn exprEvaluator, ec *evalContext, e PathStepExpr) (Se
 		if err != nil {
 			return nil, err
 		}
-		if isNodeResult {
-			rNodes, nok := NodesFrom(r)
-			if nok {
+		rNodes, nok := NodesFrom(r)
+		if nok {
+			if len(rNodes) > 0 {
+				// XPTY0018: path expression returns mix of nodes and non-nodes.
+				if hasNonNodes {
+					return nil, fmt.Errorf("XPTY0018: path expression result contains a mix of nodes and non-nodes")
+				}
+				hasNodes = true
 				allNodes = append(allNodes, rNodes...)
-				continue
 			}
-			// First non-node result — switch to item mode
-			isNodeResult = false
-			// Convert previously collected nodes to items
-			for _, pn := range allNodes {
-				allItems = append(allItems, nodeItemFor(ec, pn))
+		} else {
+			// Check for mixed results.
+			if hasNodes {
+				return nil, fmt.Errorf("XPTY0018: path expression result contains a mix of nodes and non-nodes")
 			}
-			allNodes = nil
+			hasNonNodes = true
+			allItems = append(allItems, seqMaterialize(r)...)
 		}
-		allItems = append(allItems, seqMaterialize(r)...)
 	}
 
-	if isNodeResult {
+	if hasNodes {
 		if filterPreservesOrder(e.Left) {
 			allNodes, err = ixpath.DeduplicateNodesPreserveOrder(allNodes, ec.maxNodes)
 		} else {

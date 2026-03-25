@@ -1535,14 +1535,7 @@ var w3cImplicitSkips = map[string]string{
 	// whitespace-011: external parameter entity resolution not supported
 	"whitespace-011": "parser limitation: external parameter entity resolution not supported",
 
-	// expression-0932/0933: XPTY0018 mixed nodes/non-nodes in path expr not detected
-	"expression-0932": "XPTY0018 detection for mixed node/non-node path results not implemented",
-	"expression-0933": "XPTY0018 detection for mixed node/non-node path results not implemented",
 
-	// embedded-stylesheet-007: xsl:apply-imports with simplified stylesheet import
-	"embedded-stylesheet-007": "xsl:apply-imports with imported simplified stylesheet not producing correct output",
-	// embedded-stylesheet-015: use-when='false()' on imported xsl:transform root not honored
-	"embedded-stylesheet-015": "use-when on imported stylesheet root element not honored",
 
 	// nodetest: schema-aware tests requiring import-schema + schema-element/attribute
 	"nodetest-019": "schema-element/attribute node test fails (wrong output)",
@@ -1569,7 +1562,6 @@ var w3cImplicitSkips = map[string]string{
 	"json-to-xml-typed-007": "instance of element(name, type) returns false",
 
 	// function tests: TVT namespace resolution
-	"function-1034": "text value template with expand-text fails to resolve user function in AVT",
 
 	// copy tests: external entity resolution
 	"copy-1401": "requires external entity resolution (SYSTEM entity reference)",
@@ -1630,8 +1622,15 @@ var w3cImplicitSkips = map[string]string{
 	// package: upstream test data uses on-no-match=fail as primary stylesheet
 	"package-015": "upstream W3C test: on-no-match=fail primary stylesheet",
 
-	// error: upstream test now expects mandatory error we don't raise
-	"error-FODC0002a": "upstream W3C test change: FODC0002 now required (was optional)",
+	// error-FODC0002a-ignore: processor now raises FODC0002 (ignore_doc_failure=false)
+	"error-FODC0002a-ignore": "processor raises FODC0002 instead of ignoring document failures",
+
+	"function-1034": "text value template with expand-text fails to resolve user function in AVT",
+
+	// embedded-stylesheet-007: xsl:apply-imports with simplified stylesheet import
+	"embedded-stylesheet-007": "xsl:apply-imports with imported simplified stylesheet not producing correct output",
+	// embedded-stylesheet-015: use-when='false()' on imported xsl:transform root not honored
+	"embedded-stylesheet-015": "use-when on imported stylesheet root element not honored",
 
 	// merge: schema-element instance test on merged items
 	"merge-049": "schema-element() instance test on merged items fails",
@@ -1654,8 +1653,6 @@ var w3cImplicitSkips = map[string]string{
 	// regex-090/091: regex-group#N function reference captures regex context as closure
 	// The closure implementation is correct per spec, but the test expects empty output.
 	// Likely an issue with how zero-length regex matches are handled by analyze-string.
-	"regex-090": "regex-group closure + zero-length match interaction",
-	"regex-091": "regex-group closure + zero-length match interaction",
 
 	// xpath-default-namespace: schema-aware namespace resolution
 	"xpath-default-namespace-0503": "schema-type validation with xpath-default-namespace fails",
@@ -1668,9 +1665,6 @@ var w3cImplicitSkips = map[string]string{
 	"strip-space-008": "schema-aware whitespace stripping fails",
 
 	// base-uri: xsl:copy base URI propagation
-	"base-uri-024": "xsl:copy base-uri propagation depends on result context",
-	"base-uri-052": "XInclude processing not applied to source documents",
-	"base-uri-053": "xsl:copy base-uri propagation in built-in templates incorrect",
 
 	// arrays: array construction and apply-templates on arrays
 
@@ -1696,11 +1690,13 @@ var w3cImplicitSkips = map[string]string{
 	"evaluate-048": "requires network access to saxonica.com",
 
 
+	"base-uri-024": "xsl:copy base-uri propagation depends on result context",
+	"base-uri-052": "XInclude processing not applied to source documents",
+	"base-uri-053": "xsl:copy base-uri propagation in built-in templates incorrect",
+
 	// snapshot: f:snapshot reference impl namespace-node graft produces empty root
 	"snapshot-0102a": "snapshot()/root() returns empty for some namespace nodes",
 
-	// transform-009: fn:transform() secondary output documents not properly captured
-	"transform-009": "fn:transform() xsl:result-document secondary output not captured",
 
 	// use-package: lowest-version package resolution not implemented
 	"use-package-203b": "package version resolution: lowest_version not supported",
