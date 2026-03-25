@@ -804,8 +804,6 @@ func getSetSkipReason(name string, deps *xslDependencies) string {
 	switch name {
 	case "load-xquery-module":
 		return "requires XQuery load-xquery-module"
-	case "streaming-fallback":
-		return "streaming fallback suite disabled"
 	}
 	if deps != nil {
 		if reason := getDepsSkipReason(deps); reason != "" {
@@ -932,7 +930,6 @@ func featureSupported(feature string) bool {
 	switch feature {
 	case
 		"backwards_compatibility",
-		"XSD_1.1",
 		"Saxon-PE", "Saxon-EE":
 		return false
 	}
@@ -1216,6 +1213,12 @@ func convertAssertion(xa xmlAssertion, tsDir string) assertion {
 	case "serialization-matches":
 		a.Value = decodeXMLText(string(xa.Inner))
 		a.Flags = xa.Flags
+	case "assert-type", "assert-count", "assert-deep-eq", "assert-empty", "assert-eq":
+		a.Value = decodeXMLText(string(xa.Inner))
+	case "not":
+		for _, child := range xa.Children {
+			a.Children = append(a.Children, convertAssertion(child, tsDir))
+		}
 	case "assert-posture-and-sweep":
 		a.Value = "skip: streaming not supported"
 	default:
@@ -1634,6 +1637,25 @@ func emitAssertion(a assertion) []string {
 	case "serialization-matches":
 		pattern := buildSerializationMatchesPattern(a.Value, a.Flags)
 		return []string{fmt.Sprintf("w3cAssertSerializationMatches(%s)", goStringLiteral(pattern))}
+	case "assert-type":
+		return []string{fmt.Sprintf("w3cAssertType(%s)", goStringLiteral(strings.TrimSpace(a.Value)))}
+	case "assert-count":
+		return []string{fmt.Sprintf("w3cAssertCount(%s)", strings.TrimSpace(a.Value))}
+	case "assert-deep-eq":
+		return []string{fmt.Sprintf("w3cAssertDeepEq(%s)", goStringLiteral(strings.TrimSpace(a.Value)))}
+	case "assert-empty":
+		return []string{"w3cAssertEmpty()"}
+	case "assert-eq":
+		return []string{fmt.Sprintf("w3cAssertEq(%s)", goStringLiteral(strings.TrimSpace(a.Value)))}
+	case "not":
+		var checks []string
+		for _, child := range a.Children {
+			checks = append(checks, emitCheck(child))
+		}
+		if len(checks) == 0 {
+			return []string{"w3cAssertSkip()"}
+		}
+		return []string{fmt.Sprintf("w3cAssertNot(%s)", strings.Join(checks, ", "))}
 	case "assert-posture-and-sweep":
 		return []string{"w3cAssertSkip()"}
 	default:
@@ -1745,6 +1767,31 @@ func emitCheck(a assertion) string {
 			checks = append(checks, emitCheck(child))
 		}
 		return fmt.Sprintf("w3cCheckAllOf(%s)", strings.Join(checks, ", "))
+	case "any-of":
+		var checks []string
+		for _, child := range a.Children {
+			checks = append(checks, emitCheck(child))
+		}
+		return fmt.Sprintf("w3cCheckAnyOf(%s)", strings.Join(checks, ", "))
+	case "assert-type":
+		return fmt.Sprintf("w3cCheckType(%s)", goStringLiteral(strings.TrimSpace(a.Value)))
+	case "assert-count":
+		return fmt.Sprintf("w3cCheckCount(%s)", strings.TrimSpace(a.Value))
+	case "assert-deep-eq":
+		return fmt.Sprintf("w3cCheckDeepEq(%s)", goStringLiteral(strings.TrimSpace(a.Value)))
+	case "assert-empty":
+		return "w3cCheckEmpty()"
+	case "assert-eq":
+		return fmt.Sprintf("w3cCheckEq(%s)", goStringLiteral(strings.TrimSpace(a.Value)))
+	case "not":
+		var checks []string
+		for _, child := range a.Children {
+			checks = append(checks, emitCheck(child))
+		}
+		if len(checks) == 0 {
+			return "w3cCheckSkip()"
+		}
+		return fmt.Sprintf("w3cCheckNot(%s)", strings.Join(checks, ", "))
 	default:
 		return "w3cCheckSkip()"
 	}

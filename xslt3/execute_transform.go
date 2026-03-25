@@ -225,6 +225,12 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if err != nil {
 			return nil, err
 		}
+		// Deliver the raw XDM result sequence to the receiver.
+		if cfg.rawResultHandler != nil && ec.rawResultSequence != nil {
+			if err := cfg.rawResultHandler.HandleRawResult(ec.rawResultSequence); err != nil {
+				return nil, err
+			}
+		}
 		// Collect captured items for raw delivery format.
 		out := ec.currentOutput()
 		if out != nil && len(out.pendingItems) > 0 {
@@ -264,7 +270,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 			return nil, dynamicError(errCodeXTDE0820, "initial template %q not found", initialTemplateName)
 		}
 		// XTDE0040: initial template must be public in a package context
-		if ec.stylesheet.isPackage && tmpl.Visibility != "" && tmpl.Visibility != visPublic {
+		if ec.stylesheet.isPackage && tmpl.Visibility != "" && tmpl.Visibility != visPublic && tmpl.Visibility != visFinal {
 			return nil, dynamicError(errCodeXTDE0040, "initial template %q is not public (visibility=%q)", initialTemplateName, tmpl.Visibility)
 		}
 		// Also check for templates with no explicit visibility in packages (default=private)
