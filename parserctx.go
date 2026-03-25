@@ -671,6 +671,18 @@ func (ctx *parserCtx) switchEncoding() error {
 	if pdebug.Enabled {
 		pdebug.Printf("Loading encoding '%s'", encName)
 	}
+	// For UTF-8/ASCII, bypass the RuneCursor ring buffer and use a direct
+	// byte cursor that decodes UTF-8 on the fly.
+	if encoding.IsUTF8(encName) {
+		cur := ctx.getByteCursor()
+		if cur == nil {
+			return ErrByteCursorRequired
+		}
+		ctx.popInput()
+		ctx.pushInput(strcursor.NewUTF8Cursor(cur))
+		return nil
+	}
+
 	enc := encoding.Load(encName)
 	if enc == nil {
 		return errors.New("encoding '" + encName + "' not supported")
