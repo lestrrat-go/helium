@@ -742,6 +742,8 @@ var unicodeBlocks = map[string]string{
 	"SupplementaryPrivateUseArea-A":        `\x{F0000}-\x{FFFFD}`,
 	"SupplementaryPrivateUseArea-B":        `\x{100000}-\x{10FFFD}`,
 	"Tags":                                 `\x{E0000}-\x{E007F}`,
+	// Composite block: union of PrivateUseArea + SupplementaryPrivateUseArea-A + SupplementaryPrivateUseArea-B
+	"PrivateUse": `\x{E000}-\x{F8FF}\x{F0000}-\x{FFFFD}\x{100000}-\x{10FFFD}`,
 }
 
 // validateXPathRegex checks for patterns that Go's regexp accepts but
