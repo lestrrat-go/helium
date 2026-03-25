@@ -1351,6 +1351,9 @@ var w3cImplicitSkips = map[string]string{
 	"override-f-031": "requires schema-aware union type conversion (xsl:import-schema)",
 	"override-v-006": "requires schema-aware union type comparison (xsl:import-schema)",
 
+	// function-lookup: returns overridden function instead of original in package context
+	"function-lookup-005": "function-lookup returns override instead of original in package context",
+
 	// override: package-scoped component isolation not implemented
 	"override-as-005":  "package-scoped attribute-set isolation not implemented",
 	"override-misc-004": "package-scoped key isolation not implemented",

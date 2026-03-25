@@ -461,6 +461,9 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 	if oset != nil {
 		for qn, fn := range oset.functions {
 			c.stylesheet.functions[qn] = fn
+			// Update the package's function map for late binding.
+			// Package-internal calls dispatch to the override.
+			pkg.functions[qn] = fn
 		}
 		for name, tmpl := range oset.namedTemplates {
 			tmpl.ImportPrec = c.importPrec - 1

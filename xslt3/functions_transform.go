@@ -100,15 +100,6 @@ func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Functio
 				}
 			}
 		}
-		// Late binding: override functions from the stylesheet replace
-		// the original package functions for direct calls. This enables
-		// the XSLT 3.0 virtual dispatch behavior where overridden
-		// functions are called even from within the base package.
-		for _, def := range ec.stylesheet.functions {
-			if def.IsOverride {
-				ec.registerOverrideFunc(def)
-			}
-		}
 	} else {
 		for _, def := range ec.stylesheet.functions {
 			ec.registerUserFunc(def)
@@ -147,44 +138,41 @@ func (ec *execContext) xsltEvaluateFunctionsNS() map[xpath3.QualifiedName]xpath3
 	return result
 }
 
-// registerOverrideFunc registers an override function, REPLACING any existing
-// function with the same name and arity. For multi-arity wrappers, the
-// matching variant is replaced.
-func (ec *execContext) registerOverrideFunc(def *xslFunction) {
-	qn := def.Name
-	uf := &xslUserFunc{def: def, ec: ec}
-	arity := len(def.Params)
-	if existing, ok := ec.cachedFnsNS[qn]; ok {
-		if maf, ok := existing.(*xslMultiArityFunc); ok {
-			// Replace the variant with matching arity
-			replaced := false
-			for i, v := range maf.variants {
-				if len(v.def.Params) == arity {
-					maf.variants[i] = uf
-					replaced = true
-					break
-				}
-			}
-			if !replaced {
-				maf.addVariant(uf)
-			}
-			return
-		}
-		// Single function — replace if arity matches
-		if existing.MinArity() <= arity && arity <= existing.MaxArity() {
-			ec.cachedFnsNS[qn] = uf
-			return
-		}
-		// Different arity — create multi-arity wrapper
-		maf := &xslMultiArityFunc{minArity: existing.MinArity(), maxArity: existing.MaxArity()}
-		if euf, ok := existing.(*xslUserFunc); ok {
-			maf.variants = append(maf.variants, euf)
-		}
-		maf.addVariant(uf)
-		ec.cachedFnsNS[qn] = maf
-		return
+// registerLateBindingFunc registers a package function that has been overridden.
+// The registered wrapper reports the original function's type signature (for
+// function-lookup) but dispatches to the override when called.
+func (ec *execContext) registerLateBindingFunc(original, override *xslFunction) {
+	qn := original.Name
+	wrapper := &xslLateBindingFunc{
+		original: &xslUserFunc{def: original, ec: ec},
+		override: &xslUserFunc{def: override, ec: ec},
 	}
-	ec.cachedFnsNS[qn] = uf
+	ec.cachedFnsNS[qn] = wrapper
+}
+
+// xslLateBindingFunc wraps an original function and its override. It reports
+// the original function's type signature but dispatches calls to the override.
+// This allows function-lookup to return the wrapper (which looks like the
+// original) while direct calls use the override.
+type xslLateBindingFunc struct {
+	original *xslUserFunc
+	override *xslUserFunc
+}
+
+func (f *xslLateBindingFunc) MinArity() int { return f.original.MinArity() }
+func (f *xslLateBindingFunc) MaxArity() int { return f.original.MaxArity() }
+
+func (f *xslLateBindingFunc) FuncParamTypes() []xpath3.SequenceType {
+	return f.original.FuncParamTypes()
+}
+
+func (f *xslLateBindingFunc) FuncReturnType() *xpath3.SequenceType {
+	return f.original.FuncReturnType()
+}
+
+func (f *xslLateBindingFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	// Dispatch to the override function
+	return f.override.Call(ctx, args)
 }
 
 // registerUserFunc registers an XSL user function into cachedFnsNS,
