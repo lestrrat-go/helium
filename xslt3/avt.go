@@ -312,8 +312,9 @@ func stringifySequenceWithSep(seq xpath3.Sequence, sep string) string {
 }
 
 // stringifySimpleContent implements XSLT 3.0 §5.7.2 simple content
-// construction: adjacent text nodes are merged first, then all
-// remaining items are separated by the given separator string.
+// construction: adjacent text nodes are merged first, zero-length
+// text nodes are removed, then remaining items are separated by the
+// given separator string.
 func stringifySimpleContent(seq xpath3.Sequence, sep string) string {
 	seq = flattenArraysInSequence(seq)
 	if seq == nil || sequence.Len(seq) == 0 {
@@ -321,8 +322,29 @@ func stringifySimpleContent(seq xpath3.Sequence, sep string) string {
 	}
 	// Step 1: merge adjacent text nodes.
 	merged := mergeAdjacentTextNodes(seq)
-	// Step 2: stringify each item, separating with sep.
+	// Step 2: remove zero-length text nodes so they don't produce
+	// stray separators (e.g. empty TVTs in sequence mode).
+	merged = removeEmptyTextNodes(merged)
+	// Step 3: stringify each item, separating with sep.
 	return stringifySequenceWithSep(merged, sep)
+}
+
+// removeEmptyTextNodes filters out text nodes with zero-length content.
+func removeEmptyTextNodes(seq xpath3.Sequence) xpath3.Sequence {
+	if seq == nil {
+		return nil
+	}
+	seqLen := sequence.Len(seq)
+	result := make(xpath3.ItemSlice, 0, seqLen)
+	for i := 0; i < seqLen; i++ {
+		item := seq.Get(i)
+		ni, ok := item.(xpath3.NodeItem)
+		if ok && ni.Node.Type() == helium.TextNode && len(ni.Node.Content()) == 0 {
+			continue
+		}
+		result = append(result, item)
+	}
+	return result
 }
 
 // flattenArraysInSequence recursively replaces any ArrayItem in the
