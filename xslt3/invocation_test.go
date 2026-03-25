@@ -251,6 +251,37 @@ func TestInvocationWriteToErrorPropagation(t *testing.T) {
 	require.True(t, w.written > 0)
 }
 
+func TestResolvedOutputDefAfterSerialize(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`)
+
+	inv := ss.Transform(parseTransformSource(t))
+	require.Nil(t, inv.ResolvedOutputDef(), "should be nil before execution")
+
+	_, err := inv.Serialize(t.Context())
+	require.NoError(t, err)
+	require.NotNil(t, inv.ResolvedOutputDef(), "should be populated after Serialize")
+}
+
+func TestResolvedOutputDefAfterWriteTo(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`)
+
+	inv := ss.Transform(parseTransformSource(t))
+	require.Nil(t, inv.ResolvedOutputDef(), "should be nil before execution")
+
+	var buf bytes.Buffer
+	err := inv.WriteTo(t.Context(), &buf)
+	require.NoError(t, err)
+	require.NotNil(t, inv.ResolvedOutputDef(), "should be populated after WriteTo")
+}
+
 func TestTransformStringConvenience(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">

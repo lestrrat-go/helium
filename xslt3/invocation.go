@@ -298,9 +298,9 @@ func (inv Invocation) Do(ctx context.Context) (*helium.Document, error) {
 }
 
 // ResolvedOutputDef returns the effective output definition for the primary
-// result after Do has been called. It includes runtime overrides from
-// xsl:result-document targeting the primary output. Returns nil if Do has
-// not yet been called.
+// result after a terminal method (Do, Serialize, WriteTo) has been called.
+// It includes runtime overrides from xsl:result-document targeting the
+// primary output. Returns nil if no terminal method has been called yet.
 func (inv Invocation) ResolvedOutputDef() *OutputDef {
 	return inv.cfg.resolvedOutputDef
 }
@@ -323,6 +323,7 @@ func (inv Invocation) WriteTo(ctx context.Context, w io.Writer) error {
 	}
 	tcfg := inv.toTransformConfig()
 	resultDoc, err := executeTransform(ctx, inv.cfg.source, inv.cfg.ss, tcfg)
+	inv.cfg.resolvedOutputDef = tcfg.resolvedOutputDef
 	if err != nil {
 		return err
 	}
