@@ -1087,7 +1087,7 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		panic("did not get rune cursor")
 	}
 
-	i, needsNormalize := cur.ScanCharDataInto(buf)
+	i := cur.ScanCharDataInto(buf)
 	if i <= 0 {
 		// ScanCharDataInto stops at ]]> but doesn't error — check for it.
 		if cur.PeekN(1) == ']' && cur.PeekN(2) == ']' && cur.PeekN(3) == '>' {
@@ -1102,10 +1102,8 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	}
 
 	// Work with bytes directly to avoid buf.String() + []byte(str) allocations.
+	// EOL normalization was already applied by ScanCharDataInto.
 	data := buf.Bytes()
-	if needsNormalize {
-		data = normalizeEOL(data)
-	}
 	if pctx.areBlanksBytes(data, false) {
 		if s := pctx.sax; s != nil && !pctx.disableSAX {
 			if err := pctx.deliverCharacters(ctx, s.IgnorableWhitespace, data); err != nil {

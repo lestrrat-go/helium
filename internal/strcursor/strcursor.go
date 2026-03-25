@@ -30,9 +30,9 @@ type Cursor interface {
 	PeekN(int) rune
 	// PeekString returns the first n runes/bytes as a string without consuming.
 	PeekString(int) string
-	// ScanCharDataInto scans XML character data into dst, returning rune count
-	// and whether '\r' was seen. Does not consume — call AdvanceFast after.
-	ScanCharDataInto(dst *bytes.Buffer) (int, bool)
+	// ScanCharDataInto scans XML character data into dst with EOL normalization.
+	// Returns rune count consumed. Does not advance — call AdvanceFast after.
+	ScanCharDataInto(dst *bytes.Buffer) int
 	Unused() io.Reader
 }
 
@@ -420,16 +420,13 @@ func (c *RuneCursor) AdvanceFast(n int) error {
 }
 
 // ScanCharDataInto scans contiguous XML character data from the ring buffer
-// and writes it into dst. It stops at '<', '&', ']]>', or any non-XML-char.
-// Returns the rune count consumed and whether '\r' was encountered.
-// The caller should call AdvanceFast(nRunes) after processing.
-//
-// This is faster than the PeekN(i+1) loop because it accesses the ring buffer
-// directly without function call overhead per character, and pre-grows dst.
-func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer) (int, bool) {
+// and writes it into dst with XML §2.11 EOL normalization applied inline
+// (\r\n → \n, lone \r → \n). It stops at '<', '&', ']]>', or any non-XML-char.
+// Returns the rune count consumed. The caller should call AdvanceFast(nRunes).
+func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer) int {
 	if c.count == 0 {
 		if err := c.ensure(1); err != nil {
-			return 0, false
+			return 0
 		}
 	}
 
@@ -437,7 +434,6 @@ func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer) (int, bool) {
 	ring := c.ring
 	head := c.head
 	count := c.count
-	hasCarriageReturn := false
 	nRunes := 0
 
 	// Pre-grow to avoid repeated buffer growth.
@@ -458,8 +454,15 @@ func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer) (int, bool) {
 				break
 			}
 		}
+		// XML §2.11 EOL normalization: \r\n → \n, lone \r → \n.
 		if r == '\r' {
-			hasCarriageReturn = true
+			dst.WriteByte('\n')
+			// Skip the following \n if present (\r\n pair).
+			if nRunes+1 < count && ring[(head+nRunes+1)&mask].val == '\n' {
+				nRunes++ // consume the \n too
+			}
+			nRunes++
+			continue
 		}
 		if e.width == 1 {
 			dst.WriteByte(byte(r))
@@ -469,7 +472,7 @@ func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer) (int, bool) {
 		nRunes++
 	}
 
-	return nRunes, hasCarriageReturn
+	return nRunes
 }
 
 func (c *RuneCursor) hasPrefix(s string, n int, consume bool) bool {
@@ -689,12 +692,11 @@ func (c *ByteCursor) AdvanceFast(n int) error {
 	return c.Advance(n)
 }
 
-// ScanCharDataInto scans XML character data into dst for ByteCursor.
-func (c *ByteCursor) ScanCharDataInto(dst *bytes.Buffer) (int, bool) {
+// ScanCharDataInto scans XML character data into dst with EOL normalization.
+func (c *ByteCursor) ScanCharDataInto(dst *bytes.Buffer) int {
 	if c.fillBuffer(1) != nil {
-		return 0, false
+		return 0
 	}
-	hasCarriageReturn := false
 	i := 0
 	for c.bufpos+i < c.buflen {
 		b := c.buf[c.bufpos+i]
@@ -708,15 +710,17 @@ func (c *ByteCursor) ScanCharDataInto(dst *bytes.Buffer) (int, bool) {
 			break
 		}
 		if b == '\r' {
-			hasCarriageReturn = true
+			dst.WriteByte('\n')
+			if c.bufpos+i+1 < c.buflen && c.buf[c.bufpos+i+1] == '\n' {
+				i++ // skip the \n in \r\n
+			}
+			i++
+			continue
 		}
+		dst.WriteByte(b)
 		i++
 	}
-	if i == 0 {
-		return 0, false
-	}
-	dst.Write(c.buf[c.bufpos : c.bufpos+i])
-	return i, hasCarriageReturn
+	return i
 }
 
 func (c *ByteCursor) hasPrefix(s []byte, consume bool) bool {
