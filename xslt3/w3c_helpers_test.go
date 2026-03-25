@@ -1594,51 +1594,32 @@ var w3cImplicitSkips = map[string]string{
 	"as-3603": "requires schema-aware processing (schema-attribute type check)",
 	"as-3701": "requires schema-aware processing (schema-element type check)",
 
-	// accept: override function not visible in package scope during xsl:call-template
-	"accept-042":  "override function not visible in package scope via function-lookup",
-	"accept-043a": "override function not visible in package scope via function-lookup",
-	"accept-047a": "override function not visible in package scope via function-lookup",
+	// override: schema-aware union types from xsl:import-schema
+	"override-f-031": "requires schema-aware union type conversion (xsl:import-schema)",
+	"override-v-006": "requires schema-aware union type comparison (xsl:import-schema)",
 
-	// package: xsl:expose visibility control not implemented
+	// function-lookup: spec §20.3.3 requires original (not override) in package context
+	"function-lookup-005": "function-lookup returns override instead of original per spec §20.3.3",
 
-	// package: unnamed mode on-no-match with xsl:import precedence
+	// package-scoped component isolation: same-named components in different packages
+	"override-as-005":   "package-scoped attribute-set isolation not implemented",
+	"override-misc-005": "package-scoped accumulator isolation not implemented",
+	"override-misc-007": "package-scoped accumulator isolation not implemented",
 
-	// package: static error detection not implemented
-	"package-909":  "XTSE0020 package static error detection not implemented",
-	"package-100":    "package cross-reference variable resolution not implemented",
-	"package-101":    "package cross-reference variable resolution (used-package private vars not accessible)",
-
-	// use-package: package template override precedence
-	"use-package-176": "package template override precedence with versioned packages incorrect",
+	// use-package: variable isolation across versioned package instances
+	"use-package-176": "variable from multiple package versions not isolated per-package",
 
 	// use-package: character map namespace serialization in package context
-	"use-package-108":  "package-scoped character map with namespace serialization not fully implemented",
-	"use-package-108b": "package-scoped character map with namespace serialization not fully implemented",
+	"use-package-108":  "package-scoped output format namespace serialization",
+	"use-package-108b": "package-scoped output format namespace serialization",
 
 	// use-package: xml-to-json package mode template matching
 	"use-package-150": "xml-to-json package mode template matching not implemented",
 	"use-package-151": "xml-to-json package mode template matching not implemented",
 	"use-package-152": "xml-to-json package mode template matching not implemented",
 
-
-	// override: schema-aware union types from xsl:import-schema
-	"override-f-031": "requires schema-aware union type conversion (xsl:import-schema)",
-	"override-v-006": "requires schema-aware union type comparison (xsl:import-schema)",
-
-	// function-lookup: returns overridden function instead of original in package context
-	"function-lookup-005": "function-lookup returns override instead of original in package context",
-
-	// override: package-scoped component isolation not implemented
-	"override-as-005":  "package-scoped attribute-set isolation not implemented",
-	"override-misc-004": "package-scoped key isolation not implemented",
-	"override-misc-005": "package-scoped accumulator isolation not implemented",
-	"override-misc-006": "package-scoped decimal format isolation not implemented",
-	"override-misc-007": "package-scoped accumulator isolation not implemented",
-
-	// resolve-uri: xml:base propagation in parsed documents
-
-	// package: upstream test change (primary stylesheet now package-015-import.xsl)
-	"package-015": "upstream W3C test change: on-no-match=fail with new primary stylesheet",
+	// package: upstream test data uses on-no-match=fail as primary stylesheet
+	"package-015": "upstream W3C test: on-no-match=fail primary stylesheet",
 
 	// error: upstream test now expects mandatory error we don't raise
 	"error-FODC0002a": "upstream W3C test change: FODC0002 now required (was optional)",
