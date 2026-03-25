@@ -794,6 +794,7 @@ func w3cCheckAnyOf(checks ...w3cCheck) w3cCheck {
 	return c
 }
 
+//nolint:unused // called from generated w3c_*_gen_test.go files
 func w3cCheckType(typeName string) w3cCheck {
 	return w3cCheck{
 		fn: func(_ string, _ []string, _ map[string]*helium.Document) bool {
@@ -805,6 +806,7 @@ func w3cCheckType(typeName string) w3cCheck {
 	}
 }
 
+//nolint:unused // called from generated w3c_*_gen_test.go files
 func w3cCheckCount(n int) w3cCheck {
 	return w3cCheck{
 		fn: func(_ string, _ []string, _ map[string]*helium.Document) bool {
@@ -820,6 +822,7 @@ func w3cCheckCount(n int) w3cCheck {
 	}
 }
 
+//nolint:unused // called from generated w3c_*_gen_test.go files
 func w3cCheckDeepEq(expr string) w3cCheck {
 	return w3cCheck{
 		fn: func(_ string, _ []string, _ map[string]*helium.Document) bool {
@@ -831,6 +834,7 @@ func w3cCheckDeepEq(expr string) w3cCheck {
 	}
 }
 
+//nolint:unused // called from generated w3c_*_gen_test.go files
 func w3cCheckEmpty() w3cCheck {
 	return w3cCheck{
 		fn: func(result string, _ []string, _ map[string]*helium.Document) bool {
@@ -853,6 +857,7 @@ func w3cCheckEq(expr string) w3cCheck {
 	}
 }
 
+//nolint:unused // called from generated w3c_*_gen_test.go files
 func w3cCheckNot(checks ...w3cCheck) w3cCheck {
 	return w3cCheck{fn: func(result string, messages []string, resultDocs map[string]*helium.Document) bool {
 		for _, chk := range checks {
