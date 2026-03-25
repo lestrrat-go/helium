@@ -45,7 +45,7 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 		}},
 		"copy-of":                     &xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf},
 		"snapshot":                    &xsltFunc{min: 0, max: 1, fn: ec.fnSnapshot},
-		"regex-group":                 &xsltFunc{min: 1, max: 1, fn: ec.fnRegexGroup},
+		"regex-group":                 &regexGroupFunc{ec: ec},
 		"transform":                   &xsltFunc{min: 1, max: 1, fn: ec.fnTransform},
 		"available-system-properties": &xsltFunc{min: 0, max: 0, fn: ec.fnAvailableSystemProperties},
 		"stream-available":            &xsltFunc{min: 1, max: 1, fn: ec.fnStreamAvailable},

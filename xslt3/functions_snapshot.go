@@ -511,6 +511,34 @@ func addInScopeNamespaces(src, dst *helium.Element) {
 	}
 }
 
+// regexGroupFunc wraps fnRegexGroup and implements FunctionRefCapturer so
+// that regex-group#1 as a named function reference captures the current
+// regex match groups.  When the captured function item is called later
+// (potentially inside a nested analyze-string), it uses the groups from
+// the creation site, not the call site.
+type regexGroupFunc struct {
+	ec *execContext
+}
+
+func (f *regexGroupFunc) MinArity() int { return 1 }
+func (f *regexGroupFunc) MaxArity() int { return 1 }
+func (f *regexGroupFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	return f.ec.fnRegexGroup(ctx, args)
+}
+
+func (f *regexGroupFunc) CapturedFunctionItem(_ context.Context, arity int) (xpath3.FunctionItem, bool) {
+	// Per XSLT 3.0 §20.1.2: a function item obtained via regex-group#1
+	// has no intrinsic regex match context.  It always returns the empty
+	// string, regardless of where it is later called.
+	fi := xpath3.FunctionItem{
+		Arity: arity,
+		Invoke: func(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
+			return xpath3.SingleString(""), nil
+		},
+	}
+	return fi, true
+}
+
 // regex-group(n) returns the nth captured group from the current regex match.
 // Returns empty string if called outside xsl:matching-substring or if the
 // group number is out of range.

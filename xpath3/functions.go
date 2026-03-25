@@ -26,6 +26,14 @@ type DynamicRefRestricted interface {
 	DynRefErrorCode() string
 }
 
+// FunctionRefCapturer marks a Function that needs to capture state when
+// used as a named function reference (fn#arity).  The evaluator calls
+// CapturedFunctionItem to obtain a FunctionItem that closes over
+// whatever dynamic state is relevant (e.g. regex match groups).
+type FunctionRefCapturer interface {
+	CapturedFunctionItem(ctx context.Context, arity int) (FunctionItem, bool)
+}
+
 // TypedFunction extends Function with type signature information.
 // Implementations that expose parameter and return types enable
 // correct instance-of checks and function coercion for user-defined functions.

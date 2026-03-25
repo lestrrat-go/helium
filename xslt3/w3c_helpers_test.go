@@ -1441,9 +1441,6 @@ var w3cImplicitSkips = map[string]string{
 	"attribute-set-1512": "attribute-set same-name merging override order incorrect",
 	"attribute-set-1814": "static-base-uri in attribute-set with xml:base not resolved",
 
-	// regex-090/091: regex-group#N function reference captures regex context as closure
-	"regex-090": "regex-group function reference closure not implemented",
-	"regex-091": "regex-group function reference closure not implemented",
 
 	// xpath-default-namespace: various namespace resolution issues
 	"xpath-default-namespace-0104": "xpath-default-namespace not applied to XPath in select/match",

@@ -176,6 +176,18 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 		return ItemSlice{fi}, nil
 	}
 
+	// Check if the function wants to capture dynamic state (e.g. regex
+	// match groups) into a closure for use as a named function reference.
+	if cap, ok := fn.(FunctionRefCapturer); ok {
+		if fi, captured := cap.CapturedFunctionItem(ec.goCtx, e.Arity); captured {
+			ns, _ := resolvePrefix(ec, e.Prefix)
+			fi.Name = e.Name
+			fi.Namespace = ns
+			fi.Arity = e.Arity
+			return ItemSlice{fi}, nil
+		}
+	}
+
 	minArity := fn.MinArity()
 	ns, _ := resolvePrefix(ec, e.Prefix)
 	// Per XPath 3.1 Section 3.1.6: if the function is focus-dependent,
