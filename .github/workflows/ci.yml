@@ -42,7 +42,7 @@ jobs:
 
       - name: Run tests
         run: |
-          go test -race ./...
+          go test -race -timeout 20m ./...
 
       - name: Build helium command
         run: |

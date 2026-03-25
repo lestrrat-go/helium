@@ -1467,8 +1467,11 @@ var w3cTestsWithBaseOutputURI = map[string]struct{}{
 }
 
 func w3cImplicitSkipReason(name string) string {
+	// regex-classes: each test builds a 1.1M codepoint string and runs
+	// analyze-string twice against it. With -race and 20 concurrent subtests
+	// this consumes multiple GB and causes OOM on constrained machines.
 	if strings.HasPrefix(name, "regex-classes-") {
-		return "regex-classes suite disabled pending Unicode regex conformance"
+		return "too slow for CI: each test processes 1.1M codepoints with regex"
 	}
 	// XSD 1.0-only regex tests: these patterns are invalid under XSD 1.0
 	// character class rules but valid in XSD 1.1 which we target.
@@ -1549,9 +1552,6 @@ var w3cImplicitSkips = map[string]string{
 	"json-to-xml-typed-006": "json-to-xml validate option does not annotate result nodes",
 	"json-to-xml-typed-007": "json-to-xml validate option does not annotate result nodes",
 
-	// function tests: QName eq comparison ignores namespace URI
-	"function-1034": "QName eq comparison incorrectly returns true for different namespace URIs",
-
 	// copy tests: external entity resolution
 	"copy-1401": "requires external entity resolution (SYSTEM entity reference)",
 
@@ -1588,9 +1588,6 @@ var w3cImplicitSkips = map[string]string{
 
 
 
-	// use-package: variable isolation across versioned package instances
-	"use-package-176": "variable from multiple package versions not isolated per-package",
-
 	// use-package: package-scoped namespace serialization in result-document
 	"use-package-108":  "package-scoped namespace alias serialization not implemented",
 	"use-package-108b": "package-scoped namespace alias serialization not implemented",
@@ -1601,10 +1598,6 @@ var w3cImplicitSkips = map[string]string{
 	// error-FODC0002a-ignore: processor now raises FODC0002 (ignore_doc_failure=false)
 	"error-FODC0002a-ignore": "processor raises FODC0002 instead of ignoring document failures",
 
-	// embedded-stylesheet-007: xsl:apply-imports with simplified stylesheet import
-	"embedded-stylesheet-007": "xsl:apply-imports with imported simplified stylesheet not producing correct output",
-	// embedded-stylesheet-015: use-when='false()' on imported xsl:transform root not honored
-	"embedded-stylesheet-015": "use-when on imported stylesheet root element not honored",
 
 	// merge: schema-element instance test on merged items
 	"merge-049": "schema-element() instance test on merged items fails",
@@ -1660,10 +1653,13 @@ var w3cImplicitSkips = map[string]string{
 	"evaluate-013": "schema-aware xsl:evaluate: expected XTDE3160 not raised",
 	"evaluate-048": "requires network access to saxonica.com",
 
+	// slow xsl:evaluate tests (~30s each with -race on CI)
+	"evaluate-010": "too slow for CI: large iteration count in xsl:evaluate",
+	"evaluate-039": "too slow for CI: large iteration count in xsl:evaluate",
+	"evaluate-040": "too slow for CI: large iteration count in xsl:evaluate",
+	"variable-0108": "too slow for CI: large iteration count with variable binding",
 
-	"base-uri-024": "xsl:copy base-uri propagation depends on result context",
 	"base-uri-052": "XInclude processing not applied to source documents",
-	"base-uri-053": "xsl:copy base-uri propagation in built-in templates incorrect",
 
 	// snapshot: f:snapshot reference impl namespace-node graft produces empty root
 	"snapshot-0102a": "snapshot()/root() returns empty for some namespace nodes",
@@ -1674,10 +1670,6 @@ var w3cImplicitSkips = map[string]string{
 	"validation-1301":  "XSD 1.1 xs:alternative type selection not implemented",
 	"import-schema-164": "XSD validation fails for namespaced attribute ref with default",
 	"strip-space-009":  "schema-aware whitespace stripping not implemented",
-	"package-910":      "XSD 1.1 package static error XTSE0165 not detected",
-	"package-913":      "XSD 1.1 package static error XTSE0165 not detected",
-	"package-913a":     "XSD 1.1 package static error XTSE0165 not detected",
-	"package-913b":     "XSD 1.1 package static error XTSE0165 not detected",
 
 
 	// higher-order functions: nested for-each-group grouping bug

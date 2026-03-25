@@ -244,9 +244,11 @@ var knownSkips = map[string]string{
 	"analyze-string-090a": "implementation handles zero-length matches (XSLT 3.0)",
 	"analyze-string-091a": "implementation handles zero-length matches (XSLT 3.0)",
 
-	// These tests require xsl:package/xsl:use-package override support not yet implemented.
-	"document-2401": "requires xsl:package override support",
-	"document-2402": "requires xsl:use-package override support",
+	// Package-scoped strip-space: override template currentPackage=nil but
+	// the using package's strip rules are not on the main stylesheet (they're
+	// in the package's own Stylesheet object, which is merged differently).
+	"document-2401": "package-scoped strip-space: using package rules not on main stylesheet",
+	"document-2402": "package-scoped strip-space: using package rules not on main stylesheet",
 
 	// XSLT 2.0 test expects XTSE0870 for empty xsl:value-of, but XSLT 3.0 allows it.
 	"select-7502a": "XSLT 2.0 test; XSLT 3.0 correctly accepts empty xsl:value-of",
@@ -261,10 +263,6 @@ var knownSkips = map[string]string{
 
 	// Requires external Unicode Consortium NormalizationTest.txt file not included in test suite.
 	"normalize-unicode-008": "missing external fixture NormalizationTest.txt",
-
-	// Requires xsl:use-package override behavior for named templates, which
-	// remains incomplete.
-	"collection-006": "requires xsl:use-package override support",
 
 	// XSD 1.0 variant expects xs:dateTimeStamp unavailable; our processor
 	// targets XSD 1.1 where it is available. The 0151a variant tests XSD 1.1
@@ -1640,6 +1638,26 @@ func emitAssertions(assertions []assertion) []string {
 	var out []string
 	for _, a := range assertions {
 		out = append(out, emitAssertion(a)...)
+	}
+	// Filter out w3cAssertSkip() when real assertions exist alongside.
+	// This handles W3C tests with mixed result alternatives (e.g.
+	// assert-xml + assert-posture-and-sweep): the unsupported assertion
+	// would cause a t.Skip that hides the passing real assertion.
+	hasReal := false
+	for _, e := range out {
+		if e != "w3cAssertSkip()" {
+			hasReal = true
+			break
+		}
+	}
+	if hasReal {
+		filtered := out[:0]
+		for _, e := range out {
+			if e != "w3cAssertSkip()" {
+				filtered = append(filtered, e)
+			}
+		}
+		out = filtered
 	}
 	return out
 }

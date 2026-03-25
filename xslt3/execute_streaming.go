@@ -35,7 +35,8 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 	}
 	resolvedURI := resolveAgainstBaseURI(docURI, effectiveBase)
 
-	doc, ok := ec.docCache[resolvedURI]
+	cacheKey := ec.docCacheKey(resolvedURI)
+	doc, ok := ec.docCache[cacheKey]
 	if !ok {
 		data, err := os.ReadFile(resolvedURI)
 		if err != nil {
@@ -50,14 +51,14 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 
 		// Apply xsl:strip-space to the loaded document so that whitespace-only
 		// text nodes are removed before XPath evaluation sees them.
-		if len(ec.stylesheet.stripSpace) > 0 {
+		if len(ec.effectiveStripSpace()) > 0 {
 			ec.stripWhitespaceFromDoc(doc)
 		}
 
 		if ec.docCache == nil {
 			ec.docCache = make(map[string]*helium.Document)
 		}
-		ec.docCache[resolvedURI] = doc
+		ec.docCache[cacheKey] = doc
 	}
 
 	// Apply schema validation when validation="strict"|"lax" or type is specified.
@@ -1275,7 +1276,8 @@ func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effect
 	resolvedURI := resolveAgainstBaseURI(uri, effectiveBase)
 
 	// Check document cache.
-	if doc, ok := ec.docCache[resolvedURI]; ok {
+	mergeCacheKey := ec.docCacheKey(resolvedURI)
+	if doc, ok := ec.docCache[mergeCacheKey]; ok {
 		return doc, nil
 	}
 
@@ -1291,14 +1293,14 @@ func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effect
 	}
 
 	// Apply xsl:strip-space.
-	if len(ec.stylesheet.stripSpace) > 0 {
+	if len(ec.effectiveStripSpace()) > 0 {
 		ec.stripWhitespaceFromDoc(doc)
 	}
 
 	if ec.docCache == nil {
 		ec.docCache = make(map[string]*helium.Document)
 	}
-	ec.docCache[resolvedURI] = doc
+	ec.docCache[mergeCacheKey] = doc
 	return doc, nil
 }
 
