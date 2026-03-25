@@ -431,10 +431,14 @@ func (ec *execContext) evaluateGlobalParam(p *param) (xpath3.Sequence, error) {
 	ec.currentMode = ec.stylesheet.defaultMode
 	defer func() { ec.currentMode = savedMode }()
 
-	// Reset static base URI override so global param evaluation is not
-	// affected by the caller's xml:base context.
+	// Restore the declaration-site static base URI so that
+	// static-base-uri() inside the param resolves correctly.
 	savedBaseOverride := ec.staticBaseURIOverride
-	ec.staticBaseURIOverride = ""
+	if p.StaticBaseURI != "" {
+		ec.staticBaseURIOverride = p.StaticBaseURI
+	} else {
+		ec.staticBaseURIOverride = ""
+	}
 	defer func() { ec.staticBaseURIOverride = savedBaseOverride }()
 
 	// XTDE0050: required stylesheet parameter not supplied by the caller.

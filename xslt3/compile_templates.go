@@ -641,6 +641,11 @@ func (c *compiler) compileParamDef(elem *helium.Element) (*param, error) {
 		Visibility: getAttr(elem, "visibility"),
 	}
 
+	// Capture xml:base for static base URI override during body evaluation.
+	if effectiveBase := stylesheetBaseURI(elem, c.baseURI); effectiveBase != c.baseURI {
+		p.StaticBaseURI = effectiveBase
+	}
+
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
