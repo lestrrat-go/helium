@@ -309,7 +309,7 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 					ctx = context.Background()
 				}
 				ec.temporaryOutputDepth++
-				seq, err := ec.evaluateBody(ctx, kd.Body)
+				seq, err := ec.evaluateBodyAsSequence(ctx, kd.Body)
 				ec.temporaryOutputDepth--
 				if err != nil {
 					ec.keyUseExprDepth--
