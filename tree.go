@@ -12,9 +12,9 @@ import (
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
-	"github.com/lestrrat-go/helium/internal/strcursor"
 )
 
 // BuildURI resolves a relative system ID against a base URI.
@@ -77,8 +77,8 @@ func (f *fileParseInput) URI() string { return f.uri }
 // TreeBuilder is a SAX2 handler that builds a DOM tree from SAX events,
 // analogous to libxml2's default SAX handler (xmlSAX2InitDefaultSAXHandler).
 type TreeBuilder struct {
-	cachedCtx context.Context // last context seen
-	cachedPCtx *parserCtx    // cached parserCtx for that context
+	cachedCtx  context.Context // last context seen
+	cachedPCtx *parserCtx      // cached parserCtx for that context
 }
 
 func (t *TreeBuilder) pctx(ctxif context.Context) *parserCtx {
@@ -567,8 +567,8 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	ctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(data)))
 
 	for ctx.inputTab.Len() > baseLen {
-		top, ok := ctx.inputTab.PeekOne().(strcursor.Cursor)
-		if !ok || top.Done() {
+		top := ctx.adaptCursor(ctx.inputTab.PeekOne())
+		if top == nil || top.Done() {
 			break
 		}
 
@@ -577,13 +577,13 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		if ctx.inputTab.Len() <= baseLen {
 			break
 		}
-		top, ok = ctx.inputTab.PeekOne().(strcursor.Cursor)
-		if !ok || top.Done() {
+		top = ctx.adaptCursor(ctx.inputTab.PeekOne())
+		if top == nil || top.Done() {
 			break
 		}
 
 		cur := ctx.getCursor()
-		if cur != nil && cur.Peek() == '<' && cur.PeekN(2) == '!' && cur.PeekN(3) == '[' {
+		if cur != nil && cur.Peek() == '<' && cur.PeekAt(1) == '!' && cur.PeekAt(2) == '[' {
 			if err := ctx.parseConditionalSections(ctxif); err != nil {
 				break
 			}

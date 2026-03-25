@@ -2,7 +2,6 @@ package strcursor
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"unicode/utf8"
 )
@@ -104,7 +103,33 @@ func (c *UTF8Cursor) Done() bool {
 	return c.fillBuffer(1) != nil
 }
 
-func (c *UTF8Cursor) Peek() rune {
+// Peek returns the byte at the current position, or 0 if at EOF.
+func (c *UTF8Cursor) Peek() byte {
+	if c.bufpos >= c.buflen {
+		if c.fillBuffer(1) != nil {
+			return 0
+		}
+	}
+	return c.buf[c.bufpos]
+}
+
+// PeekAt returns the byte at offset bytes from the current position (0-indexed).
+func (c *UTF8Cursor) PeekAt(offset int) byte {
+	pos := c.bufpos + offset
+	if pos >= c.buflen {
+		if c.fillBuffer(offset+1) != nil {
+			return 0
+		}
+		pos = c.bufpos + offset
+		if pos >= c.buflen {
+			return 0
+		}
+	}
+	return c.buf[pos]
+}
+
+// PeekRune decodes and returns the rune at the current position.
+func (c *UTF8Cursor) PeekRune() rune {
 	if c.bufpos >= c.buflen {
 		if c.fillBuffer(1) != nil {
 			return utf8.RuneError
@@ -121,143 +146,64 @@ func (c *UTF8Cursor) Peek() rune {
 	return r
 }
 
-func (c *UTF8Cursor) PeekN(n int) rune {
-	// Fast path: if the first n bytes from bufpos are all ASCII, then byte
-	// position == rune position. This is the common case for XML names,
-	// delimiters, and most content.
+// PeekString returns n bytes from the current position as a string.
+func (c *UTF8Cursor) PeekString(n int) string {
 	if c.buflen-c.bufpos < n {
 		if c.fillBuffer(n) != nil {
-			return utf8.RuneError
+			return ""
 		}
 	}
-	allASCII := true
-	for i := 0; i < n; i++ {
-		if c.buf[c.bufpos+i] >= 0x80 {
-			allASCII = false
-			break
-		}
-	}
-	if allASCII {
-		return rune(c.buf[c.bufpos+n-1])
-	}
-
-	// Slow path: multi-byte UTF-8 present. Scan rune boundaries.
-	off, err := c.nthRuneOffset(n - 1)
-	if err != nil {
-		return utf8.RuneError
-	}
-	if err := c.fillBuffer(off + utf8.UTFMax); err != nil {
-		if c.bufpos+off >= c.buflen {
-			return utf8.RuneError
-		}
-	}
-	b := c.buf[c.bufpos+off]
-	if b < 0x80 {
-		return rune(b)
-	}
-	r, _ := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
-	return r
-}
-
-func (c *UTF8Cursor) PeekString(n int) string {
-	// Fast path: if first n bytes are ASCII, byte count == rune count.
-	if err := c.fillBuffer(n); err != nil {
+	if c.bufpos+n > c.buflen {
 		return ""
 	}
-	allASCII := true
-	for i := 0; i < n; i++ {
-		if c.bufpos+i >= c.buflen {
-			allASCII = false
-			break
-		}
-		if c.buf[c.bufpos+i] >= 0x80 {
-			allASCII = false
-			break
-		}
-	}
-	if allASCII {
-		return string(c.buf[c.bufpos : c.bufpos+n])
-	}
-
-	// Slow path: multi-byte.
-	off, err := c.nthRuneOffset(n)
-	if err != nil {
-		return ""
-	}
-	return string(c.buf[c.bufpos : c.bufpos+off])
+	return string(c.buf[c.bufpos : c.bufpos+n])
 }
 
-func (c *UTF8Cursor) Cur() rune {
-	r := c.Peek()
-	if r != utf8.RuneError {
-		_ = c.Advance(1)
-	}
-	return r
-}
-
+// Advance consumes n bytes, updating line/column tracking.
 func (c *UTF8Cursor) Advance(n int) error {
-	for i := 0; i < n; i++ {
-		if err := c.fillBuffer(1); err != nil {
+	if c.buflen-c.bufpos < n {
+		if err := c.fillBuffer(n); err != nil {
 			return err
 		}
+	}
+	end := c.bufpos + n
+	for c.bufpos < end {
 		b := c.buf[c.bufpos]
-		var w int
-		var r rune
-		if b < 0x80 {
-			r = rune(b)
-			w = 1
-		} else {
-			_ = c.fillBuffer(utf8.UTFMax)
-			r, w = utf8.DecodeRune(c.buf[c.bufpos:c.buflen])
-			if w == 0 {
-				return errors.New("invalid UTF-8")
-			}
-		}
-		if r == '\n' {
+		if b == '\n' {
 			c.lineno++
 			c.line.Reset()
 			c.column = 1
 		} else {
 			c.column++
 		}
-		if w == 1 {
-			c.line.WriteByte(b)
-		} else {
-			c.line.Write(c.buf[c.bufpos : c.bufpos+w])
-		}
-		c.bufpos += w
+		c.line.WriteByte(b)
+		c.bufpos++
 	}
 	return nil
 }
 
+// AdvanceFast consumes n bytes, updating only line numbers (not the line buffer).
 func (c *UTF8Cursor) AdvanceFast(n int) error {
-	lastNewline := -1
-	for i := 0; i < n; i++ {
-		if err := c.fillBuffer(1); err != nil {
+	if c.buflen-c.bufpos < n {
+		if err := c.fillBuffer(n); err != nil {
 			return err
 		}
-		b := c.buf[c.bufpos]
-		if b < 0x80 {
-			if b == '\n' {
-				c.lineno++
-				lastNewline = i
-			}
-			c.bufpos++
-		} else {
-			_ = c.fillBuffer(utf8.UTFMax)
-			_, w := utf8.DecodeRune(c.buf[c.bufpos:c.buflen])
-			if w == 0 {
-				return errors.New("invalid UTF-8")
-			}
-			c.bufpos += w
+	}
+	end := c.bufpos + n
+	lastNewline := -1
+	for i := c.bufpos; i < end; i++ {
+		if c.buf[i] == '\n' {
+			c.lineno++
+			lastNewline = i
 		}
 	}
 	if lastNewline >= 0 {
-		c.column = n - lastNewline
+		c.column = end - lastNewline
 		c.line.Reset()
 	} else {
 		c.column += n
 	}
+	c.bufpos = end
 	return nil
 }
 
@@ -286,8 +232,7 @@ func (c *UTF8Cursor) Consume(b []byte) bool {
 	if !c.HasPrefix(b) {
 		return false
 	}
-	n := utf8.RuneCount(b)
-	_ = c.Advance(n)
+	_ = c.Advance(len(b))
 	return true
 }
 
@@ -295,8 +240,7 @@ func (c *UTF8Cursor) ConsumeString(s string) bool {
 	if !c.HasPrefixString(s) {
 		return false
 	}
-	n := utf8.RuneCountInString(s)
-	_ = c.Advance(n)
+	_ = c.Advance(len(s))
 	return true
 }
 
@@ -373,7 +317,7 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 	nRunes := 1
 	for {
 		if c.bufpos+off >= c.buflen {
-			if c.fillBuffer(off + 1) != nil {
+			if c.fillBuffer(off+1) != nil {
 				break
 			}
 			if c.bufpos+off >= c.buflen {
@@ -427,19 +371,18 @@ func isNCNameChar(r rune) bool {
 
 // ScanSimpleAttrValue scans a simple attribute value (no entities, no special
 // whitespace) between the current position and the given quote character.
-// Returns the value string and rune count, or ("", 0) if the value contains
+// Returns the value string and byte count, or ("", 0) if the value contains
 // entities or special characters that require the slow path.
-// Does NOT consume — caller must call Advance(nRunes) after.
+// Does NOT consume — caller must call Advance(nBytes) after.
 func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte) (string, int) {
 	if c.fillBuffer(1) != nil {
 		return "", 0
 	}
 
 	off := 0
-	nRunes := 0
 	for {
 		if c.bufpos+off >= c.buflen {
-			if c.fillBuffer(off + 1) != nil {
+			if c.fillBuffer(off+1) != nil {
 				return "", 0
 			}
 			if c.bufpos+off >= c.buflen {
@@ -449,7 +392,7 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte) (string, int) {
 		b := c.buf[c.bufpos+off]
 		if b == quote {
 			// End of value.
-			return string(c.buf[c.bufpos : c.bufpos+off]), nRunes
+			return string(c.buf[c.bufpos : c.bufpos+off]), off
 		}
 		if b == '&' || b == '<' {
 			// Entity reference or invalid char — need slow path.
@@ -461,7 +404,6 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte) (string, int) {
 				return "", 0
 			}
 			off++
-			nRunes++
 		} else {
 			_ = c.fillBuffer(off + utf8.UTFMax)
 			_, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
@@ -469,25 +411,28 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte) (string, int) {
 				return "", 0
 			}
 			off += w
-			nRunes++
 		}
 	}
 }
 
 // ScanCharDataInto scans XML character data with inline EOL normalization.
-// Does NOT consume — caller must call AdvanceFast(nRunes) after processing.
-// The returned rune count counts \r\n as 2 runes to match what AdvanceFast sees.
-func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer) int {
+// Does NOT consume — caller must call AdvanceFast(nBytes) after processing.
+// ScanCharDataSlice scans XML character data with EOL normalization, appending
+// to dst. Returns the grown slice and the number of bytes consumed. The caller takes
+// ownership of the returned slice. Does NOT consume — call AdvanceFast after.
+func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 	if c.fillBuffer(1) != nil {
-		return 0
+		return dst, 0
 	}
 
-	nRunes := 0
-	pos := c.bufpos
-	dst.Grow(c.buflen - pos)
+	off := 0
 
-	for pos < c.buflen {
-		b := c.buf[pos]
+	for {
+		if c.bufpos+off >= c.buflen {
+			break
+		}
+
+		b := c.buf[c.bufpos+off]
 		if b < 0x80 {
 			if b == '<' || b == '&' {
 				break
@@ -495,39 +440,88 @@ func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer) int {
 			if b < 0x20 && b != 0x9 && b != 0xa && b != 0xd {
 				break
 			}
-			if b == ']' && pos+2 < c.buflen && c.buf[pos+1] == ']' && c.buf[pos+2] == '>' {
+			if b == ']' && c.bufpos+off+2 < c.buflen && c.buf[c.bufpos+off+1] == ']' && c.buf[c.bufpos+off+2] == '>' {
 				break
 			}
 			if b == '\r' {
-				dst.WriteByte('\n')
-				pos++
-				nRunes++ // count \r as a rune
-				if pos < c.buflen && c.buf[pos] == '\n' {
-					pos++
-					nRunes++ // count \n as a rune too — AdvanceFast sees both
+				dst = append(dst, '\n')
+				off++
+				if c.bufpos+off < c.buflen && c.buf[c.bufpos+off] == '\n' {
+					off++
 				}
 				continue
 			}
-			dst.WriteByte(b)
-			pos++
-			nRunes++
+			dst = append(dst, b)
+			off++
 			continue
 		}
-		// Multi-byte UTF-8. Try to ensure enough bytes.
-		if c.buflen-pos < utf8.UTFMax {
-			_ = c.fillBuffer(pos - c.bufpos + utf8.UTFMax)
+		if c.buflen-(c.bufpos+off) < utf8.UTFMax {
+			_ = c.fillBuffer(off + utf8.UTFMax)
 		}
-		r, w := utf8.DecodeRune(c.buf[pos:c.buflen])
+		r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
 		if r == utf8.RuneError || w == 0 {
 			break
 		}
 		if r < 0x20 {
 			break
 		}
-		dst.WriteRune(r)
-		pos += w
-		nRunes++
+		dst = utf8.AppendRune(dst, r)
+		off += w
 	}
 
-	return nRunes
+	return dst, off
+}
+
+func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer) int {
+	if c.fillBuffer(1) != nil {
+		return 0
+	}
+
+	off := 0
+	dst.Grow(c.buflen - c.bufpos)
+
+	for {
+		if c.bufpos+off >= c.buflen {
+			break
+		}
+
+		b := c.buf[c.bufpos+off]
+		if b < 0x80 {
+			if b == '<' || b == '&' {
+				break
+			}
+			if b < 0x20 && b != 0x9 && b != 0xa && b != 0xd {
+				break
+			}
+			if b == ']' && c.bufpos+off+2 < c.buflen && c.buf[c.bufpos+off+1] == ']' && c.buf[c.bufpos+off+2] == '>' {
+				break
+			}
+			if b == '\r' {
+				dst.WriteByte('\n')
+				off++
+				if c.bufpos+off < c.buflen && c.buf[c.bufpos+off] == '\n' {
+					off++
+				}
+				continue
+			}
+			dst.WriteByte(b)
+			off++
+			continue
+		}
+		// Multi-byte UTF-8. Try to ensure enough bytes.
+		if c.buflen-(c.bufpos+off) < utf8.UTFMax {
+			_ = c.fillBuffer(off + utf8.UTFMax)
+		}
+		r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
+		if r == utf8.RuneError || w == 0 {
+			break
+		}
+		if r < 0x20 {
+			break
+		}
+		dst.Write(c.buf[c.bufpos+off : c.bufpos+off+w])
+		off += w
+	}
+
+	return off
 }

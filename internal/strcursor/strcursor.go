@@ -11,27 +11,34 @@ import (
 	"unicode/utf8"
 )
 
-// Cursor is the interface satisfied by both RuneCursor and ByteCursor.
+// Cursor is the byte-oriented interface for reading XML input.
+// All offsets and counts are in bytes, not runes.
 type Cursor interface {
 	io.Reader
 
+	// Advance consumes n bytes from the input, updating line/column tracking.
 	Advance(int) error
+	// AdvanceFast consumes n bytes, updating only line numbers (not the line buffer).
 	AdvanceFast(int) error
 	Column() int
 	Consume([]byte) bool
 	ConsumeString(string) bool
-	Cur() rune
 	Done() bool
 	HasPrefix([]byte) bool
 	HasPrefixString(string) bool
 	Line() string
 	LineNumber() int
-	Peek() rune
-	PeekN(int) rune
-	// PeekString returns the first n runes/bytes as a string without consuming.
+	// Peek returns the byte at the current position, or 0 if at EOF.
+	Peek() byte
+	// PeekAt returns the byte at offset bytes from the current position (0-indexed).
+	PeekAt(int) byte
+	// PeekRune decodes and returns the rune at the current position.
+	// Use for non-ASCII content (byte >= 0x80). Returns utf8.RuneError on error.
+	PeekRune() rune
+	// PeekString returns n bytes from the current position as a string.
 	PeekString(int) string
 	// ScanCharDataInto scans XML character data into dst with EOL normalization.
-	// Returns rune count consumed. Does not advance — call AdvanceFast after.
+	// Returns the number of bytes consumed. Does not advance — call AdvanceFast after.
 	ScanCharDataInto(dst *bytes.Buffer) int
 	Unused() io.Reader
 }
@@ -645,29 +652,52 @@ func (c *ByteCursor) Done() bool {
 	return c.fillBuffer(1) != nil
 }
 
-func (c *ByteCursor) Peek() rune {
-	return c.PeekN(1)
+// Peek returns the byte at the current position, or 0 if at EOF.
+func (c *ByteCursor) Peek() byte {
+	if c.bufpos >= c.buflen {
+		if c.fillBuffer(1) != nil {
+			return 0
+		}
+	}
+	return c.buf[c.bufpos]
 }
 
-func (c *ByteCursor) PeekN(n int) rune {
-	if err := c.fillBuffer(n); err != nil {
+// PeekAt returns the byte at offset bytes from the current position (0-indexed).
+func (c *ByteCursor) PeekAt(offset int) byte {
+	pos := c.bufpos + offset
+	if pos >= c.buflen {
+		if c.fillBuffer(offset+1) != nil {
+			return 0
+		}
+		pos = c.bufpos + offset
+		if pos >= c.buflen {
+			return 0
+		}
+	}
+	return c.buf[pos]
+}
+
+// PeekRune decodes and returns the rune at the current position.
+// For ByteCursor, each byte is treated as a single character.
+func (c *ByteCursor) PeekRune() rune {
+	b := c.Peek()
+	if b == 0 {
 		return utf8.RuneError
 	}
-	return rune(c.buf[c.bufpos+n-1])
+	return rune(b)
 }
 
 // PeekString returns the first n bytes as a string without consuming them.
 func (c *ByteCursor) PeekString(n int) string {
-	if err := c.fillBuffer(n); err != nil {
+	if c.buflen-c.bufpos < n {
+		if c.fillBuffer(n) != nil {
+			return ""
+		}
+	}
+	if c.bufpos+n > c.buflen {
 		return ""
 	}
 	return string(c.buf[c.bufpos : c.bufpos+n])
-}
-
-func (c *ByteCursor) Cur() rune {
-	b := c.Peek()
-	_ = c.Advance(1)
-	return b
 }
 
 func (c *ByteCursor) Advance(n int) error {
