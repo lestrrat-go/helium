@@ -9,8 +9,10 @@ import (
 )
 
 func Example_relaxng_validate() {
+	p := helium.NewParser()
+
 	// Compile a small RELAX NG schema from XML syntax.
-	schemaDoc, err := helium.NewParser().Parse(context.Background(), []byte(
+	schemaDoc, err := p.Parse(context.Background(), []byte(
 		`<grammar xmlns="http://relaxng.org/ns/structure/1.0">
   <start>
     <element name="book">
@@ -29,7 +31,7 @@ func Example_relaxng_validate() {
 		return
 	}
 
-	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
+	doc, err := p.Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
 	if err != nil {
 		fmt.Printf("xml parse failed: %s\n", err)
 		return

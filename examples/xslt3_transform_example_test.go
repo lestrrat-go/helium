@@ -30,13 +30,14 @@ func Example_xslt3_transform() {
 </catalog>`
 
 	ctx := context.Background()
+	p := helium.NewParser()
 
 	// The basic XSLT workflow is:
 	// 1. parse or load the stylesheet
 	// 2. compile it to *xslt3.Stylesheet
 	// 3. parse the source document
 	// 4. call stylesheet.Transform(source).Do(ctx)
-	stylesheetDoc, err := helium.NewParser().Parse(ctx, []byte(stylesheetSrc))
+	stylesheetDoc, err := p.Parse(ctx, []byte(stylesheetSrc))
 	if err != nil {
 		fmt.Printf("failed to parse stylesheet: %s\n", err)
 		return
@@ -48,7 +49,7 @@ func Example_xslt3_transform() {
 		return
 	}
 
-	sourceDoc, err := helium.NewParser().Parse(ctx, []byte(sourceSrc))
+	sourceDoc, err := p.Parse(ctx, []byte(sourceSrc))
 	if err != nil {
 		fmt.Printf("failed to parse source: %s\n", err)
 		return

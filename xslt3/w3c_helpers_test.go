@@ -1788,18 +1788,19 @@ func domEqual(a, b string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	docA, errA := helium.NewParser().Parse(ctx, []byte(wrapA))
-	docB, errB := helium.NewParser().Parse(ctx, []byte(wrapB))
+	p := helium.NewParser()
+	docA, errA := p.Parse(ctx, []byte(wrapA))
+	docB, errB := p.Parse(ctx, []byte(wrapB))
 	if errA != nil || errB != nil {
 		// XML 1.1 prefix undeclarations (xmlns:prefix="") are not valid
 		// XML 1.0. Strip them and retry so that DOM comparison still works.
 		if errA != nil {
 			wrapA = stripPrefixUndecls(wrapA)
-			docA, errA = helium.NewParser().Parse(ctx, []byte(wrapA))
+			docA, errA = p.Parse(ctx, []byte(wrapA))
 		}
 		if errB != nil {
 			wrapB = stripPrefixUndecls(wrapB)
-			docB, errB = helium.NewParser().Parse(ctx, []byte(wrapB))
+			docB, errB = p.Parse(ctx, []byte(wrapB))
 		}
 		if errA != nil || errB != nil {
 			return false

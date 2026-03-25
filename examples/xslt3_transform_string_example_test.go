@@ -19,8 +19,9 @@ func Example_xslt3_transform_string() {
 	const sourceSrc = `<person name="World"/>`
 
 	ctx := context.Background()
+	p := helium.NewParser()
 
-	stylesheetDoc, err := helium.NewParser().Parse(ctx, []byte(stylesheetSrc))
+	stylesheetDoc, err := p.Parse(ctx, []byte(stylesheetSrc))
 	if err != nil {
 		fmt.Printf("parse stylesheet error: %s\n", err)
 		return
@@ -32,7 +33,7 @@ func Example_xslt3_transform_string() {
 		return
 	}
 
-	sourceDoc, err := helium.NewParser().Parse(ctx, []byte(sourceSrc))
+	sourceDoc, err := p.Parse(ctx, []byte(sourceSrc))
 	if err != nil {
 		fmt.Printf("parse error: %s\n", err)
 		return

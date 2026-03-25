@@ -29,11 +29,12 @@ func FuzzParseRoundtrip(f *testing.F) {
 	f.Add([]byte(`<root xmlns="http://example.com"><child attr="val">text</child></root>`))
 	f.Add([]byte(`<?xml version="1.0"?><root><a><b><c>deep</c></b></a></root>`))
 
+	p := helium.NewParser()
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {
 			return
 		}
-		doc, err := helium.NewParser().Parse(t.Context(), data)
+		doc, err := p.Parse(t.Context(), data)
 		if err != nil {
 			return
 		}
@@ -43,7 +44,7 @@ func FuzzParseRoundtrip(f *testing.F) {
 		err = w.WriteDoc(&buf, doc)
 		require.NoError(t, err)
 
-		_, err = helium.NewParser().Parse(t.Context(), buf.Bytes())
+		_, err = p.Parse(t.Context(), buf.Bytes())
 		require.NoError(t, err)
 	})
 }

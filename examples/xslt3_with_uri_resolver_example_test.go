@@ -29,12 +29,13 @@ func Example_xslt3_with_uri_resolver() {
 </xsl:stylesheet>`
 
 	ctx := context.Background()
+	p := helium.NewParser()
 
 	// URI resolvers are used at stylesheet compile time for xsl:include,
 	// xsl:import, and other external reads. They are a good fit when your
 	// stylesheets live in memory, in an embedded filesystem, or behind a custom
 	// storage layer instead of regular disk paths.
-	stylesheetDoc, err := helium.NewParser().Parse(ctx, []byte(mainStylesheetSrc))
+	stylesheetDoc, err := p.Parse(ctx, []byte(mainStylesheetSrc))
 	if err != nil {
 		fmt.Printf("failed to parse stylesheet: %s\n", err)
 		return
@@ -53,7 +54,7 @@ func Example_xslt3_with_uri_resolver() {
 		return
 	}
 
-	sourceDoc, err := helium.NewParser().Parse(ctx, []byte(`<catalog><item code="A1"/><item code="B2"/></catalog>`))
+	sourceDoc, err := p.Parse(ctx, []byte(`<catalog><item code="A1"/><item code="B2"/></catalog>`))
 	if err != nil {
 		fmt.Printf("failed to parse source: %s\n", err)
 		return

@@ -3,8 +3,6 @@ package examples_test
 import (
 	"context"
 	"fmt"
-
-	"github.com/lestrrat-go/helium"
 )
 
 func Example_xslt3_apply_templates() {
@@ -36,7 +34,7 @@ func Example_xslt3_apply_templates() {
 		return
 	}
 
-	sourceDoc, err := helium.NewParser().Parse(ctx, []byte(sourceSrc))
+	sourceDoc, err := parseExampleDocument(ctx, sourceSrc)
 	if err != nil {
 		fmt.Printf("parse error: %s\n", err)
 		return
