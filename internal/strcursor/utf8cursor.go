@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"unicode/utf8"
+	"unsafe"
 )
 
 // UTF8Cursor is a high-performance cursor for UTF-8 encoded input.
@@ -15,7 +16,7 @@ type UTF8Cursor struct {
 	bufpos int
 	column int
 	in     io.Reader
-	line   bytes.Buffer
+	line   []byte
 	lineno int
 }
 
@@ -27,6 +28,7 @@ func NewUTF8Cursor(r io.Reader) *UTF8Cursor {
 		bufpos: 0,
 		column: 1,
 		in:     r,
+		line:   make([]byte, 0, 256),
 		lineno: 1,
 	}
 }
@@ -171,12 +173,12 @@ func (c *UTF8Cursor) Advance(n int) error {
 		b := c.buf[c.bufpos]
 		if b == '\n' {
 			c.lineno++
-			c.line.Reset()
+			c.line = c.line[:0]
 			c.column = 1
 		} else {
 			c.column++
 		}
-		c.line.WriteByte(b)
+		c.line = append(c.line, b)
 		c.bufpos++
 	}
 	return nil
@@ -199,7 +201,7 @@ func (c *UTF8Cursor) AdvanceFast(n int) error {
 	}
 	if lastNewline >= 0 {
 		c.column = end - lastNewline
-		c.line.Reset()
+		c.line = c.line[:0]
 	} else {
 		c.column += n
 	}
@@ -245,7 +247,7 @@ func (c *UTF8Cursor) ConsumeString(s string) bool {
 }
 
 func (c *UTF8Cursor) Line() string {
-	return c.line.String()
+	return unsafe.String(unsafe.SliceData(c.line), len(c.line))
 }
 
 func (c *UTF8Cursor) LineNumber() int {

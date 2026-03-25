@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"unicode/utf8"
+	"unsafe"
 )
 
 // Cursor is the byte-oriented interface for reading XML input.
@@ -103,7 +104,7 @@ type RuneCursor struct {
 	rawPos int // consumed position in raw
 
 	in     io.Reader
-	line   bytes.Buffer
+	line   []byte
 	lineno int
 	column int
 	nread  int
@@ -126,6 +127,7 @@ func NewRuneCursor(r io.Reader, bufsize ...int) *RuneCursor {
 		rawLen:   0,
 		rawPos:   0,
 		in:       r,
+		line:     make([]byte, 0, 256),
 		lineno:   1,
 		column:   1,
 	}
@@ -344,15 +346,15 @@ func (c *RuneCursor) Cur() rune {
 	c.nread += c.ring[c.head].width
 	if r == '\n' {
 		c.lineno++
-		c.line.Reset()
+		c.line = c.line[:0]
 		c.column = 1
 	} else {
 		c.column++
 	}
 	if r < utf8.RuneSelf {
-		c.line.WriteByte(byte(r))
+		c.line = append(c.line, byte(r))
 	} else {
-		c.line.WriteRune(r)
+		c.line = utf8.AppendRune(c.line, r)
 	}
 	c.head = (c.head + 1) & c.ringMask
 	c.count--
@@ -373,15 +375,15 @@ func (c *RuneCursor) Advance(n int) error {
 		c.nread += e.width
 		if e.val == '\n' {
 			c.lineno++
-			c.line.Reset()
+			c.line = c.line[:0]
 			c.column = 1
 		} else {
 			c.column++
 		}
 		if e.val < utf8.RuneSelf {
-			c.line.WriteByte(byte(e.val))
+			c.line = append(c.line, byte(e.val))
 		} else {
-			c.line.WriteRune(e.val)
+			c.line = utf8.AppendRune(c.line, e.val)
 		}
 		head = (head + 1) & mask
 	}
@@ -417,7 +419,7 @@ func (c *RuneCursor) AdvanceFast(n int) error {
 	c.nread += totalBytes
 	if lastNewline >= 0 {
 		c.column = n - lastNewline
-		c.line.Reset()
+		c.line = c.line[:0]
 	} else {
 		c.column += n
 	}
@@ -526,7 +528,7 @@ func (c *RuneCursor) ConsumeString(s string) bool {
 }
 
 func (c *RuneCursor) Line() string {
-	return c.line.String()
+	return unsafe.String(unsafe.SliceData(c.line), len(c.line))
 }
 
 func (c *RuneCursor) LineNumber() int {
@@ -590,7 +592,7 @@ type ByteCursor struct {
 	bufpos int
 	column int
 	in     io.Reader
-	line   bytes.Buffer
+	line   []byte
 	lineno int
 }
 
@@ -606,6 +608,7 @@ func NewByteCursor(r io.Reader, nn ...int) *ByteCursor {
 		bufpos: n, // force fill on first read
 		column: 1,
 		in:     r,
+		line:   make([]byte, 0, 256),
 		lineno: 1,
 	}
 }
@@ -707,11 +710,10 @@ func (c *ByteCursor) Advance(n int) error {
 	if i := bytes.IndexByte(c.buf[c.bufpos:c.bufpos+n], '\n'); i > -1 {
 		c.lineno++
 		c.column = n - i + 1
-		c.line.Reset()
-		c.line.Write(c.buf[c.bufpos+i : c.bufpos+n])
+		c.line = append(c.line[:0], c.buf[c.bufpos+i:c.bufpos+n]...)
 	} else {
 		c.column += n
-		c.line.Write(c.buf[c.bufpos : c.bufpos+n])
+		c.line = append(c.line, c.buf[c.bufpos:c.bufpos+n]...)
 	}
 	c.bufpos += n
 	return nil
@@ -784,7 +786,7 @@ func (c *ByteCursor) ConsumeString(s string) bool {
 }
 
 func (c *ByteCursor) Line() string {
-	return c.line.String()
+	return unsafe.String(unsafe.SliceData(c.line), len(c.line))
 }
 
 func (c *ByteCursor) LineNumber() int {
