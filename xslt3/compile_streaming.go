@@ -830,13 +830,18 @@ func (c *compiler) compileMerge(elem *helium.Element) (instruction, error) {
 var mergeSourceAllowedAttrs = map[string]struct{}{
 	"name": {}, "for-each-item": {}, "for-each-source": {},
 	"select": {}, "streamable": {}, "sort-before-merge": {},
-	"use-accumulators": {}, "validation": {},
+	"use-accumulators": {}, "validation": {}, "type": {},
 }
 
 // compileMergeSource compiles an xsl:merge-source element.
 func (c *compiler) compileMergeSource(elem *helium.Element) (*mergeSource, error) {
 	if err := c.validateXSLTAttrs(elem, mergeSourceAllowedAttrs); err != nil {
 		return nil, err
+	}
+	// XTSE0020: the type attribute requires schema-aware type validation
+	// on merge-source items, which is not yet implemented.
+	if typeAttr := getAttr(elem, "type"); typeAttr != "" {
+		return nil, staticError(errCodeXTSE0020, "xsl:merge-source type=%q attribute validation is not supported", typeAttr)
 	}
 	src := &mergeSource{
 		Name:    getAttr(elem, "name"),

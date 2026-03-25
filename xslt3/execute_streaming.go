@@ -695,11 +695,14 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 			}
 		} else {
 			// Default: verify items are already sorted (XTDE2210).
-			// Resolve collation for each key level and apply to verify keys.
-			// Skip verification when collation uses unsupported options
-			// (alternate=shifted/blanked) or lang/case-order without an
-			// explicit collation URI, since the Go UCA fallback may differ
-			// from the original sort order.
+			// Resolve collation for each key level and apply it to the
+			// verify keys so the comparison uses the correct ordering.
+			//
+			// When collation-related attributes (lang, collation,
+			// case-order) are present, skip verification because our
+			// Go UCA approximation may not perfectly match the sort
+			// order of the original data (especially for alternate=
+			// shifted/blanked and locale-specific letter ordering).
 			srcKeyDefs := inst.Sources[src.sourceIdx].Keys
 			skipVerify := false
 			for _, mk := range srcKeyDefs {
@@ -1016,6 +1019,15 @@ func (ec *execContext) prepareMergeSourceAccumulators(ctx context.Context, src *
 			return nil
 		}
 	}
+
+	// Set activeAccumulators to restrict accumulator access (XTDE3362)
+	// to only those declared in use-accumulators on the merge-source.
+	savedActiveAccums := ec.activeAccumulators
+	ec.activeAccumulators = make(map[string]struct{}, len(src.UseAccumulators))
+	for _, name := range src.UseAccumulators {
+		ec.activeAccumulators[name] = struct{}{}
+	}
+	defer func() { ec.activeAccumulators = savedActiveAccums }()
 
 	names := append([]string(nil), ec.stylesheet.accumulatorOrder...)
 

@@ -126,6 +126,29 @@ func (ec *execContext) onNoMatchTextOnlyCopy(ctx context.Context, node helium.No
 func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
 	switch node.Type() {
 	case helium.DocumentNode:
+		// The built-in template for document nodes in shallow-copy mode
+		// creates a new document node and applies templates to the children.
+		// When in sequence mode (e.g., inside a function returning
+		// document-node()), wrap the result in a document node so the
+		// return type matches. Otherwise, emit children directly.
+		out := ec.currentOutput()
+		if out.sequenceMode || (out.captureItems && out.current != nil && out.current.Type() != helium.DocumentNode) {
+			tmpDoc := helium.NewDefaultDocument()
+			frame := &outputFrame{doc: tmpDoc, current: tmpDoc}
+			ec.outputStack = append(ec.outputStack, frame)
+			for child := range helium.Children(node) {
+				if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
+					ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+					return err
+				}
+			}
+			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+			if tmpDoc.FirstChild() != nil {
+				out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: tmpDoc})
+				out.noteOutput()
+			}
+			return nil
+		}
 		for child := range helium.Children(node) {
 			if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
 				return err
