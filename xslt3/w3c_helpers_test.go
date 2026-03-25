@@ -1618,11 +1618,6 @@ var w3cImplicitSkips = map[string]string{
 	"merge-097s": "uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable)",
 	"merge-097sf": "uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable)",
 
-	// streamable: various streaming and grouping issues
-	"streamable-009": "streaming for-each-group grouping result incorrect",
-	"streamable-015": "streaming for-each-group grouping result incorrect",
-	"streamable-016": "streaming for-each-group grouping result incorrect",
-	"streamable-019": "streaming for-each-group position tracking incorrect",
 
 	// package version resolution: lowest_version not supported (we use highest_version)
 
