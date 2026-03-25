@@ -11,6 +11,18 @@ import (
 )
 
 func (ec *execContext) execVariable(ctx context.Context, inst *variableInst) error {
+	// Apply per-variable xpath-default-namespace if declared.
+	if inst.HasXPathDefaultNS {
+		savedNS := ec.xpathDefaultNS
+		savedHas := ec.hasXPathDefaultNS
+		ec.xpathDefaultNS = inst.XPathDefaultNS
+		ec.hasXPathDefaultNS = true
+		defer func() {
+			ec.xpathDefaultNS = savedNS
+			ec.hasXPathDefaultNS = savedHas
+		}()
+	}
+
 	var val xpath3.Sequence
 	var evalErr error
 

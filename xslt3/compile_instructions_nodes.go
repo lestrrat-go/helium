@@ -155,7 +155,7 @@ func (c *compiler) compileElement(elem *helium.Element) (*elementInst, error) {
 		if err := c.checkTypeAttrSchemaAware("xsl:element", typeAttr); err != nil {
 			return nil, err
 		}
-		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
+		inst.TypeName = c.resolveXSDTypeNameWithXDN(typeAttr)
 	}
 	if validation != "" {
 		if err := validateValidationAttr("xsl:element", validation); err != nil {
@@ -212,7 +212,7 @@ func (c *compiler) compileAttribute(elem *helium.Element) (*attributeInst, error
 		if err := c.checkTypeAttrSchemaAware("xsl:attribute", typeAttr); err != nil {
 			return nil, err
 		}
-		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
+		inst.TypeName = c.resolveXSDTypeNameWithXDN(typeAttr)
 	}
 
 	if valAttr := getAttr(elem, "validation"); valAttr != "" {
@@ -375,7 +375,7 @@ func (c *compiler) compileCopy(elem *helium.Element) (*copyInst, error) {
 		inst.Validation = v
 	}
 	if typeAttr := getAttr(elem, "type"); typeAttr != "" {
-		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
+		inst.TypeName = c.resolveXSDTypeNameWithXDN(typeAttr)
 	}
 
 	if selectAttr := getAttr(elem, "select"); selectAttr != "" {
@@ -470,7 +470,7 @@ func (c *compiler) compileCopyOf(elem *helium.Element) (*copyOfInst, error) {
 		inst.Validation = v
 	}
 	if typeAttr := getAttr(elem, "type"); typeAttr != "" {
-		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
+		inst.TypeName = c.resolveXSDTypeNameWithXDN(typeAttr)
 	}
 	if ca := getAttr(elem, "copy-accumulators"); ca != "" {
 		if v, ok := parseXSDBool(ca); ok && v {
@@ -642,7 +642,7 @@ func (c *compiler) compileDocument(elem *helium.Element) (*documentInst, error) 
 		inst.Validation = v
 	}
 	if typeAttr := getAttr(elem, "type"); typeAttr != "" {
-		inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
+		inst.TypeName = c.resolveXSDTypeNameWithXDN(typeAttr)
 	}
 	body, err := c.compileChildren(elem)
 	if err != nil {
@@ -959,7 +959,7 @@ func (c *compiler) compileLiteralResultElement(elem *helium.Element) (*literalRe
 		if err := c.checkTypeAttrSchemaAware("LRE (xsl:type)", typeAttr); err != nil {
 			return nil, err
 		}
-		lre.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
+		lre.TypeName = c.resolveXSDTypeNameWithXDN(typeAttr)
 	}
 
 	// Handle xsl:default-validation on LRE (XSLT 3.0 §3.6)

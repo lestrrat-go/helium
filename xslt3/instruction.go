@@ -208,6 +208,7 @@ func (*forEachInst) instructionTag() {}
 // variableInst represents xsl:variable (local).
 type variableInst struct {
 	sourceInfo
+	xpathNS
 	Name   string
 	Select *xpath3.Expression
 	Body   []instruction

@@ -334,29 +334,65 @@ func hasSignificantContent(elem *helium.Element) bool {
 }
 
 // resolveAsType resolves an "as" attribute sequence type string using
-// the current xpath-default-namespace. When the xpath-default-namespace
-// is the XSD namespace and the type name is unqualified, prefix it
-// with "xs:" so runtime type checks resolve correctly.
+// the current xpath-default-namespace. For XSD namespace, bare type
+// names are prefixed with "xs:". For user-defined namespaces, bare type
+// names in schema-element(), element(*, ...), and standalone type
+// positions are resolved to Q{ns}local form. Occurrence indicators
+// (?, *, +) are preserved.
 func (c *compiler) resolveAsType(asAttr string) string {
 	if asAttr == "" || c.xpathDefaultNS == "" {
 		return asAttr
 	}
-	if c.xpathDefaultNS != lexicon.NamespaceXSD {
+
+	// Resolve bare type names inside element(*, TYPE) and
+	// schema-element(NAME) with the xpath-default-namespace.
+	resolved := c.resolveAsTypeInner(asAttr)
+	return resolved
+}
+
+// resolveAsTypeInner handles the actual resolution of type names inside
+// as= sequence type expressions using xpath-default-namespace.
+func (c *compiler) resolveAsTypeInner(asAttr string) string {
+	// Handle schema-element(NAME) — resolve bare element name.
+	if strings.HasPrefix(asAttr, "schema-element(") && strings.HasSuffix(asAttr, ")") {
+		inner := asAttr[len("schema-element(") : len(asAttr)-1]
+		inner = strings.TrimSpace(inner)
+		if inner != "" && !strings.ContainsAny(inner, ":{") {
+			return "schema-element(" + xpath3.QAnnotation(c.xpathDefaultNS, inner) + ")"
+		}
 		return asAttr
 	}
-	// Only resolve unqualified type names (no prefix, no Q{}).
-	// Strip occurrence indicator for the check.
+
+	// Handle element(*, TYPE) — resolve bare type name after the comma.
+	if strings.HasPrefix(asAttr, "element(") && strings.HasSuffix(asAttr, ")") {
+		inner := asAttr[len("element(") : len(asAttr)-1]
+		parts := strings.SplitN(inner, ",", 2)
+		if len(parts) == 2 {
+			typePart := strings.TrimSpace(parts[1])
+			if typePart != "" && !strings.ContainsAny(typePart, ":{") {
+				resolved := xpath3.QAnnotation(c.xpathDefaultNS, typePart)
+				return "element(" + parts[0] + ", " + resolved + ")"
+			}
+		}
+		return asAttr
+	}
+
+	// Handle bare type name (possibly with occurrence indicator).
 	typePart := strings.TrimRight(asAttr, "?*+")
-	if typePart == "" || strings.ContainsAny(typePart, ":{") {
+	suffix := asAttr[len(typePart):]
+	if typePart == "" || strings.ContainsAny(typePart, ":{(") {
 		return asAttr
 	}
-	// Check if it's a known XSD type name
-	candidate := "xs:" + typePart
-	if xpath3.IsKnownXSDType(candidate) {
-		suffix := asAttr[len(typePart):]
-		return candidate + suffix
+	// XSD namespace: use xs: prefix for known types.
+	if c.xpathDefaultNS == lexicon.NamespaceXSD {
+		candidate := "xs:" + typePart
+		if xpath3.IsKnownXSDType(candidate) {
+			return candidate + suffix
+		}
+		return asAttr
 	}
-	return asAttr
+	// User-defined namespace: resolve to Q{ns}local form.
+	return xpath3.QAnnotation(c.xpathDefaultNS, typePart) + suffix
 }
 
 // hasSignificantChildren returns true if elem has any non-whitespace-only

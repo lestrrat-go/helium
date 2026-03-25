@@ -1624,11 +1624,14 @@ var w3cImplicitSkips = map[string]string{
 	// The closure implementation is correct per spec, but the test expects empty output.
 	// Likely an issue with how zero-length regex matches are handled by analyze-string.
 
-	// xpath-default-namespace: schema-aware namespace resolution
-	"xpath-default-namespace-0503": "schema-type validation with xpath-default-namespace fails",
-	"xpath-default-namespace-0701": "schema-element with xpath-default-namespace fails",
-	"xpath-default-namespace-0703": "schema-element with xpath-default-namespace fails",
+	// castable tests: schema-aware union/list type casting
+	"castable-005": "schema-aware union type casting fails",
+	"castable-006": "schema-aware list type casting fails",
 
+	// xpath-default-namespace: schema-aware namespace resolution
+
+	// error: XTSE1530 complex type on xsl:attribute not implemented
+	"error-1530a": "XTSE1530 complex type check on xsl:attribute not implemented",
 
 	// strip-space: schema-aware whitespace stripping
 

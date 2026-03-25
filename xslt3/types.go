@@ -764,9 +764,17 @@ func isAnyURIType(typeName string, ec ...*execContext) bool {
 	return base == xpath3.TypeAnyURI
 }
 
-// resolveSchemaQName resolves a QName string (e.g. "my:userNode" or "localName")
-// to (localName, namespace) using the stylesheet's namespace bindings.
+// resolveSchemaQName resolves a QName string (e.g. "my:userNode", "localName",
+// or "Q{ns}localName") to (localName, namespace) using the stylesheet's
+// namespace bindings and xpath-default-namespace.
 func resolveSchemaQName(qname string, ec *execContext) (local, ns string) {
+	// Handle Q{ns}local EQName form.
+	if len(qname) > 2 && qname[0] == 'Q' && qname[1] == '{' {
+		end := strings.IndexByte(qname, '}')
+		if end > 0 {
+			return qname[end+1:], qname[2:end]
+		}
+	}
 	idx := strings.IndexByte(qname, ':')
 	if idx < 0 {
 		// Unprefixed: use xpath-default-namespace if set.

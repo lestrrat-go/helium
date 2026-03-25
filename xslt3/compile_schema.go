@@ -346,8 +346,14 @@ func resolveXSDTypeName(qname string, nsBindings map[string]string) string {
 			return xpath3.QAnnotation(uri, local)
 		}
 	}
-	// Bare name (no prefix, no Q{} wrapper): treat as user-defined type
-	// in no namespace. Use Q{} annotation form to match xsdTypeNameFromDef.
+	// Bare name (no prefix, no Q{} wrapper): use xpath-default-namespace
+	// (passed as the "" key) if available, otherwise no namespace.
+	if xdn, ok := nsBindings[""]; ok && xdn != "" {
+		if xdn == lexicon.NamespaceXSD {
+			return "xs:" + qname
+		}
+		return xpath3.QAnnotation(xdn, qname)
+	}
 	return "Q{}" + qname
 }
 
@@ -378,6 +384,16 @@ func (c *compiler) validateAsSequenceType(as string, context string) error {
 
 	reg := &schemaRegistry{schemas: c.stylesheet.schemas}
 
+	// Build bindings with xpath-default-namespace as "" key.
+	bindings := c.nsBindings
+	if c.xpathDefaultNS != "" {
+		bindings = make(map[string]string, len(c.nsBindings)+1)
+		for k, v := range c.nsBindings {
+			bindings[k] = v
+		}
+		bindings[""] = c.xpathDefaultNS
+	}
+
 	// Check schema-element(Q) and schema-attribute(Q) references.
 	for _, kind := range []string{"schema-element", "schema-attribute"} {
 		search := kind + "("
@@ -398,8 +414,8 @@ func (c *compiler) validateAsSequenceType(as string, context string) error {
 			if qname == "" {
 				continue
 			}
-			// Resolve the QName to (local, ns) using current namespace bindings.
-			local, ns := resolveQNameToLocalNS(qname, c.nsBindings)
+			// Resolve the QName to (local, ns) using namespace bindings.
+			local, ns := resolveQNameToLocalNS(qname, bindings)
 			if local == "" {
 				continue
 			}
@@ -441,6 +457,9 @@ func resolveQNameToLocalNS(qname string, nsBindings map[string]string) (local, n
 			return loc, ""
 		}
 		return loc, uri
+	}
+	if xdn, ok := nsBindings[""]; ok && xdn != "" {
+		return qname, xdn
 	}
 	return qname, ""
 }

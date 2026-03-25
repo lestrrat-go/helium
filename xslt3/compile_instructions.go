@@ -403,6 +403,8 @@ func (c *compiler) setInstructionXPathNS(inst instruction, hasLocal bool) {
 		set(&v.xpathNS)
 	case *literalResultElement:
 		set(&v.xpathNS)
+	case *variableInst:
+		set(&v.xpathNS)
 	}
 }
 
@@ -766,7 +768,7 @@ func (c *compiler) compileXSLTInstruction(elem *helium.Element) (instruction, er
 			inst.Validation = v
 		}
 		if typeAttr := getAttr(elem, "type"); typeAttr != "" {
-			inst.TypeName = resolveXSDTypeName(typeAttr, c.nsBindings)
+			inst.TypeName = c.resolveXSDTypeNameWithXDN(typeAttr)
 		}
 		if ucm := getAttr(elem, paramUseCharacterMaps); ucm != "" {
 			for _, n := range strings.Fields(ucm) {
