@@ -2,6 +2,8 @@ package html_test
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -183,6 +185,19 @@ func TestOptionsNoWarning(t *testing.T) {
 	err := html.NewParser().SuppressWarnings(true).ParseWithSAX(t.Context(), []byte(input), sax)
 	require.NoError(t, err)
 	require.False(t, warningCalled, "warning handler should not be called with WithNoWarning")
+}
+
+func TestParseFileSetsURL(t *testing.T) {
+	tmpDir := t.TempDir()
+	f := filepath.Join(tmpDir, "test.html")
+	require.NoError(t, os.WriteFile(f, []byte(`<html><body><p>hi</p></body></html>`), 0o644))
+
+	doc, err := html.NewParser().ParseFile(t.Context(), f)
+	require.NoError(t, err)
+
+	abs, err := filepath.Abs(f)
+	require.NoError(t, err)
+	require.Equal(t, abs, doc.URL())
 }
 
 func TestOptionsPushParserCarriesOptions(t *testing.T) {
