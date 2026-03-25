@@ -1041,26 +1041,6 @@ func (ec *execContext) effectiveKeys() map[string][]*keyDef {
 	return ec.stylesheet.keys
 }
 
-// effectiveCharacterMaps returns the character maps for the current
-// execution scope. When executing code from a used package, the
-// package's own character maps are used (package-scoped isolation).
-func (ec *execContext) effectiveCharacterMaps() map[string]*characterMapDef {
-	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
-		return ec.currentPackage.characterMaps
-	}
-	return ec.stylesheet.characterMaps
-}
-
-// effectiveNamespaceAliases returns the namespace aliases for the
-// current execution scope. When executing code from a used package,
-// the package's own aliases are used (package-scoped isolation).
-func (ec *execContext) effectiveNamespaceAliases() []namespaceAlias {
-	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
-		return ec.currentPackage.namespaceAliases
-	}
-	return ec.stylesheet.namespaceAliases
-}
-
 // effectiveOutputs returns the output definitions for the current
 // execution scope. When executing code from a used package, the
 // package's own outputs are used (package-scoped isolation).
