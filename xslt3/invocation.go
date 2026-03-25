@@ -124,7 +124,9 @@ func (inv Invocation) Mode(name string) Invocation {
 	return inv
 }
 
-// Selection sets the initial match selection for apply-templates.
+// Selection sets the initial match selection.
+// Only valid for ApplyTemplates invocations; rejected at validation
+// time for Transform, CallTemplate, and CallFunction.
 func (inv Invocation) Selection(seq xpath3.Sequence) Invocation {
 	inv = inv.clone()
 	inv.cfg.matchSelection = seq
@@ -341,6 +343,9 @@ func (inv Invocation) validate() error {
 		// nil source is allowed: the stylesheet may use xsl:source-document,
 		// global-context-item use="absent", or an initial template.
 		// executeTransform will raise XTDE0040 if source is truly needed.
+		if c.matchSelection != nil {
+			return fmt.Errorf("xslt3: Selection is not valid for Transform (use ApplyTemplates)")
+		}
 	case InvocationApplyTemplates:
 		// nil source is allowed when a match selection is provided, or when
 		// the stylesheet does not require a source document.

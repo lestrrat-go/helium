@@ -164,6 +164,18 @@ func TestInvocationSourceSchemas(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestInvocationTransformSelectionRejected(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`)
+
+	// Selection is invalid for Transform.
+	_, err := ss.Transform(nil).Selection(xpath3.SingleString("x")).Do(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Selection is not valid for Transform")
+}
+
 func TestInvocationCallTemplateValidation(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
