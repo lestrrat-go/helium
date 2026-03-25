@@ -9,7 +9,6 @@ import (
 	"math"
 	"net/url"
 	"strings"
-	"sync"
 	"unicode"
 	"unicode/utf8"
 
@@ -17,6 +16,7 @@ import (
 	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/pool"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 	"github.com/lestrrat-go/helium/internal/strcursor"
@@ -302,19 +302,12 @@ func (ctx *parserCtx) GetSystemID() string {
 	return ctx.baseURI
 }
 
-var bufferPool = sync.Pool{
-	New: allocByteBuffer,
-}
-
-func allocByteBuffer() any {
-	if pdebug.Enabled {
-		pdebug.Printf("Allocating new bytes.Buffer...")
-	}
-	return &bytes.Buffer{}
-}
+var bufferPool = pool.New(
+	func() *bytes.Buffer { return &bytes.Buffer{} },
+	func(b *bytes.Buffer) *bytes.Buffer { b.Reset(); return b },
+)
 
 func releaseBuffer(b *bytes.Buffer) {
-	b.Reset()
 	bufferPool.Put(b)
 }
 
@@ -1058,7 +1051,7 @@ func (ctx *parserCtx) parseCDataContent() (string, error) {
 		defer g.IRelease("END parseCDataContent")
 	}
 
-	buf := bufferPool.Get().(*bytes.Buffer)
+	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
 	cur := ctx.getCursor()
@@ -1092,7 +1085,7 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		defer g.IRelease("END parseCharDataContent")
 	}
 
-	buf := bufferPool.Get().(*bytes.Buffer)
+	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
 	cur := pctx.getCursor()
@@ -1563,7 +1556,7 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch rune
 	}
 
 	inSpace := false
-	b := bufferPool.Get().(*bytes.Buffer)
+	b := bufferPool.Get()
 	defer releaseBuffer(b)
 
 	for {
@@ -2274,7 +2267,7 @@ func (ctx *parserCtx) parseVersionNum(_ rune) (string, error) {
 
 	for i := 4; ; i++ {
 		if v := cur.PeekN(i); v > '9' || v < '0' {
-			b := bufferPool.Get().(*bytes.Buffer)
+			b := bufferPool.Get()
 			defer releaseBuffer(b)
 
 			for x := 1; x < i; x++ {
@@ -2389,7 +2382,7 @@ func (pctx *parserCtx) parseEncodingName(ctx context.Context, _ rune) (string, e
 	}
 	c := cur.Peek()
 
-	buf := bufferPool.Get().(*bytes.Buffer)
+	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
 	// first char needs to be alphabets
@@ -2523,7 +2516,7 @@ func (pctx *parserCtx) parsePI(ctx context.Context) error {
 	}
 
 	pctx.skipBlanks(ctx)
-	buf := bufferPool.Get().(*bytes.Buffer)
+	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
 	i := 0
@@ -3001,7 +2994,7 @@ func (pctx *parserCtx) parseComment(ctx context.Context) error {
 		return pctx.error(ctx, ErrInvalidComment)
 	}
 
-	buf := bufferPool.Get().(*bytes.Buffer)
+	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
 	i := 0
@@ -4120,7 +4113,7 @@ func (pctx *parserCtx) parseEntityValueInternal(ctx context.Context, qch rune) (
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	buf := bufferPool.Get().(*bytes.Buffer)
+	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
 	i := 0
@@ -4162,7 +4155,7 @@ func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, wha
 		return "", errors.New("entity loop (depth > 40)")
 	}
 
-	out := bufferPool.Get().(*bytes.Buffer)
+	out := bufferPool.Get()
 	defer releaseBuffer(out)
 
 	for len(s) > 0 {
@@ -5209,7 +5202,7 @@ func (pctx *parserCtx) parseSystemLiteral(ctx context.Context, qch rune) (string
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	buf := bufferPool.Get().(*bytes.Buffer)
+	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
 	i := 0
@@ -5230,7 +5223,7 @@ func (pctx *parserCtx) parsePubidLiteral(ctx context.Context, qch rune) (string,
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	buf := bufferPool.Get().(*bytes.Buffer)
+	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
 	i := 0
@@ -5914,7 +5907,7 @@ func parseStringName(s []byte) (string, int, error) {
 		return "", 0, errors.New("invalid name start char")
 	}
 
-	out := bufferPool.Get().(*bytes.Buffer)
+	out := bufferPool.Get()
 	defer releaseBuffer(out)
 
 	out.WriteRune(r)

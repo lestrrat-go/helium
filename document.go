@@ -5,10 +5,10 @@ import (
 	"errors"
 	"io"
 	"strings"
-	"sync"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/pool"
 	"github.com/lestrrat-go/pdebug"
 )
 
@@ -325,7 +325,7 @@ func (d *Document) CreateNamespace(prefix, uri string) (*Namespace, error) {
 
 func (d *Document) allocNamespace() *Namespace {
 	if len(d.nsSlab) == 0 {
-		chunk := nsChunkPool.Get().(*[slabSize]Namespace)
+		chunk := nsChunkPool.Get()
 		d.nsChunks = append(d.nsChunks, chunk)
 		d.nsSlab = chunk[:]
 	}
@@ -337,7 +337,7 @@ func (d *Document) allocNamespace() *Namespace {
 
 func (d *Document) allocAttribute(name string, ns *Namespace) *Attribute {
 	if len(d.attrSlab) == 0 {
-		chunk := attrChunkPool.Get().(*[slabSize]Attribute)
+		chunk := attrChunkPool.Get()
 		d.attrChunks = append(d.attrChunks, chunk)
 		d.attrSlab = chunk[:]
 	}
@@ -425,10 +425,10 @@ func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD
 const slabSize = 256
 
 var (
-	elemChunkPool = sync.Pool{New: func() any { return new([slabSize]Element) }}
-	textChunkPool = sync.Pool{New: func() any { return new([slabSize]Text) }}
-	nsChunkPool   = sync.Pool{New: func() any { return new([slabSize]Namespace) }}
-	attrChunkPool = sync.Pool{New: func() any { return new([slabSize]Attribute) }}
+	elemChunkPool = pool.New(func() *[slabSize]Element { return new([slabSize]Element) }, nil)
+	textChunkPool = pool.New(func() *[slabSize]Text { return new([slabSize]Text) }, nil)
+	nsChunkPool   = pool.New(func() *[slabSize]Namespace { return new([slabSize]Namespace) }, nil)
+	attrChunkPool = pool.New(func() *[slabSize]Attribute { return new([slabSize]Attribute) }, nil)
 )
 
 func (d *Document) CreateElement(name string) (*Element, error) {
@@ -446,7 +446,7 @@ func (d *Document) CreateElement(name string) (*Element, error) {
 
 func (d *Document) allocElement() *Element {
 	if len(d.elemSlab) == 0 {
-		chunk := elemChunkPool.Get().(*[slabSize]Element)
+		chunk := elemChunkPool.Get()
 		d.elemChunks = append(d.elemChunks, chunk)
 		d.elemSlab = chunk[:]
 	}
@@ -473,7 +473,7 @@ func (d *Document) CreateText(value []byte) (*Text, error) {
 
 func (d *Document) allocText() *Text {
 	if len(d.textSlab) == 0 {
-		chunk := textChunkPool.Get().(*[slabSize]Text)
+		chunk := textChunkPool.Get()
 		d.textChunks = append(d.textChunks, chunk)
 		d.textSlab = chunk[:]
 	}
