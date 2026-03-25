@@ -31,7 +31,7 @@ func Example_xsd_compile_file() {
 
 	// CompileFile loads and compiles an XSD schema directly from a file path.
 	// This is a convenience over parsing the document yourself and calling Compile.
-	schema, err := xsd.CompileFile(context.Background(), schemaPath)
+	schema, err := xsd.NewCompiler().CompileFile(context.Background(), schemaPath)
 	if err != nil {
 		fmt.Printf("failed to compile: %s\n", err)
 		return
@@ -43,7 +43,7 @@ func Example_xsd_compile_file() {
 		return
 	}
 
-	if err := xsd.Validate(context.Background(), doc, schema); err != nil {
+	if err := xsd.NewValidator(schema).Validate(context.Background(), doc); err != nil {
 		fmt.Println(err)
 	}
 	// Output:

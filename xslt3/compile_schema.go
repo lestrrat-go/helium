@@ -66,7 +66,7 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 			uri = filepath.Join(baseDir, schemaLoc)
 		}
 
-		schema, err := xsd.CompileFile(c.ctx, uri)
+		schema, err := xsd.NewCompiler().CompileFile(c.ctx, uri)
 		if err != nil {
 			// File not found — try pre-compiled import schemas by namespace.
 			if declaredNS != "" {
@@ -125,13 +125,12 @@ func (c *compiler) compileImportSchema(elem *helium.Element) error {
 			if err := inlineDoc.AddChild(copied); err != nil {
 				return fmt.Errorf("xsl:import-schema: cannot build inline schema doc: %w", err)
 			}
-			var inlineOpts []xsd.CompileOption
-			if c.baseURI != "" {
-				inlineOpts = append(inlineOpts, xsd.WithBaseDir(filepath.Dir(c.baseURI)))
-			}
 			errCounter := &fatalErrorCounter{}
-			inlineOpts = append(inlineOpts, xsd.WithCompileErrorHandler(errCounter))
-			schema, err := xsd.Compile(c.ctx, inlineDoc, inlineOpts...)
+			compiler := xsd.NewCompiler().ErrorHandler(errCounter)
+			if c.baseURI != "" {
+				compiler = compiler.BaseDir(filepath.Dir(c.baseURI))
+			}
+			schema, err := compiler.Compile(c.ctx, inlineDoc)
 			if err != nil {
 				return fmt.Errorf("xsl:import-schema: cannot compile inline schema: %w", err)
 			}

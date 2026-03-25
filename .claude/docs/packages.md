@@ -120,8 +120,12 @@ XSLT element registry: metadata for all ~80 recognized XSLT 3.0 elements.
 
 XML Schema (XSD) 1.0 compilation and validation.
 
-- **Compile(ctx, *Document, ...CompileOption) → (*Schema, error)** / **CompileFile(ctx, path, ...CompileOption) → (*Schema, error)**
-- **Validate(*Document, *Schema, ...ValidateOption) → error**
+- **NewCompiler() → Compiler** — create fluent builder for schema compilation
+  - `SchemaFilename(name)`, `BaseDir(dir)`, `ErrorHandler(h)` — builder methods (clone-on-write)
+  - `Compile(ctx, *Document) → (*Schema, error)` / `CompileFile(ctx, path) → (*Schema, error)` — terminal methods
+- **NewValidator(schema) → Validator** — create fluent builder for validation
+  - `Filename(name)`, `ErrorHandler(h)`, `Annotations(*TypeAnnotations)`, `NilledElements(*NilledElements)` — builder methods
+  - `Validate(ctx, *Document) → error` — terminal method
 - **ValidateSimpleValue(value, *TypeDef) → error** — validate a lexical value against a compiled simple type definition
 - `Schema.LookupElement(local, ns)`, `Schema.LookupType(local, ns)`, `Schema.NamedTypes()`, `Schema.TargetNamespace()`
 - Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include, IDC (xs:unique/key/keyref)
@@ -134,8 +138,12 @@ XML Schema (XSD) 1.0 compilation and validation.
 
 RELAX NG schema compilation and validation.
 
-- **Compile(ctx, *Document, ...CompileOption) → (*Grammar, error)** / **CompileFile(ctx, path, ...CompileOption) → (*Grammar, error)**
-- **Validate(*Document, *Grammar, ...ValidateOption) → error**
+- **NewCompiler() → Compiler** — create fluent builder for grammar compilation
+  - `SchemaFilename(name)`, `ErrorHandler(h)` — builder methods (clone-on-write)
+  - `Compile(ctx, *Document) → (*Grammar, error)` / `CompileFile(ctx, path) → (*Grammar, error)` — terminal methods
+- **NewValidator(grammar) → Validator** — create fluent builder for validation
+  - `Filename(name)` — builder method
+  - `Validate(ctx, *Document) → error` — terminal method
 - Pattern-based: element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref, data, value, list, mixed, notAllowed
 - Supports: include with override, externalRef, parentRef, anyName/nsName/ncName, data types
 - Group backtracking for greedy pattern over-consumption
@@ -357,7 +365,7 @@ Importable implementation behind `helium` CLI. Used by `cmd/helium` wrapper and 
 - XPath behavior: mandatory positional expr, default engine `3`, `--engine 1|3`, XML from file args or stdin, type-aware result output for xpath1/xpath3
 - RELAX NG behavior: compile grammar from mandatory positional schema path, parse XML input(s), validate via `relaxng.Validate`, return schema/validation exit codes
 - Schematron behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `schematron.NewValidator(schema).Validate`, return schema/validation exit codes
-- XSD behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `xsd.Validate`, return schema/validation exit codes
+- XSD behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `xsd.NewValidator(schema).Validate`, return schema/validation exit codes
 - Files: `cli.go`, `exitcode.go`, `lint.go`, `xpath.go`, `relaxng_validate.go`, `schematron_validate.go`, `xsd_validate.go`
 - Imports: helium, c14n/, relaxng/, schematron/, xsd/, xinclude/, xpath1/, xpath3/, catalog/, internal/cliutil/
 

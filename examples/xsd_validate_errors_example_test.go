@@ -30,7 +30,7 @@ func Example_xsd_validate_errors() {
 		fmt.Printf("failed to parse schema: %s\n", err)
 		return
 	}
-	schema, err := xsd.Compile(context.Background(), schemaDoc)
+	schema, err := xsd.NewCompiler().Compile(context.Background(), schemaDoc)
 	if err != nil {
 		fmt.Printf("failed to compile schema: %s\n", err)
 		return
@@ -47,7 +47,7 @@ func Example_xsd_validate_errors() {
 
 	// Validate returns an error when the document is invalid.
 	// The error message contains "fails to validate" along with details.
-	if err := xsd.Validate(context.Background(), doc, schema); err != nil {
+	if err := xsd.NewValidator(schema).Validate(context.Background(), doc); err != nil {
 		fmt.Println(strings.Contains(err.Error(), "fails to validate"))
 	}
 	// Output:

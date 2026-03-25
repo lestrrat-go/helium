@@ -61,7 +61,7 @@ func loadSchemasFromSchemaLocation(ctx context.Context, doc *helium.Document) ([
 		if !filepath.IsAbs(absPath) && baseURI != "" {
 			absPath = filepath.Join(filepath.Dir(baseURI), path)
 		}
-		schema, err := xsd.CompileFile(ctx, absPath)
+		schema, err := xsd.NewCompiler().CompileFile(ctx, absPath)
 		if err != nil {
 			return nil, fmt.Errorf("compile source schema %q: %w", absPath, err)
 		}
