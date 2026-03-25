@@ -1588,20 +1588,12 @@ var w3cImplicitSkips = map[string]string{
 
 
 
-	// package-scoped component isolation: same-named components in different packages
-	"override-as-005":   "package-scoped attribute-set: use-attribute-sets cannot find private attr-set from package",
-	"override-misc-005": "package-scoped accumulator override not applied to package-internal template",
-	"override-misc-007": "package-scoped accumulator override not applied to package-internal template",
+	// use-package: variable isolation across versioned package instances
+	"use-package-176": "variable from multiple package versions not isolated per-package",
 
-	// use-package: character map namespace serialization in package context
-	"use-package-108":  "package-scoped output format namespace serialization",
-	"use-package-108b": "package-scoped output format namespace serialization",
-
-
-	// use-package: xml-to-json package mode template matching
-	"use-package-150": "xml-to-json package: XTTE0780 sequence cardinality error in template application",
-	"use-package-151": "xml-to-json package: XTTE0780 sequence cardinality error in template application",
-	"use-package-152": "xml-to-json package: XTTE0780 sequence cardinality error in template application",
+	// use-package: package-scoped namespace serialization in result-document
+	"use-package-108":  "package-scoped namespace alias serialization not implemented",
+	"use-package-108b": "package-scoped namespace alias serialization not implemented",
 
 
 

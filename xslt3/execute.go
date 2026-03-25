@@ -2,6 +2,7 @@ package xslt3
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"path/filepath"
 	"reflect"
@@ -67,6 +68,7 @@ type execContext struct {
 	accumulatorBeforeErrorByNode map[helium.Node]map[string]error // deferred errors for accumulator-before
 	accumulatorAfterErrorByNode  map[helium.Node]map[string]error // deferred errors for accumulator-after
 	accumulatorComputedDocs      map[helium.Node]struct{}         // document roots for which accumulator states have been computed
+	accumulatorComputedPkgs      map[string]struct{}              // package-scoped accumulator computation tracking
 	activeAccumulators           map[string]struct{}              // accumulator names allowed in current source-document context
 	requireStreamableAccums      bool                             // require streamable="yes" for current accumulator access context
 	evaluatingAccumulator        bool
@@ -513,8 +515,16 @@ func (ec *execContext) setVarDeferred(name string, err error) {
 }
 
 func (ec *execContext) resolvePrefix(prefix string) string {
-	if uri, ok := ec.stylesheet.namespaces[prefix]; ok {
+	ss := ec.effectiveStylesheet()
+	if uri, ok := ss.namespaces[prefix]; ok {
 		return uri
+	}
+	// Fall back to the main stylesheet's namespaces in case the
+	// prefix is declared only at the top level.
+	if ss != ec.stylesheet {
+		if uri, ok := ec.stylesheet.namespaces[prefix]; ok {
+			return uri
+		}
 	}
 	// The xml prefix is universally predeclared per XML Namespaces spec.
 	if prefix == lexicon.PrefixXML {
@@ -1062,6 +1072,46 @@ func (ec *execContext) effectiveStylesheet() *Stylesheet {
 	return ec.stylesheet
 }
 
+// effectiveModeDefs returns the mode definitions for the current execution
+// scope. When executing code from a used package, the package's own mode
+// definitions are used (package-scoped isolation).
+func (ec *execContext) effectiveModeDefs() map[string]*modeDef {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return ec.currentPackage.modeDefs
+	}
+	return ec.stylesheet.modeDefs
+}
+
+// effectiveAttributeSets returns the attribute-set definitions for the
+// current execution scope. When executing code from a used package, the
+// package's own attribute-sets are used (package-scoped isolation).
+func (ec *execContext) effectiveAttributeSets() map[string]*attributeSetDef {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return ec.currentPackage.attributeSets
+	}
+	return ec.stylesheet.attributeSets
+}
+
+// effectiveAccumulators returns the accumulator definitions for the current
+// execution scope. When executing code from a used package, the package's
+// own accumulators are used (package-scoped isolation).
+func (ec *execContext) effectiveAccumulators() map[string]*accumulatorDef {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return ec.currentPackage.accumulators
+	}
+	return ec.stylesheet.accumulators
+}
+
+// accumulatorStateKey returns a package-scoped key for accumulator state
+// storage. When executing in a used package, the key includes the package
+// pointer to isolate same-named accumulators from different packages.
+func (ec *execContext) accumulatorStateKey(name string) string {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return fmt.Sprintf("%s@%p", name, ec.currentPackage)
+	}
+	return name
+}
+
 // xpathEvaluator returns the base evaluator with per-call overlays
 // (variables, position, size, context item, collation, doc-order cache).
 func (ec *execContext) xpathEvaluator() xpath3.Evaluator {
@@ -1352,6 +1402,30 @@ func (ec *execContext) ResolveVariable(_ context.Context, name string) (xpath3.S
 				return nil, false, err
 			}
 			return val, true, nil
+		}
+	}
+	// When evaluating in a package context, also check the package's own
+	// global variables (including private ones not merged into the stylesheet).
+	if ec.currentPackage != nil {
+		for _, v := range ec.currentPackage.globalVars {
+			if v.Name == name {
+				val, err := ec.evaluateGlobalVar(v)
+				if err != nil {
+					return nil, false, err
+				}
+				return val, true, nil
+			}
+		}
+		// Also check package-scoped global params (e.g. private params
+		// that were not merged into the using stylesheet).
+		for _, p := range ec.currentPackage.globalParams {
+			if p.Name == name {
+				val, err := ec.evaluateGlobalParam(p)
+				if err != nil {
+					return nil, false, err
+				}
+				return val, true, nil
+			}
 		}
 	}
 	// Try to lazily evaluate a pending global parameter

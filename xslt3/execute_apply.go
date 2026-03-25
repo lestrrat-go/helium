@@ -202,7 +202,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 		if modeKey == "" || modeKey == modeUnnamed {
 			modeKey = modeDefault
 		}
-		modeDef := ec.stylesheet.modeDefs[modeKey]
+		modeDef := ec.effectiveModeDefs()[modeKey]
 		if modeDef != nil && (modeDef.OnNoMatch == onNoMatchDeepSkip || modeDef.OnNoMatch == onNoMatchShallowSkip) {
 			continue
 		}

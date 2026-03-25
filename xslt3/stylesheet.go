@@ -202,6 +202,7 @@ type attributeSetDef struct {
 	Visibility      string             // "public", "private", "final", "abstract"
 	Streamable      bool               // streamable="yes" on the attribute-set
 	OriginalAttrSet *attributeSetDef   // original attribute-set being overridden (for xsl:original)
+	OwnerPackage    *Stylesheet        // owning package (nil for locally declared)
 }
 
 // xslFunction is a compiled xsl:function.

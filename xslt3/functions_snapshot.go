@@ -76,7 +76,7 @@ func (ec *execContext) fnCopyOf(ctx context.Context, args []xpath3.Sequence) (xp
 		ec.transferNilledStatus(node, copied)
 		// Transfer accumulator state from original to copy so that
 		// accumulator-before()/accumulator-after() work on the copy.
-		if len(ec.stylesheet.accumulators) > 0 {
+		if len(ec.effectiveAccumulators()) > 0 {
 			_ = ec.ensureAccumulatorStates(ctx, node)
 			ec.transferAccumulatorStates(node, copied)
 			// Mark the copy's document as computed to prevent recomputation.

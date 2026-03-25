@@ -80,11 +80,12 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 // Handles the mismatch where templates use "" for the unnamed mode
 // but mode definitions are stored under "#default".
 func (ec *execContext) lookupModeDef(mode string) *modeDef {
-	if md := ec.stylesheet.modeDefs[mode]; md != nil {
+	modeDefs := ec.effectiveModeDefs()
+	if md := modeDefs[mode]; md != nil {
 		return md
 	}
 	if mode == "" {
-		return ec.stylesheet.modeDefs[modeDefault]
+		return modeDefs[modeDefault]
 	}
 	return nil
 }
@@ -162,12 +163,13 @@ func (ec *execContext) findFirstMatch(templates []*template, node helium.Node) *
 // the given mode is "fail".
 func (ec *execContext) onMultipleMatchFail(mode string) bool {
 	// Check mode definition in the stylesheet first
-	if md := ec.stylesheet.modeDefs[mode]; md != nil && md.OnMultipleMatch != "" {
+	modeDefs := ec.effectiveModeDefs()
+	if md := modeDefs[mode]; md != nil && md.OnMultipleMatch != "" {
 		return md.OnMultipleMatch == onNoMatchFail
 	}
 	// The unnamed default mode is stored as "#default" but referenced as ""
 	if mode == "" {
-		if md := ec.stylesheet.modeDefs[modeDefault]; md != nil && md.OnMultipleMatch != "" {
+		if md := modeDefs[modeDefault]; md != nil && md.OnMultipleMatch != "" {
 			return md.OnMultipleMatch == onNoMatchFail
 		}
 	}

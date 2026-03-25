@@ -608,7 +608,7 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 				}
 			}
 			// Transfer accumulator state when copy-accumulators="yes"
-			if inst.CopyAccumulators && len(ec.stylesheet.accumulators) > 0 {
+			if inst.CopyAccumulators && len(ec.effectiveAccumulators()) > 0 {
 				// XTDE3362: check that accumulators are applicable
 				// to the source document. This requires explicit
 				// use-accumulators on the processing mode.
@@ -1149,14 +1149,15 @@ func undeclareParentCopyNS(parent *helium.Element) {
 // An accumulator is applicable to a source document only if the initial
 // mode explicitly lists it via use-accumulators.
 func (ec *execContext) checkCopyAccumulators(node helium.Node) error {
-	if len(ec.stylesheet.accumulators) == 0 {
+	accumulators := ec.effectiveAccumulators()
+	if len(accumulators) == 0 {
 		return nil
 	}
 
 	// When there is an activeAccumulators set (e.g. from xsl:source-document),
 	// the document-level applicability already restricts access.
 	if ec.activeAccumulators != nil {
-		for name := range ec.stylesheet.accumulators {
+		for name := range accumulators {
 			if _, ok := ec.activeAccumulators[name]; !ok {
 				return dynamicError(errCodeXTDE3362,
 					"accumulator %q is not applicable to the source document (copy-accumulators)", name)
@@ -1174,9 +1175,10 @@ func (ec *execContext) checkCopyAccumulators(node helium.Node) error {
 	}
 
 	// Determine the mode definition for the initial mode.
-	md := ec.stylesheet.modeDefs[ec.currentMode]
+	modeDefs := ec.effectiveModeDefs()
+	md := modeDefs[ec.currentMode]
 	if md == nil {
-		md = ec.stylesheet.modeDefs[modeDefault]
+		md = modeDefs[modeDefault]
 	}
 
 	// When no explicit xsl:mode declaration exists, the mode has no
@@ -1199,7 +1201,7 @@ func (ec *execContext) checkCopyAccumulators(node helium.Node) error {
 	for _, n := range strings.Fields(ua) {
 		allowed[n] = struct{}{}
 	}
-	for name := range ec.stylesheet.accumulators {
+	for name := range accumulators {
 		if _, ok := allowed[name]; !ok {
 			return dynamicError(errCodeXTDE3362,
 				"accumulator %q is not applicable to the source document (copy-accumulators)", name)
