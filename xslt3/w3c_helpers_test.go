@@ -1469,7 +1469,7 @@ var w3cImplicitSkips = map[string]string{
 	"base-uri-013": "static-base-uri with non-standard URI scheme incorrect",
 	"base-uri-014": "static-base-uri in included module incorrect",
 	"base-uri-016": "static-base-uri in included module incorrect",
-	"base-uri-024": "xml:base on source document not resolved",
+	"base-uri-024": "xsl:copy base-uri propagation depends on result context",
 	"base-uri-025": "static-base-uri in included module incorrect",
 	"base-uri-028": "static-base-uri in included module incorrect",
 	"base-uri-030": "static-base-uri in included module incorrect",
@@ -1482,11 +1482,8 @@ var w3cImplicitSkips = map[string]string{
 	"base-uri-042": "static-base-uri in included module incorrect",
 	"base-uri-046": "xml:base resolution on source doc elements incorrect",
 	"base-uri-050": "xsl:document base-uri propagation incorrect",
-	"base-uri-051": "xsl:document base-uri propagation incorrect",
-	"base-uri-051a": "xsl:document base-uri propagation incorrect",
-	"base-uri-051b": "xsl:document base-uri propagation incorrect",
-	"base-uri-052": "xsl:document base-uri propagation incorrect",
-	"base-uri-053": "xsl:copy base-uri propagation incorrect",
+	"base-uri-052": "XInclude processing not applied to source documents",
+	"base-uri-053": "xsl:copy base-uri propagation in built-in templates incorrect",
 
 	// arrays: array construction and apply-templates on arrays
 	"square-array-019": "apply-templates on array members includes extra elements",
@@ -1517,7 +1514,8 @@ var w3cImplicitSkips = map[string]string{
 	"evaluate-013": "schema-aware xsl:evaluate not implemented (XTDE3160)",
 	"evaluate-048": "requires network access to saxonica.com",
 
-	// snapshot: deep-equal mismatch between built-in and reference snapshot
+
+	// snapshot: f:snapshot reference impl namespace-node graft produces empty root
 	"snapshot-0102a": "snapshot()/root() returns empty for some namespace nodes",
 
 	// higher-order functions: nested for-each-group grouping bug
