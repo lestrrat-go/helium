@@ -1072,16 +1072,6 @@ func (ec *execContext) effectiveStylesheet() *Stylesheet {
 	return ec.stylesheet
 }
 
-// effectiveModeTemplates returns the mode templates map for the current
-// execution scope. When executing code from a used package, the package's
-// own mode templates are used (package-scoped isolation).
-func (ec *execContext) effectiveModeTemplates() map[string][]*template {
-	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
-		return ec.currentPackage.modeTemplates
-	}
-	return ec.stylesheet.modeTemplates
-}
-
 // effectiveModeDefs returns the mode definitions for the current execution
 // scope. When executing code from a used package, the package's own mode
 // definitions are used (package-scoped isolation).
