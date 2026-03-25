@@ -252,6 +252,7 @@ type variable struct {
 	ImportPrec       int            // import precedence for XTSE0630 duplicate detection
 	StaticValue      xpath3.Sequence // pre-computed value for static="yes" variables
 	XPathDefaultNS   string         // xpath-default-namespace in scope at definition site
+	StaticBaseURI    string         // effective static base URI from xml:base (non-empty when overridden)
 }
 
 // param is a compiled xsl:param.

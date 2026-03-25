@@ -111,12 +111,6 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *liter
 	out.wherePopulated = false
 	ec.pushVarScope()
 
-	// Override static base URI when the LRE carries xml:base
-	savedBaseOverride := ec.staticBaseURIOverride
-	if inst.StaticBaseURI != "" {
-		ec.staticBaseURIOverride = inst.StaticBaseURI
-	}
-
 	// Propagate xpath-default-namespace from the LRE
 	savedXPathDefaultNS := ec.xpathDefaultNS
 	savedHasXPathDefaultNS := ec.hasXPathDefaultNS
@@ -135,7 +129,6 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *liter
 		ec.defaultValidation = savedDefaultValidation
 		ec.xpathDefaultNS = savedXPathDefaultNS
 		ec.hasXPathDefaultNS = savedHasXPathDefaultNS
-		ec.staticBaseURIOverride = savedBaseOverride
 		ec.popVarScope()
 		out.current = savedCurrent
 		out.prevWasAtomic = savedPrevAtomic
