@@ -713,11 +713,20 @@ func (c *compiler) compileAttributeSet(elem *helium.Element) error {
 	if c.stylesheet.attributeSets == nil {
 		c.stylesheet.attributeSets = make(map[string]*attributeSetDef)
 	}
+	// Build a part for this declaration
+	effectiveBase := stylesheetBaseURI(elem, c.baseURI)
+	part := attributeSetPart{
+		UseAttrSets:   asd.UseAttrSets,
+		Attrs:         asd.Attrs,
+		StaticBaseURI: effectiveBase,
+	}
 	// Merge same-named attribute-sets (XSLT spec: union of all definitions)
 	if existing, ok := c.stylesheet.attributeSets[name]; ok {
 		existing.Attrs = append(existing.Attrs, asd.Attrs...)
 		existing.UseAttrSets = append(existing.UseAttrSets, asd.UseAttrSets...)
+		existing.Parts = append(existing.Parts, part)
 	} else {
+		asd.Parts = []attributeSetPart{part}
 		c.stylesheet.attributeSets[name] = asd
 	}
 	return nil
@@ -1035,6 +1044,13 @@ func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) error 
 		return staticError(errCodeXTSE0010, "xsl:%s requires the elements attribute", kind)
 	}
 
+	// Apply per-element xpath-default-namespace
+	savedXPathDefaultNS := c.xpathDefaultNS
+	if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
+		c.xpathDefaultNS = xdn
+	}
+	defer func() { c.xpathDefaultNS = savedXPathDefaultNS }()
+
 	for _, name := range strings.Fields(elements) {
 		nt := nameTest{}
 		// Handle EQName syntax: Q{uri}local
@@ -1048,8 +1064,19 @@ func (c *compiler) compileSpaceHandling(elem *helium.Element, strip bool) error 
 		} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
 			nt.Prefix = name[:idx]
 			nt.Local = name[idx+1:]
+			// XTSE0280: check that the prefix is declared (skip EQName and wildcards)
+			if !strings.HasPrefix(nt.Prefix, "Q{") && nt.Prefix != "*" {
+				if _, ok := c.nsBindings[nt.Prefix]; !ok {
+					return staticError(errCodeXTSE0280, "undeclared namespace prefix %q in xsl:%s elements attribute", nt.Prefix, kind)
+				}
+			}
 		} else {
 			nt.Local = name
+			// Apply xpath-default-namespace for unprefixed names (not wildcards)
+			if name != "*" && c.xpathDefaultNS != "" {
+				nt.URI = c.xpathDefaultNS
+				nt.HasURI = true
+			}
 		}
 		if strip {
 			c.stylesheet.stripSpace = append(c.stylesheet.stripSpace, nt)
@@ -1068,6 +1095,8 @@ func (c *compiler) nameTestKey(nt nameTest) string {
 		uri = nt.Prefix[2 : len(nt.Prefix)-1]
 	} else if nt.Prefix != "" {
 		uri = c.nsBindings[nt.Prefix]
+	} else if nt.HasURI {
+		uri = nt.URI
 	}
 	return "{" + uri + "}" + nt.Local
 }

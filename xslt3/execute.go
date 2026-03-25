@@ -113,6 +113,7 @@ type execContext struct {
 	originalFunc                 xpath3.Function              // current xsl:original function (set during overriding function call)
 	docOrderCache                *xpath3.DocOrderCache        // shared document-order cache for consistent cross-document ordering
 	packageVarCache              map[*variable]xpath3.Sequence // cache for package-scoped variable evaluations
+	globalContextAbsent          bool                         // true when global context item is absent (select evaluated to empty)
 	traceWriter                  io.Writer                    // destination for fn:trace output (nil = os.Stderr)
 
 	// cached base XPath evaluator — rebuilt when invalidation keys change

@@ -17,6 +17,15 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst instruction)
 		}
 	}
 
+	// Apply per-instruction static base URI override from xml:base
+	if s, ok := inst.(interface{ getStaticBaseURI() string }); ok {
+		if sbu := s.getStaticBaseURI(); sbu != "" {
+			savedBase := ec.staticBaseURIOverride
+			ec.staticBaseURIOverride = sbu
+			defer func() { ec.staticBaseURIOverride = savedBase }()
+		}
+	}
+
 	// Apply per-instruction xpath-default-namespace if set
 	if h, ok := inst.(xpathNSHolder); ok && h.xpathNSIsSet() {
 		savedNS := ec.xpathDefaultNS

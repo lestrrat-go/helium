@@ -272,22 +272,41 @@ func stringifySequenceWithSep(seq xpath3.Sequence, sep string) string {
 	if seq == nil || sequence.Len(seq) == 0 {
 		return ""
 	}
+	// Atomize the entire sequence at once so that list-typed nodes
+	// are decomposed into their individual atomic items (each one
+	// rendered in canonical form).
+	atoms, err := xpath3.AtomizeSequence(seq)
+	if err != nil {
+		// Fall back to per-item atomization on error.
+		var sb strings.Builder
+		i := 0
+		for item := range sequence.Items(seq) {
+			if i > 0 {
+				sb.WriteString(sep)
+			}
+			av, atomErr := xpath3.AtomizeItem(item)
+			if atomErr != nil {
+				continue
+			}
+			s, strErr := xpath3.AtomicToString(av)
+			if strErr != nil {
+				continue
+			}
+			sb.WriteString(s)
+			i++
+		}
+		return sb.String()
+	}
 	var sb strings.Builder
-	i := 0
-	for item := range sequence.Items(seq) {
+	for i, av := range atoms {
 		if i > 0 {
 			sb.WriteString(sep)
 		}
-		av, err := xpath3.AtomizeItem(item)
-		if err != nil {
-			continue
-		}
-		s, err := xpath3.AtomicToString(av)
-		if err != nil {
+		s, strErr := xpath3.AtomicToString(av)
+		if strErr != nil {
 			continue
 		}
 		sb.WriteString(s)
-		i++
 	}
 	return sb.String()
 }

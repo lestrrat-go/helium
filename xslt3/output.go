@@ -1768,15 +1768,12 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 	// children manually to insert <!DOCTYPE html> before the first element.
 	noEscapeURI := outDef.EscapeURIAttributes != nil && !*outDef.EscapeURIAttributes
 	if isHTML5 && !hasDoctypeAttrs {
-		nodeOpts := []htmlpkg.WriteOption{
-			htmlpkg.WithNoFormat(),
-			htmlpkg.WithPreserveCase(),
-		}
+		hw := htmlpkg.NewWriter().NoFormat().PreserveCase()
 		if escapeCtrl {
-			nodeOpts = append(nodeOpts, htmlpkg.WithEscapeControlChars())
+			hw = hw.EscapeControlChars()
 		}
 		if noEscapeURI {
-			nodeOpts = append(nodeOpts, htmlpkg.WithNoEscapeURIAttributes())
+			hw = hw.NoEscapeURIAttributes()
 		}
 		doctypeEmitted := false
 		for child := range helium.Children(doc) {
@@ -1787,25 +1784,21 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 				_, _ = io.WriteString(w, "<!DOCTYPE html>")
 				doctypeEmitted = true
 			}
-			if err := htmlpkg.WriteNode(w, child, nodeOpts...); err != nil {
+			if err := hw.WriteNode(w, child); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
 
-	opts := []htmlpkg.WriteOption{
-		htmlpkg.WithNoDefaultDTD(),
-		htmlpkg.WithNoFormat(),
-		htmlpkg.WithPreserveCase(),
-	}
+	hw := htmlpkg.NewWriter().NoDefaultDTD().NoFormat().PreserveCase()
 	if noEscapeURI {
-		opts = append(opts, htmlpkg.WithNoEscapeURIAttributes())
+		hw = hw.NoEscapeURIAttributes()
 	}
 	if escapeCtrl {
-		opts = append(opts, htmlpkg.WithEscapeControlChars())
+		hw = hw.EscapeControlChars()
 	}
-	return htmlpkg.WriteDoc(w, doc, opts...)
+	return hw.WriteDoc(w, doc)
 }
 
 // serializeXHTML serializes using the XHTML output method.
