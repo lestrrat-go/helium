@@ -951,8 +951,6 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*mergeKey, error) {
 	}
 
 	// Track collation-related attributes for sort verification.
-	// When a non-codepoint collation or locale-specific sorting is used,
-	// we can't reliably verify sort order so we skip the check.
 	collation := getAttr(elem, "collation")
 	mk.Collation = collation
 	mk.Lang = getAttr(elem, "lang")
@@ -961,6 +959,14 @@ func (c *compiler) compileMergeKey(elem *helium.Element) (*mergeKey, error) {
 		mk.HasCollation = true
 	} else if collation != "" && collation != lexicon.CollationCodepoint {
 		mk.HasCollation = true
+	}
+	// Compile the collation attribute as an AVT so that expressions like
+	// collation="{$collation}" are resolved at runtime.
+	if collation != "" {
+		collAVT, err := compileAVT(collation, c.nsBindings)
+		if err == nil && collAVT != nil {
+			mk.CollationAVT = collAVT
+		}
 	}
 
 	selAttr := getAttr(elem, "select")

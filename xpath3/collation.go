@@ -679,3 +679,22 @@ func ResolveCollationCompareFunc(uri string) (func(a, b string) int, error) {
 	}
 	return coll.compare, nil
 }
+
+// CollationHasUnsupportedOptions returns true if the UCA collation URI
+// contains options that are not fully supported (e.g., alternate=shifted).
+// Returns false for non-UCA collation URIs.
+func CollationHasUnsupportedOptions(uri string) bool {
+	if !strings.HasPrefix(uri, lexicon.CollationUCA) {
+		return false
+	}
+	idx := strings.Index(uri, "?")
+	if idx < 0 {
+		return false
+	}
+	params, err := parseUCAParams(uri[idx+1:])
+	if err != nil {
+		return true // parse error = unsupported
+	}
+	return params.alternate == "shifted" || params.alternate == "blanked" ||
+		params.caseLevel || params.backwards
+}

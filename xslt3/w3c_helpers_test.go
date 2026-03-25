@@ -1347,21 +1347,28 @@ var w3cImplicitSkips = map[string]string{
 	"error-FODC0002a": "upstream W3C test change: FODC0002 now required (was optional)",
 
 	// merge: schema type annotations not propagated through merge
-	"merge-049":  "merge schema-element instance-of check fails after merge",
-	"merge-051":  "xsl:merge-source type attribute not implemented",
-	"merge-067":  "XTDE3362 merge ordering error not detected",
-	"merge-072":  "merge with multiple sources and key comparison incorrect",
-	"merge-079":  "merge with multiple sources and key comparison incorrect",
-	"merge-096":  "merge with multiple sources and key comparison incorrect",
-	"merge-097":  "uri-collection test data files not available",
-	"merge-097s": "uri-collection test data files not available",
-	"merge-097sf": "uri-collection test data files not available",
+	"merge-049":  "schema-element() instance test requires type annotations on merged items",
+	"merge-051":  "xsl:merge-source type= attribute validation not implemented",
+	"merge-067":  "XTDE3362 merge accumulator applicability not detected",
+	"merge-072":  "XTDE2220 alternate=shifted collation not rejected",
+	"merge-079":  "merge collation-based sort verification false positive with translate()",
+	"merge-096":  "XTTE0780 construct-doc type error in merge",
+	"merge-097":  "missing test data files merge-097-*.xml",
+	"merge-097s": "missing test data files merge-097-*.xml",
+	"merge-097sf": "missing test data files merge-097-*.xml",
 
-	// streamable: XTSE3430/XPDY0002 analysis not yet implemented
-	"streamable-116": "XPDY0002 streaming absent context not detected",
-	"streamable-126": "XTSE3430 up-then-down navigation not detected",
-	"streamable-127": "XTSE3430 up-then-down navigation not detected",
-	"streamable-128": "XTSE3430 streaming node return not detected",
+	// streamable: various streaming and grouping issues
+	"streamable-009": "streaming for-each-group grouping result incorrect",
+	"streamable-015": "streaming for-each-group grouping result incorrect",
+	"streamable-016": "streaming for-each-group grouping result incorrect",
+	"streamable-019": "streaming for-each-group position tracking incorrect",
+	"streamable-035": "streaming for-each-group grouping result incorrect",
+	"streamable-045": "streaming for-each-group sum/avg calculation incorrect",
+	"streamable-054": "streaming for-each-group min calculation incorrect",
+	"streamable-059": "streaming for-each-group value concatenation incorrect",
+	"streamable-107": "XTSE3430 streamability analysis not implemented",
+	"streamable-110": "XTSE3430 streamability analysis not implemented",
+	"streamable-148": "streaming for-each-group grouping result incorrect",
 
 	// package version resolution: lowest_version not supported (we use highest_version)
 

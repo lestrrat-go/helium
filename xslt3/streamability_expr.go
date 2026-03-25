@@ -99,6 +99,15 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 			"expression %q uses treat as document-node(element(...)) in a path, which is not streamable", expr.String())
 	}
 
+	// 13. Up-then-down navigation in a single expression: a path that first
+	// navigates upward (parent/ancestor) and then downward (child/descendant)
+	// is not streamable because the downward step from an ancestor may access
+	// nodes that have not yet been streamed.
+	if exprHasUpThenDownNavigation(expr) {
+		return staticError(errCodeXTSE3430,
+			"expression %q navigates upward then downward, which is not streamable", expr.String())
+	}
+
 	return nil
 }
 
@@ -1077,4 +1086,13 @@ func predicateIsNonMotionlessSS(ss *Stylesheet, pred xpath3.Expr, step *xpath3.S
 	}
 	walkPred(pred, false)
 	return nonMotionless
+}
+
+// exprHasUpThenDownNavigation returns true if any location path in the
+// expression first navigates upward (parent/ancestor axis) and then downward
+// (child/descendant axis). This up-then-down pattern is not streamable because
+// the downward step from an ancestor may access nodes that have not yet been
+// streamed.
+func exprHasUpThenDownNavigation(expr *xpath3.Expression) bool {
+	return xpath3.ExprHasUpThenDownNavigation(expr)
 }
