@@ -295,8 +295,9 @@ func Example_xslt3_transform_string() {
   const sourceSrc = `<person name="World"/>`
 
   ctx := context.Background()
+  p := helium.NewParser()
 
-  stylesheetDoc, err := helium.NewParser().Parse(ctx, []byte(stylesheetSrc))
+  stylesheetDoc, err := p.Parse(ctx, []byte(stylesheetSrc))
   if err != nil {
     fmt.Printf("parse stylesheet error: %s\n", err)
     return
@@ -308,7 +309,7 @@ func Example_xslt3_transform_string() {
     return
   }
 
-  sourceDoc, err := helium.NewParser().Parse(ctx, []byte(sourceSrc))
+  sourceDoc, err := p.Parse(ctx, []byte(sourceSrc))
   if err != nil {
     fmt.Printf("parse error: %s\n", err)
     return
@@ -538,8 +539,10 @@ import (
 )
 
 func Example_relaxng_validate() {
+  p := helium.NewParser()
+
   // Compile a small RELAX NG schema from XML syntax.
-  schemaDoc, err := helium.NewParser().Parse(context.Background(), []byte(
+  schemaDoc, err := p.Parse(context.Background(), []byte(
     `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
   <start>
     <element name="book">
@@ -558,7 +561,7 @@ func Example_relaxng_validate() {
     return
   }
 
-  doc, err := helium.NewParser().Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
+  doc, err := p.Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
   if err != nil {
     fmt.Printf("xml parse failed: %s\n", err)
     return
@@ -588,8 +591,10 @@ import (
 )
 
 func Example_schematron_validate() {
+  p := helium.NewParser()
+
   // Compile a minimal Schematron schema with one assertion.
-  schemaDoc, err := helium.NewParser().Parse(context.Background(), []byte(
+  schemaDoc, err := p.Parse(context.Background(), []byte(
     `<schema xmlns="http://www.ascc.net/xml/schematron">
   <pattern name="book-check">
     <rule context="book">
@@ -608,7 +613,7 @@ func Example_schematron_validate() {
     return
   }
 
-  doc, err := helium.NewParser().Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
+  doc, err := p.Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
   if err != nil {
     fmt.Printf("xml parse failed: %s\n", err)
     return
