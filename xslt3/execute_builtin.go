@@ -6,6 +6,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 )
 
 // applyBuiltinRules applies the built-in template rules per XSLT spec.
@@ -295,13 +296,63 @@ func (ec *execContext) shouldStripWhitespace(node helium.Node) bool {
 		return false
 	}
 	if ec.isElementStripped(elem) {
+		// Schema-aware: do not strip whitespace from elements with simple
+		// content or mixed content, even if xsl:strip-space says to strip.
+		// Per XSLT 3.0 §4.4, only element-only content elements have
+		// whitespace stripped. Simple/mixed content whitespace is data.
+		// Check the element's type annotation from the PSVI first, then
+		// fall back to global element declaration.
+		if ec.schemaRegistry != nil && ec.hasSimpleOrMixedContentByAnnotation(elem) {
+			return false
+		}
 		return true
 	}
 	// Per XDM 3.1 Section 6.7.1: if the element is validated as having
-	// element-only content (from a DTD), whitespace-only text node children
-	// are stripped. This ensures documents parsed with DTD element content
-	// models behave correctly even without xsl:strip-space.
-	return hasElementOnlyContent(elem)
+	// element-only content (from a DTD or XSD schema), whitespace-only text
+	// node children are stripped. This ensures documents parsed with element
+	// content models behave correctly even without xsl:strip-space.
+	if hasElementOnlyContent(elem) {
+		return true
+	}
+	// Schema-aware: check XSD element-only content model via annotation or declaration.
+	if ec.schemaRegistry != nil {
+		if ec.hasElementOnlyContentByAnnotation(elem) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasSimpleOrMixedContentByAnnotation checks if an element's type annotation
+// indicates simple or mixed content (whitespace is significant data).
+func (ec *execContext) hasSimpleOrMixedContentByAnnotation(elem *helium.Element) bool {
+	ann := ec.typeAnnotations[elem]
+	if ann == "" {
+		// No PSVI annotation — check global element declaration
+		return ec.schemaRegistry.HasSimpleOrMixedContent(elem.LocalName(), elem.URI())
+	}
+	// Check if the type is a simple type (no ContentType field) or complex with simple/mixed content
+	td, _, found := ec.schemaRegistry.LookupTypeDef(ann)
+	if !found {
+		// Unknown type — check if it's a built-in simple type
+		return isBuiltinSimpleType(ann)
+	}
+	return td.ContentType == xsd.ContentTypeSimple || td.ContentType == xsd.ContentTypeMixed
+}
+
+// hasElementOnlyContentByAnnotation checks if an element's type annotation
+// indicates element-only content (whitespace should be stripped).
+func (ec *execContext) hasElementOnlyContentByAnnotation(elem *helium.Element) bool {
+	ann := ec.typeAnnotations[elem]
+	if ann == "" {
+		// No PSVI annotation — check global element declaration
+		return ec.schemaRegistry.HasElementOnlyContent(elem.LocalName(), elem.URI())
+	}
+	td, _, found := ec.schemaRegistry.LookupTypeDef(ann)
+	if !found {
+		return false
+	}
+	return td.ContentType == xsd.ContentTypeElementOnly
 }
 
 // inheritedXMLSpace walks up the ancestor chain to find the nearest

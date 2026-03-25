@@ -53,6 +53,38 @@ func (r *schemaRegistry) HasNamespace(ns string) bool {
 	return false
 }
 
+// HasElementOnlyContent returns true if the given element's schema-declared
+// type has element-only content (no mixed text). Per XSLT 3.0 §4.4, whitespace
+// text nodes in element-only content elements are stripped regardless of
+// xsl:preserve-space declarations.
+func (r *schemaRegistry) HasElementOnlyContent(local, ns string) bool {
+	typeName, ok := r.LookupElement(local, ns)
+	if !ok {
+		return false
+	}
+	td, _, found := r.LookupTypeDef(typeName)
+	if !found {
+		return false
+	}
+	return td.ContentType == xsd.ContentTypeElementOnly
+}
+
+// HasSimpleOrMixedContent returns true if the given element's schema-declared
+// type has simple content or mixed content (text is significant). Per XSLT 3.0
+// §4.4, whitespace text nodes in such elements are NOT stripped even when
+// xsl:strip-space declarations apply.
+func (r *schemaRegistry) HasSimpleOrMixedContent(local, ns string) bool {
+	typeName, ok := r.LookupElement(local, ns)
+	if !ok {
+		return false
+	}
+	td, _, found := r.LookupTypeDef(typeName)
+	if !found {
+		return false
+	}
+	return td.ContentType == xsd.ContentTypeSimple || td.ContentType == xsd.ContentTypeMixed
+}
+
 // LookupType returns the base type name for a schema type definition.
 func (r *schemaRegistry) LookupType(local, ns string) (baseType string, ok bool) {
 	for _, s := range r.schemas {

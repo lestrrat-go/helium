@@ -152,7 +152,9 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 
 	// Apply xsl:strip-space to the source document so that whitespace-only
 	// text nodes are removed before template matching and XPath evaluation.
-	if len(ss.stripSpace) > 0 && effectiveSource != nil {
+	// Also strip when schema-aware: element-only content elements have
+	// whitespace stripped per XSLT 3.0 §4.4 regardless of xsl:strip-space.
+	if effectiveSource != nil && (len(ss.stripSpace) > 0 || ec.schemaRegistry != nil) {
 		ec.stripWhitespaceFromDoc(effectiveSource)
 	}
 

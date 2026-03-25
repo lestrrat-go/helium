@@ -1635,8 +1635,6 @@ var w3cImplicitSkips = map[string]string{
 
 
 	// strip-space: schema-aware whitespace stripping
-	"strip-space-007": "schema-aware whitespace stripping fails",
-	"strip-space-008": "schema-aware whitespace stripping fails",
 
 	// base-uri: xsl:copy base URI propagation
 
@@ -1671,9 +1669,9 @@ var w3cImplicitSkips = map[string]string{
 
 
 	// XSD 1.1 features: newly unlocked but failing
+	"strip-space-009":  "XSD 1.1 xs:assert: whitespace preservation with assertion-guarded types",
 	"validation-1301":  "XSD 1.1 xs:alternative type selection not implemented",
 	"import-schema-164": "XSD validation fails for namespaced attribute ref with default",
-	"strip-space-009":  "schema-aware whitespace stripping not implemented",
 	"package-910":      "XSD 1.1 package static error XTSE0165 not detected",
 	"package-913":      "XSD 1.1 package static error XTSE0165 not detected",
 	"package-913a":     "XSD 1.1 package static error XTSE0165 not detected",
