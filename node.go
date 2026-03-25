@@ -57,6 +57,7 @@ type node struct {
 	properties *Attribute
 	ns         *Namespace
 	nsDefs     []*Namespace
+	qname      string // cached qualified name (prefix:local or just local)
 }
 
 type ElementType int
@@ -431,6 +432,7 @@ func (n *node) SetActiveNamespace(prefix, uri string) error {
 		return err
 	}
 	n.ns = ns
+	n.invalidateQName()
 	return nil
 }
 
@@ -438,6 +440,7 @@ func (n *node) SetActiveNamespace(prefix, uri string) error {
 // without creating a new declaration.
 func (n *node) SetNs(ns *Namespace) {
 	n.ns = ns
+	n.invalidateQName()
 }
 
 func (n node) Prefix() string {
@@ -454,11 +457,19 @@ func (n node) URI() string {
 	return ""
 }
 
-func (n node) Name() string {
+func (n *node) Name() string {
+	if n.qname != "" {
+		return n.qname
+	}
 	if ns := n.ns; ns != nil && ns.Prefix() != "" {
-		return ns.Prefix() + ":" + n.name
+		n.qname = ns.Prefix() + ":" + n.name
+		return n.qname
 	}
 	return n.name
+}
+
+func (n *node) invalidateQName() {
+	n.qname = ""
 }
 
 func SetListDoc(n Node, doc *Document) {
