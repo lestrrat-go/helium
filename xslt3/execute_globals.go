@@ -212,7 +212,7 @@ func (ec *execContext) invokeInitialFunction(ctx context.Context, cfg *transform
 	if fn == nil {
 		return nil, dynamicError(errCodeXTDE0041, "initial function %q not found", cfg.initialFunction)
 	}
-	if fn.Visibility != visPublic {
+	if fn.Visibility != visPublic && fn.Visibility != visFinal {
 		return nil, dynamicError(errCodeXTDE0041, "initial function %q is not public", cfg.initialFunction)
 	}
 	if len(cfg.initialFunctionParams) != len(fn.Params) {
@@ -225,6 +225,9 @@ func (ec *execContext) invokeInitialFunction(ctx context.Context, cfg *transform
 	if fnErr != nil {
 		return nil, fnErr
 	}
+
+	// Capture the raw XDM result for assert-type/assert-eq/etc.
+	ec.rawResultSequence = result
 
 	// Write the result to the output document
 	if err := ec.outputSequence(result); err != nil {
