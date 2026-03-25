@@ -77,6 +77,18 @@ func (f *fileParseInput) URI() string { return f.uri }
 // TreeBuilder is a SAX2 handler that builds a DOM tree from SAX events,
 // analogous to libxml2's default SAX handler (xmlSAX2InitDefaultSAXHandler).
 type TreeBuilder struct {
+	cachedCtx context.Context // last context seen
+	cachedPCtx *parserCtx    // cached parserCtx for that context
+}
+
+func (t *TreeBuilder) pctx(ctxif context.Context) *parserCtx {
+	if ctxif == t.cachedCtx {
+		return t.cachedPCtx
+	}
+	p := getParserCtx(ctxif)
+	t.cachedCtx = ctxif
+	t.cachedPCtx = p
+	return p
 }
 
 // NewTreeBuilder creates a new TreeBuilder that builds a DOM tree from SAX events.
@@ -99,7 +111,7 @@ func (t *TreeBuilder) StartDocument(ctxif context.Context) error {
 		defer g.IRelease("END tree.StartDocument")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	ctx.doc = NewDocument(ctx.version, ctx.encoding, ctx.standalone)
 	ctx.doc.ids = make(map[string]*Element)
 	ctx.doc.url = ctx.baseURI
@@ -112,7 +124,7 @@ func (t *TreeBuilder) EndDocument(ctxif context.Context) error {
 		defer g.IRelease("END tree.EndDocument")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	if ctx.doc != nil && ctx.wellFormed {
 		ctx.doc.properties |= DocWellFormed
 		if ctx.valid {
@@ -127,7 +139,7 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif context.Context, target, data 
 		g := pdebug.IPrintf("START tree.ProcessingInstruction")
 		defer g.IRelease("END tree.ProcessingInstruction")
 	}
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	pi, err := doc.CreatePI(target, data)
 	if err != nil {
@@ -233,7 +245,7 @@ func lookupAttributeDecl(doc *Document, name, prefix, elem string) *AttributeDec
 }
 
 func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
-	//	ctx := getParserCtx(ctxif)
+	//	ctx := t.pctx(ctxif)
 	if pdebug.Enabled {
 		var name string
 		if prefix != "" {
@@ -245,7 +257,7 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 		defer g.IRelease("END tree.StartElement")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 
 	e, err := doc.CreateElement(localname)
@@ -368,7 +380,7 @@ func (t *TreeBuilder) EndElementNS(ctxif context.Context, localname, prefix, uri
 		}
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	cur := ctx.elem
 	if cur == nil {
 		return errors.New("no context node to end")
@@ -389,7 +401,7 @@ func (t *TreeBuilder) Characters(ctxif context.Context, data []byte) error {
 		defer g.IRelease("END tree.Characters")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	n := ctx.elem
 	if n == nil {
 		return errors.New("text content placed in wrong location")
@@ -411,7 +423,7 @@ func (t *TreeBuilder) CDataBlock(ctxif context.Context, data []byte) error {
 		defer g.IRelease("END tree.CDATABlock")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	parent := ctx.elem
 	if parent == nil {
 		return nil
@@ -435,7 +447,7 @@ func (t *TreeBuilder) Comment(ctxif context.Context, data []byte) error {
 		defer g.IRelease("END tree.Comment")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	if doc == nil {
 		return errors.New("comment placed in wrong location")
@@ -477,7 +489,7 @@ func (t *TreeBuilder) InternalSubset(ctxif context.Context, name, eid, uri strin
 		defer g.IRelease("END tree.InternalSubset")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 
 	dtd, err := doc.InternalSubset()
@@ -501,7 +513,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 		defer g.IRelease("END tree.ExternalSubset")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 
 	if ctx.options.IsSet(parseNoXXE) {
 		return nil
@@ -614,7 +626,7 @@ func (t *TreeBuilder) GetEntity(ctxif context.Context, name string) (ent sax.Ent
 		}()
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	x, ok := doc.GetEntity(name)
 	if !ok {
@@ -635,7 +647,7 @@ func (t *TreeBuilder) GetParameterEntity(ctxif context.Context, name string) (sa
 		return nil, ErrInvalidParserCtx
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	if doc == nil {
 		return nil, ErrInvalidDocument
@@ -654,7 +666,7 @@ func (t *TreeBuilder) AttributeDecl(ctxif context.Context, eName string, aName s
 		defer g.IRelease("END tree.AttributeDecl")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 
 	if aName == lexicon.QNameXMLID && typ != enum.AttrID {
 		// libxml2 says "raise the error but keep the validity flag"
@@ -706,7 +718,7 @@ func (t *TreeBuilder) ElementDecl(ctxif context.Context, name string, typ enum.E
 		defer g.IRelease("END tree.ElementDecl")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	var dtd *DTD
 	switch ctx.inSubset {
@@ -767,7 +779,7 @@ func (t *TreeBuilder) IgnorableWhitespace(ctxif context.Context, content []byte)
 		defer g.IRelease("END tree.IgnorableWhitespace")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	if ctx.keepBlanks {
 		return t.Characters(ctxif, content)
 	}
@@ -790,7 +802,7 @@ func (t *TreeBuilder) NotationDecl(ctxif context.Context, name string, publicID 
 		defer g.IRelease("END tree.NotationDecl")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	dtd := ctx.doc.intSubset
 	if dtd == nil {
 		return nil
@@ -805,7 +817,7 @@ func (t *TreeBuilder) Reference(ctxif context.Context, name string) error {
 		defer g.IRelease("END tree.Reference")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	var n Node
 	var err error
@@ -829,7 +841,7 @@ func (t *TreeBuilder) ResolveEntity(ctxif context.Context, publicID string, syst
 		defer g.IRelease("END tree.ResolveEntity")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	if ctx.catalog != nil {
 		if resolved := ctx.catalog.Resolve(publicID, systemID); resolved != "" {
 			f, err := os.Open(resolved)
@@ -885,7 +897,7 @@ func (t *TreeBuilder) EntityDecl(ctxif context.Context, name string, typ enum.En
 		defer g.IRelease("END tree.EntityDecl")
 	}
 
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	var dtd *DTD
 	switch ctx.inSubset {
@@ -927,7 +939,7 @@ func (t *TreeBuilder) UnparsedEntityDecl(ctxif context.Context, name string, pub
 	}
 
 	// Mirror xmlSAX2UnparsedEntityDecl: register the NDATA entity in the DTD.
-	ctx := getParserCtx(ctxif)
+	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 	var dtd *DTD
 	switch ctx.inSubset {
