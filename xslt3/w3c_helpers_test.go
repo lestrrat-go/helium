@@ -1618,9 +1618,6 @@ var w3cImplicitSkips = map[string]string{
 
 
 
-	// use-package: variable isolation across versioned package instances
-	"use-package-176": "variable from multiple package versions not isolated per-package",
-
 	// use-package: package-scoped namespace serialization in result-document
 	"use-package-108":  "package-scoped namespace alias serialization not implemented",
 	"use-package-108b": "package-scoped namespace alias serialization not implemented",
