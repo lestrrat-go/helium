@@ -148,9 +148,12 @@ RELAX NG schema compilation and validation.
 
 HTML 4.01 parser producing helium DOM or SAX events.
 
-- **Parse(ctx, []byte, ...ParseOption) → (*Document, error)**
-- **ParseFile(ctx, path, ...ParseOption) → (*Document, error)**
-- **ParseWithSAX(ctx, []byte, SAXHandler, ...ParseOption) → error**
+- **NewParser() → Parser** — create fluent parser builder
+- Parser methods: NoImplied(), NoBlanks(), NoError(), NoWarning()
+- Terminal: **Parse(ctx, []byte)**, **ParseFile(ctx, path)**, **ParseWithSAX(ctx, []byte, SAXHandler)**, **NewPushParser(ctx)**, **NewSAXPushParser(ctx, SAXHandler)**
+- **NewWriter() → Writer** — create fluent writer builder
+- Writer methods: NoDefaultDTD(), NoFormat(), PreserveCase(), NoEscapeURIAttributes(), EscapeControlChars()
+- Terminal: **WriteDoc(io.Writer, *Document)**, **WriteNode(io.Writer, Node)**
 - Auto-closing, void elements, implicit html/head/body insertion
 - Encoding: prescan charset=utf-8 → U+FFFD for invalid bytes; otherwise Latin-1/Win-1252→UTF-8
 - Entity resolution: 2125 WHATWG + 106 legacy HTML4; legacy entities work without `;`
