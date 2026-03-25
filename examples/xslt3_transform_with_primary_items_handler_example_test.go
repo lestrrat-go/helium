@@ -27,7 +27,7 @@ func Example_xslt3_transform_with_primary_items_handler() {
 
 	// This stylesheet uses method="json", which means the primary output is
 	// driven by XDM items such as maps and arrays instead of an element tree.
-	// That is the scenario where PrimaryItemsReceiver is most useful.
+	// That is the scenario where PrimaryItemsHandler is most useful.
 	stylesheet, err := compileExampleStylesheet(ctx, stylesheetSrc)
 	if err != nil {
 		fmt.Printf("failed to compile stylesheet: %s\n", err)
@@ -40,7 +40,7 @@ func Example_xslt3_transform_with_primary_items_handler() {
 		return
 	}
 
-	// For json/adaptive output, a primary-items receiver lets callers access the
+	// For json/adaptive output, a primary-items handler lets callers access the
 	// non-node XDM items that the serializer will turn into the final output.
 	// This is useful if your program wants to inspect the map/array structure,
 	// apply custom serialization, or hand the items to another layer without
@@ -49,7 +49,7 @@ func Example_xslt3_transform_with_primary_items_handler() {
 	// Gotcha: this callback is primarily interesting for non-XML outputs. For a
 	// normal element-based XML result, the returned document is usually the more
 	// natural API to consume.
-	recv := &examplePrimaryItemsReceiver{}
+	recv := &examplePrimaryItemsHandler{}
 
 	resultDoc, err := stylesheet.Transform(sourceDoc).
 		PrimaryItemsHandler(recv).
