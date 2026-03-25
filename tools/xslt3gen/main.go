@@ -85,11 +85,12 @@ type xslCollection struct {
 }
 
 type xslSource struct {
-	Role    string      `xml:"role,attr"`
-	File    string      `xml:"file,attr"`
-	URI     string      `xml:"uri,attr"`
-	Select  string      `xml:"select,attr"`
-	Content *xslContent `xml:"content"`
+	Role              string      `xml:"role,attr"`
+	File              string      `xml:"file,attr"`
+	URI               string      `xml:"uri,attr"`
+	Select            string      `xml:"select,attr"`
+	DefinesStylesheet string      `xml:"defines-stylesheet,attr"`
+	Content           *xslContent `xml:"content"`
 }
 
 type xslContent struct {
@@ -218,6 +219,7 @@ type generatedTest struct {
 	Collections                 []collectionDef
 	SourceSchemaPath            string
 	ImportSchemaPaths           []string // schemas for xsl:import-schema resolution
+	EmbeddedStylesheet          bool     // source document contains <?xml-stylesheet?> PI
 }
 
 // packageDep maps a package URI+version to its file path.
@@ -448,6 +450,16 @@ func main() {
 			if gt.StylesheetPath == "" {
 				env := resolveEnvironment(tc.Environment, localEnvs)
 				if env != nil {
+					// Check if source document defines the stylesheet
+					// (embedded via <?xml-stylesheet?> PI).
+					sourceDefinesStylesheet := false
+					for _, src := range env.Sources {
+						if src.Role == "." && src.DefinesStylesheet == "true" {
+							sourceDefinesStylesheet = true
+							gt.EmbeddedStylesheet = true
+							break
+						}
+					}
 					for _, ss := range env.Stylesheets {
 						relPath := filepath.Join(tsDir, ss.File)
 						if ss.Role == "secondary" {
@@ -456,7 +468,9 @@ func main() {
 							gt.StylesheetPath = relPath
 						}
 					}
-					if gt.StylesheetPath == "" && len(env.Stylesheets) == 1 {
+					// Only promote a lone environment stylesheet to primary
+					// when the source document does not define the stylesheet.
+					if gt.StylesheetPath == "" && len(env.Stylesheets) == 1 && !sourceDefinesStylesheet {
 						gt.StylesheetPath = filepath.Join(tsDir, env.Stylesheets[0].File)
 					}
 					// Environment-level packages as principal fallback
@@ -494,10 +508,9 @@ func main() {
 				}
 			}
 
-			if gt.StylesheetPath == "" {
+			if gt.StylesheetPath == "" && !gt.EmbeddedStylesheet {
 				gt.Skip = "no stylesheet"
 			}
-
 			// Initial template
 			if tc.Test.InitialTemplate != nil {
 				gt.InitialTemplate = resolveInitialTemplateName(tc.Test.InitialTemplate)
@@ -582,6 +595,9 @@ func main() {
 						gt.SourceContent = decodeXMLText(string(src.Content.Inner))
 					} else if xmlContent := extractParseXMLContent(src.Select); xmlContent != "" {
 						gt.SourceContent = xmlContent
+					}
+					if src.DefinesStylesheet == "true" {
+						gt.EmbeddedStylesheet = true
 					}
 					// When source has a select attribute (e.g., select="/doc"),
 					// use it as the initial match selection so the transformation
@@ -1565,6 +1581,9 @@ func generateTestFile(tests []generatedTest) string {
 					fmt.Fprintf(&b, "%q", code)
 				}
 				b.WriteString("}")
+			}
+			if tc.EmbeddedStylesheet {
+				b.WriteString(", EmbeddedStylesheet: true")
 			}
 			if tc.Skip != "" {
 				fmt.Fprintf(&b, ", Skip: %q", tc.Skip)
