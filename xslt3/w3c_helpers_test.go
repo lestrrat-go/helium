@@ -1680,8 +1680,6 @@ var w3cImplicitSkips = map[string]string{
 	// snapshot: f:snapshot reference impl namespace-node graft produces empty root
 	"snapshot-0102a": "snapshot()/root() returns empty for some namespace nodes",
 
-	// transform-009: fn:transform() secondary output documents not properly captured
-	"transform-009": "fn:transform() xsl:result-document secondary output not captured",
 
 	// output-0602: HTML namespace serialization not suppressed on known HTML elements
 	"output-0602a": "HTML serializer emits xmlns on svg/body elements (should be suppressed)",

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/sequence"
@@ -214,13 +215,17 @@ type transformDepthKey struct{}
 const maxTransformDepth = 10
 
 // resultDocCollector implements ResultDocumentHandler for fn:transform,
-// collecting secondary result documents into a map.
+// collecting secondary result documents and their output definitions into maps.
 type resultDocCollector struct {
-	results map[string]*helium.Document
+	results    map[string]*helium.Document
+	outputDefs map[string]*OutputDef
 }
 
-func (c resultDocCollector) HandleResultDocument(href string, doc *helium.Document, _ *OutputDef) error {
+func (c resultDocCollector) HandleResultDocument(href string, doc *helium.Document, outDef *OutputDef) error {
 	c.results[href] = doc
+	if outDef != nil && c.outputDefs != nil {
+		c.outputDefs[href] = outDef
+	}
 	return nil
 }
 
@@ -492,12 +497,13 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 
 	// Build a fresh transform config for the inner fn:transform call.
 	secondaryResults := make(map[string]*helium.Document)
+	secondaryOutputDefs := make(map[string]*OutputDef)
 	fnTransformCfg := &transformConfig{
 		initialTemplate:   initialTemplate,
 		initialMode:       initialMode,
 		initialFunction:  initialFunction,
 		baseOutputURI:    baseOutputURI,
-		resultDocHandler: resultDocCollector{results: secondaryResults},
+		resultDocHandler: resultDocCollector{results: secondaryResults, outputDefs: secondaryOutputDefs},
 	}
 
 	// Apply map-valued options from the fn:transform options map.
@@ -647,7 +653,10 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		// Serialize secondary results too.
 		for href, doc := range secondaryResults {
 			hrefKey := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: href}
-			outDef := ss.outputs[href]
+			outDef := secondaryOutputDefs[href]
+			if outDef == nil {
+				outDef = ss.outputs[href]
+			}
 			if outDef == nil {
 				outDef = ss.outputs[""]
 			}
@@ -655,7 +664,9 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 			if err := SerializeResult(&buf, doc, outDef); err != nil {
 				result = result.Put(hrefKey, xpath3.SingleString(""))
 			} else {
-				result = result.Put(hrefKey, xpath3.SingleString(buf.String()))
+				// Trim trailing newline added by the XML serializer's document
+				// serialization so the string value matches spec expectations.
+				result = result.Put(hrefKey, xpath3.SingleString(strings.TrimRight(buf.String(), "\n")))
 			}
 		}
 	default:
