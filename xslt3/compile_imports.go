@@ -538,6 +538,18 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
 	}
 
+	// Check use-when on the imported/included stylesheet's root element.
+	// If use-when evaluates to false, skip the entire module.
+	if uw := getAttr(importedRoot, "use-when"); uw != "" {
+		include, err := c.evaluateUseWhen(uw)
+		if err != nil {
+			return err
+		}
+		if !include {
+			return nil
+		}
+	}
+
 	// Save/restore default-mode: included/imported stylesheets may have
 	// their own default-mode that affects only their templates.
 	savedDefaultMode := c.defaultMode
