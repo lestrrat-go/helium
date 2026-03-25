@@ -162,29 +162,38 @@ func (c *UTF8Cursor) PeekString(n int) string {
 }
 
 // Advance consumes n bytes, updating line/column tracking.
-// The per-byte loop benchmarks faster than batched bytes.IndexByte + bulk append
-// because most calls advance by only 1–10 bytes (names, single chars), where the
-// function call overhead of IndexByte exceeds the cost of a simple byte loop.
-// For bulk content, callers use AdvanceFast instead.
+// Scans for newlines first, then does a single bulk append to c.line.
+// Only the bytes after the last newline end up in c.line (since newlines reset it).
 func (c *UTF8Cursor) Advance(n int) error {
 	if c.buflen-c.bufpos < n {
 		if err := c.fillBuffer(n); err != nil {
 			return err
 		}
 	}
-	end := c.bufpos + n
-	for c.bufpos < end {
-		b := c.buf[c.bufpos]
-		if b == '\n' {
-			c.lineno++
-			c.line = c.line[:0]
-			c.column = 1
-		} else {
-			c.column++
+	start := c.bufpos
+	end := start + n
+
+	// Scan for newlines. Track last newline position and count.
+	lastNL := -1
+	nlCount := 0
+	for i := start; i < end; i++ {
+		if c.buf[i] == '\n' {
+			lastNL = i
+			nlCount++
 		}
-		c.line = append(c.line, b)
-		c.bufpos++
 	}
+
+	if nlCount == 0 {
+		// No newlines — bulk append, bump column.
+		c.line = append(c.line, c.buf[start:end]...)
+		c.column += n
+	} else {
+		// Reset line to bytes after the last newline.
+		c.lineno += nlCount
+		c.line = append(c.line[:0], c.buf[lastNL+1:end]...)
+		c.column = end - lastNL
+	}
+	c.bufpos = end
 	return nil
 }
 
