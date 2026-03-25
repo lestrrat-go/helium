@@ -1521,30 +1521,28 @@ var w3cImplicitSkips = map[string]string{
 	"embedded-stylesheet-015": "use-when on imported stylesheet root element not honored",
 
 	// nodetest: schema-aware tests requiring import-schema + schema-element/attribute
-	"nodetest-007": "requires full schema-aware processing (import-schema)",
-	"nodetest-019": "requires full schema-aware processing (import-schema)",
-	"nodetest-020": "requires full schema-aware processing (import-schema)",
-	"nodetest-023": "requires full schema-aware processing (import-schema)",
-	"nodetest-024": "requires full schema-aware processing (import-schema)",
-	"nodetest-026": "requires full schema-aware processing (import-schema)",
-	"nodetest-027": "requires full schema-aware processing (import-schema)",
-	"nodetest-028": "requires full schema-aware processing (import-schema)",
-	"nodetest-029": "requires full schema-aware processing (import-schema)",
-	"nodetest-030": "requires full schema-aware processing (import-schema)",
-	"nodetest-031": "requires full schema-aware processing (import-schema)",
-	"nodetest-032": "requires full schema-aware processing (import-schema)",
-	"nodetest-033": "requires full schema-aware processing (import-schema)",
-	"nodetest-037": "requires full schema-aware processing (import-schema)",
-	"nodetest-038": "requires full schema-aware processing (import-schema)",
+	"nodetest-019": "schema-element/attribute node test fails (wrong output)",
+	"nodetest-020": "schema-element/attribute node test fails (wrong output)",
+	"nodetest-023": "schema-element/attribute node test fails (wrong output)",
+	"nodetest-024": "schema-element/attribute node test fails (wrong output)",
+	"nodetest-026": "schema-element/attribute node test fails (wrong output)",
+	"nodetest-027": "schema-element/attribute node test fails (wrong output)",
+	"nodetest-028": "schema-element/attribute node test fails (wrong output)",
+	"nodetest-029": "schema-element/attribute node test fails (wrong output)",
+	"nodetest-030": "schema-element/attribute node test fails (wrong output)",
+	"nodetest-031": "schema-element/attribute node test fails (wrong output)",
+	"nodetest-032": "schema-element/attribute node test fails (wrong output)",
+	"nodetest-033": "schema-element/attribute node test fails (wrong output)",
+	"nodetest-037": "schema-element/attribute node test fails (wrong output)",
 
-	// json-to-xml typed tests: require schema-aware processing (import-schema + element type tests)
-	"json-to-xml-typed-001": "requires schema-aware processing (instance of element(name, type))",
-	"json-to-xml-typed-002": "requires schema-aware processing (instance of element(name, type))",
-	"json-to-xml-typed-003": "requires schema-aware processing (instance of element(name, type))",
-	"json-to-xml-typed-004": "requires schema-aware processing (instance of element(name, type))",
-	"json-to-xml-typed-005": "requires schema-aware processing (instance of element(name, type))",
-	"json-to-xml-typed-006": "requires schema-aware processing (instance of element(name, type))",
-	"json-to-xml-typed-007": "requires schema-aware processing (instance of element(name, type))",
+	// json-to-xml typed tests: require instance of element(name, type)
+	"json-to-xml-typed-001": "instance of element(name, type) returns false",
+	"json-to-xml-typed-002": "instance of element(name, type) returns false",
+	"json-to-xml-typed-003": "instance of element(name, type) returns false",
+	"json-to-xml-typed-004": "instance of element(name, type) returns false",
+	"json-to-xml-typed-005": "instance of element(name, type) returns false",
+	"json-to-xml-typed-006": "instance of element(name, type) returns false",
+	"json-to-xml-typed-007": "instance of element(name, type) returns false",
 
 	// function tests: TVT namespace resolution
 	"function-1034": "text value template with expand-text fails to resolve user function in AVT",
@@ -1559,43 +1557,31 @@ var w3cImplicitSkips = map[string]string{
 
 	// copy tests: accumulator handling
 
-	// copy tests: require schema-aware processing (import-schema + ID/IDREF)
-	"copy-5031": "requires schema-aware processing (ID/IDREF from import-schema)",
-	"copy-5032": "requires schema-aware processing (ID/IDREF from import-schema)",
-	"copy-5033": "requires schema-aware processing (ID/IDREF from import-schema)",
-	"copy-5034": "requires schema-aware processing (ID/IDREF from import-schema)",
+	// copy tests: schema-aware ID/IDREF
+	"copy-5034": "schema-aware ID/IDREF copy validation fails",
 
-	// validation tests: require schema-aware processing
-	"validation-0202": "requires schema-aware processing (result validation)",
-	"validation-0213": "requires schema-aware processing (result validation)",
-	"validation-0501": "requires schema-aware processing (XSLT schema querying)",
-	"validation-0601": "requires schema-aware processing (XSLT schema querying)",
-	"validation-0701": "requires schema-aware processing (XSLT schema querying)",
-	"validation-0801": "requires schema-aware processing (instance of schema-element)",
-	"validation-1002": "requires schema-aware processing (instance of schema-element)",
-	"validation-1202": "requires schema-aware processing (instance of schema-element)",
-	"validation-1204": "requires schema-aware processing (instance of schema-element)",
-	"validation-1501": "requires schema-aware processing (schema-element type check)",
-	"validation-2002": "requires schema-aware processing (nilled/schema-element)",
+	// validation tests: schema-aware processing
+	"validation-0202": "schema-aware result validation fails",
+	"validation-0213": "schema-aware result validation fails",
+	"validation-0501": "schema-aware XSLT schema querying fails",
+	"validation-0601": "schema-aware XSLT schema querying fails",
+	"validation-0701": "schema-aware XSLT schema querying fails",
+	"validation-0801": "instance of schema-element fails",
+	"validation-1002": "instance of schema-element fails",
+	"validation-1202": "instance of schema-element fails",
+	"validation-1204": "instance of schema-element fails",
 
-	// as tests: require schema-aware processing (import-schema + type checks)
-	"as-0151": "requires schema-aware processing (document-node(element(name,type)))",
-	"as-1812": "requires schema-aware processing (schema-attribute type check)",
-	"as-1813": "requires schema-aware processing (schema-attribute type check)",
-	"as-1814": "requires schema-aware processing (schema-attribute type check)",
-	"as-2905": "requires schema-aware processing (schema-element type check)",
-	"as-2906": "requires schema-aware processing (instance of element(name,type))",
-	"as-3101": "requires schema-aware processing (instance of element(name,type))",
-	"as-3202": "requires schema-aware processing (schema-element type check)",
-	"as-3504": "requires schema-aware processing (schema-element type check)",
-	"as-3601": "requires schema-aware processing (schema-attribute type check)",
-	"as-3602": "requires schema-aware processing (schema-attribute type check)",
-	"as-3603": "requires schema-aware processing (schema-attribute type check)",
-	"as-3701": "requires schema-aware processing (schema-element type check)",
+	// as tests: schema-attribute type checks
+	"as-1812": "schema-attribute type check fails",
+	"as-1813": "schema-attribute type check fails",
+	"as-1814": "schema-attribute type check fails",
+	"as-3601": "schema-attribute type check fails",
+	"as-3602": "schema-attribute type check fails",
+	"as-3603": "schema-attribute type check fails",
 
 	// override: schema-aware union types from xsl:import-schema
-	"override-f-031": "requires schema-aware union type conversion (xsl:import-schema)",
-	"override-v-006": "requires schema-aware union type comparison (xsl:import-schema)",
+	"override-f-031": "schema-aware union type conversion fails",
+	"override-v-006": "schema-aware union type comparison fails",
 
 	// function-lookup: spec §20.3.3 requires original (not override) in package context
 	"function-lookup-005": "function-lookup returns override instead of original per spec §20.3.3",
@@ -1623,9 +1609,9 @@ var w3cImplicitSkips = map[string]string{
 	// error: upstream test now expects mandatory error we don't raise
 	"error-FODC0002a": "upstream W3C test change: FODC0002 now required (was optional)",
 
-	// merge: schema type annotations not propagated through merge
-	"merge-049":  "schema-element() instance test requires type annotations on merged items",
-	"merge-051":  "xsl:merge-source type= attribute: schema-element() instance test requires type annotations on merged items",
+	// merge: schema-element instance test on merged items
+	"merge-049": "schema-element() instance test on merged items fails",
+	"merge-051": "schema-element() instance test on merged items fails",
 	"merge-072":  "XTDE2220 alternate=shifted collation sort-order verification not supported",
 	"merge-079":  "DOM-materialized merge exposes ancestor::record outside streaming snapshot",
 	"merge-097":  "uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable)",
@@ -1641,8 +1627,8 @@ var w3cImplicitSkips = map[string]string{
 	// package version resolution: lowest_version not supported (we use highest_version)
 
 	// castable tests: schema-aware union/list type casting
-	"castable-005": "requires schema-aware union type casting (import-schema)",
-	"castable-006": "requires schema-aware list type casting (import-schema)",
+	"castable-005": "schema-aware union type casting fails",
+	"castable-006": "schema-aware list type casting fails",
 
 	// attribute-set tests
 
@@ -1652,15 +1638,15 @@ var w3cImplicitSkips = map[string]string{
 	"regex-090": "regex-group closure + zero-length match interaction",
 	"regex-091": "regex-group closure + zero-length match interaction",
 
-	// xpath-default-namespace: various namespace resolution issues
-	"xpath-default-namespace-0503": "schema-type validation with xpath-default-namespace not implemented",
-	"xpath-default-namespace-0701": "schema-element with xpath-default-namespace not resolved",
-	"xpath-default-namespace-0703": "schema-element with xpath-default-namespace not resolved",
+	// xpath-default-namespace: schema-aware namespace resolution
+	"xpath-default-namespace-0503": "schema-type validation with xpath-default-namespace fails",
+	"xpath-default-namespace-0701": "schema-element with xpath-default-namespace fails",
+	"xpath-default-namespace-0703": "schema-element with xpath-default-namespace fails",
 
 
-	// strip-space: various whitespace stripping issues
-	"strip-space-007": "schema-aware whitespace stripping not implemented",
-	"strip-space-008": "schema-aware whitespace stripping not implemented",
+	// strip-space: schema-aware whitespace stripping
+	"strip-space-007": "schema-aware whitespace stripping fails",
+	"strip-space-008": "schema-aware whitespace stripping fails",
 
 	// base-uri: xsl:copy base URI propagation
 	"base-uri-024": "xsl:copy base-uri propagation depends on result context",
@@ -1669,29 +1655,25 @@ var w3cImplicitSkips = map[string]string{
 
 	// arrays: array construction and apply-templates on arrays
 
-	// schema-aware match tests: require full schema-aware pattern matching (xsl:import-schema)
-	"match-054": "schema-aware pattern matching not implemented",
-	"match-055": "schema-aware pattern matching not implemented",
-	"match-056": "schema-aware pattern matching not implemented",
-	"match-173": "schema-aware pattern matching not implemented",
-	"match-174": "schema-aware pattern matching not implemented",
-	"match-181": "schema-aware pattern matching not implemented",
-	"match-185": "schema-aware pattern matching not implemented",
-	"match-187": "schema-aware pattern matching not implemented",
-	"match-205": "schema-aware pattern matching not implemented",
-	"match-206": "schema-aware pattern matching not implemented",
-	"match-207": "schema-aware pattern matching not implemented",
-	"match-210": "schema-aware pattern matching not implemented",
-	"match-221": "schema-aware pattern matching not implemented",
-	"match-232": "schema-aware pattern matching not implemented",
-	"match-244": "schema-aware pattern matching not implemented",
-	"match-262": "schema-aware pattern matching not implemented",
-	"match-263": "schema-aware pattern matching not implemented",
-	"match-287": "schema-aware pattern matching not implemented",
+	// schema-aware match tests: pattern matching with schema types
+	"match-054": "schema-element pattern match produces wrong output",
+	"match-055": "schema-element pattern match produces wrong output",
+	"match-174": "schema-aware user type pattern match fails",
+	"match-181": "schema-aware user type pattern match fails",
+	"match-205": "schema-aware type pattern match returns extra items",
+	"match-206": "schema-aware type pattern match returns extra items",
+	"match-207": "schema-aware type pattern match returns extra items",
+	"match-210": "schema-aware attribute type pattern match fails",
+	"match-221": "schema-aware numeric type pattern match fails",
+	"match-232": "schema-aware type pattern match missing items",
+	"match-244": "expected error XTSE3105 not raised for schema pattern",
+	"match-262": "schema-aware instance test returns false",
+	"match-263": "schema-aware variable binding fails (empty sequence)",
+	"match-287": "schema-attribute pattern match fails (XTTE0780)",
 
-	// evaluate tests requiring schema-aware processing or network access
-	"evaluate-012": "schema-aware xsl:evaluate not implemented (XTDE3160)",
-	"evaluate-013": "schema-aware xsl:evaluate not implemented (XTDE3160)",
+	// evaluate tests requiring schema-aware processing
+	"evaluate-012": "schema-aware xsl:evaluate: expected XTDE3160 not raised",
+	"evaluate-013": "schema-aware xsl:evaluate: expected XTDE3160 not raised",
 	"evaluate-048": "requires network access to saxonica.com",
 
 
@@ -1722,12 +1704,12 @@ var w3cImplicitSkips = map[string]string{
 	// XSD 1.1 features: newly unlocked but failing
 	"validation-1301":  "XSD 1.1 xs:override not fully implemented",
 	"import-schema-164": "XSD 1.1 xs:override attribute validation not implemented",
-	"strip-space-009":  "XSD 1.1 schema-aware whitespace stripping not implemented",
+	"strip-space-009":  "XSD 1.1 schema-aware whitespace stripping fails",
 	"package-910":      "XSD 1.1 package static error XTSE0165 not detected",
 	"package-913":      "XSD 1.1 package static error XTSE0165 not detected",
 	"package-913a":     "XSD 1.1 package static error XTSE0165 not detected",
 	"package-913b":     "XSD 1.1 package static error XTSE0165 not detected",
-	"error-0905b":      "XSD 1.1 xs:anyURI validation rejects #### (should accept under 1.1)",
+	"error-0905b":      "XSD 1.1 xs:anyURI validation rejects #### (should accept)",
 
 	// streaming-fallback: XTSE3430 raised as compile error instead of falling back to non-streaming
 	"streaming-fallback-001": "XTSE3430 fallback to non-streaming not implemented",
