@@ -604,7 +604,7 @@ func Example_schematron_validate() {
     return
   }
 
-  schema, err := schematron.Compile(context.Background(), schemaDoc)
+  schema, err := schematron.NewCompiler().Compile(context.Background(), schemaDoc)
   if err != nil {
     fmt.Printf("schema compile failed: %s\n", err)
     return
@@ -616,7 +616,7 @@ func Example_schematron_validate() {
     return
   }
 
-  if err := schematron.Validate(context.Background(), doc, schema, schematron.WithFilename("doc.xml")); err != nil {
+  if err := schematron.NewValidator(schema).Filename("doc.xml").Validate(context.Background(), doc); err != nil {
     fmt.Println(err)
   }
   // Output:
