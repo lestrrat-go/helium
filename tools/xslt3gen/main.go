@@ -244,9 +244,10 @@ var knownSkips = map[string]string{
 	"analyze-string-090a": "implementation handles zero-length matches (XSLT 3.0)",
 	"analyze-string-091a": "implementation handles zero-length matches (XSLT 3.0)",
 
-	// These tests require xsl:package/xsl:use-package override support not yet implemented.
-	"document-2401": "requires xsl:package override support",
-	"document-2402": "requires xsl:use-package override support",
+	// These tests require package-scoped strip-space isolation not yet implemented.
+	"document-2401": "requires package-scoped strip-space isolation",
+	"document-2402": "requires package-scoped strip-space isolation",
+	"collection-006": "requires package-scoped strip-space isolation",
 
 	// XSLT 2.0 test expects XTSE0870 for empty xsl:value-of, but XSLT 3.0 allows it.
 	"select-7502a": "XSLT 2.0 test; XSLT 3.0 correctly accepts empty xsl:value-of",
@@ -261,10 +262,6 @@ var knownSkips = map[string]string{
 
 	// Requires external Unicode Consortium NormalizationTest.txt file not included in test suite.
 	"normalize-unicode-008": "missing external fixture NormalizationTest.txt",
-
-	// Requires xsl:use-package override behavior for named templates, which
-	// remains incomplete.
-	"collection-006": "requires xsl:use-package override support",
 
 	// XSD 1.0 variant expects xs:dateTimeStamp unavailable; our processor
 	// targets XSD 1.1 where it is available. The 0151a variant tests XSD 1.1
