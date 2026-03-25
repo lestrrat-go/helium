@@ -49,6 +49,9 @@ func NewProcessor() Processor {
 }
 
 func (p Processor) clone() Processor {
+	if p.cfg == nil {
+		return Processor{cfg: &processorCfg{}}
+	}
 	cp := *p.cfg
 	return Processor{cfg: &cp}
 }
@@ -126,12 +129,16 @@ func (proc Processor) Process(ctx context.Context, doc *helium.Document) (int, e
 // When called with a *Document, it processes the entire document.
 // Returns the number of substitutions made, or an error.
 func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, error) {
+	cfg := proc.cfg
+	if cfg == nil {
+		cfg = &processorCfg{}
+	}
 	p := &processor{
-		noMarkers:   proc.cfg.noMarkers,
-		noBaseFixup: proc.cfg.noBaseFixup,
-		resolver:    proc.cfg.resolver,
-		baseURI:     proc.cfg.baseURI,
-		warnHandler: proc.cfg.warnHandler,
+		noMarkers:   cfg.noMarkers,
+		noBaseFixup: cfg.noBaseFixup,
+		resolver:    cfg.resolver,
+		baseURI:     cfg.baseURI,
+		warnHandler: cfg.warnHandler,
 		expanding:   make(map[string]bool),
 		docCache:    make(map[string]docCacheEntry),
 		txtCache:    make(map[string]txtCacheEntry),

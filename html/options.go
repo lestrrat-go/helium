@@ -25,6 +25,9 @@ func NewWriter() Writer {
 }
 
 func (w Writer) clone() Writer {
+	if w.cfg == nil {
+		return Writer{cfg: &writerCfg{}}
+	}
 	cp := *w.cfg
 	return Writer{cfg: &cp}
 }
