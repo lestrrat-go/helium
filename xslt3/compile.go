@@ -449,7 +449,7 @@ func resolveQName(qname string, nsBindings map[string]string) string {
 			if uri == "" {
 				return local // Q{}local → just local (no namespace)
 			}
-			return "{" + uri + "}" + local
+			return helium.ClarkName(uri, local)
 		}
 	}
 	idx := strings.IndexByte(qname, ':')
@@ -459,7 +459,7 @@ func resolveQName(qname string, nsBindings map[string]string) string {
 	prefix := qname[:idx]
 	local := qname[idx+1:]
 	if uri, ok := nsBindings[prefix]; ok {
-		return "{" + uri + "}" + local
+		return helium.ClarkName(uri, local)
 	}
 	// prefix not found; return as-is
 	return qname

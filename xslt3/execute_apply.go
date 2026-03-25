@@ -338,7 +338,7 @@ func (ec *execContext) evaluateWithParam(ctx context.Context, wp *withParam) (xp
 //     from the package to be called by other templates in the same package
 func (ec *execContext) resolveNamedTemplate(name string) (*template, bool) {
 	// Handle xsl:original — resolve to the original overridden template
-	if name == "{"+lexicon.NamespaceXSLT+"}original" {
+	if name == helium.ClarkName(lexicon.NamespaceXSLT, "original") {
 		if ec.overridingTemplate != nil && ec.overridingTemplate.OriginalTemplate != nil {
 			return ec.overridingTemplate.OriginalTemplate, true
 		}

@@ -231,7 +231,7 @@ func entryDisplayName(entry idcEntry) string {
 // idcDisplayName returns the namespace-qualified display name of an IDC.
 func idcDisplayName(idc *IDConstraint, schema *Schema) string {
 	if schema.targetNamespace != "" {
-		return "{" + schema.targetNamespace + "}" + idc.Name
+		return helium.ClarkName(schema.targetNamespace, idc.Name)
 	}
 	return idc.Name
 }

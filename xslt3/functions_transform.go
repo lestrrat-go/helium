@@ -299,7 +299,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if av.TypeName == xpath3.TypeQName {
 			if qv, ok := av.Value.(xpath3.QNameValue); ok {
 				if qv.URI != "" {
-					return "{" + qv.URI + "}" + qv.Local
+					return helium.ClarkName(qv.URI, qv.Local)
 				}
 				return qv.Local
 			}

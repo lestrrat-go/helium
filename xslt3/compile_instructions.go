@@ -538,33 +538,33 @@ func (c *compiler) useWhenSystemProperty(_ context.Context, args []xpath3.Sequen
 
 	resolved := resolveQName(name, c.nsBindings)
 	switch resolved {
-	case "{" + lexicon.NamespaceXSLT + "}version":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "version"):
 		return xpath3.SingleString("3.0"), nil
-	case "{" + lexicon.NamespaceXSLT + "}vendor":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "vendor"):
 		return xpath3.SingleString("helium"), nil
-	case "{" + lexicon.NamespaceXSLT + "}vendor-url":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "vendor-url"):
 		return xpath3.SingleString("https://github.com/lestrrat-go/helium"), nil
-	case "{" + lexicon.NamespaceXSLT + "}product-name":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "product-name"):
 		return xpath3.SingleString("helium"), nil
-	case "{" + lexicon.NamespaceXSLT + "}product-version":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "product-version"):
 		return xpath3.SingleString("0.1"), nil
-	case "{" + lexicon.NamespaceXSLT + "}is-schema-aware":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "is-schema-aware"):
 		return xpath3.SingleString(lexicon.ValueYes), nil
-	case "{" + lexicon.NamespaceXSLT + "}supports-serialization":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-serialization"):
 		return xpath3.SingleString(lexicon.ValueYes), nil
-	case "{" + lexicon.NamespaceXSLT + "}supports-backwards-compatibility":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-backwards-compatibility"):
 		return xpath3.SingleString(lexicon.ValueNo), nil
-	case "{" + lexicon.NamespaceXSLT + "}supports-namespace-axis":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-namespace-axis"):
 		return xpath3.SingleString(lexicon.ValueYes), nil
-	case "{" + lexicon.NamespaceXSLT + "}supports-streaming":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-streaming"):
 		return xpath3.SingleString(lexicon.ValueNo), nil
-	case "{" + lexicon.NamespaceXSLT + "}supports-dynamic-evaluation":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-dynamic-evaluation"):
 		return xpath3.SingleString(lexicon.ValueYes), nil
-	case "{" + lexicon.NamespaceXSLT + "}supports-higher-order-functions":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "supports-higher-order-functions"):
 		return xpath3.SingleString(lexicon.ValueYes), nil
-	case "{" + lexicon.NamespaceXSLT + "}xpath-version":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "xpath-version"):
 		return xpath3.SingleString("3.1"), nil
-	case "{" + lexicon.NamespaceXSLT + "}xsd-version":
+	case helium.ClarkName(lexicon.NamespaceXSLT, "xsd-version"):
 		return xpath3.SingleString("1.1"), nil
 	}
 	return xpath3.SingleString(""), nil

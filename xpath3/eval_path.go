@@ -42,7 +42,7 @@ func evalVariable(ec *evalContext, e VariableExpr) (Sequence, error) {
 		if e.Prefix != "" {
 			if uri, ok := ec.namespaces[e.Prefix]; ok {
 				local := e.Name[len(e.Prefix)+1:] // strip "prefix:"
-				resolved := "{" + uri + "}" + local
+				resolved := helium.ClarkName(uri, local)
 				if v, ok := ec.vars.Lookup(resolved); ok {
 					return enrichNodeItems(ec, v), nil
 				}

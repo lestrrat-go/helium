@@ -272,7 +272,7 @@ func attrLocalName(a *helium.Attribute) string {
 
 func elemDisplayName(elem *helium.Element) string {
 	if elem.URI() != "" {
-		return "{" + elem.URI() + "}" + elem.LocalName()
+		return helium.ClarkName(elem.URI(), elem.LocalName())
 	}
 	return elem.LocalName()
 }
@@ -280,7 +280,7 @@ func elemDisplayName(elem *helium.Element) string {
 func attrDisplayName(a *helium.Attribute) string {
 	uri := a.URI()
 	if uri != "" {
-		return "{" + uri + "}" + a.LocalName()
+		return helium.ClarkName(uri, a.LocalName())
 	}
 	return a.LocalName()
 }

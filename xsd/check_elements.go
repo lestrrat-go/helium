@@ -429,7 +429,7 @@ func (c *compiler) checkDocumentation(elem *helium.Element) {
 	// Validate xml:lang value after attribute checks.
 	if langValue != "" && !languageRegex.MatchString(langValue) {
 		c.errorHandler.Handle(c.compileContext(), helium.NewLeveledError(schemaParserErrorAttr(c.filename, line, local, "documentation",
-			"{"+lexicon.NamespaceXML+"}"+lexicon.AttrLang,
+			helium.ClarkName(lexicon.NamespaceXML, lexicon.AttrLang),
 			"'"+langValue+"' is not a valid value of the atomic type 'xs:language'."), helium.ErrorLevelFatal))
 		c.errorCount++
 	}
