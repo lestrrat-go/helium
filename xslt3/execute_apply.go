@@ -379,9 +379,15 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 	}
 
 	// Switch package function scope if the template belongs to a different package.
+	// Override templates (OriginalTemplate != nil) run in the main stylesheet
+	// context so that strip-space and other package-scoped rules from the
+	// using package apply, not the used package's rules.
 	savedFnsNS := ec.cachedFnsNS
 	savedPackage := ec.currentPackage
-	if tmpl.OwnerPackage != nil && tmpl.OwnerPackage != ec.currentPackage {
+	if tmpl.OriginalTemplate != nil {
+		ec.cachedFnsNS = nil
+		ec.currentPackage = nil
+	} else if tmpl.OwnerPackage != nil && tmpl.OwnerPackage != ec.currentPackage {
 		ec.cachedFnsNS = nil
 		ec.currentPackage = tmpl.OwnerPackage
 	}

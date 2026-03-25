@@ -244,11 +244,6 @@ var knownSkips = map[string]string{
 	"analyze-string-090a": "implementation handles zero-length matches (XSLT 3.0)",
 	"analyze-string-091a": "implementation handles zero-length matches (XSLT 3.0)",
 
-	// These tests require package-scoped strip-space isolation not yet implemented.
-	"document-2401": "requires package-scoped strip-space isolation",
-	"document-2402": "requires package-scoped strip-space isolation",
-	"collection-006": "requires package-scoped strip-space isolation",
-
 	// XSLT 2.0 test expects XTSE0870 for empty xsl:value-of, but XSLT 3.0 allows it.
 	"select-7502a": "XSLT 2.0 test; XSLT 3.0 correctly accepts empty xsl:value-of",
 

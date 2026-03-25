@@ -877,7 +877,7 @@ func (ec *execContext) collectionResolver() xpath3.CollectionResolver {
 	if ec.transformConfig == nil || ec.transformConfig.collectionResolver == nil {
 		return nil
 	}
-	if len(ec.stylesheet.stripSpace) == 0 && len(ec.stylesheet.preserveSpace) == 0 {
+	if len(ec.effectiveStripSpace()) == 0 && len(ec.effectivePreserveSpace()) == 0 {
 		return ec.transformConfig.collectionResolver
 	}
 	return strippingCollectionResolver{

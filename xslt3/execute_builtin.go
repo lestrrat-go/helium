@@ -322,16 +322,19 @@ func inheritedXMLSpace(elem *helium.Element) string {
 
 // isElementStripped checks if an element matches strip-space rules.
 // preserve-space overrides strip-space for the same element.
+// Uses the effective (package-scoped) strip/preserve rules.
 func (ec *execContext) isElementStripped(elem *helium.Element) bool {
-	ss := ec.stylesheet
-	if len(ss.stripSpace) == 0 {
+	stripRules := ec.effectiveStripSpace()
+	if len(stripRules) == 0 {
 		return false
 	}
 
+	nsBindings := ec.effectiveStripNamespaces()
+
 	stripped := false
 	stripPriority := -1
-	for _, nt := range ss.stripSpace {
-		if matchSpaceNameTest(nt, elem, ss.namespaces) {
+	for _, nt := range stripRules {
+		if matchSpaceNameTest(nt, elem, nsBindings) {
 			p := nameTestPriority(nt)
 			if p > stripPriority {
 				stripPriority = p
@@ -345,8 +348,8 @@ func (ec *execContext) isElementStripped(elem *helium.Element) bool {
 	}
 
 	// Check if preserve-space overrides
-	for _, nt := range ss.preserveSpace {
-		if matchSpaceNameTest(nt, elem, ss.namespaces) {
+	for _, nt := range ec.effectivePreserveSpace() {
+		if matchSpaceNameTest(nt, elem, nsBindings) {
 			p := nameTestPriority(nt)
 			if p >= stripPriority {
 				return false

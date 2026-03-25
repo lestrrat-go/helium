@@ -330,7 +330,8 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 		return ec.sourceDoc, nil
 	}
 
-	if doc, ok := ec.docCache[resolvedURI]; ok {
+	cacheKey := ec.docCacheKey(resolvedURI)
+	if doc, ok := ec.docCache[cacheKey]; ok {
 		return doc, nil
 	}
 
@@ -360,7 +361,7 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 	// Apply xsl:strip-space rules to the loaded document so that
 	// whitespace-only text nodes are removed consistently with how
 	// the source document is treated.
-	if len(ec.stylesheet.stripSpace) > 0 {
+	if len(ec.effectiveStripSpace()) > 0 {
 		ec.stripWhitespaceFromDoc(doc)
 	}
 
@@ -380,7 +381,7 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 	if ec.docCache == nil {
 		ec.docCache = make(map[string]*helium.Document)
 	}
-	ec.docCache[resolvedURI] = doc
+	ec.docCache[cacheKey] = doc
 
 	// Pre-compute accumulator states for documents loaded via doc()/document()
 	// so that accumulator-before()/accumulator-after() work when processing
