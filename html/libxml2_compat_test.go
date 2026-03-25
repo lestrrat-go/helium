@@ -394,7 +394,7 @@ func TestLibxml2CompatHTMLSAX(t *testing.T) {
 
 			var buf bytes.Buffer
 			handler := newHTMLSAXEventEmitter(&buf)
-			err = html.ParseWithSAX(t.Context(), input, handler)
+			err = html.NewParser().ParseWithSAX(t.Context(), input, handler)
 			require.NoError(t, err, "ParseWithSAX should succeed (file = %s)", name)
 
 			actual := buf.String()
@@ -477,11 +477,11 @@ func TestHTMLSerialization(t *testing.T) {
 				}
 			}()
 
-			doc, err := html.ParseFile(t.Context(), filepath.Join(dir, name))
+			doc, err := html.NewParser().ParseFile(t.Context(), filepath.Join(dir, name))
 			require.NoError(t, err, "ParseFile should succeed (file = %s)", name)
 
 			var buf bytes.Buffer
-			err = html.WriteDoc(&buf, doc)
+			err = html.NewWriter().WriteDoc(&buf, doc)
 			require.NoError(t, err, "WriteDoc should succeed (file = %s)", name)
 
 			expected, err := os.ReadFile(expectedPath)
@@ -694,7 +694,7 @@ func TestHTMLErrors(t *testing.T) {
 			require.NoError(t, err, "reading expected .err file")
 
 			handler, errors := newHTMLErrorCollector()
-			err = html.ParseWithSAX(t.Context(), input, handler)
+			err = html.NewParser().ParseWithSAX(t.Context(), input, handler)
 			require.NoError(t, err, "ParseWithSAX should succeed (file = %s)", name)
 
 			actual := formatHTMLErrors(name, input, *errors)

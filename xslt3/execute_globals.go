@@ -173,6 +173,14 @@ func (ec *execContext) evaluateAllGlobals() error {
 			if !ok {
 				continue // already evaluated as a dependency
 			}
+			// Abstract variables have no implementation — skip eager
+			// evaluation. They will raise XTDE3052 if actually referenced.
+			// Also skip variables from used packages: they may reference
+			// abstract components that have not been overridden, and should
+			// only be evaluated when actually referenced (lazy semantics).
+			if v.Visibility == visAbstract || v.OwnerPackage != nil {
+				continue
+			}
 			if _, err := ec.evaluateGlobalVar(v); err != nil {
 				return err
 			}
@@ -264,6 +272,27 @@ func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
 		}
 	}()
 
+	// XPDY0002: when a variable belongs to a library package that does not
+	// declare xsl:global-context-item (or declares use="absent"), the global
+	// context item is absent during evaluation. Temporarily clear the context
+	// node so XPath expressions that depend on it raise XPDY0002.
+	savedContextNode := ec.contextNode
+	savedContextItem := ec.contextItem
+	savedSourceDoc := ec.sourceDoc
+	if v.OwnerPackage != nil && v.OwnerPackage != ec.stylesheet {
+		gci := v.OwnerPackage.globalContextItem
+		if gci == nil || gci.Use == ctxItemAbsent {
+			ec.contextNode = nil
+			ec.contextItem = nil
+			ec.sourceDoc = nil
+		}
+	}
+	defer func() {
+		ec.contextNode = savedContextNode
+		ec.contextItem = savedContextItem
+		ec.sourceDoc = savedSourceDoc
+	}()
+
 	// Track overriding variable for $xsl:original support
 	savedOverridingVarDef := ec.overridingVarDef
 	if v.OriginalVar != nil {
@@ -285,6 +314,23 @@ func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
 		ec.hasXPathDefaultNS = savedHasXPathDefaultNS
 	}()
 
+	// Abstract variables have no implementation — raise XTDE3052.
+	if v.Visibility == visAbstract {
+		return nil, dynamicError(errCodeXTDE3052,
+			"abstract variable $%s was invoked without being overridden", v.Name)
+	}
+
+	// Always reset static base URI override for global variable evaluation
+	// so that the variable body is not affected by the caller's xml:base
+	// override (e.g. when evaluated lazily from within an LRE with xml:base).
+	savedBaseOverride := ec.staticBaseURIOverride
+	if v.StaticBaseURI != "" {
+		ec.staticBaseURIOverride = v.StaticBaseURI
+	} else {
+		ec.staticBaseURIOverride = ""
+	}
+	defer func() { ec.staticBaseURIOverride = savedBaseOverride }()
+
 	// Static variables use their pre-computed compile-time value.
 	if v.StaticValue != nil {
 		val = v.StaticValue
@@ -295,7 +341,10 @@ func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
 	}
 
 	if v.Select != nil {
-		sourceNode := normalizeNode(ec.sourceDoc)
+		var sourceNode helium.Node
+		if !ec.globalContextAbsent {
+			sourceNode = normalizeNode(ec.sourceDoc)
+		}
 		result, err := ec.evalXPath(v.Select, sourceNode)
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global variable %q: %w", v.Name, err)
@@ -306,7 +355,10 @@ func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
 		// context node, not whatever the current template context is. Save
 		// and restore ec.contextNode so that XPath expressions inside the
 		// body (e.g. value-of select="doc/a") resolve relative to "/".
-		sourceNode := normalizeNode(ec.sourceDoc)
+		var sourceNode helium.Node
+		if !ec.globalContextAbsent {
+			sourceNode = normalizeNode(ec.sourceDoc)
+		}
 		savedCtx := ec.contextNode
 		ec.contextNode = sourceNode
 		ec.temporaryOutputDepth++
@@ -376,6 +428,12 @@ func (ec *execContext) evaluateGlobalParam(p *param) (xpath3.Sequence, error) {
 	ec.currentMode = ec.stylesheet.defaultMode
 	defer func() { ec.currentMode = savedMode }()
 
+	// Reset static base URI override so global param evaluation is not
+	// affected by the caller's xml:base context.
+	savedBaseOverride := ec.staticBaseURIOverride
+	ec.staticBaseURIOverride = ""
+	defer func() { ec.staticBaseURIOverride = savedBaseOverride }()
+
 	// XTDE0050: required stylesheet parameter not supplied by the caller.
 	// If we reach here (not set in initGlobalVars), no external value was given.
 	if p.Required {
@@ -383,7 +441,10 @@ func (ec *execContext) evaluateGlobalParam(p *param) (xpath3.Sequence, error) {
 	}
 
 	if p.Select != nil {
-		sourceNode := normalizeNode(ec.sourceDoc)
+		var sourceNode helium.Node
+		if !ec.globalContextAbsent {
+			sourceNode = normalizeNode(ec.sourceDoc)
+		}
 		result, err := ec.evalXPath(p.Select, sourceNode)
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global param %q: %w", p.Name, err)
@@ -392,7 +453,10 @@ func (ec *execContext) evaluateGlobalParam(p *param) (xpath3.Sequence, error) {
 	} else if len(p.Body) > 0 {
 		// Global param body must evaluate with the source document as
 		// context node (same as the Select path above).
-		sourceNode := normalizeNode(ec.sourceDoc)
+		var sourceNode helium.Node
+		if !ec.globalContextAbsent {
+			sourceNode = normalizeNode(ec.sourceDoc)
+		}
 		savedCtx := ec.contextNode
 		ec.contextNode = sourceNode
 		ec.temporaryOutputDepth++
@@ -715,6 +779,11 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []instru
 // the body is a sequence constructor per the XSLT spec.
 func (ec *execContext) evaluateBodyAsSequence(ctx context.Context, body []instruction) (xpath3.Sequence, error) {
 	tmpDoc := helium.NewDefaultDocument()
+	// Set the document URL to the static base URI so that element nodes
+	// with xml:base can resolve against it (even when orphaned).
+	if baseURI := ec.effectiveStaticBaseURI(); baseURI != "" {
+		tmpDoc.SetURL(baseURI)
+	}
 	tmpRoot, err := tmpDoc.CreateElement("_tmp")
 	if err != nil {
 		return nil, err
@@ -726,7 +795,13 @@ func (ec *execContext) evaluateBodyAsSequence(ctx context.Context, body []instru
 	// Use sequenceMode to capture all nodes as separate items
 	frame := &outputFrame{doc: tmpDoc, current: tmpRoot, captureItems: true, sequenceMode: true}
 	ec.outputStack = append(ec.outputStack, frame)
+
+	// Temporarily set resultDoc to the temp document so that nodes
+	// created by copy-of belong to the correct document tree.
+	savedResultDoc := ec.resultDoc
+	ec.resultDoc = tmpDoc
 	defer func() {
+		ec.resultDoc = savedResultDoc
 		ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 	}()
 

@@ -30,7 +30,7 @@ func Example_html_parse_file() {
 
 	// After parsing, you can query the document with the same XPath helpers used
 	// for XML documents.
-	doc, err := html.ParseFile(context.Background(), f.Name())
+	doc, err := html.NewParser().ParseFile(context.Background(), f.Name())
 	if err != nil {
 		fmt.Printf("parse file failed: %s\n", err)
 		return

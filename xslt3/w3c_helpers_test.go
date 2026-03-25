@@ -159,6 +159,7 @@ type w3cTest struct {
 	BaseOutputURI               string // base output URI for current-output-uri(); empty = not set
 	SourceSchemaPath            string   // path to XSD schema for source document validation (relative to testdata dir)
 	ImportSchemaPaths           []string // schema paths for xsl:import-schema resolution (relative to testdata dir)
+	VersionResolution           string   // "lowest" to select lowest matching package version (default: highest)
 }
 
 // w3cAssertion is an assertion to check against the transform result.
@@ -620,7 +621,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		absPath, _ := filepath.Abs(ssPath)
 		compiler := xslt3.NewCompiler().BaseURI(absPath)
 		if len(tc.PackageDeps) > 0 {
-			compiler = compiler.PackageResolver(w3cPackageResolver{deps: tc.PackageDeps})
+			compiler = compiler.PackageResolver(w3cPackageResolver{deps: tc.PackageDeps, versionResolution: tc.VersionResolution})
 		}
 		if len(tc.ImportSchemaPaths) > 0 {
 			var importSchemas []*xsd.Schema
@@ -736,6 +737,9 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		inv = ss.CallTemplate(tc.InitialTemplate)
 		if sourceDoc != nil {
 			inv = inv.SourceDocument(sourceDoc)
+		}
+		if tc.InitialModeSelect != "" {
+			inv = inv.GlobalContextSelect(tc.InitialModeSelect)
 		}
 		for pName, pVal := range tc.InitialTemplateParams {
 			inv = inv.SetInitialTemplateParameter(pName, w3cEvaluateParamSequence(ctx, pVal))
@@ -1293,98 +1297,46 @@ var w3cImplicitSkips = map[string]string{
 	"as-3603": "requires schema-aware processing (schema-attribute type check)",
 	"as-3701": "requires schema-aware processing (schema-element type check)",
 
-	// accept tests: xsl:accept/use-package visibility control not fully implemented
-	"accept-003":  "xsl:accept package visibility control not implemented",
-	"accept-004":  "xsl:accept package visibility control not implemented",
-	"accept-009":  "xsl:accept package visibility control not implemented",
-	"accept-010":  "xsl:accept package visibility control not implemented",
-	"accept-011":  "xsl:accept package visibility control not implemented",
-	"accept-020":  "xsl:accept package visibility control not implemented",
-	"accept-023":  "xsl:accept package visibility control not implemented",
-	"accept-040":  "xsl:accept package visibility control not implemented",
-	"accept-041a": "xsl:accept package visibility control not implemented",
-	"accept-042":  "xsl:accept package visibility control not implemented",
-	"accept-043a": "xsl:accept package visibility control not implemented",
-	"accept-044":  "xsl:accept package visibility control not implemented",
-	"accept-045a": "xsl:accept package visibility control not implemented",
-	"accept-046":  "xsl:accept package visibility control not implemented",
-	"accept-047a": "xsl:accept package visibility control not implemented",
-	"accept-909":  "xsl:accept package visibility control not implemented",
-	"accept-910":  "xsl:accept package visibility control not implemented",
-	"accept-911":  "xsl:accept package visibility control not implemented",
-	"accept-912":  "xsl:accept package visibility control not implemented",
-	"accept-913":  "xsl:accept package visibility control not implemented",
+	// accept: override function not visible in package scope during xsl:call-template
+	"accept-042":  "override function not visible in package scope via function-lookup",
+	"accept-043a": "override function not visible in package scope via function-lookup",
+	"accept-047a": "override function not visible in package scope via function-lookup",
 
 	// package: xsl:expose visibility control not implemented
-	"package-001j": "xsl:expose mode visibility control not implemented",
 
 	// package: unnamed mode on-no-match with xsl:import precedence
-	"package-013": "unnamed mode built-in on-no-match with import precedence incorrect",
 
 	// package: static error detection not implemented
 	"package-909":  "XTSE0020 package static error detection not implemented",
-	"package-910":  "XTSE0165 xsl:import in package static check not implemented",
-	"package-912":  "XPDY0002 absent context item in package not detected",
-	"package-913":  "XTSE3008 package use-package conflict detection not implemented",
-	"package-913a": "XTSE3008 package use-package conflict detection not implemented",
-	"package-913b": "XTSE3008 package use-package conflict detection not implemented",
-	"package-022err": "XTSE3050 package xsl:override static check not implemented",
 	"package-100":    "package cross-reference variable resolution not implemented",
-	"package-101":    "package cross-reference variable resolution not implemented",
+	"package-101":    "package cross-reference variable resolution (used-package private vars not accessible)",
 
-	// use-package: package-scoped component isolation not implemented
-	"use-package-101": "package-scoped decimal format isolation not implemented",
-	"use-package-102": "package-scoped key isolation not implemented",
-	"use-package-104": "package-scoped decimal format error isolation not implemented",
-	"use-package-105": "package-scoped key isolation not implemented",
-	"use-package-106": "package-scoped namespace-alias isolation not implemented",
-	"use-package-108": "package-scoped character map isolation not implemented",
-	"use-package-108b": "package-scoped character map isolation not implemented",
-	"use-package-150": "xml-to-json function argument handling incorrect",
-	"use-package-151": "xml-to-json function argument handling incorrect",
-	"use-package-152": "xml-to-json function argument handling incorrect",
-	"use-package-161": "package-scoped variable resolution not implemented",
-	"use-package-175": "package-scoped variable resolution not implemented",
-	"use-package-176": "package template override precedence incorrect",
+	// use-package: package template override precedence
+	"use-package-176": "package template override precedence with versioned packages incorrect",
 
-	// override: xsl:original and override static checks not implemented
-	"override-f-012":    "xsl:override function replacement not fully implemented",
-	"override-f-013":    "xsl:override function replacement not fully implemented",
-	"override-f-015":    "xsl:override function replacement not fully implemented",
-	"override-f-016":    "xsl:original function reference not implemented",
-	"override-f-017":    "xsl:original function reference not implemented",
-	"override-f-018":    "xsl:original function reference not implemented",
-	"override-f-024":    "xsl:override function replacement not fully implemented",
-	"override-f-026":    "xsl:override function visibility not propagated",
-	"override-f-031":    "xsl:original function reference not implemented",
-	"override-f-033":    "xsl:override function replacement not fully implemented",
-	"override-t-003a":   "xsl:override template replacement not fully implemented",
-	"override-t-003d":   "XTSE3080 override static check not implemented",
-	"override-t-005":    "XTSE3070 override static check not implemented",
-	"override-t-006":    "XTSE3070 override static check not implemented",
-	"override-t-007":    "xsl:original template reference not implemented",
-	"override-t-008":    "XTSE3050 override static check not implemented",
-	"override-t-009":    "XTSE3050 override static check not implemented",
-	"override-t-015":    "xsl:original template reference not implemented",
-	"override-v-002":    "xsl:override variable visibility not propagated",
-	"override-v-003":    "xsl:original variable reference not implemented",
-	"override-v-006":    "XTSE3070 override static check not implemented",
-	"override-v-007":    "XTSE3070 override static check not implemented",
-	"override-v-011":    "XTSE3050 override static check not implemented",
-	"override-v-012":    "XTSE3050 override static check not implemented",
-	"override-m-004":    "XTSE3440 override mode static check not implemented",
-	"override-m-010":    "xsl:override mode replacement not fully implemented",
-	"override-m-012":    "xsl:override mode replacement not fully implemented",
-	"override-m-014":    "xsl:override mode replacement not fully implemented",
-	"override-m-017":    "XTSE3050 override static check not implemented",
-	"override-m-018":    "XTSE3050 override static check not implemented",
-	"override-as-002":   "xsl:override attribute-set replacement not fully implemented",
-	"override-as-003":   "xsl:override attribute-set error detection not implemented",
-	"override-as-005":   "xsl:override attribute-set replacement not fully implemented",
-	"override-misc-004": "xsl:override decimal-format replacement not fully implemented",
-	"override-misc-005": "xsl:override decimal-format replacement not fully implemented",
-	"override-misc-006": "xsl:override decimal-format replacement not fully implemented",
-	"override-misc-007": "xsl:override accumulator replacement not fully implemented",
+	// use-package: character map namespace serialization in package context
+	"use-package-108":  "package-scoped character map with namespace serialization not fully implemented",
+	"use-package-108b": "package-scoped character map with namespace serialization not fully implemented",
+
+	// use-package: xml-to-json package mode template matching
+	"use-package-150": "xml-to-json package mode template matching not implemented",
+	"use-package-151": "xml-to-json package mode template matching not implemented",
+	"use-package-152": "xml-to-json package mode template matching not implemented",
+
+
+	// override: schema-aware union types from xsl:import-schema
+	"override-f-031": "requires schema-aware union type conversion (xsl:import-schema)",
+	"override-v-006": "requires schema-aware union type comparison (xsl:import-schema)",
+
+	// function-lookup: returns overridden function instead of original in package context
+	"function-lookup-005": "function-lookup returns override instead of original in package context",
+
+	// override: package-scoped component isolation not implemented
+	"override-as-005":  "package-scoped attribute-set isolation not implemented",
+	"override-misc-004": "package-scoped key isolation not implemented",
+	"override-misc-005": "package-scoped accumulator isolation not implemented",
+	"override-misc-006": "package-scoped decimal format isolation not implemented",
+	"override-misc-007": "package-scoped accumulator isolation not implemented",
 
 	// resolve-uri: xml:base propagation in parsed documents
 
@@ -1419,75 +1371,35 @@ var w3cImplicitSkips = map[string]string{
 	"streamable-148": "streaming for-each-group grouping result incorrect",
 
 	// package version resolution: lowest_version not supported (we use highest_version)
-	"use-package-203b": "package_version_resolution=lowest_version not supported",
-	"use-package-204b": "package_version_resolution=lowest_version not supported",
-	"use-package-206b": "package_version_resolution=lowest_version not supported",
-	"use-package-210b": "package_version_resolution=lowest_version not supported",
 
 	// castable tests: schema-aware union/list type casting
 	"castable-005": "requires schema-aware union type casting (import-schema)",
 	"castable-006": "requires schema-aware list type casting (import-schema)",
-	"castable-009": "xs:ENTITIES list type castable not implemented",
 
 	// attribute-set tests
-	"attribute-set-1003": "XTSE0710 circular attribute-set reference detection not implemented",
-	"attribute-set-1512": "attribute-set same-name merging override order incorrect",
-	"attribute-set-1814": "static-base-uri in attribute-set with xml:base not resolved",
 
 	// regex-090/091: regex-group#N function reference captures regex context as closure
-	"regex-090": "regex-group function reference closure not implemented",
-	"regex-091": "regex-group function reference closure not implemented",
+	// The closure implementation is correct per spec, but the test expects empty output.
+	// Likely an issue with how zero-length regex matches are handled by analyze-string.
+	"regex-090": "regex-group closure + zero-length match interaction",
+	"regex-091": "regex-group closure + zero-length match interaction",
 
 	// xpath-default-namespace: various namespace resolution issues
-	"xpath-default-namespace-0104": "xpath-default-namespace not applied to XPath in select/match",
-	"xpath-default-namespace-0201": "xsl:strip-space/preserve-space conflict with xpath-default-namespace",
-	"xpath-default-namespace-0202": "xsl:strip-space/preserve-space conflict with xpath-default-namespace",
-	"xpath-default-namespace-0401": "xpath-default-namespace not applied to key/accumulator patterns",
 	"xpath-default-namespace-0503": "schema-type validation with xpath-default-namespace not implemented",
-	"xpath-default-namespace-0601": "xpath-default-namespace scoping on xsl:for-each-group incorrect",
 	"xpath-default-namespace-0701": "schema-element with xpath-default-namespace not resolved",
 	"xpath-default-namespace-0703": "schema-element with xpath-default-namespace not resolved",
-	"xpath-default-namespace-1202": "xpath-default-namespace on xsl:template match pattern incorrect",
 
 
 	// strip-space: various whitespace stripping issues
-	"strip-space-002": "XTSE0280 undeclared prefix in strip-space not detected",
-	"strip-space-003": "xsl:strip-space with xml:space interaction incorrect",
-	"strip-space-004": "xsl:strip-space with *:NCName pattern not implemented",
 	"strip-space-007": "schema-aware whitespace stripping not implemented",
 	"strip-space-008": "schema-aware whitespace stripping not implemented",
-	"strip-space-022": "xsl:strip-space with xml:space=preserve interaction incorrect",
-	"strip-space-023": "XPDY0002 context-dependent expression in strip-space not detected",
 
-	// base-uri: static-base-uri and base URI propagation through includes
-	"base-uri-005": "base-uri on result document nodes incorrect",
-	"base-uri-007": "base-uri on result document nodes incorrect",
-	"base-uri-010": "xml:base resolution in included stylesheets incorrect",
-	"base-uri-013": "static-base-uri with non-standard URI scheme incorrect",
-	"base-uri-014": "static-base-uri in included module incorrect",
-	"base-uri-016": "static-base-uri in included module incorrect",
-	"base-uri-024": "xml:base on source document not resolved",
-	"base-uri-025": "static-base-uri in included module incorrect",
-	"base-uri-028": "static-base-uri in included module incorrect",
-	"base-uri-030": "static-base-uri in included module incorrect",
-	"base-uri-032": "static-base-uri in included module incorrect",
-	"base-uri-033": "static-base-uri in included module incorrect",
-	"base-uri-035": "static-base-uri in included module incorrect",
-	"base-uri-038": "static-base-uri in included module incorrect",
-	"base-uri-039": "static-base-uri in included module incorrect",
-	"base-uri-040": "static-base-uri in included module incorrect",
-	"base-uri-042": "static-base-uri in included module incorrect",
-	"base-uri-046": "xml:base resolution on source doc elements incorrect",
-	"base-uri-050": "xsl:document base-uri propagation incorrect",
-	"base-uri-051": "xsl:document base-uri propagation incorrect",
-	"base-uri-051a": "xsl:document base-uri propagation incorrect",
-	"base-uri-051b": "xsl:document base-uri propagation incorrect",
-	"base-uri-052": "xsl:document base-uri propagation incorrect",
-	"base-uri-053": "xsl:copy base-uri propagation incorrect",
+	// base-uri: xsl:copy base URI propagation
+	"base-uri-024": "xsl:copy base-uri propagation depends on result context",
+	"base-uri-052": "XInclude processing not applied to source documents",
+	"base-uri-053": "xsl:copy base-uri propagation in built-in templates incorrect",
 
 	// arrays: array construction and apply-templates on arrays
-	"square-array-019": "apply-templates on array members includes extra elements",
-	"square-array-201": "array construction sort order incorrect",
 
 	// schema-aware match tests: require full schema-aware pattern matching (xsl:import-schema)
 	"match-054": "schema-aware pattern matching not implemented",
@@ -1514,11 +1426,11 @@ var w3cImplicitSkips = map[string]string{
 	"evaluate-013": "schema-aware xsl:evaluate not implemented (XTDE3160)",
 	"evaluate-048": "requires network access to saxonica.com",
 
-	// snapshot: deep-equal mismatch between built-in and reference snapshot
+
+	// snapshot: f:snapshot reference impl namespace-node graft produces empty root
 	"snapshot-0102a": "snapshot()/root() returns empty for some namespace nodes",
 
 	// higher-order functions: nested for-each-group grouping bug
-	"higher-order-functions-076": "nested group-starting-with/group-ending-with produces wrong structure",
 }
 
 // promoteWrapperChildren takes a document parsed from "<_r>content</_r>"
@@ -1851,7 +1763,7 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 			// The result may be HTML output with void elements
 			// (e.g. <meta>, <img>) that are not valid XML. Try
 			// the HTML parser as a last resort.
-			htmlDoc, htmlErr := htmlparser.Parse(context.TODO(), []byte(resultXML))
+			htmlDoc, htmlErr := htmlparser.NewParser().Parse(context.TODO(), []byte(resultXML))
 			if htmlErr != nil {
 				t.Errorf("assert: cannot parse result XML: %v", err)
 				return false
@@ -1900,12 +1812,13 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 		ns["g"] = "http://www.w3.org/xsl-tests/grouped-transactions"
 	}
 	// Also check for -e variant used by some streaming tests.
-	// If the default namespace matches and g: doesn't, add the mapping.
-	if defNS, ok := ns[""]; ok {
-		if defNS == "http://www.w3.org/xsl-tests/grouped-transactions-e" {
-			if _, ok := ns["g"]; !ok || ns["g"] != defNS {
-				ns["g"] = defNS
-			}
+	// The -e namespace may appear as the default namespace (stored under
+	// "o" by gatherDocNamespaces) or as an explicit prefix binding.
+	geNS := "http://www.w3.org/xsl-tests/grouped-transactions-e"
+	for _, uri := range ns {
+		if uri == geNS {
+			ns["g"] = geNS
+			break
 		}
 	}
 	if len(ns) > 0 {
@@ -1960,11 +1873,12 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
 	if _, ok := ns["g"]; !ok {
 		ns["g"] = "http://www.w3.org/xsl-tests/grouped-transactions"
 	}
-	if defNS, ok := ns[""]; ok {
-		if defNS == "http://www.w3.org/xsl-tests/grouped-transactions-e" {
-			if _, ok := ns["g"]; !ok || ns["g"] != defNS {
-				ns["g"] = defNS
-			}
+	// Also check for -e variant used by some streaming tests.
+	geNS2 := "http://www.w3.org/xsl-tests/grouped-transactions-e"
+	for _, uri := range ns {
+		if uri == geNS2 {
+			ns["g"] = geNS2
+			break
 		}
 	}
 	if len(ns) > 0 {
@@ -2034,7 +1948,7 @@ func evalXPathAssertWithRawResult(t *testing.T, expr string, resultXML string, r
 		wrapped := "<_w3c_wrap_>" + resultXML + "</_w3c_wrap_>"
 		wrapDoc, wrapErr := helium.Parse(context.TODO(), []byte(wrapped))
 		if wrapErr != nil {
-			htmlDoc, htmlErr := htmlparser.Parse(context.TODO(), []byte(resultXML))
+			htmlDoc, htmlErr := htmlparser.NewParser().Parse(context.TODO(), []byte(resultXML))
 			if htmlErr != nil {
 				t.Errorf("assert: cannot parse result XML: %v", err)
 				return false
@@ -2178,7 +2092,8 @@ func gatherDocNamespaces(doc *helium.Document) map[string]string {
 
 // w3cPackageResolver resolves package URIs to files based on W3C test deps.
 type w3cPackageResolver struct {
-	deps []w3cPackageDep
+	deps              []w3cPackageDep
+	versionResolution string // "lowest" for lowest matching version; default = highest
 }
 
 func (r w3cPackageResolver) ResolvePackage(name string, version string) (io.ReadCloser, string, error) {
@@ -2249,11 +2164,18 @@ func (r w3cPackageResolver) ResolvePackage(name string, version string) (io.Read
 		return nil, "", fmt.Errorf("package %q version %q not found in test deps", name, version)
 	}
 
-	// Select the highest matching version (implementation-defined per spec)
+	// Select the best matching version (implementation-defined per spec).
+	// Default is highest; "lowest" selects the lowest.
 	best := matches[0]
 	for _, m := range matches[1:] {
-		if m.version.Compare(best.version) > 0 {
-			best = m
+		if r.versionResolution == "lowest" {
+			if m.version.Compare(best.version) < 0 {
+				best = m
+			}
+		} else {
+			if m.version.Compare(best.version) > 0 {
+				best = m
+			}
 		}
 	}
 

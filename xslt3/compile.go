@@ -53,6 +53,8 @@ type compiler struct {
 	usedModes                 map[string]struct{}        // all mode names referenced (for XTSE3085)
 	usedAttrSetRefs           []string                   // all use-attribute-sets names referenced (for XTSE0710)
 	localTemplateNames        map[string]struct{}        // pre-scanned named templates in this module (for XTSE3055)
+	localVarNames             map[string]struct{}        // pre-scanned variable names in this module (for XTSE3050)
+	localModeNames            map[string]struct{}        // pre-scanned mode names in this module (for XTSE3050)
 	// Declared visibility snapshots (before xsl:expose modification)
 	declaredTemplateVis map[string]string
 	declaredFunctionVis map[string]string
@@ -1325,6 +1327,15 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		}
 	}
 
+	// XTSE3080: check that no abstract components remain unimplemented.
+	// Only check for the top-level stylesheet, not sub-packages (which
+	// may intentionally pass abstract components through).
+	if !cfg.isSubPackage {
+		if err := c.checkAbstractComponents(); err != nil {
+			return nil, err
+		}
+	}
+
 	// Sort templates by import precedence (desc) then priority (desc)
 	c.sortTemplates()
 
@@ -1371,8 +1382,14 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	}
 
 	// XTSE0710: validate all use-attribute-sets references point to declared attribute sets.
+	// Hidden/private attribute-sets from packages are in the map for internal
+	// reference resolution but must not be directly used from the using stylesheet.
 	for _, ref := range c.usedAttrSetRefs {
-		if _, ok := c.stylesheet.attributeSets[ref]; !ok {
+		asd, ok := c.stylesheet.attributeSets[ref]
+		if !ok {
+			return nil, staticError(errCodeXTSE0710, "use-attribute-sets references undeclared attribute-set %q", ref)
+		}
+		if asd != nil && (asd.Visibility == visHidden || asd.Visibility == visPrivate) {
 			return nil, staticError(errCodeXTSE0710, "use-attribute-sets references undeclared attribute-set %q", ref)
 		}
 	}
@@ -1413,6 +1430,27 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	sortAccumulatorOrder(c.stylesheet)
 
 	return c.stylesheet, nil
+}
+
+// checkAbstractComponents checks that no abstract components remain
+// unimplemented in the final compiled stylesheet. XTSE3080.
+func (c *compiler) checkAbstractComponents() error {
+	// Check named templates
+	for name, tmpl := range c.stylesheet.namedTemplates {
+		if tmpl.Visibility == visAbstract {
+			return staticError(errCodeXTSE3080,
+				"abstract template %q has no implementation", name)
+		}
+	}
+	// Check functions
+	for fk, fn := range c.stylesheet.functions {
+		if fn.Visibility == visAbstract {
+			return staticError(errCodeXTSE3080,
+				"abstract function %s#%d has no implementation",
+				fmt.Sprintf("{%s}%s", fk.Name.URI, fk.Name.Name), fk.Arity)
+		}
+	}
+	return nil
 }
 
 // checkDeclaredModes verifies that all modes referenced in the stylesheet
@@ -1457,9 +1495,6 @@ func checkDeclaredModes(ss *Stylesheet, usedModes map[string]struct{}) error {
 // checkCharacterMapRefs validates XTSE1590: all character map references
 // (in use-character-maps attributes) must resolve to defined character maps.
 func checkCharacterMapRefs(ss *Stylesheet) error {
-	if len(ss.characterMaps) == 0 {
-		return nil
-	}
 	// Check use-character-maps references within character map definitions
 	for _, cm := range ss.characterMaps {
 		for _, ref := range cm.UseCharacterMaps {

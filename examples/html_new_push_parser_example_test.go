@@ -9,7 +9,7 @@ import (
 )
 
 func Example_html_new_push_parser() {
-	pp := html.NewPushParser(context.Background())
+	pp := html.NewParser().NewPushParser(context.Background())
 	if err := pp.Push([]byte(`<h1>Title`)); err != nil {
 		fmt.Printf("push failed: %s\n", err)
 		return

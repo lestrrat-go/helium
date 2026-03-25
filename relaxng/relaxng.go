@@ -11,46 +11,65 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
-// Compile compiles a RELAX NG document into a Grammar.
-// (libxml2: xmlRelaxNGNewParserCtxt + xmlRelaxNGParse)
-func Compile(ctx context.Context, doc *helium.Document, opts ...CompileOption) (*Grammar, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	cfg := &compileConfig{}
-	for _, o := range opts {
-		o(cfg)
-	}
-	grammar, err := compileSchema(ctx, doc, "", cfg)
-	if cfg.errorHandler != nil {
-		if cl, ok := cfg.errorHandler.(io.Closer); ok {
+// Compiler compiles RELAX NG documents into Grammars.
+type Compiler struct {
+	cfg *compilerCfg
+}
+
+// NewCompiler creates a new Compiler with default settings.
+func NewCompiler() Compiler {
+	return Compiler{cfg: &compilerCfg{}}
+}
+
+func (c Compiler) clone() Compiler {
+	cp := *c.cfg
+	return Compiler{cfg: &cp}
+}
+
+// SchemaFilename sets the RNG filename used in schema compilation error messages.
+func (c Compiler) SchemaFilename(name string) Compiler {
+	c = c.clone()
+	c.cfg.filename = name
+	return c
+}
+
+// ErrorHandler sets a handler that receives schema compilation errors.
+func (c Compiler) ErrorHandler(h helium.ErrorHandler) Compiler {
+	c = c.clone()
+	c.cfg.errorHandler = h
+	return c
+}
+
+func (c Compiler) closeHandler() {
+	if c.cfg.errorHandler != nil {
+		if cl, ok := c.cfg.errorHandler.(io.Closer); ok {
 			_ = cl.Close()
 		}
 	}
+}
+
+// Compile compiles a RELAX NG document into a Grammar.
+// (libxml2: xmlRelaxNGNewParserCtxt + xmlRelaxNGParse)
+func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Grammar, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cfg := c.cfg
+	grammar, err := compileSchema(ctx, doc, "", cfg)
+	c.closeHandler()
 	return grammar, err
 }
 
 // CompileFile reads and compiles a RELAX NG file into a Grammar.
-func CompileFile(ctx context.Context, path string, opts ...CompileOption) (*Grammar, error) {
+func (c Compiler) CompileFile(ctx context.Context, path string) (*Grammar, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	cfg := &compileConfig{}
-	for _, o := range opts {
-		o(cfg)
-	}
-
-	closeHandler := func() {
-		if cfg.errorHandler != nil {
-			if cl, ok := cfg.errorHandler.(io.Closer); ok {
-				_ = cl.Close()
-			}
-		}
-	}
+	cfg := c.cfg
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		closeHandler()
+		c.closeHandler()
 		return nil, err
 	}
 	doc, err := helium.Parse(ctx, data)
@@ -65,17 +84,40 @@ func CompileFile(ctx context.Context, path string, opts ...CompileOption) (*Gram
 			if cfg.errorHandler != nil {
 				cfg.errorHandler.Handle(ctx, helium.NewLeveledError(errs, helium.ErrorLevelFatal))
 			}
-			closeHandler()
+			c.closeHandler()
 			return &Grammar{}, nil
 		}
-		closeHandler()
+		c.closeHandler()
 		return nil, err
 	}
 	doc.SetURL(path)
 	baseDir := filepath.Dir(path)
 	grammar, compileErr := compileSchema(ctx, doc, baseDir, cfg)
-	closeHandler()
+	c.closeHandler()
 	return grammar, compileErr
+}
+
+// Validator validates documents against a compiled Grammar.
+type Validator struct {
+	cfg     *validatorCfg
+	grammar *Grammar
+}
+
+// NewValidator creates a new Validator for the given grammar.
+func NewValidator(grammar *Grammar) Validator {
+	return Validator{cfg: &validatorCfg{}, grammar: grammar}
+}
+
+func (v Validator) clone() Validator {
+	cp := *v.cfg
+	return Validator{cfg: &cp, grammar: v.grammar}
+}
+
+// Filename sets the filename used in validation error messages.
+func (v Validator) Filename(name string) Validator {
+	v = v.clone()
+	v.cfg.filename = name
+	return v
 }
 
 // ValidateError holds detailed validation failure output.
@@ -87,15 +129,11 @@ func (e *ValidateError) Error() string {
 	return e.Output
 }
 
-// Validate validates a document against a compiled grammar.
+// Validate validates a document against the compiled grammar.
 // It returns nil if the document is valid, or a *ValidateError with details.
 // (libxml2: xmlRelaxNGValidateDoc)
-func Validate(doc *helium.Document, grammar *Grammar, opts ...ValidateOption) error {
-	cfg := &validateConfig{}
-	for _, o := range opts {
-		o(cfg)
-	}
-	output, valid := validateDocument(doc, grammar, cfg)
+func (v Validator) Validate(_ context.Context, doc *helium.Document) error {
+	output, valid := validateDocument(doc, v.grammar, v.cfg)
 	if valid {
 		return nil
 	}

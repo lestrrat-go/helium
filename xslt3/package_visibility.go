@@ -277,7 +277,10 @@ func applyAcceptRules(compType, compName string, rules []acceptRule, defaultVis 
 			continue
 		}
 
-		// Calculate specificity: exact name > prefix:* > *
+		// Calculate specificity based on name token only (XSLT 3.0 §3.6.2):
+		// * = 0, ns:* or *:local = 1, explicit name = 2.
+		// Component attribute does NOT affect priority.
+		// When priority ties, last matching rule (document order) wins.
 		spec := 0
 		if rule.names == xslWildcard {
 			spec = 0
@@ -286,12 +289,8 @@ func applyAcceptRules(compType, compName string, rules []acceptRule, defaultVis 
 		} else {
 			spec = 2
 		}
-		// Component type specificity
-		if rule.component != xslWildcard {
-			spec += 3
-		}
 
-		if spec > bestSpecificity {
+		if spec >= bestSpecificity {
 			bestSpecificity = spec
 			bestVis = rule.visibility
 		}
@@ -804,10 +803,7 @@ func (c *compiler) applyExposeToAttrSets(pattern, visibility string, strict bool
 
 func (c *compiler) applyExposeToModes(pattern, visibility string, strict bool) error {
 	if c.stylesheet.modeDefs == nil {
-		if strict && !isWildcard(pattern) {
-			return staticError(errCodeXTSE3010, "xsl:expose: no mode %q found in package", pattern)
-		}
-		return nil
+		c.stylesheet.modeDefs = make(map[string]*modeDef)
 	}
 	matched := false
 	isWild := isWildcard(pattern)
@@ -833,6 +829,36 @@ func (c *compiler) applyExposeToModes(pattern, visibility string, strict bool) e
 			}
 			md.Visibility = visibility
 			matched = true
+		}
+	}
+	// When declared-modes="false", also match implicit modes from templates
+	// that have no explicit xsl:mode declaration.
+	if !c.stylesheet.declaredModes {
+		for modeName := range c.stylesheet.modeTemplates {
+			if modeName == modeAll {
+				continue
+			}
+			// Skip modes already in modeDefs (including unnamed mode
+			// stored under "#default").
+			if _, exists := c.stylesheet.modeDefs[modeName]; exists {
+				continue
+			}
+			if modeName == "" {
+				if _, exists := c.stylesheet.modeDefs[modeDefault]; exists {
+					continue
+				}
+			}
+			if componentNameMatches(modeName, pattern) {
+				// Create a modeDef entry for this implicit mode so
+				// visibility is tracked. Only Visibility is set; other
+				// mode properties (on-no-match etc.) remain at defaults.
+				md := &modeDef{
+					Name:       modeName,
+					Visibility: visibility,
+				}
+				c.stylesheet.modeDefs[modeName] = md
+				matched = true
+			}
 		}
 	}
 	if strict && !matched && !isWildcard(pattern) {

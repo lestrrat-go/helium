@@ -159,6 +159,13 @@ func evalNamedFunctionRef(ec *evalContext, e NamedFunctionRef) (Sequence, error)
 		return nil, err
 	}
 
+	// Check if the function needs to capture state at reference creation time.
+	if sp, ok := fn.(DynamicRefSnapshotProvider); ok {
+		if fi, ok := sp.DynamicRefSnapshot(ec.goCtx, e.Arity); ok {
+			return ItemSlice{fi}, nil
+		}
+	}
+
 	// Check if the function restricts dynamic references (e.g. current-group#0).
 	// If so, create a function item that always raises the specified error.
 	if dr, ok := fn.(DynamicRefRestricted); ok && dr.NoDynamicRef() {

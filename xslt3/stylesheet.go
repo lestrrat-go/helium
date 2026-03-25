@@ -185,13 +185,23 @@ type modeDef struct {
 	conflictAccumulator bool
 }
 
+// attributeSetPart represents a single xsl:attribute-set declaration.
+// Multiple same-named declarations are stored as separate parts.
+type attributeSetPart struct {
+	UseAttrSets   []string      // names of other attribute sets to include
+	Attrs         []instruction // xsl:attribute instructions
+	StaticBaseURI string        // effective static base URI from xml:base on this declaration
+}
+
 // attributeSetDef is a compiled xsl:attribute-set.
 type attributeSetDef struct {
-	Name        string
-	UseAttrSets []string      // names of other attribute sets to include
-	Attrs       []instruction // xsl:attribute instructions
-	Visibility  string        // "public", "private", "final", "abstract"
-	Streamable  bool          // streamable="yes" on the attribute-set
+	Name            string
+	UseAttrSets     []string           // flattened: all use-attribute-sets (legacy, used by streamability)
+	Attrs           []instruction      // flattened: all xsl:attribute instructions (legacy, used by streamability)
+	Parts           []attributeSetPart // ordered parts from same-named declarations
+	Visibility      string             // "public", "private", "final", "abstract"
+	Streamable      bool               // streamable="yes" on the attribute-set
+	OriginalAttrSet *attributeSetDef   // original attribute-set being overridden (for xsl:original)
 }
 
 // xslFunction is a compiled xsl:function.
@@ -205,8 +215,10 @@ type xslFunction struct {
 	Visibility    string      // "public", "private", "final", "abstract"
 	NewEachTime   string      // "yes", "no", "maybe"; "" = unspecified (defaults to "maybe")
 	OwnerPackage  *Stylesheet   // package that defined this function (nil = main stylesheet)
+	AcceptedFrom  *Stylesheet  // use-package that accepted this function (for XTSE3050 detection)
 	ImportPrec    int           // import precedence for XTSE0770 conflict detection
 	OriginalFunc  *xslFunction // original function being overridden (for xsl:original calls)
+	IsOverride    bool         // true if this function was defined in xsl:override
 }
 
 // template is a compiled xsl:template.
@@ -243,6 +255,7 @@ type variable struct {
 	ImportPrec       int            // import precedence for XTSE0630 duplicate detection
 	StaticValue      xpath3.Sequence // pre-computed value for static="yes" variables
 	XPathDefaultNS   string         // xpath-default-namespace in scope at definition site
+	StaticBaseURI    string         // effective static base URI from xml:base (non-empty when overridden)
 }
 
 // param is a compiled xsl:param.
@@ -348,4 +361,6 @@ type accumulatorRule struct {
 type nameTest struct {
 	Prefix string
 	Local  string // "*" = wildcard
+	URI    string // resolved namespace URI (set at compile time for unprefixed names via xpath-default-namespace)
+	HasURI bool   // true when URI was explicitly resolved (distinguishes "" from unset)
 }

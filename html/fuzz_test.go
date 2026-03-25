@@ -20,6 +20,6 @@ func FuzzParse(f *testing.F) {
 		if len(data) > 1<<20 {
 			return
 		}
-		_, _ = html.Parse(t.Context(), data)
+		_, _ = html.NewParser().Parse(t.Context(), data)
 	})
 }

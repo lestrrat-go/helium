@@ -38,8 +38,9 @@ func (*collationScopeInst) instructionTag() {}
 // sourceInfo records the source location of an instruction in the stylesheet.
 // Embedded in instruction types to report location for xsl:catch error variables.
 type sourceInfo struct {
-	SourceLine   int    // line number in the stylesheet
-	SourceModule string // stylesheet URI (module)
+	SourceLine    int    // line number in the stylesheet
+	SourceModule  string // stylesheet URI (module)
+	StaticBaseURI string // effective static base URI from xml:base (non-empty when overridden)
 }
 
 func (s *sourceInfo) setSourceInfo(line int, module string) {
@@ -47,8 +48,10 @@ func (s *sourceInfo) setSourceInfo(line int, module string) {
 	s.SourceModule = module
 }
 
-func (s *sourceInfo) getSourceLine() int      { return s.SourceLine }
-func (s *sourceInfo) getSourceModule() string { return s.SourceModule }
+func (s *sourceInfo) getSourceLine() int        { return s.SourceLine }
+func (s *sourceInfo) getSourceModule() string   { return s.SourceModule }
+func (s *sourceInfo) getStaticBaseURI() string   { return s.StaticBaseURI }
+func (s *sourceInfo) setStaticBaseURI(v string)  { s.StaticBaseURI = v }
 
 // applyTemplatesInst represents xsl:apply-templates.
 type applyTemplatesInst struct {
@@ -121,7 +124,6 @@ type elementInst struct {
 	TypeName          string   // XSD type annotation (e.g., "xs:integer")
 	Validation        string   // "strict", "lax", "preserve", "strip"
 	UseAttrSets       []string // xsl:use-attribute-sets (resolved QNames)
-	StaticBaseURI     string   // effective static base URI from xml:base
 	InheritNamespaces bool     // inherit-namespaces="yes" (default true)
 }
 
@@ -206,11 +208,10 @@ func (*forEachInst) instructionTag() {}
 // variableInst represents xsl:variable (local).
 type variableInst struct {
 	sourceInfo
-	Name          string
-	Select        *xpath3.Expression
-	Body          []instruction
-	As            string // type declaration (e.g., "item()*"); empty = wrap body in document node
-	StaticBaseURI string // effective static base URI (non-empty when xml:base overrides)
+	Name   string
+	Select *xpath3.Expression
+	Body   []instruction
+	As     string // type declaration (e.g., "item()*"); empty = wrap body in document node
 }
 
 func (*variableInst) instructionTag() {}
@@ -270,7 +271,6 @@ type literalResultElement struct {
 	Namespaces        map[string]string // prefix -> URI declarations to copy
 	Body              []instruction
 	UseAttrSets       []string // xsl:use-attribute-sets (resolved QNames)
-	StaticBaseURI     string   // effective static base URI (non-empty when xml:base overrides)
 	Validation        string   // xsl:validation="strict"|"lax"|"preserve"|"strip"
 	TypeName          string   // xsl:type annotation (e.g., "xs:integer")
 	DefaultValidation string   // xsl:default-validation override for this LRE scope

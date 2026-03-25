@@ -544,17 +544,19 @@ func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
 	if ec := getFnContext(ctx); ec != nil {
 		implicitTZ = ec.getImplicitTimezone()
 	}
+	// Atomize the entire sequence so list-typed nodes are
+	// decomposed into individual atomic values.
+	atoms, err := AtomizeSequence(args[0])
+	if err != nil {
+		return nil, err
+	}
 	var result []AtomicValue
 	seenFast := make(map[string]struct{})
 	var numericDecInt []AtomicValue
 	var numericFloat []AtomicValue
 	var numericDouble []AtomicValue
 	seenNaN := false
-	for item := range seqItems(args[0]) {
-		a, err := AtomizeItem(item)
-		if err != nil {
-			return nil, err
-		}
+	for _, a := range atoms {
 		// Promote untypedAtomic to string for comparison per spec
 		if a.TypeName == TypeUntypedAtomic {
 			a = AtomicValue{TypeName: TypeString, Value: a.StringVal()}

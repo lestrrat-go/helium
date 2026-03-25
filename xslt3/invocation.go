@@ -88,6 +88,7 @@ type invocationConfig struct {
 	sourceSchemas      []*xsd.Schema
 	onMultipleMatch    OnMultipleMatchMode
 	traceWriter        io.Writer
+	globalContextSelect string // XPath for global context item (evaluated post-strip-space)
 
 	// resolvedOutputDef is set after executeTransform completes.
 	// It contains the effective output definition for the primary result,
@@ -123,7 +124,9 @@ func (inv Invocation) Mode(name string) Invocation {
 	return inv
 }
 
-// Selection sets the initial match selection for apply-templates.
+// Selection sets the initial match selection.
+// Only valid for ApplyTemplates invocations; rejected at validation
+// time for Transform, CallTemplate, and CallFunction.
 func (inv Invocation) Selection(seq xpath3.Sequence) Invocation {
 	inv = inv.clone()
 	inv.cfg.matchSelection = seq
@@ -272,6 +275,17 @@ func (inv Invocation) TraceWriter(w io.Writer) Invocation {
 	return inv
 }
 
+// GlobalContextSelect sets an XPath expression whose result (evaluated
+// against the source document after whitespace stripping) determines the
+// global context item.  If the expression evaluates to an empty sequence,
+// the global context item is absent and global variables referencing "."
+// will raise XPDY0002.
+func (inv Invocation) GlobalContextSelect(expr string) Invocation {
+	inv = inv.clone()
+	inv.cfg.globalContextSelect = expr
+	return inv
+}
+
 // Do executes the transformation and returns the principal result document.
 func (inv Invocation) Do(ctx context.Context) (*helium.Document, error) {
 	if err := inv.validate(); err != nil {
@@ -329,6 +343,9 @@ func (inv Invocation) validate() error {
 		// nil source is allowed: the stylesheet may use xsl:source-document,
 		// global-context-item use="absent", or an initial template.
 		// executeTransform will raise XTDE0040 if source is truly needed.
+		if c.matchSelection != nil {
+			return fmt.Errorf("xslt3: Selection is not valid for Transform (use ApplyTemplates)")
+		}
 	case InvocationApplyTemplates:
 		// nil source is allowed when a match selection is provided, or when
 		// the stylesheet does not require a source document.
@@ -421,6 +438,9 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 	tcfg.rawResultHandler = c.rawResultHandler
 	tcfg.primaryItemsHandler = c.primaryItemsHandler
 	tcfg.annotationHandler = c.annotationHandler
+
+	// Global context select
+	tcfg.globalContextSelect = c.globalContextSelect
 
 	return tcfg
 }

@@ -29,7 +29,7 @@ func Example_relaxng_compile_file() {
 		return
 	}
 
-	grammar, err := relaxng.CompileFile(context.Background(), f.Name())
+	grammar, err := relaxng.NewCompiler().CompileFile(context.Background(), f.Name())
 	if err != nil {
 		fmt.Printf("compile failed: %s\n", err)
 		return
@@ -43,7 +43,7 @@ func Example_relaxng_compile_file() {
 
 	// Successful validation is intentionally quiet here: nil means the document
 	// matched the grammar, which is the common "all good" path in callers.
-	if err := relaxng.Validate(doc, grammar, relaxng.WithFilename("doc.xml")); err != nil {
+	if err := relaxng.NewValidator(grammar).Filename("doc.xml").Validate(context.Background(), doc); err != nil {
 		fmt.Println(err)
 	}
 	// Output:

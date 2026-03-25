@@ -18,22 +18,10 @@ import (
 //
 // (libxml2: htmlCreatePushParserCtxt)
 type PushParser struct {
-	ctx     context.Context
-	buf     bytes.Buffer
-	sax     SAXHandler
-	options []ParseOption
-}
-
-// NewPushParser creates an HTML PushParser that builds a DOM tree.
-func NewPushParser(ctx context.Context, options ...ParseOption) *PushParser {
-	return &PushParser{ctx: ctx, options: options}
-}
-
-// NewSAXPushParser creates an HTML PushParser that fires SAX events
-// to the given handler instead of building a DOM tree.
-// (libxml2: htmlCreatePushParserCtxt with SAX handler)
-func NewSAXPushParser(ctx context.Context, h SAXHandler, options ...ParseOption) *PushParser {
-	return &PushParser{ctx: ctx, sax: h, options: options}
+	ctx context.Context
+	buf bytes.Buffer
+	sax SAXHandler
+	cfg parseConfig
 }
 
 // Push appends a chunk of HTML data to the internal buffer.
@@ -48,12 +36,21 @@ func (pp *PushParser) Write(p []byte) (int, error) {
 }
 
 // Close parses the accumulated HTML data and returns the resulting Document.
-// When created with [NewSAXPushParser], it fires SAX events and always
+// When created with [Parser.NewSAXPushParser], it fires SAX events and always
 // returns a nil Document; the returned error is non-nil only on parse failure.
 func (pp *PushParser) Close() (*helium.Document, error) {
 	data := pp.buf.Bytes()
 	if pp.sax != nil {
-		return nil, ParseWithSAX(pp.ctx, data, pp.sax, pp.options...)
+		hp := newParser(data, pp.sax, pp.cfg)
+		return nil, hp.parse()
 	}
-	return Parse(pp.ctx, data, pp.options...)
+	tb := newTreeBuilder()
+	hp := newParser(data, tb, pp.cfg)
+	if err := hp.parse(); err != nil {
+		return nil, err
+	}
+	if enc := hp.detectedEncoding; enc != "" {
+		tb.doc.SetEncoding(enc)
+	}
+	return tb.doc, nil
 }

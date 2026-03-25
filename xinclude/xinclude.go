@@ -28,46 +28,78 @@ type Resolver interface {
 	Resolve(href, base string) (io.ReadCloser, error)
 }
 
-// Option configures XInclude processing behavior.
-type Option func(*processor)
-
-// WithNoXIncludeMarkers suppresses XIncludeStart/End marker nodes.
-func WithNoXIncludeMarkers() Option {
-	return func(p *processor) { p.noMarkers = true }
+// processorCfg holds the configuration for a Processor.
+type processorCfg struct {
+	noMarkers   bool
+	noBaseFixup bool
+	resolver    Resolver
+	baseURI     string
+	warnHandler func(msg string)
 }
 
-// WithNoBaseFixup disables xml:base fixup on included content.
-func WithNoBaseFixup() Option {
-	return func(p *processor) { p.noBaseFixup = true }
+// Processor configures XInclude processing. It is a value-style wrapper:
+// fluent methods return updated copies and the original is never mutated.
+type Processor struct {
+	cfg *processorCfg
 }
 
-// WithResolver sets a custom resource resolver.
-func WithResolver(r Resolver) Option {
-	return func(p *processor) { p.resolver = r }
+// NewProcessor creates a new Processor with default settings.
+func NewProcessor() Processor {
+	return Processor{cfg: &processorCfg{}}
 }
 
-// WithBaseURI sets the base URI for resolving relative hrefs.
-func WithBaseURI(uri string) Option {
-	return func(p *processor) { p.baseURI = uri }
+func (p Processor) clone() Processor {
+	cp := *p.cfg
+	return Processor{cfg: &cp}
 }
 
-// WithParseFlags reads XInclude-related parse flags and configures the
+// NoXIncludeMarkers suppresses XIncludeStart/End marker nodes.
+func (p Processor) NoXIncludeMarkers() Processor {
+	p = p.clone()
+	p.cfg.noMarkers = true
+	return p
+}
+
+// NoBaseFixup disables xml:base fixup on included content.
+func (p Processor) NoBaseFixup() Processor {
+	p = p.clone()
+	p.cfg.noBaseFixup = true
+	return p
+}
+
+// Resolver sets a custom resource resolver.
+func (p Processor) Resolver(r Resolver) Processor {
+	p = p.clone()
+	p.cfg.resolver = r
+	return p
+}
+
+// BaseURI sets the base URI for resolving relative hrefs.
+func (p Processor) BaseURI(uri string) Processor {
+	p = p.clone()
+	p.cfg.baseURI = uri
+	return p
+}
+
+// ParseFlags reads XInclude-related parse flags and configures the
 // processor accordingly. Recognized flags: ParseNoXIncNode, ParseNoBaseFix.
-func WithParseFlags(flags helium.ParseOption) Option {
-	return func(p *processor) {
-		if flags.IsSet(helium.ParseNoXIncNode) {
-			p.noMarkers = true
-		}
-		if flags.IsSet(helium.ParseNoBaseFix) {
-			p.noBaseFixup = true
-		}
+func (p Processor) ParseFlags(flags helium.ParseOption) Processor {
+	p = p.clone()
+	if flags.IsSet(helium.ParseNoXIncNode) {
+		p.cfg.noMarkers = true
 	}
+	if flags.IsSet(helium.ParseNoBaseFix) {
+		p.cfg.noBaseFixup = true
+	}
+	return p
 }
 
-// WithWarningHandler sets a callback for non-fatal warnings such as
+// WarningHandler sets a callback for non-fatal warnings such as
 // entity definition mismatches during XInclude entity merging.
-func WithWarningHandler(fn func(msg string)) Option {
-	return func(p *processor) { p.warnHandler = fn }
+func (p Processor) WarningHandler(fn func(msg string)) Processor {
+	p = p.clone()
+	p.cfg.warnHandler = fn
+	return p
 }
 
 type docCacheEntry struct {
@@ -95,8 +127,8 @@ type processor struct {
 
 // Process performs XInclude processing on the document.
 // Returns the number of substitutions made, or an error.
-func Process(ctx context.Context, doc *helium.Document, opts ...Option) (int, error) {
-	count, err := ProcessTree(ctx, doc, opts...)
+func (proc Processor) Process(ctx context.Context, doc *helium.Document) (int, error) {
+	count, err := proc.ProcessTree(ctx, doc)
 	if count > 0 {
 		doc.SetProperties(doc.Properties() | helium.DocXInclude)
 	}
@@ -106,14 +138,16 @@ func Process(ctx context.Context, doc *helium.Document, opts ...Option) (int, er
 // ProcessTree performs XInclude processing starting from any node in the tree.
 // When called with a *Document, it processes the entire document.
 // Returns the number of substitutions made, or an error.
-func ProcessTree(ctx context.Context, node helium.Node, opts ...Option) (int, error) {
+func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, error) {
 	p := &processor{
-		expanding: make(map[string]bool),
-		docCache:  make(map[string]docCacheEntry),
-		txtCache:  make(map[string]txtCacheEntry),
-	}
-	for _, o := range opts {
-		o(p)
+		noMarkers:   proc.cfg.noMarkers,
+		noBaseFixup: proc.cfg.noBaseFixup,
+		resolver:    proc.cfg.resolver,
+		baseURI:     proc.cfg.baseURI,
+		warnHandler: proc.cfg.warnHandler,
+		expanding:   make(map[string]bool),
+		docCache:    make(map[string]docCacheEntry),
+		txtCache:    make(map[string]txtCacheEntry),
 	}
 	if p.resolver == nil {
 		p.resolver = &fileResolver{}

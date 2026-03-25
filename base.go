@@ -7,13 +7,6 @@ func NodeGetBase(doc *Document, n Node) string {
 		return ""
 	}
 
-	// If the node itself has an entity base URI (i.e. it was parsed from an
-	// external entity), that is the effective base URI. The entity URI is
-	// already fully resolved, so return it directly.
-	if ebu := n.baseDocNode().entityBaseURI; ebu != "" {
-		return ebu
-	}
-
 	// Collect xml:base values from the node up to the root.
 	var bases []string
 	for cur := n; cur != nil; cur = cur.Parent() {
@@ -52,4 +45,10 @@ func NodeGetBase(doc *Document, n Node) string {
 	}
 
 	return base
+}
+
+// SetNodeBaseURI sets an explicit base URI on a node. This is used by
+// xsl:copy to preserve the original element's base URI on the copy.
+func SetNodeBaseURI(n Node, uri string) {
+	n.baseDocNode().entityBaseURI = uri
 }

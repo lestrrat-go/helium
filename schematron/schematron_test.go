@@ -139,7 +139,7 @@ func TestGoldenFiles(t *testing.T) {
 			require.NoError(t, err)
 
 			collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-			schema, err := schematron.CompileFile(t.Context(), tc.sctPath, schematron.WithCompileErrorHandler(collector))
+			schema, err := schematron.NewCompiler().ErrorHandler(collector).CompileFile(t.Context(), tc.sctPath)
 			require.NoError(t, err, "schema compilation failed for %s", tc.sctPath)
 			_ = collector.Close()
 			compileWarnings, compileErrors := partitionCompileErrors(collector.Errors())
@@ -154,7 +154,7 @@ func TestGoldenFiles(t *testing.T) {
 				require.NoError(t, err, "XML parse failed for %s", tc.xmlPath)
 
 				filename := "./test/schematron/" + tc.xmlBase
-				err = schematron.Validate(t.Context(), doc, schema, schematron.WithFilename(filename))
+				err = schematron.NewValidator(schema).Filename(filename).Validate(t.Context(), doc)
 				if err != nil {
 					got = compileWarnings + err.Error()
 				} else {
@@ -184,18 +184,6 @@ func extractBaseName(name string) string {
 	return name[:idx]
 }
 
-// compileAndValidate is a helper that compiles a schema from a string and
-// validates an XML document string against it, returning the validation error.
-func compileAndValidate(t *testing.T, schemaXML, instanceXML string, opts ...schematron.ValidateOption) error {
-	t.Helper()
-	sDoc, err := helium.Parse(t.Context(), []byte(schemaXML))
-	require.NoError(t, err)
-	schema, err := schematron.Compile(t.Context(), sDoc)
-	require.NoError(t, err)
-	doc, err := helium.Parse(t.Context(), []byte(instanceXML))
-	require.NoError(t, err)
-	return schematron.Validate(t.Context(), doc, schema, opts...) //nolint:wrapcheck // test helper: caller uses require.NoError
-}
 
 func TestWithQuiet(t *testing.T) {
 	const sct = `<schema xmlns="http://www.ascc.net/xml/schematron">
@@ -207,15 +195,27 @@ func TestWithQuiet(t *testing.T) {
   </pattern>
 </schema>`
 
+	// Compile the schema once for all sub-tests.
+	sDoc, err := helium.Parse(t.Context(), []byte(sct))
+	require.NoError(t, err)
+	schema, err := schematron.NewCompiler().Compile(t.Context(), sDoc)
+	require.NoError(t, err)
+
 	t.Run("failing document", func(t *testing.T) {
 		// Without quiet: per-error lines + "fails to validate"
-		err := compileAndValidate(t, sct, `<AAA><CCC/></AAA>`, schematron.WithFilename("test.xml"))
+		doc, err := helium.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
+		require.NoError(t, err)
+
+		err = schematron.NewValidator(schema).Filename("test.xml").Validate(t.Context(), doc)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "schematron error")
 		require.Contains(t, err.Error(), "fails to validate")
 
 		// With quiet: only "fails to validate" line, no per-error lines
-		quietErr := compileAndValidate(t, sct, `<AAA><CCC/></AAA>`, schematron.WithFilename("test.xml"), schematron.WithQuiet())
+		doc2, err := helium.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
+		require.NoError(t, err)
+
+		quietErr := schematron.NewValidator(schema).Filename("test.xml").Quiet().Validate(t.Context(), doc2)
 		require.Error(t, quietErr)
 		require.NotContains(t, quietErr.Error(), "schematron error")
 		require.Equal(t, "test.xml fails to validate\n", quietErr.Error())
@@ -230,13 +230,22 @@ func TestWithQuiet(t *testing.T) {
     </rule>
   </pattern>
 </schema>`
+		rDoc, err := helium.Parse(t.Context(), []byte(reportOnly))
+		require.NoError(t, err)
+		rSchema, err := schematron.NewCompiler().Compile(t.Context(), rDoc)
+		require.NoError(t, err)
+
 		// Without quiet: report fires, "fails to validate"
-		err := compileAndValidate(t, reportOnly, `<AAA><CCC/></AAA>`, schematron.WithFilename("test.xml"))
+		doc, err := helium.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
+		require.NoError(t, err)
+		err = schematron.NewValidator(rSchema).Filename("test.xml").Validate(t.Context(), doc)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "CCC is present")
 
 		// With quiet: report suppressed, but since the report fired, it still "fails to validate"
-		quietErr := compileAndValidate(t, reportOnly, `<AAA><CCC/></AAA>`, schematron.WithFilename("test.xml"), schematron.WithQuiet())
+		doc2, err := helium.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
+		require.NoError(t, err)
+		quietErr := schematron.NewValidator(rSchema).Filename("test.xml").Quiet().Validate(t.Context(), doc2)
 		require.Error(t, quietErr)
 		require.NotContains(t, quietErr.Error(), "CCC is present")
 		require.Equal(t, "test.xml fails to validate\n", quietErr.Error())
@@ -253,16 +262,24 @@ func TestWithErrorHandler(t *testing.T) {
   </pattern>
 </schema>`
 
+	sDoc, err := helium.Parse(t.Context(), []byte(sct))
+	require.NoError(t, err)
+	schema, err := schematron.NewCompiler().Compile(t.Context(), sDoc)
+	require.NoError(t, err)
+
 	t.Run("errors delivered to handler", func(t *testing.T) {
 		var errors []schematron.ValidationError
 		handler := schematron.ErrorHandlerFunc(func(e schematron.ValidationError) {
 			errors = append(errors, e)
 		})
 
-		err := compileAndValidate(t, sct, `<AAA><CCC/></AAA>`,
-			schematron.WithFilename("test.xml"),
-			schematron.WithErrorHandler(handler),
-		)
+		doc, err := helium.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
+		require.NoError(t, err)
+
+		err = schematron.NewValidator(schema).
+			Filename("test.xml").
+			ErrorHandler(handler).
+			Validate(t.Context(), doc)
 
 		// Error output should not contain per-error lines
 		require.Error(t, err)
@@ -284,10 +301,13 @@ func TestWithErrorHandler(t *testing.T) {
 			errors = append(errors, e)
 		})
 
-		err := compileAndValidate(t, sct, `<AAA name="x"><BBB/></AAA>`,
-			schematron.WithFilename("test.xml"),
-			schematron.WithErrorHandler(handler),
-		)
+		doc, err := helium.Parse(t.Context(), []byte(`<AAA name="x"><BBB/></AAA>`))
+		require.NoError(t, err)
+
+		err = schematron.NewValidator(schema).
+			Filename("test.xml").
+			ErrorHandler(handler).
+			Validate(t.Context(), doc)
 
 		require.NoError(t, err)
 		require.Empty(t, errors)
@@ -300,11 +320,14 @@ func TestWithErrorHandler(t *testing.T) {
 			errors = append(errors, e)
 		})
 
-		err := compileAndValidate(t, sct, `<AAA><CCC/></AAA>`,
-			schematron.WithFilename("test.xml"),
-			schematron.WithQuiet(),
-			schematron.WithErrorHandler(handler),
-		)
+		doc, err := helium.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
+		require.NoError(t, err)
+
+		err = schematron.NewValidator(schema).
+			Filename("test.xml").
+			Quiet().
+			ErrorHandler(handler).
+			Validate(t.Context(), doc)
 
 		require.Error(t, err)
 		require.NotContains(t, err.Error(), "schematron error")

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // compileUsePackage handles xsl:use-package by resolving and compiling the
@@ -49,6 +48,7 @@ func (c *compiler) compileUsePackage(elem *helium.Element) error {
 		baseURI:         pkgBaseURI,
 		resolver:        c.resolver,
 		packageResolver: c.packageResolver,
+		isSubPackage:    true,
 	}
 	pkgSS, err := compile(c.ctx, doc, pkgCfg)
 	if err != nil {
@@ -268,6 +268,14 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 			}
 		}
 
+		// XTSE3050: local template with same name as package component
+		if tmpl.Name != "" {
+			if _, local := c.localTemplateNames[tmpl.Name]; local {
+				return staticError(errCodeXTSE3050,
+					"local template %q conflicts with public component from used package", tmpl.Name)
+			}
+		}
+
 		tmpl.ImportPrec = c.importPrec - 1
 		tmpl.MinImportPrec = tmpl.ImportPrec // package templates have no sub-imports
 		tmpl.OwnerPackage = pkg
@@ -311,14 +319,27 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		if _, overridden := overrideNames[xslElemFunction+":"+key]; overridden {
 			continue
 		}
-		if _, exists := c.stylesheet.functions[fk]; !exists {
+		if fn.OwnerPackage == nil {
+			fn.OwnerPackage = pkg
+		}
+		fn.AcceptedFrom = pkg
+		if existing, exists := c.stylesheet.functions[fk]; !exists {
 			c.stylesheet.functions[fk] = fn
+		} else if existing.AcceptedFrom != nil && existing.AcceptedFrom != pkg {
+			// XTSE3050: two use-packages accept the same function
+			// with non-hidden visibility.
+			return staticError(errCodeXTSE3050,
+				"function %q accepted from multiple packages with non-hidden visibility",
+				key)
 		}
 	}
 
-	// Merge global variables
+	// Merge global variables from the used package.
 	for _, v := range pkg.globalVars {
 		pkgVis := getComponentVisibility(pkg, xslElemVariable, v.Name)
+		if _, overridden := overrideNames[xslElemVariable+":"+v.Name]; overridden {
+			continue
+		}
 		if !isVisibleFromOutside(pkgVis) {
 			continue
 		}
@@ -329,8 +350,17 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 			}
 			v.Visibility = acceptVis
 		}
-		if _, overridden := overrideNames[xslElemVariable+":"+v.Name]; overridden {
-			continue
+		// XTSE3050: local variable with same name as package component
+		if _, local := c.localVarNames[v.Name]; local {
+			return staticError(errCodeXTSE3050,
+				"local variable %q conflicts with public component from used package", v.Name)
+		}
+		// XTSE3032: check for homonymous variables from different packages
+		for _, existing := range c.stylesheet.globalVars {
+			if existing.Name == v.Name && existing.OwnerPackage != nil && existing.OwnerPackage != pkg {
+				return staticError(errCodeXTSE3032,
+					"variable %q accepted from multiple packages with non-hidden visibility", v.Name)
+			}
 		}
 		v.OwnerPackage = pkg
 		c.stylesheet.globalVars = append(c.stylesheet.globalVars, v)
@@ -351,31 +381,14 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		c.stylesheet.globalParams = append(c.stylesheet.globalParams, p)
 	}
 
-	// Merge keys
-	for name, defs := range pkg.keys {
-		c.stylesheet.keys[name] = append(c.stylesheet.keys[name], defs...)
-	}
+	// Note: keys are package-scoped and NOT merged into the using
+	// stylesheet. Package code uses its own keys via effectiveKeys().
 
-	// Merge decimal formats
-	if pkg.decimalFormats != nil {
-		if c.stylesheet.decimalFormats == nil {
-			c.stylesheet.decimalFormats = make(map[xpath3.QualifiedName]xpath3.DecimalFormat)
-			c.stylesheet.decimalFmtPrec = make(map[xpath3.QualifiedName]int)
-			c.stylesheet.decimalFmtSet = make(map[xpath3.QualifiedName]map[string]struct{})
-		}
-		for qn, df := range pkg.decimalFormats {
-			if _, exists := c.stylesheet.decimalFormats[qn]; !exists {
-				c.stylesheet.decimalFormats[qn] = df
-			}
-		}
-	}
+	// Note: decimal formats are package-scoped and NOT merged into the
+	// using stylesheet. Package code uses its own formats via effectiveDecimalFormats().
 
-	// Merge outputs
-	for name, od := range pkg.outputs {
-		if _, exists := c.stylesheet.outputs[name]; !exists {
-			c.stylesheet.outputs[name] = od
-		}
-	}
+	// Note: named outputs are package-scoped and NOT merged into the using
+	// stylesheet. Package code references its own outputs via effectiveOutputs().
 
 	// Merge mode definitions
 	if pkg.modeDefs != nil {
@@ -392,6 +405,11 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 					continue
 				}
 				md.Visibility = acceptVis
+			}
+			// XTSE3050: local mode with same name as package mode
+			if _, local := c.localModeNames[name]; local {
+				return staticError(errCodeXTSE3050,
+					"local mode %q conflicts with public component from used package", name)
 			}
 			if _, exists := c.stylesheet.modeDefs[name]; !exists {
 				c.stylesheet.modeDefs[name] = md
@@ -410,24 +428,24 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		}
 	}
 
-	// Merge attribute sets
+	// Merge attribute sets. Private attribute-sets are also merged (for
+	// package-internal use-attribute-sets references) but keep their visibility.
 	if pkg.attributeSets != nil {
 		if c.stylesheet.attributeSets == nil {
 			c.stylesheet.attributeSets = make(map[string]*attributeSetDef)
 		}
 		for name, as := range pkg.attributeSets {
-			pkgVis := getComponentVisibility(pkg, xslElemAttributeSet, name)
-			if !isVisibleFromOutside(pkgVis) {
+			if _, overridden := overrideNames[xslElemAttributeSet+":"+name]; overridden {
 				continue
 			}
+			pkgVis := getComponentVisibility(pkg, xslElemAttributeSet, name)
 			if len(acceptRules) > 0 {
 				acceptVis := applyAcceptRules(xslElemAttributeSet, name, acceptRules, pkgVis)
 				if acceptVis == visHidden {
-					continue
+					// Mark as hidden but still merge so that package-
+					// internal use-attribute-sets references resolve.
+					as.Visibility = visHidden
 				}
-			}
-			if _, overridden := overrideNames[xslElemAttributeSet+":"+name]; overridden {
-				continue
 			}
 			if _, exists := c.stylesheet.attributeSets[name]; !exists {
 				c.stylesheet.attributeSets[name] = as
@@ -435,32 +453,46 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		}
 	}
 
-	// Merge override components (these replace the originals)
+	// Merge override components (these replace the originals).
+	// Override functions/templates/variables also replace the entries in the
+	// package's own maps so that package-internal calls dispatch to the
+	// override (XSLT 3.0 late-binding / virtual-dispatch semantics).
 	if oset != nil {
 		for qn, fn := range oset.functions {
-			fn.OwnerPackage = pkg
 			c.stylesheet.functions[qn] = fn
+			// Update the package's function map for late binding.
+			// Package-internal calls dispatch to the override.
+			pkg.functions[qn] = fn
 		}
 		for name, tmpl := range oset.namedTemplates {
 			tmpl.ImportPrec = c.importPrec - 1
 			tmpl.OwnerPackage = pkg
 			c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
 			c.stylesheet.namedTemplates[name] = tmpl
+			// Update the package's own named template map for late binding
+			pkg.namedTemplates[name] = tmpl
 		}
 		for _, tmpl := range oset.matchTemplates {
 			tmpl.ImportPrec = c.importPrec - 1
 			tmpl.OwnerPackage = pkg
 			c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
-			modes := []string{tmpl.Mode}
-			if tmpl.Mode == modeAll {
-				modes = []string{""}
-			}
+			// Resolve mode list: may be multi-mode (e.g. "m3 m4")
+			modes := resolveTemplateModes(tmpl.Mode)
 			for _, mode := range modes {
 				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
+				// Update the package's mode template list for late binding
+				pkg.modeTemplates[mode] = append(pkg.modeTemplates[mode], tmpl)
 			}
 		}
 		for _, v := range oset.variables {
 			c.stylesheet.globalVars = append(c.stylesheet.globalVars, v)
+			// Update the package's own global vars for late binding
+			for i, pv := range pkg.globalVars {
+				if pv.Name == v.Name {
+					pkg.globalVars[i] = v
+					break
+				}
+			}
 		}
 		for _, p := range oset.params {
 			c.stylesheet.globalParams = append(c.stylesheet.globalParams, p)
@@ -469,11 +501,53 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 			if c.stylesheet.attributeSets == nil {
 				c.stylesheet.attributeSets = make(map[string]*attributeSetDef)
 			}
+			// Link original attribute-set for xsl:original support.
+			// The original comes from the used package, not the
+			// stylesheet (it was skipped during merge because it's
+			// overridden).
+			if pkg.attributeSets != nil {
+				if origAS, ok := pkg.attributeSets[name]; ok {
+					as.OriginalAttrSet = origAS
+				}
+			}
 			c.stylesheet.attributeSets[name] = as
+			// Update the package's own attribute set map for late binding
+			if pkg.attributeSets == nil {
+				pkg.attributeSets = make(map[string]*attributeSetDef)
+			}
+			pkg.attributeSets[name] = as
 		}
 	}
 
 	return nil
+}
+
+// resolveTemplateModes splits a mode string into individual modes for
+// registration in modeTemplates. Handles multi-mode ("m3 m4"), #all,
+// #default, #unnamed, and the empty string (default mode).
+func resolveTemplateModes(mode string) []string {
+	if mode == modeAll {
+		return []string{""}
+	}
+	fields := strings.Fields(mode)
+	if len(fields) == 0 {
+		return []string{mode}
+	}
+	if len(fields) == 1 {
+		m := fields[0]
+		if m == "#default" || m == "#unnamed" {
+			return []string{""}
+		}
+		return []string{m}
+	}
+	var modes []string
+	for _, m := range fields {
+		if m == "#default" || m == "#unnamed" {
+			m = ""
+		}
+		modes = append(modes, m)
+	}
+	return modes
 }
 
 // isAcceptVisibilityCompatible checks whether changing a component's visibility

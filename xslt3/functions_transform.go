@@ -61,7 +61,7 @@ func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Functio
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "current-merge-key"}] =
 		&xsltFunc{min: 0, max: 0, fn: ec.fnCurrentMergeKey}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "regex-group"}] =
-		&xsltFunc{min: 1, max: 1, fn: ec.fnRegexGroup}
+		&regexGroupFunc{ec: ec}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "accumulator-before"}] =
 		&xsltFunc{min: 1, max: 1, fn: func(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 			return ec.accumulatorLookup(ctx, args, "accumulator-before", func() (map[helium.Node]map[string]xpath3.Sequence, map[helium.Node]map[string]error) {

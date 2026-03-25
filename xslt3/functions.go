@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -45,7 +46,7 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 		}},
 		"copy-of":                     &xsltFunc{min: 0, max: 1, fn: ec.fnCopyOf},
 		"snapshot":                    &xsltFunc{min: 0, max: 1, fn: ec.fnSnapshot},
-		"regex-group":                 &xsltFunc{min: 1, max: 1, fn: ec.fnRegexGroup},
+		"regex-group":                 &regexGroupFunc{ec: ec},
 		"transform":                   &xsltFunc{min: 1, max: 1, fn: ec.fnTransform},
 		"available-system-properties": &xsltFunc{min: 0, max: 0, fn: ec.fnAvailableSystemProperties},
 		"stream-available":            &xsltFunc{min: 1, max: 1, fn: ec.fnStreamAvailable},
@@ -75,6 +76,54 @@ func (f *xsltFunc) NoDynamicRef() bool { return f.noDynRef }
 // DynRefErrorCode returns the error code to raise when this function
 // is called via dynamic reference.
 func (f *xsltFunc) DynRefErrorCode() string { return f.dynRefError }
+
+// regexGroupFunc implements xpath3.Function and DynamicRefSnapshotProvider
+// for the regex-group() XSLT function. When used as a function reference
+// (regex-group#1), it captures the current regex groups as a closure.
+type regexGroupFunc struct {
+	ec *execContext
+}
+
+func (f *regexGroupFunc) MinArity() int { return 1 }
+func (f *regexGroupFunc) MaxArity() int { return 1 }
+func (f *regexGroupFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+	return f.ec.fnRegexGroup(ctx, args)
+}
+
+func (f *regexGroupFunc) DynamicRefSnapshot(_ context.Context, arity int) (xpath3.FunctionItem, bool) {
+	// Capture the current regex groups at reference creation time.
+	// Per XSLT 3.0 Section 20.2.5, a function reference regex-group#1
+	// is bound to the captured substrings in scope at creation time.
+	capturedGroups := make([]string, len(f.ec.regexGroups))
+	copy(capturedGroups, f.ec.regexGroups)
+	fi := xpath3.FunctionItem{
+		Arity:     arity,
+		Name:      "regex-group",
+		Namespace: "http://www.w3.org/1999/XSL/Transform",
+		Invoke: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
+			if len(args) == 0 || args[0] == nil || sequence.Len(args[0]) == 0 {
+				return xpath3.SingleString(""), nil
+			}
+			av, err := xpath3.AtomizeItem(args[0].Get(0))
+			if err != nil {
+				return xpath3.SingleString(""), nil
+			}
+			s, err := xpath3.AtomicToString(av)
+			if err != nil {
+				return xpath3.SingleString(""), nil
+			}
+			idx, err := strconv.Atoi(strings.TrimSpace(s))
+			if err != nil {
+				return xpath3.SingleString(""), nil
+			}
+			if idx < 0 || idx >= len(capturedGroups) {
+				return xpath3.SingleString(""), nil
+			}
+			return xpath3.SingleString(capturedGroups[idx]), nil
+		},
+	}
+	return fi, true
+}
 
 // fnNilled overrides the XPath nilled() function to support schema-aware
 // nilled checking via the exec context's type annotations and schema registry.
@@ -268,13 +317,28 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 	// Empty string means the stylesheet module itself (XSLT spec 14.1).
 	// When called from an included/imported module, return that module's
 	// document, not the top-level stylesheet.
+	// However, if xml:base changes the effective base URI, resolve against
+	// that URI instead (the base URI may point to a different file).
 	if uri == "" {
+		effectiveBase := ec.effectiveStaticBaseURI()
 		if ec.currentTemplate != nil && ec.currentTemplate.BaseURI != "" {
 			if modDoc, ok := ec.stylesheet.moduleDocs[ec.currentTemplate.BaseURI]; ok {
-				return modDoc, nil
+				// Only return the module doc if the effective base URI
+				// matches the template's module. If xml:base overrides,
+				// fall through to load the overridden URI.
+				if effectiveBase == ec.currentTemplate.BaseURI || effectiveBase == "" {
+					return modDoc, nil
+				}
+			} else if effectiveBase == ec.currentTemplate.BaseURI || effectiveBase == "" {
+				return ec.stylesheet.sourceDoc, nil
 			}
+		} else if effectiveBase == "" || effectiveBase == ec.stylesheet.baseURI {
+			return ec.stylesheet.sourceDoc, nil
 		}
-		return ec.stylesheet.sourceDoc, nil
+		// xml:base overrides the base URI — resolve the empty string
+		// against the effective base URI to load the target document.
+		uri = effectiveBase
+		baseDir = filepath.Dir(effectiveBase)
 	}
 
 	// Strip fragment identifier before loading.

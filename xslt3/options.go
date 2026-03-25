@@ -27,6 +27,7 @@ type compileConfig struct {
 	packageResolver PackageResolver
 	staticParams    map[string]xpath3.Sequence // externally supplied static param values
 	importSchemas   []*xsd.Schema             // pre-compiled schemas for xsl:import-schema resolution
+	isSubPackage    bool                       // true when compiling a sub-package (via xsl:use-package)
 }
 
 // --- Transform configuration (internal) ---
@@ -56,4 +57,5 @@ type transformConfig struct {
 	sourceSchemas            []*xsd.Schema // pre-compiled schemas for source document validation
 	traceWriter              io.Writer     // destination for fn:trace output (nil = os.Stderr)
 	resolvedOutputDef        *OutputDef    // resolved primary output def (set by executeTransform)
+	globalContextSelect      string        // XPath for global context item (evaluated after strip-space)
 }

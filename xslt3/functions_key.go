@@ -76,7 +76,7 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 
 	// Check if this is a composite key
 	isComposite := false
-	if defs, ok := ec.stylesheet.keys[name]; ok && len(defs) > 0 {
+	if defs, ok := ec.effectiveKeys()[name]; ok && len(defs) > 0 {
 		isComposite = defs[0].Composite
 	}
 
