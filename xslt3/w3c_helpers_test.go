@@ -1681,9 +1681,9 @@ var w3cImplicitSkips = map[string]string{
 
 
 	// XSD 1.1 features: newly unlocked but failing
-	"validation-1301":  "XSD 1.1 xs:override not fully implemented",
-	"import-schema-164": "XSD 1.1 xs:override attribute validation not implemented",
-	"strip-space-009":  "XSD 1.1 schema-aware whitespace stripping fails",
+	"validation-1301":  "XSD 1.1 xs:alternative type selection not implemented",
+	"import-schema-164": "XSD validation fails for namespaced attribute ref with default",
+	"strip-space-009":  "schema-aware whitespace stripping not implemented",
 	"package-910":      "XSD 1.1 package static error XTSE0165 not detected",
 	"package-913":      "XSD 1.1 package static error XTSE0165 not detected",
 	"package-913a":     "XSD 1.1 package static error XTSE0165 not detected",
