@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"unicode/utf8"
-	"unsafe"
 )
 
 // UTF8Cursor is a high-performance cursor for UTF-8 encoded input.
@@ -16,7 +15,6 @@ type UTF8Cursor struct {
 	bufpos int
 	column int
 	in     io.Reader
-	line   []byte
 	lineno int
 }
 
@@ -28,7 +26,6 @@ func NewUTF8Cursor(r io.Reader) *UTF8Cursor {
 		bufpos: 0,
 		column: 1,
 		in:     r,
-		line:   make([]byte, 0, 256),
 		lineno: 1,
 	}
 }
@@ -161,44 +158,9 @@ func (c *UTF8Cursor) PeekString(n int) string {
 	return string(c.buf[c.bufpos : c.bufpos+n])
 }
 
-// Advance consumes n bytes, updating line/column tracking.
-// Scans for newlines first, then does a single bulk append to c.line.
-// Only the bytes after the last newline end up in c.line (since newlines reset it).
+// Advance consumes n bytes, updating line number and column tracking.
+// The line buffer is not maintained eagerly — Line() reconstructs it on demand.
 func (c *UTF8Cursor) Advance(n int) error {
-	if c.buflen-c.bufpos < n {
-		if err := c.fillBuffer(n); err != nil {
-			return err
-		}
-	}
-	start := c.bufpos
-	end := start + n
-
-	// Scan for newlines. Track last newline position and count.
-	lastNL := -1
-	nlCount := 0
-	for i := start; i < end; i++ {
-		if c.buf[i] == '\n' {
-			lastNL = i
-			nlCount++
-		}
-	}
-
-	if nlCount == 0 {
-		// No newlines — bulk append, bump column.
-		c.line = append(c.line, c.buf[start:end]...)
-		c.column += n
-	} else {
-		// Reset line to bytes after the last newline.
-		c.lineno += nlCount
-		c.line = append(c.line[:0], c.buf[lastNL+1:end]...)
-		c.column = end - lastNL
-	}
-	c.bufpos = end
-	return nil
-}
-
-// AdvanceFast consumes n bytes, updating only line numbers (not the line buffer).
-func (c *UTF8Cursor) AdvanceFast(n int) error {
 	if c.buflen-c.bufpos < n {
 		if err := c.fillBuffer(n); err != nil {
 			return err
@@ -214,12 +176,16 @@ func (c *UTF8Cursor) AdvanceFast(n int) error {
 	}
 	if lastNewline >= 0 {
 		c.column = end - lastNewline
-		c.line = c.line[:0]
 	} else {
 		c.column += n
 	}
 	c.bufpos = end
 	return nil
+}
+
+// AdvanceFast is an alias for Advance (kept for interface compatibility).
+func (c *UTF8Cursor) AdvanceFast(n int) error {
+	return c.Advance(n)
 }
 
 func (c *UTF8Cursor) HasPrefix(b []byte) bool {
@@ -259,8 +225,18 @@ func (c *UTF8Cursor) ConsumeString(s string) bool {
 	return true
 }
 
+// Line returns the content of the current line up to the cursor position.
+// Reconstructed on demand by scanning backward in the buffer.
 func (c *UTF8Cursor) Line() string {
-	return unsafe.String(unsafe.SliceData(c.line), len(c.line))
+	// Scan backward from bufpos to find the start of the current line.
+	start := c.bufpos
+	for start > 0 && c.buf[start-1] != '\n' {
+		start--
+	}
+	if start == c.bufpos {
+		return ""
+	}
+	return string(c.buf[start:c.bufpos])
 }
 
 func (c *UTF8Cursor) LineNumber() int {
@@ -441,46 +417,71 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 	}
 
 	off := 0
+	data := c.buf[c.bufpos:c.buflen]
+	dlen := len(data)
 
-	for {
-		if c.bufpos+off >= c.buflen {
+	for off < dlen {
+		// Fast inner loop: scan ahead for a run of plain ASCII bytes that
+		// can be bulk-copied (no <, &, \r, ]], control chars).
+		runStart := off
+		for off < dlen {
+			b := data[off]
+			if b >= 0x80 {
+				break
+			}
+			if b == '<' || b == '&' {
+				break
+			}
+			if b < 0x20 && b != 0x9 && b != 0xa {
+				// \r or other control chars need special handling
+				break
+			}
+			if b == ']' && off+2 < dlen && data[off+1] == ']' && data[off+2] == '>' {
+				break
+			}
+			off++
+		}
+		if off > runStart {
+			dst = append(dst, data[runStart:off]...)
+		}
+		if off >= dlen {
 			break
 		}
 
-		b := c.buf[c.bufpos+off]
+		b := data[off]
 		if b < 0x80 {
 			if b == '<' || b == '&' {
 				break
 			}
-			if b < 0x20 && b != 0x9 && b != 0xa && b != 0xd {
-				break
-			}
-			if b == ']' && c.bufpos+off+2 < c.buflen && c.buf[c.bufpos+off+1] == ']' && c.buf[c.bufpos+off+2] == '>' {
+			if b == ']' {
 				break
 			}
 			if b == '\r' {
 				dst = append(dst, '\n')
 				off++
-				if c.bufpos+off < c.buflen && c.buf[c.bufpos+off] == '\n' {
+				if off < dlen && data[off] == '\n' {
 					off++
 				}
 				continue
 			}
-			dst = append(dst, b)
-			off++
-			continue
+			// Other control char (not 0x9 or 0xa) — stop.
+			break
 		}
-		if c.buflen-(c.bufpos+off) < utf8.UTFMax {
+		// Multi-byte UTF-8.
+		if dlen-off < utf8.UTFMax {
 			_ = c.fillBuffer(off + utf8.UTFMax)
+			// Buffer may have moved — re-derive data slice.
+			data = c.buf[c.bufpos:c.buflen]
+			dlen = len(data)
 		}
-		r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
+		r, w := utf8.DecodeRune(data[off:dlen])
 		if r == utf8.RuneError || w == 0 {
 			break
 		}
 		if r < 0x20 {
 			break
 		}
-		dst = utf8.AppendRune(dst, r)
+		dst = append(dst, data[off:off+w]...)
 		off += w
 	}
 
