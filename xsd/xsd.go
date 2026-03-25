@@ -26,6 +26,9 @@ func NewCompiler() Compiler {
 }
 
 func (c Compiler) clone() Compiler {
+	if c.cfg == nil {
+		return Compiler{cfg: &compileConfig{}}
+	}
 	cp := *c.cfg
 	return Compiler{cfg: &cp}
 }
@@ -54,7 +57,7 @@ func (c Compiler) ErrorHandler(h helium.ErrorHandler) Compiler {
 }
 
 func (c Compiler) closeHandler() {
-	if c.cfg.errorHandler != nil {
+	if c.cfg != nil && c.cfg.errorHandler != nil {
 		if cl, ok := c.cfg.errorHandler.(io.Closer); ok {
 			_ = cl.Close()
 		}
@@ -67,7 +70,11 @@ func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Schema, e
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	schema, err := compileSchema(ctx, doc, c.cfg.baseDir, c.cfg)
+	cfg := c.cfg
+	if cfg == nil {
+		cfg = &compileConfig{}
+	}
+	schema, err := compileSchema(ctx, doc, cfg.baseDir, cfg)
 	c.closeHandler()
 	return schema, err
 }
@@ -85,8 +92,12 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 	if err != nil {
 		return nil, fmt.Errorf("xsd: failed to parse %q: %w", path, err)
 	}
+	cfg := c.cfg
+	if cfg == nil {
+		cfg = &compileConfig{}
+	}
 	baseDir := filepath.Dir(path)
-	schema, compileErr := compileSchema(ctx, doc, baseDir, c.cfg)
+	schema, compileErr := compileSchema(ctx, doc, baseDir, cfg)
 	c.closeHandler()
 	return schema, compileErr
 }
@@ -114,6 +125,9 @@ func NewValidator(schema *Schema) Validator {
 }
 
 func (v Validator) clone() Validator {
+	if v.cfg == nil {
+		return Validator{cfg: &validateConfig{}, schema: v.schema}
+	}
 	cp := *v.cfg
 	return Validator{cfg: &cp, schema: v.schema}
 }
@@ -154,7 +168,11 @@ func (v Validator) NilledElements(ne *NilledElements) Validator {
 // It returns nil if the document is valid, or a *ValidateError with details.
 // (libxml2: xmlSchemaValidateDoc)
 func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
-	output, valid := validateDocument(ctx, doc, v.schema, v.cfg)
+	cfg := v.cfg
+	if cfg == nil {
+		cfg = &validateConfig{}
+	}
+	output, valid := validateDocument(ctx, doc, v.schema, cfg)
 	if valid {
 		return nil
 	}
