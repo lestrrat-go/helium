@@ -273,12 +273,12 @@ func (ec *execContext) resolveResultDocMethod(ctx context.Context, inst *resultD
 	// Named format.
 	format, _ := ec.resolveResultDocFormat(ctx, inst)
 	if format != "" {
-		if outDef, ok := ec.stylesheet.outputs[format]; ok {
+		if outDef, ok := ec.effectiveOutputs()[format]; ok {
 			return outDef.Method
 		}
 	}
 	// Default output definition.
-	if outDef, ok := ec.stylesheet.outputs[""]; ok {
+	if outDef, ok := ec.effectiveOutputs()[""]; ok {
 		return outDef.Method
 	}
 	return methodXML
@@ -327,7 +327,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 
 	// XTDE1460: the format attribute must reference a declared xsl:output.
 	if effectiveFormat != "" {
-		if _, ok := ec.stylesheet.outputs[effectiveFormat]; !ok {
+		if _, ok := ec.effectiveOutputs()[effectiveFormat]; !ok {
 			return dynamicError(errCodeXTDE1460,
 				"xsl:result-document format %q does not match any declared xsl:output", effectiveFormat)
 		}
@@ -367,10 +367,10 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			itemSep = &sepVal
 		}
 	} else if effectiveFormat != "" {
-		if outDef, ok := ec.stylesheet.outputs[effectiveFormat]; ok && outDef.ItemSeparator != nil {
+		if outDef, ok := ec.effectiveOutputs()[effectiveFormat]; ok && outDef.ItemSeparator != nil {
 			itemSep = outDef.ItemSeparator
 		}
-	} else if outDef, ok := ec.stylesheet.outputs[""]; ok && outDef.ItemSeparator != nil {
+	} else if outDef, ok := ec.effectiveOutputs()[""]; ok && outDef.ItemSeparator != nil {
 		itemSep = outDef.ItemSeparator
 	}
 
@@ -559,7 +559,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		// maps from xsl:result-document itself (higher priority).
 		var allMaps []string
 		if effectiveFormat != "" {
-			if fmtDef, ok := ec.stylesheet.outputs[effectiveFormat]; ok {
+			if fmtDef, ok := ec.effectiveOutputs()[effectiveFormat]; ok {
 				allMaps = append(allMaps, fmtDef.UseCharacterMaps...)
 				// Also propagate resolved character maps from parameter-document.
 				if len(fmtDef.ResolvedCharMap) > 0 {
@@ -570,6 +570,18 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		allMaps = append(allMaps, inst.UseCharacterMaps...)
 		if len(allMaps) > 0 {
 			ec.primaryCharacterMaps = allMaps
+			// Resolve character maps now while currentPackage is correct
+			// (package-scoped isolation). Merge into primaryResolvedCharMap.
+			resolved := resolveCharacterMaps(ec.effectiveStylesheet(), allMaps)
+			if len(resolved) > 0 {
+				if ec.primaryResolvedCharMap == nil {
+					ec.primaryResolvedCharMap = resolved
+				} else {
+					for k, v := range resolved {
+						ec.primaryResolvedCharMap[k] = v
+					}
+				}
+			}
 		}
 		// Capture serialization parameter overrides from xsl:result-document.
 		if overrides, err := ec.evalResultDocOutputDef(ctx, inst); err != nil {
@@ -715,11 +727,11 @@ func (ec *execContext) evalResultDocOutputDef(ctx context.Context, inst *resultD
 	}
 	// Named format overrides parameter-document.
 	if effectiveFormat != "" {
-		if fmtDef, ok := ec.stylesheet.outputs[effectiveFormat]; ok {
+		if fmtDef, ok := ec.effectiveOutputs()[effectiveFormat]; ok {
 			base = *fmtDef
 		}
 	} else if paramDocOD == nil {
-		if defDef, ok := ec.stylesheet.outputs[""]; ok {
+		if defDef, ok := ec.effectiveOutputs()[""]; ok {
 			base = *defDef
 		}
 	}
@@ -895,7 +907,7 @@ func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *result
 	}
 	// Named format overrides parameter-document.
 	if formatName != "" {
-		if fmtDef, ok := ec.stylesheet.outputs[formatName]; ok {
+		if fmtDef, ok := ec.effectiveOutputs()[formatName]; ok {
 			base = *fmtDef
 		}
 	}
@@ -926,13 +938,13 @@ func (ec *execContext) buildEffectiveOutputDef(ctx context.Context, inst *result
 	// Resolve character maps from the format and instruction.
 	var allMaps []string
 	if formatName != "" {
-		if fmtDef, ok := ec.stylesheet.outputs[formatName]; ok {
+		if fmtDef, ok := ec.effectiveOutputs()[formatName]; ok {
 			allMaps = append(allMaps, fmtDef.UseCharacterMaps...)
 		}
 	}
 	allMaps = append(allMaps, inst.UseCharacterMaps...)
 	if len(allMaps) > 0 {
-		base.ResolvedCharMap = resolveCharacterMaps(ec.stylesheet, allMaps)
+		base.ResolvedCharMap = resolveCharacterMaps(ec.effectiveStylesheet(), allMaps)
 	}
 	return &base, nil
 }

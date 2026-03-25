@@ -159,6 +159,7 @@ type w3cTest struct {
 	BaseOutputURI               string // base output URI for current-output-uri(); empty = not set
 	SourceSchemaPath            string   // path to XSD schema for source document validation (relative to testdata dir)
 	ImportSchemaPaths           []string // schema paths for xsl:import-schema resolution (relative to testdata dir)
+	VersionResolution           string   // "lowest" to select lowest matching package version (default: highest)
 }
 
 // w3cAssertion is an assertion to check against the transform result.
@@ -620,7 +621,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		absPath, _ := filepath.Abs(ssPath)
 		compiler := xslt3.NewCompiler().BaseURI(absPath)
 		if len(tc.PackageDeps) > 0 {
-			compiler = compiler.PackageResolver(w3cPackageResolver{deps: tc.PackageDeps})
+			compiler = compiler.PackageResolver(w3cPackageResolver{deps: tc.PackageDeps, versionResolution: tc.VersionResolution})
 		}
 		if len(tc.ImportSchemaPaths) > 0 {
 			var importSchemas []*xsd.Schema
@@ -736,6 +737,9 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		inv = ss.CallTemplate(tc.InitialTemplate)
 		if sourceDoc != nil {
 			inv = inv.SourceDocument(sourceDoc)
+		}
+		if tc.InitialModeSelect != "" {
+			inv = inv.GlobalContextSelect(tc.InitialModeSelect)
 		}
 		for pName, pVal := range tc.InitialTemplateParams {
 			inv = inv.SetInitialTemplateParameter(pName, w3cEvaluateParamSequence(ctx, pVal))
@@ -1299,36 +1303,26 @@ var w3cImplicitSkips = map[string]string{
 	"accept-047a": "override function not visible in package scope via function-lookup",
 
 	// package: xsl:expose visibility control not implemented
-	"package-001j": "xsl:expose mode visibility control not implemented",
 
 	// package: unnamed mode on-no-match with xsl:import precedence
-	"package-013": "unnamed mode built-in on-no-match with import precedence incorrect",
 
 	// package: static error detection not implemented
 	"package-909":  "XTSE0020 package static error detection not implemented",
-	"package-910":  "XTSE0165 xsl:import in package static check not implemented",
-	"package-912":  "XPDY0002 absent context item in package not detected",
-	"package-913":  "XTSE3008 package use-package conflict detection not implemented",
-	"package-913a": "XTSE3008 package use-package conflict detection not implemented",
-	"package-913b": "XTSE3008 package use-package conflict detection not implemented",
-	"package-022err": "XTSE3050 package xsl:override static check not implemented",
 	"package-100":    "package cross-reference variable resolution not implemented",
-	"package-101":    "package cross-reference variable resolution not implemented",
+	"package-101":    "package cross-reference variable resolution (used-package private vars not accessible)",
 
-	// use-package: package-scoped component isolation not implemented
-	"use-package-101": "package-scoped decimal format isolation not implemented",
-	"use-package-102": "package-scoped key isolation not implemented",
-	"use-package-104": "package-scoped decimal format error isolation not implemented",
-	"use-package-105": "package-scoped key isolation not implemented",
-	"use-package-106": "package-scoped namespace-alias isolation not implemented",
-	"use-package-108": "package-scoped character map isolation not implemented",
-	"use-package-108b": "package-scoped character map isolation not implemented",
-	"use-package-150": "xml-to-json function argument handling incorrect",
-	"use-package-151": "xml-to-json function argument handling incorrect",
-	"use-package-152": "xml-to-json function argument handling incorrect",
-	"use-package-161": "package-scoped variable resolution not implemented",
-	"use-package-175": "package-scoped variable resolution not implemented",
-	"use-package-176": "package template override precedence incorrect",
+	// use-package: package template override precedence
+	"use-package-176": "package template override precedence with versioned packages incorrect",
+
+	// use-package: character map namespace serialization in package context
+	"use-package-108":  "package-scoped character map with namespace serialization not fully implemented",
+	"use-package-108b": "package-scoped character map with namespace serialization not fully implemented",
+
+	// use-package: xml-to-json package mode template matching
+	"use-package-150": "xml-to-json package mode template matching not implemented",
+	"use-package-151": "xml-to-json package mode template matching not implemented",
+	"use-package-152": "xml-to-json package mode template matching not implemented",
+
 
 	// override: schema-aware union types from xsl:import-schema
 	"override-f-031": "requires schema-aware union type conversion (xsl:import-schema)",
@@ -1370,10 +1364,6 @@ var w3cImplicitSkips = map[string]string{
 	"streamable-128": "XTSE3430 streaming node return not detected",
 
 	// package version resolution: lowest_version not supported (we use highest_version)
-	"use-package-203b": "package_version_resolution=lowest_version not supported",
-	"use-package-204b": "package_version_resolution=lowest_version not supported",
-	"use-package-206b": "package_version_resolution=lowest_version not supported",
-	"use-package-210b": "package_version_resolution=lowest_version not supported",
 
 	// castable tests: schema-aware union/list type casting
 	"castable-005": "requires schema-aware union type casting (import-schema)",
@@ -1396,15 +1386,11 @@ var w3cImplicitSkips = map[string]string{
 	// strip-space: various whitespace stripping issues
 	"strip-space-007": "schema-aware whitespace stripping not implemented",
 	"strip-space-008": "schema-aware whitespace stripping not implemented",
-	"strip-space-023": "XPDY0002 context-dependent expression in strip-space not detected",
 
-	// base-uri: external entity base URI tracking and xsl:copy base URI propagation
-	"base-uri-024": "xsl:copy does not preserve original node base URI on orphaned elements",
-	"base-uri-051":  "external entity base URI not tracked by parser",
-	"base-uri-051a": "external entity base URI not tracked by parser",
-	"base-uri-051b": "external entity base URI not tracked by parser",
-	"base-uri-052":  "external entity base URI not tracked by parser",
-	"base-uri-053":  "xsl:copy does not preserve original node base URI on orphaned elements",
+	// base-uri: xsl:copy base URI propagation
+	"base-uri-024": "xsl:copy base-uri propagation depends on result context",
+	"base-uri-052": "XInclude processing not applied to source documents",
+	"base-uri-053": "xsl:copy base-uri propagation in built-in templates incorrect",
 
 	// arrays: array construction and apply-templates on arrays
 
@@ -1433,8 +1419,9 @@ var w3cImplicitSkips = map[string]string{
 	"evaluate-013": "schema-aware xsl:evaluate not implemented (XTDE3160)",
 	"evaluate-048": "requires network access to saxonica.com",
 
-	// snapshot: deep-equal mismatch between built-in and reference snapshot
-	"snapshot-0102a": "snapshot()/root() returns empty for namespace nodes in snapshot tree",
+
+	// snapshot: f:snapshot reference impl namespace-node graft produces empty root
+	"snapshot-0102a": "snapshot()/root() returns empty for some namespace nodes",
 
 	// higher-order functions: nested for-each-group grouping bug
 }
@@ -1769,7 +1756,7 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 			// The result may be HTML output with void elements
 			// (e.g. <meta>, <img>) that are not valid XML. Try
 			// the HTML parser as a last resort.
-			htmlDoc, htmlErr := htmlparser.Parse(context.TODO(), []byte(resultXML))
+			htmlDoc, htmlErr := htmlparser.NewParser().Parse(context.TODO(), []byte(resultXML))
 			if htmlErr != nil {
 				t.Errorf("assert: cannot parse result XML: %v", err)
 				return false
@@ -1954,7 +1941,7 @@ func evalXPathAssertWithRawResult(t *testing.T, expr string, resultXML string, r
 		wrapped := "<_w3c_wrap_>" + resultXML + "</_w3c_wrap_>"
 		wrapDoc, wrapErr := helium.Parse(context.TODO(), []byte(wrapped))
 		if wrapErr != nil {
-			htmlDoc, htmlErr := htmlparser.Parse(context.TODO(), []byte(resultXML))
+			htmlDoc, htmlErr := htmlparser.NewParser().Parse(context.TODO(), []byte(resultXML))
 			if htmlErr != nil {
 				t.Errorf("assert: cannot parse result XML: %v", err)
 				return false
@@ -2098,7 +2085,8 @@ func gatherDocNamespaces(doc *helium.Document) map[string]string {
 
 // w3cPackageResolver resolves package URIs to files based on W3C test deps.
 type w3cPackageResolver struct {
-	deps []w3cPackageDep
+	deps              []w3cPackageDep
+	versionResolution string // "lowest" for lowest matching version; default = highest
 }
 
 func (r w3cPackageResolver) ResolvePackage(name string, version string) (io.ReadCloser, string, error) {
@@ -2169,11 +2157,18 @@ func (r w3cPackageResolver) ResolvePackage(name string, version string) (io.Read
 		return nil, "", fmt.Errorf("package %q version %q not found in test deps", name, version)
 	}
 
-	// Select the highest matching version (implementation-defined per spec)
+	// Select the best matching version (implementation-defined per spec).
+	// Default is highest; "lowest" selects the lowest.
 	best := matches[0]
 	for _, m := range matches[1:] {
-		if m.version.Compare(best.version) > 0 {
-			best = m
+		if r.versionResolution == "lowest" {
+			if m.version.Compare(best.version) < 0 {
+				best = m
+			}
+		} else {
+			if m.version.Compare(best.version) > 0 {
+				best = m
+			}
 		}
 	}
 

@@ -137,9 +137,9 @@ import (
 )
 
 func Example_html_parse() {
-  // html.Parse builds a helium DOM from HTML input and applies HTML-specific
-  // parsing rules (implied elements, case-insensitive tag handling, etc.).
-  doc, err := html.Parse(context.Background(), []byte(`<h1>Title</h1><div>Hello</div>`))
+  // html.NewParser().Parse builds a helium DOM from HTML input and applies
+  // HTML-specific parsing rules (implied elements, case-insensitive tag handling, etc.).
+  doc, err := html.NewParser().Parse(context.Background(), []byte(`<h1>Title</h1><div>Hello</div>`))
   if err != nil {
     fmt.Printf("failed to parse: %s\n", err)
     return
@@ -604,7 +604,7 @@ func Example_schematron_validate() {
     return
   }
 
-  schema, err := schematron.Compile(context.Background(), schemaDoc)
+  schema, err := schematron.NewCompiler().Compile(context.Background(), schemaDoc)
   if err != nil {
     fmt.Printf("schema compile failed: %s\n", err)
     return
@@ -616,7 +616,7 @@ func Example_schematron_validate() {
     return
   }
 
-  if err := schematron.Validate(context.Background(), doc, schema, schematron.WithFilename("doc.xml")); err != nil {
+  if err := schematron.NewValidator(schema).Filename("doc.xml").Validate(context.Background(), doc); err != nil {
     fmt.Println(err)
   }
   // Output:

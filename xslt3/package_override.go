@@ -464,6 +464,13 @@ func (c *compiler) compileOverrideVariable(elem *helium.Element, pkg *Stylesheet
 		}
 	}
 
+	// The override's own visibility attribute takes precedence over the
+	// inherited base visibility. This allows e.g. visibility="private"
+	// on the override to hide the variable from the using package.
+	if overrideVis := getAttr(elem, "visibility"); overrideVis != "" {
+		v.Visibility = overrideVis
+	}
+
 	selectAttr := getAttr(elem, "select")
 	if selectAttr != "" {
 		expr, err := compileXPath(selectAttr, c.nsBindings)
@@ -559,16 +566,6 @@ func (c *compiler) compileOverrideAttributeSet(elem *helium.Element, pkg *Styles
 	if uas := getAttr(elem, "use-attribute-sets"); uas != "" {
 		for _, n := range strings.Fields(uas) {
 			resolved := resolveQName(n, c.nsBindings)
-			// Handle xsl:original — reference to the original attribute-set
-			if resolved == "{"+lexicon.NamespaceXSLT+"}original" {
-				// Replace with the original attribute-set's use-attribute-sets
-				// and attributes, effectively inlining the original definition.
-				if pkgAS != nil {
-					asd.UseAttrSets = append(asd.UseAttrSets, pkgAS.UseAttrSets...)
-					asd.Attrs = append(asd.Attrs, pkgAS.Attrs...)
-				}
-				continue
-			}
 			asd.UseAttrSets = append(asd.UseAttrSets, resolved)
 			useAttrSets = append(useAttrSets, resolved)
 		}

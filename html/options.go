@@ -8,39 +8,66 @@ type parseConfig struct {
 	noWarning bool
 }
 
-// ParseOption configures HTML parsing behavior.
-type ParseOption func(*parseConfig)
-
-// WithNoImplied suppresses automatic insertion of implied html/head/body elements.
-// (libxml2: HTML_PARSE_NOIMPLIED)
-func WithNoImplied() ParseOption {
-	return func(c *parseConfig) {
-		c.noImplied = true
-	}
+// writerCfg holds configuration for a Writer.
+type writerCfg struct {
+	dumpConfig
 }
 
-// WithNoBlanks removes whitespace-only text nodes from the DOM.
-// (libxml2: HTML_PARSE_NOBLANKS)
-func WithNoBlanks() ParseOption {
-	return func(c *parseConfig) {
-		c.noBlanks = true
-	}
+// Writer configures HTML serialization. It is a value-style wrapper:
+// fluent methods return updated copies and the original is never mutated.
+type Writer struct {
+	cfg *writerCfg
 }
 
-// WithNoError suppresses error messages from the SAX error handler.
-// (libxml2: HTML_PARSE_NOERROR)
-func WithNoError() ParseOption {
-	return func(c *parseConfig) {
-		c.noError = true
-	}
+// NewWriter creates a new HTML Writer with default settings.
+func NewWriter() Writer {
+	return Writer{cfg: &writerCfg{}}
 }
 
-// WithNoWarning suppresses warning messages from the SAX warning handler.
-// (libxml2: HTML_PARSE_NOWARNING)
-func WithNoWarning() ParseOption {
-	return func(c *parseConfig) {
-		c.noWarning = true
-	}
+func (w Writer) clone() Writer {
+	cp := *w.cfg
+	return Writer{cfg: &cp}
+}
+
+// NoDefaultDTD suppresses output of a default DOCTYPE when the document
+// has no DTD.
+func (w Writer) NoDefaultDTD() Writer {
+	w = w.clone()
+	w.cfg.noDefaultDTD = true
+	return w
+}
+
+// NoFormat suppresses formatting whitespace (newlines) in HTML output.
+func (w Writer) NoFormat() Writer {
+	w = w.clone()
+	w.cfg.noFormat = true
+	return w
+}
+
+// PreserveCase preserves the original case of element and attribute names
+// instead of lowercasing them. Used by XSLT HTML output method.
+func (w Writer) PreserveCase() Writer {
+	w = w.clone()
+	w.cfg.preserveCase = true
+	return w
+}
+
+// NoEscapeURIAttributes disables percent-encoding of non-ASCII characters
+// in URI attributes (href, src, action, etc.). Corresponds to
+// escape-uri-attributes="no" in the XSLT serialization spec.
+func (w Writer) NoEscapeURIAttributes() Writer {
+	w = w.clone()
+	w.cfg.noEscapeURIAttributes = true
+	return w
+}
+
+// EscapeControlChars causes characters in the U+007F-U+009F range to be
+// emitted as numeric character references (e.g. &#x9F;). HTML5 serialization
+// requires this instead of raising SERE0014.
+func (w Writer) EscapeControlChars() Writer {
+	w = w.clone()
+	w.cfg.escapeControlChars = true
+	return w
 }
 
 // dumpConfig holds configuration for HTML serialization.
@@ -50,48 +77,4 @@ type dumpConfig struct {
 	preserveCase          bool
 	noEscapeURIAttributes bool
 	escapeControlChars    bool
-}
-
-// WriteOption configures HTML serialization behavior.
-type WriteOption func(*dumpConfig)
-
-// WithNoDefaultDTD suppresses output of a default DOCTYPE when the document
-// has no DTD.
-func WithNoDefaultDTD() WriteOption {
-	return func(c *dumpConfig) {
-		c.noDefaultDTD = true
-	}
-}
-
-// WithNoFormat suppresses formatting whitespace (newlines) in HTML output.
-func WithNoFormat() WriteOption {
-	return func(c *dumpConfig) {
-		c.noFormat = true
-	}
-}
-
-// WithPreserveCase preserves the original case of element and attribute names
-// instead of lowercasing them. Used by XSLT HTML output method.
-func WithPreserveCase() WriteOption {
-	return func(c *dumpConfig) {
-		c.preserveCase = true
-	}
-}
-
-// WithNoEscapeURIAttributes disables percent-encoding of non-ASCII characters
-// in URI attributes (href, src, action, etc.). Corresponds to
-// escape-uri-attributes="no" in the XSLT serialization spec.
-func WithNoEscapeURIAttributes() WriteOption {
-	return func(c *dumpConfig) {
-		c.noEscapeURIAttributes = true
-	}
-}
-
-// WithEscapeControlChars causes characters in the U+007F-U+009F range to be
-// emitted as numeric character references (e.g. &#x9F;). HTML5 serialization
-// requires this instead of raising SERE0014.
-func WithEscapeControlChars() WriteOption {
-	return func(c *dumpConfig) {
-		c.escapeControlChars = true
-	}
 }

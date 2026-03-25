@@ -23,7 +23,14 @@ func (ec *execContext) applyBuiltinRules(ctx context.Context, node helium.Node, 
 			}
 		}
 	}
-	return ec.applyOnNoMatch(ctx, node, mode, onNoMatch, paramValues...)
+	// Built-in template rules apply templates in the same mode. When the
+	// current mode is "" (the unnamed mode), use "#unnamed" so that recursive
+	// applyTemplates calls don't re-resolve "" to the stylesheet's default-mode.
+	builtinMode := mode
+	if builtinMode == "" {
+		builtinMode = modeUnnamed
+	}
+	return ec.applyOnNoMatch(ctx, node, builtinMode, onNoMatch, paramValues...)
 }
 
 func (ec *execContext) applyOnNoMatch(ctx context.Context, node helium.Node, mode, behavior string, paramValues ...map[string]xpath3.Sequence) error {

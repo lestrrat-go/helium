@@ -288,6 +288,8 @@ func (c *compiler) compileMode(elem *helium.Element) error {
 	name := strings.TrimSpace(getAttr(elem, "name"))
 	if name == "" {
 		name = modeDefault
+	} else if name == modeUnnamed || name == modeAll || name == modeCurrent {
+		return staticError(errCodeXTSE0020, "invalid mode name %q on xsl:mode", name)
 	} else if name[0] != '#' {
 		// Resolve QName to Clark notation so mode declarations and mode
 		// references (on xsl:template/@mode, xsl:apply-templates/@mode)

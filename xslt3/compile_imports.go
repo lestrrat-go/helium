@@ -512,6 +512,11 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 	if importedRoot == nil {
 		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
 	}
+	// XTSE0165: a package must not import another package via xsl:import.
+	if isImport && importedRoot.URI() == lexicon.NamespaceXSLT && importedRoot.LocalName() == "package" {
+		return staticError(errCodeXTSE0165,
+			"cannot import xsl:package %q (use xsl:use-package instead)", uri)
+	}
 	// If the root is not in the XSLT namespace, check for simplified stylesheet
 	if importedRoot.URI() != lexicon.NamespaceXSLT {
 		if _, ok := importedRoot.GetAttributeNS("version", lexicon.NamespaceXSLT); ok {

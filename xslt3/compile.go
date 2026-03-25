@@ -1382,14 +1382,14 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	}
 
 	// XTSE0710: validate all use-attribute-sets references point to declared attribute sets.
-	// Hidden attribute-sets from packages are in the map for internal reference
-	// resolution but must not be directly used from the using stylesheet.
+	// Hidden/private attribute-sets from packages are in the map for internal
+	// reference resolution but must not be directly used from the using stylesheet.
 	for _, ref := range c.usedAttrSetRefs {
 		asd, ok := c.stylesheet.attributeSets[ref]
 		if !ok {
 			return nil, staticError(errCodeXTSE0710, "use-attribute-sets references undeclared attribute-set %q", ref)
 		}
-		if asd != nil && asd.Visibility == visHidden {
+		if asd != nil && (asd.Visibility == visHidden || asd.Visibility == visPrivate) {
 			return nil, staticError(errCodeXTSE0710, "use-attribute-sets references undeclared attribute-set %q", ref)
 		}
 	}
@@ -1495,9 +1495,6 @@ func checkDeclaredModes(ss *Stylesheet, usedModes map[string]struct{}) error {
 // checkCharacterMapRefs validates XTSE1590: all character map references
 // (in use-character-maps attributes) must resolve to defined character maps.
 func checkCharacterMapRefs(ss *Stylesheet) error {
-	if len(ss.characterMaps) == 0 {
-		return nil
-	}
 	// Check use-character-maps references within character map definitions
 	for _, cm := range ss.characterMaps {
 		for _, ref := range cm.UseCharacterMaps {

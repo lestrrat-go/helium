@@ -88,6 +88,7 @@ type invocationConfig struct {
 	sourceSchemas      []*xsd.Schema
 	onMultipleMatch    OnMultipleMatchMode
 	traceWriter        io.Writer
+	globalContextSelect string // XPath for global context item (evaluated post-strip-space)
 
 	// resolvedOutputDef is set after executeTransform completes.
 	// It contains the effective output definition for the primary result,
@@ -272,6 +273,17 @@ func (inv Invocation) TraceWriter(w io.Writer) Invocation {
 	return inv
 }
 
+// GlobalContextSelect sets an XPath expression whose result (evaluated
+// against the source document after whitespace stripping) determines the
+// global context item.  If the expression evaluates to an empty sequence,
+// the global context item is absent and global variables referencing "."
+// will raise XPDY0002.
+func (inv Invocation) GlobalContextSelect(expr string) Invocation {
+	inv = inv.clone()
+	inv.cfg.globalContextSelect = expr
+	return inv
+}
+
 // Do executes the transformation and returns the principal result document.
 func (inv Invocation) Do(ctx context.Context) (*helium.Document, error) {
 	if err := inv.validate(); err != nil {
@@ -421,6 +433,9 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 	tcfg.rawResultHandler = c.rawResultHandler
 	tcfg.primaryItemsHandler = c.primaryItemsHandler
 	tcfg.annotationHandler = c.annotationHandler
+
+	// Global context select
+	tcfg.globalContextSelect = c.globalContextSelect
 
 	return tcfg
 }

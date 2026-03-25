@@ -148,9 +148,12 @@ RELAX NG schema compilation and validation.
 
 HTML 4.01 parser producing helium DOM or SAX events.
 
-- **Parse(ctx, []byte, ...ParseOption) → (*Document, error)**
-- **ParseFile(ctx, path, ...ParseOption) → (*Document, error)**
-- **ParseWithSAX(ctx, []byte, SAXHandler, ...ParseOption) → error**
+- **NewParser() → Parser** — create fluent parser builder
+- Parser methods: NoImplied(), NoBlanks(), NoError(), NoWarning()
+- Terminal: **Parse(ctx, []byte)**, **ParseFile(ctx, path)**, **ParseWithSAX(ctx, []byte, SAXHandler)**, **NewPushParser(ctx)**, **NewSAXPushParser(ctx, SAXHandler)**
+- **NewWriter() → Writer** — create fluent writer builder
+- Writer methods: NoDefaultDTD(), NoFormat(), PreserveCase(), NoEscapeURIAttributes(), EscapeControlChars()
+- Terminal: **WriteDoc(io.Writer, *Document)**, **WriteNode(io.Writer, Node)**
 - Auto-closing, void elements, implicit html/head/body insertion
 - Encoding: prescan charset=utf-8 → U+FFFD for invalid bytes; otherwise Latin-1/Win-1252→UTF-8
 - Entity resolution: 2125 WHATWG + 106 legacy HTML4; legacy entities work without `;`
@@ -183,8 +186,8 @@ XPointer expression evaluation with scheme cascading.
 
 Schematron schema compilation and validation.
 
-- **Compile(ctx, *Document, ...CompileOption) → (*Schema, error)** / **CompileFile(ctx, path, ...CompileOption) → (*Schema, error)**
-- **Validate(*Document, *Schema, ...ValidateOption) → error**
+- **Compiler** (fluent, clone-on-write): `NewCompiler()` → `.SchemaFilename(s)` / `.ErrorHandler(h)` → `.Compile(ctx, doc)` or `.CompileFile(ctx, path)`
+- **Validator** (fluent, clone-on-write): `NewValidator(schema)` → `.Filename(s)` / `.Quiet()` / `.ErrorHandler(h)` → `.Validate(ctx, doc)`
 - Supports: schema, pattern, rule, assert, report, let, name, value-of
 - Variable bindings via `<let>` and `<param>`
 - Files: `schematron.go` (API), `schema.go`, `parse.go`, `validate.go`, `errors.go`
@@ -353,7 +356,7 @@ Importable implementation behind `helium` CLI. Used by `cmd/helium` wrapper and 
 - Lint behavior: parse args, detect stdin/TTY, process XML, run XInclude/XSD/XPath/C14N, emit xmllint-style exit codes
 - XPath behavior: mandatory positional expr, default engine `3`, `--engine 1|3`, XML from file args or stdin, type-aware result output for xpath1/xpath3
 - RELAX NG behavior: compile grammar from mandatory positional schema path, parse XML input(s), validate via `relaxng.Validate`, return schema/validation exit codes
-- Schematron behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `schematron.Validate`, return schema/validation exit codes
+- Schematron behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `schematron.NewValidator(schema).Validate`, return schema/validation exit codes
 - XSD behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `xsd.Validate`, return schema/validation exit codes
 - Files: `cli.go`, `exitcode.go`, `lint.go`, `xpath.go`, `relaxng_validate.go`, `schematron_validate.go`, `xsd_validate.go`
 - Imports: helium, c14n/, relaxng/, schematron/, xsd/, xinclude/, xpath1/, xpath3/, catalog/, internal/cliutil/

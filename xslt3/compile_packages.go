@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // compileUsePackage handles xsl:use-package by resolving and compiling the
@@ -320,8 +319,18 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		if _, overridden := overrideNames[xslElemFunction+":"+key]; overridden {
 			continue
 		}
-		if _, exists := c.stylesheet.functions[fk]; !exists {
+		if fn.OwnerPackage == nil {
+			fn.OwnerPackage = pkg
+		}
+		fn.AcceptedFrom = pkg
+		if existing, exists := c.stylesheet.functions[fk]; !exists {
 			c.stylesheet.functions[fk] = fn
+		} else if existing.AcceptedFrom != nil && existing.AcceptedFrom != pkg {
+			// XTSE3050: two use-packages accept the same function
+			// with non-hidden visibility.
+			return staticError(errCodeXTSE3050,
+				"function %q accepted from multiple packages with non-hidden visibility",
+				key)
 		}
 	}
 
@@ -372,31 +381,14 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		c.stylesheet.globalParams = append(c.stylesheet.globalParams, p)
 	}
 
-	// Merge keys
-	for name, defs := range pkg.keys {
-		c.stylesheet.keys[name] = append(c.stylesheet.keys[name], defs...)
-	}
+	// Note: keys are package-scoped and NOT merged into the using
+	// stylesheet. Package code uses its own keys via effectiveKeys().
 
-	// Merge decimal formats
-	if pkg.decimalFormats != nil {
-		if c.stylesheet.decimalFormats == nil {
-			c.stylesheet.decimalFormats = make(map[xpath3.QualifiedName]xpath3.DecimalFormat)
-			c.stylesheet.decimalFmtPrec = make(map[xpath3.QualifiedName]int)
-			c.stylesheet.decimalFmtSet = make(map[xpath3.QualifiedName]map[string]struct{})
-		}
-		for qn, df := range pkg.decimalFormats {
-			if _, exists := c.stylesheet.decimalFormats[qn]; !exists {
-				c.stylesheet.decimalFormats[qn] = df
-			}
-		}
-	}
+	// Note: decimal formats are package-scoped and NOT merged into the
+	// using stylesheet. Package code uses its own formats via effectiveDecimalFormats().
 
-	// Merge outputs
-	for name, od := range pkg.outputs {
-		if _, exists := c.stylesheet.outputs[name]; !exists {
-			c.stylesheet.outputs[name] = od
-		}
-	}
+	// Note: named outputs are package-scoped and NOT merged into the using
+	// stylesheet. Package code references its own outputs via effectiveOutputs().
 
 	// Merge mode definitions
 	if pkg.modeDefs != nil {
@@ -447,9 +439,6 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 				continue
 			}
 			pkgVis := getComponentVisibility(pkg, xslElemAttributeSet, name)
-			if !isVisibleFromOutside(pkgVis) {
-				continue
-			}
 			if len(acceptRules) > 0 {
 				acceptVis := applyAcceptRules(xslElemAttributeSet, name, acceptRules, pkgVis)
 				if acceptVis == visHidden {
@@ -511,6 +500,15 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		for name, as := range oset.attributeSets {
 			if c.stylesheet.attributeSets == nil {
 				c.stylesheet.attributeSets = make(map[string]*attributeSetDef)
+			}
+			// Link original attribute-set for xsl:original support.
+			// The original comes from the used package, not the
+			// stylesheet (it was skipped during merge because it's
+			// overridden).
+			if pkg.attributeSets != nil {
+				if origAS, ok := pkg.attributeSets[name]; ok {
+					as.OriginalAttrSet = origAS
+				}
 			}
 			c.stylesheet.attributeSets[name] = as
 			// Update the package's own attribute set map for late binding

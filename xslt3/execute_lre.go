@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -236,53 +237,92 @@ func (ec *execContext) applyAttributeSets(ctx context.Context, names []string) e
 // applyAttributeSetsGuarded is the recursive core that tracks which attribute
 // sets are currently being expanded via use-attribute-sets (defense in depth).
 func (ec *execContext) applyAttributeSetsGuarded(ctx context.Context, names []string, active map[string]struct{}) error {
+	xslOriginalName := "{" + lexicon.NamespaceXSLT + "}original"
 	for _, name := range names {
+		// Handle use-attribute-sets="xsl:original": apply the original
+		// attribute-set that was overridden via xsl:override.
+		if name == xslOriginalName {
+			if ec.currentAttrSetOriginal != nil {
+				// Temporarily remove the override's name from the active
+				// set so the original (same name) doesn't trigger cycle
+				// detection. xsl:original is by definition non-circular.
+				origName := ec.currentAttrSetOriginal.Name
+				delete(active, origName)
+				if err := ec.applyOneAttributeSet(ctx, ec.currentAttrSetOriginal, active); err != nil {
+					return err
+				}
+			}
+			continue
+		}
 		asDef := ec.stylesheet.attributeSets[name]
 		if asDef == nil {
 			continue
 		}
-		if asDef.Visibility == visAbstract || asDef.Visibility == visHidden {
-			return dynamicError(errCodeXTDE3052,
-				"abstract attribute-set %q was invoked without being overridden", name)
+		if err := ec.applyOneAttributeSet(ctx, asDef, active); err != nil {
+			return err
 		}
-		if _, ok := active[name]; ok {
-			return dynamicError(errCodeXTSE0720,
-				"attribute-set %q has a circular use-attribute-sets reference (runtime)", name)
-		}
-		active[name] = struct{}{}
-		// Process each part (same-named declaration) in document order.
-		// Each part applies its own use-attribute-sets first, then its own attrs.
-		for _, part := range asDef.Parts {
-			// Set static base URI from this part's xml:base declaration
-			savedBaseOverride := ec.staticBaseURIOverride
-			if part.StaticBaseURI != "" {
-				ec.staticBaseURIOverride = part.StaticBaseURI
-			}
-			if len(part.UseAttrSets) > 0 {
-				if err := ec.applyAttributeSetsGuarded(ctx, part.UseAttrSets, active); err != nil {
-					ec.staticBaseURIOverride = savedBaseOverride
-					delete(active, name)
-					return err
-				}
-			}
-			// Execute the attribute instructions.
-			// XSLT spec: only global variables/params are visible in
-			// attribute set bodies, not template-local variables.
-			savedLocalVars := ec.localVars
-			ec.localVars = nil
-			for _, inst := range part.Attrs {
-				if err := ec.executeInstruction(ctx, inst); err != nil {
-					ec.localVars = savedLocalVars
-					ec.staticBaseURIOverride = savedBaseOverride
-					delete(active, name)
-					return err
-				}
-			}
-			ec.localVars = savedLocalVars
-			ec.staticBaseURIOverride = savedBaseOverride
-		}
-		delete(active, name)
 	}
+	return nil
+}
+
+// applyOneAttributeSet applies a single attribute-set definition, tracking
+// the original for xsl:original support.
+func (ec *execContext) applyOneAttributeSet(ctx context.Context, asDef *attributeSetDef, active map[string]struct{}) error {
+	name := asDef.Name
+
+	if asDef.Visibility == visAbstract || asDef.Visibility == visHidden {
+		return dynamicError(errCodeXTDE3052,
+			"abstract attribute-set %q was invoked without being overridden", name)
+	}
+
+	if _, ok := active[name]; ok {
+		return dynamicError(errCodeXTSE0720,
+			"attribute-set %q has a circular use-attribute-sets reference (runtime)", name)
+	}
+	active[name] = struct{}{}
+
+	// Track the original attribute-set for use-attribute-sets="xsl:original"
+	savedOriginal := ec.currentAttrSetOriginal
+	if asDef.OriginalAttrSet != nil {
+		ec.currentAttrSetOriginal = asDef.OriginalAttrSet
+	}
+
+	// Process each part (same-named declaration) in document order.
+	// Each part applies its own use-attribute-sets first, then its own attrs.
+	for _, part := range asDef.Parts {
+		// Set static base URI from this part's xml:base declaration
+		savedBaseOverride := ec.staticBaseURIOverride
+		if part.StaticBaseURI != "" {
+			ec.staticBaseURIOverride = part.StaticBaseURI
+		}
+		if len(part.UseAttrSets) > 0 {
+			if err := ec.applyAttributeSetsGuarded(ctx, part.UseAttrSets, active); err != nil {
+				ec.staticBaseURIOverride = savedBaseOverride
+				ec.currentAttrSetOriginal = savedOriginal
+				delete(active, name)
+				return err
+			}
+		}
+		// Execute the attribute instructions.
+		// XSLT spec: only global variables/params are visible in
+		// attribute set bodies, not template-local variables.
+		savedLocalVars := ec.localVars
+		ec.localVars = nil
+		for _, inst := range part.Attrs {
+			if err := ec.executeInstruction(ctx, inst); err != nil {
+				ec.localVars = savedLocalVars
+				ec.staticBaseURIOverride = savedBaseOverride
+				ec.currentAttrSetOriginal = savedOriginal
+				delete(active, name)
+				return err
+			}
+		}
+		ec.localVars = savedLocalVars
+		ec.staticBaseURIOverride = savedBaseOverride
+	}
+
+	ec.currentAttrSetOriginal = savedOriginal
+	delete(active, name)
 	return nil
 }
 
