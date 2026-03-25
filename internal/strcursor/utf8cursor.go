@@ -162,6 +162,10 @@ func (c *UTF8Cursor) PeekString(n int) string {
 }
 
 // Advance consumes n bytes, updating line/column tracking.
+// The per-byte loop benchmarks faster than batched bytes.IndexByte + bulk append
+// because most calls advance by only 1–10 bytes (names, single chars), where the
+// function call overhead of IndexByte exceeds the cost of a simple byte loop.
+// For bulk content, callers use AdvanceFast instead.
 func (c *UTF8Cursor) Advance(n int) error {
 	if c.buflen-c.bufpos < n {
 		if err := c.fillBuffer(n); err != nil {
