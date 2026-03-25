@@ -655,8 +655,9 @@ func matchesItemType(item Item, test NodeTest, ec *evalContext) bool {
 		if ann == "" {
 			ann = TypeUntypedAtomic
 		}
-		// Untyped attributes (source documents not validated against schema) match
-		// schema-attribute(Q) when name + declaration exist per XSLT/XPath spec.
+		// For instance-of checks, untyped attributes match schema-attribute()
+		// when name + declaration exist. This handles constructed elements with
+		// xsl:type that don't yet propagate attribute type annotations.
 		if ann == TypeUntypedAtomic {
 			return true
 		}
