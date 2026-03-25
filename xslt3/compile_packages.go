@@ -479,6 +479,15 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 			if c.stylesheet.attributeSets == nil {
 				c.stylesheet.attributeSets = make(map[string]*attributeSetDef)
 			}
+			// Link original attribute-set for xsl:original support.
+			// The original comes from the used package, not the
+			// stylesheet (it was skipped during merge because it's
+			// overridden).
+			if pkg.attributeSets != nil {
+				if origAS, ok := pkg.attributeSets[name]; ok {
+					as.OriginalAttrSet = origAS
+				}
+			}
 			c.stylesheet.attributeSets[name] = as
 		}
 	}

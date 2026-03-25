@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -243,38 +244,69 @@ func (ec *execContext) applyAttributeSets(ctx context.Context, names []string) e
 // applyAttributeSetsGuarded is the recursive core that tracks which attribute
 // sets are currently being expanded via use-attribute-sets (defense in depth).
 func (ec *execContext) applyAttributeSetsGuarded(ctx context.Context, names []string, active map[string]struct{}) error {
+	xslOriginalName := "{" + lexicon.NamespaceXSLT + "}original"
 	for _, name := range names {
+		// Handle use-attribute-sets="xsl:original": apply the original
+		// attribute-set that was overridden via xsl:override.
+		if name == xslOriginalName {
+			if ec.currentAttrSetOriginal != nil {
+				if err := ec.applyOneAttributeSet(ctx, ec.currentAttrSetOriginal, active); err != nil {
+					return err
+				}
+			}
+			continue
+		}
 		asDef := ec.stylesheet.attributeSets[name]
 		if asDef == nil {
 			continue
 		}
-		if _, ok := active[name]; ok {
-			return dynamicError(errCodeXTSE0720,
-				"attribute-set %q has a circular use-attribute-sets reference (runtime)", name)
+		if err := ec.applyOneAttributeSet(ctx, asDef, active); err != nil {
+			return err
 		}
-		active[name] = struct{}{}
-		// Apply referenced attribute sets first (use-attribute-sets on the set itself)
-		if len(asDef.UseAttrSets) > 0 {
-			if err := ec.applyAttributeSetsGuarded(ctx, asDef.UseAttrSets, active); err != nil {
-				delete(active, name)
-				return err
-			}
-		}
-		// Execute the attribute instructions.
-		// XSLT spec: only global variables/params are visible in
-		// attribute set bodies, not template-local variables.
-		savedLocalVars := ec.localVars
-		ec.localVars = nil
-		for _, inst := range asDef.Attrs {
-			if err := ec.executeInstruction(ctx, inst); err != nil {
-				ec.localVars = savedLocalVars
-				delete(active, name)
-				return err
-			}
-		}
-		ec.localVars = savedLocalVars
-		delete(active, name)
 	}
+	return nil
+}
+
+// applyOneAttributeSet applies a single attribute-set definition, tracking
+// the original for xsl:original support.
+func (ec *execContext) applyOneAttributeSet(ctx context.Context, asDef *attributeSetDef, active map[string]struct{}) error {
+	name := asDef.Name
+	if _, ok := active[name]; ok {
+		return dynamicError(errCodeXTSE0720,
+			"attribute-set %q has a circular use-attribute-sets reference (runtime)", name)
+	}
+	active[name] = struct{}{}
+
+	// Track the original attribute-set for use-attribute-sets="xsl:original"
+	savedOriginal := ec.currentAttrSetOriginal
+	if asDef.OriginalAttrSet != nil {
+		ec.currentAttrSetOriginal = asDef.OriginalAttrSet
+	}
+
+	// Apply referenced attribute sets first (use-attribute-sets on the set itself)
+	if len(asDef.UseAttrSets) > 0 {
+		if err := ec.applyAttributeSetsGuarded(ctx, asDef.UseAttrSets, active); err != nil {
+			ec.currentAttrSetOriginal = savedOriginal
+			delete(active, name)
+			return err
+		}
+	}
+	// Execute the attribute instructions.
+	// XSLT spec: only global variables/params are visible in
+	// attribute set bodies, not template-local variables.
+	savedLocalVars := ec.localVars
+	ec.localVars = nil
+	for _, inst := range asDef.Attrs {
+		if err := ec.executeInstruction(ctx, inst); err != nil {
+			ec.localVars = savedLocalVars
+			ec.currentAttrSetOriginal = savedOriginal
+			delete(active, name)
+			return err
+		}
+	}
+	ec.localVars = savedLocalVars
+	ec.currentAttrSetOriginal = savedOriginal
+	delete(active, name)
 	return nil
 }
 

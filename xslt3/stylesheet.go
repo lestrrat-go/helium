@@ -187,11 +187,12 @@ type modeDef struct {
 
 // attributeSetDef is a compiled xsl:attribute-set.
 type attributeSetDef struct {
-	Name        string
-	UseAttrSets []string      // names of other attribute sets to include
-	Attrs       []instruction // xsl:attribute instructions
-	Visibility  string        // "public", "private", "final", "abstract"
-	Streamable  bool          // streamable="yes" on the attribute-set
+	Name            string
+	UseAttrSets     []string         // names of other attribute sets to include
+	Attrs           []instruction    // xsl:attribute instructions
+	Visibility      string           // "public", "private", "final", "abstract"
+	Streamable      bool             // streamable="yes" on the attribute-set
+	OriginalAttrSet *attributeSetDef // original attribute-set being overridden (for xsl:original)
 }
 
 // xslFunction is a compiled xsl:function.
