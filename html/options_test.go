@@ -10,6 +10,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestZeroValueParser(t *testing.T) {
+	var p html.Parser
+	doc, err := p.Parse(t.Context(), []byte(`<p>hello</p>`))
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+}
+
+func TestZeroValueParserFluent(t *testing.T) {
+	var p html.Parser
+	doc, err := p.SuppressImplied(true).Parse(t.Context(), []byte(`<p>hello</p>`))
+	require.NoError(t, err)
+	require.Equal(t, "p", doc.FirstChild().Name())
+}
+
+func TestZeroValueWriter(t *testing.T) {
+	doc, err := html.NewParser().Parse(t.Context(), []byte(`<html><body><p>hi</p></body></html>`))
+	require.NoError(t, err)
+
+	var w html.Writer
+	var buf bytes.Buffer
+	require.NoError(t, w.WriteDoc(&buf, doc))
+	require.Contains(t, buf.String(), "<p>hi</p>")
+}
+
 func TestOptionsNoImplied(t *testing.T) {
 	doc, err := html.NewParser().SuppressImplied(true).Parse(t.Context(), []byte(`<p>hello</p>`))
 	require.NoError(t, err)

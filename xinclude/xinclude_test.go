@@ -1038,3 +1038,20 @@ func TestXIncludeEntityMergeNoTargetDTD(t *testing.T) {
 	require.True(t, ok, "entity 'author' should exist in target")
 	require.Equal(t, "Alice", string(ent.Content()))
 }
+
+func TestZeroValueProcessor(t *testing.T) {
+	// A document with no xi:include elements — Process should succeed with 0 substitutions.
+	doc := parseXML(t, `<root><child>text</child></root>`)
+	var proc xinclude.Processor
+	count, err := proc.Process(t.Context(), doc)
+	require.NoError(t, err)
+	require.Equal(t, 0, count)
+}
+
+func TestZeroValueProcessorFluent(t *testing.T) {
+	doc := parseXML(t, `<root><child>text</child></root>`)
+	var proc xinclude.Processor
+	count, err := proc.NoXIncludeMarkers().Process(t.Context(), doc)
+	require.NoError(t, err)
+	require.Equal(t, 0, count)
+}

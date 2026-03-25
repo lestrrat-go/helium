@@ -44,6 +44,9 @@ func NewCanonicalizer(mode Mode) Canonicalizer {
 }
 
 func (c Canonicalizer) clone() Canonicalizer {
+	if c.cfg == nil {
+		return Canonicalizer{cfg: &canonicalizerCfg{}}
+	}
 	cp := *c.cfg
 	return Canonicalizer{cfg: &cp}
 }
@@ -83,22 +86,26 @@ func (c Canonicalizer) InclusiveNamespaces(prefixes []string) Canonicalizer {
 // Canonicalize writes the canonical form of doc to out.
 // (libxml2: xmlC14NDocSaveTo)
 func (c Canonicalizer) Canonicalize(doc *helium.Document, out io.Writer) error {
+	cfg := c.cfg
+	if cfg == nil {
+		cfg = &canonicalizerCfg{}
+	}
 	can := &canonicalizer{
 		doc:  doc,
-		mode: c.cfg.mode,
+		mode: cfg.mode,
 		out:  out,
 	}
-	can.withComments = c.cfg.withComments
-	can.baseURI = c.cfg.baseURI
-	if len(c.cfg.nodeSet) > 0 {
-		can.nodeSet = make(map[helium.Node]struct{}, len(c.cfg.nodeSet))
-		for _, n := range c.cfg.nodeSet {
+	can.withComments = cfg.withComments
+	can.baseURI = cfg.baseURI
+	if len(cfg.nodeSet) > 0 {
+		can.nodeSet = make(map[helium.Node]struct{}, len(cfg.nodeSet))
+		for _, n := range cfg.nodeSet {
 			can.nodeSet[n] = struct{}{}
 		}
 	}
-	if len(c.cfg.inclusivePrefixes) > 0 {
-		can.inclusivePrefixes = make(map[string]struct{}, len(c.cfg.inclusivePrefixes))
-		for _, p := range c.cfg.inclusivePrefixes {
+	if len(cfg.inclusivePrefixes) > 0 {
+		can.inclusivePrefixes = make(map[string]struct{}, len(cfg.inclusivePrefixes))
+		for _, p := range cfg.inclusivePrefixes {
 			if p == "#default" {
 				p = ""
 			}

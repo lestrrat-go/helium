@@ -278,6 +278,27 @@ func TestC14N11WithoutComments(t *testing.T) {
 	}
 }
 
+func TestZeroValueCanonicalizer(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root b="2" a="1"><child/></root>`))
+	require.NoError(t, err)
+
+	// Zero-value Canonicalizer defaults to C14N10 mode (iota = 0).
+	var can c14n.Canonicalizer
+	got, err := can.CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Contains(t, string(got), `<root`)
+}
+
+func TestZeroValueCanonicalizerFluent(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><!-- comment --><child/></root>`))
+	require.NoError(t, err)
+
+	var can c14n.Canonicalizer
+	got, err := can.Comments().CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Contains(t, string(got), `<!-- comment -->`)
+}
+
 func TestRelativeNamespaceURIRejected(t *testing.T) {
 	// C14N spec requires failure on relative namespace URIs.
 	xml := `<?xml version="1.0"?><root xmlns:bad="relative/uri"><child/></root>`
