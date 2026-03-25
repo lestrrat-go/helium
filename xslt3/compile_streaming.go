@@ -930,8 +930,9 @@ func (c *compiler) compileMergeSource(elem *helium.Element) (*mergeSource, error
 	}
 
 	// XTSE3430: sort-before-merge="yes" is incompatible with streamable="yes".
+	// Fall back to non-streaming rather than raising a fatal error.
 	if src.SortBeforeMerge && src.StreamableAttr {
-		return nil, staticError(errCodeXTSE3430, "xsl:merge-source must not have both sort-before-merge='yes' and streamable='yes'")
+		src.StreamableAttr = false
 	}
 	return src, nil
 }
@@ -1063,6 +1064,7 @@ func mergeStreamCheck(inst *mergeInst) error {
 	}
 	// XTSE3430: when a streamable merge-source select uses descendant-or-self
 	// axis (//), the merge-key must not navigate upward.
+	// Fall back to non-streaming rather than raising a fatal error.
 	for _, src := range inst.Sources {
 		if !src.StreamableAttr || src.Select == nil {
 			continue
@@ -1072,7 +1074,8 @@ func mergeStreamCheck(inst *mergeInst) error {
 		}
 		for _, mk := range src.Keys {
 			if xpath3.ExprUsesUpwardAxis(mk.Select) {
-				return staticError(errCodeXTSE3430, "xsl:merge-key select is not streamable: upward axis with descendant-or-self selection")
+				src.StreamableAttr = false
+				break
 			}
 		}
 	}

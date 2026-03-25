@@ -23,16 +23,21 @@ func lookupFuncStreamability(ss *Stylesheet, localName string, arity int) string
 
 // analyzeStreamability performs a post-compilation pass over the stylesheet.
 // It checks templates in streamable modes and bodies of xsl:source-document
-// streamable="yes" for non-streamable constructs, raising XTSE3430 errors.
+// streamable="yes" for non-streamable constructs. Per the W3C spec, a Basic
+// XSLT Processor that cannot stream a construct should fall back to
+// non-streaming (DOM-based) execution rather than raising a fatal error.
+// When an XTSE3430 violation is detected, the affected mode, source-document,
+// accumulator, or function is demoted to non-streamable and compilation
+// continues.
 func analyzeStreamability(ss *Stylesheet) error {
 	// Check all templates for source-document streamable="yes" in their body.
+	// On XTSE3430, demote the source-document to non-streamable.
 	for _, tmpl := range ss.templates {
-		if err := checkInstructionsForStreamableSourceDoc(ss, tmpl.Body); err != nil {
-			return err
-		}
+		demoteStreamableSourceDocs(ss, tmpl.Body)
 	}
 
 	// Check templates in streamable modes for non-streamable constructs.
+	// On XTSE3430, demote the entire mode to non-streamable (fallback).
 	for _, tmpl := range ss.templates {
 		modeName, ok := streamabilityModeNameForTemplate(tmpl)
 		if !ok || modeName == modeAll {
@@ -48,56 +53,65 @@ func analyzeStreamability(ss *Stylesheet) error {
 		if tmpl.Match != nil {
 			for _, alt := range tmpl.Match.Alternatives {
 				if xpath3.ExprTreeHasNonMotionlessPredicate(alt.expr) {
-					return staticError(errCodeXTSE3430,
-						"match pattern %q has a non-motionless predicate, which is not allowed in streaming mode %q",
-						tmpl.Match.source, modeName)
+					md.Streamable = false
+					break
 				}
 			}
 		}
+		if !md.Streamable {
+			continue
+		}
 		if err := checkStreamableTemplateBody(ss, tmpl.Body); err != nil {
-			return err
+			md.Streamable = false
+			continue
 		}
 		// In streaming templates, accumulator-after() is only valid in
 		// post-descent position (after a consuming operation). If used
 		// before any consuming operation, the post-descent values are
 		// not yet available.
 		if err := checkAccumulatorAfterPreDescent(tmpl.Body); err != nil {
-			return err
+			md.Streamable = false
+			continue
 		}
 	}
 
 	// Check streamable accumulators: initial-value must be motionless.
+	// On XTSE3430, demote the accumulator to non-streamable.
 	for _, acc := range ss.accumulators {
 		if !acc.Streamable {
 			continue
 		}
 		if acc.Initial != nil {
 			if err := checkStreamableExpr(ss, acc.Initial); err != nil {
-				return err
+				acc.Streamable = false
+				continue
 			}
 			// A motionless expression must not navigate the document at all.
 			if xpath3.ExprHasDownwardStep(acc.Initial) {
-				return staticError(errCodeXTSE3430,
-					"streamable accumulator %q has non-motionless initial-value expression %q",
-					acc.Name, acc.Initial.String())
+				acc.Streamable = false
+				continue
 			}
 		}
 		// Accumulator rule match patterns must be motionless in streaming.
+		demoted := false
 		for _, rule := range acc.Rules {
 			if rule.Match == nil {
 				continue
 			}
 			for _, alt := range rule.Match.Alternatives {
 				if xpath3.ExprTreeHasNonMotionlessPredicate(alt.expr) {
-					return staticError(errCodeXTSE3430,
-						"streamable accumulator %q rule match pattern %q has a non-motionless predicate",
-						acc.Name, rule.Match.source)
+					acc.Streamable = false
+					demoted = true
+					break
 				}
 				if patternHasCurrentOnElementStep(alt.expr) {
-					return staticError(errCodeXTSE3430,
-						"streamable accumulator %q rule match pattern %q uses current() on an element-matching step, which is not motionless",
-						acc.Name, rule.Match.source)
+					acc.Streamable = false
+					demoted = true
+					break
 				}
+			}
+			if demoted {
+				break
 			}
 			// Accumulator rule select expressions must not navigate
 			// downward (to children/descendants) in streaming mode.
@@ -106,29 +120,47 @@ func analyzeStreamability(ss *Stylesheet) error {
 			// For text/attribute matches, "." is fine (the value is atomic).
 			if rule.Select != nil {
 				if xpath3.ExprHasDownwardStep(rule.Select) {
-					return staticError(errCodeXTSE3430,
-						"streamable accumulator %q has a non-streamable select expression %q",
-						acc.Name, rule.Select.String())
+					acc.Streamable = false
+					demoted = true
+					break
 				}
 				if xpath3.ExprUsesContextItem(rule.Select) && accRuleMatchesElement(rule) {
-					return staticError(errCodeXTSE3430,
-						"streamable accumulator %q rule select expression %q uses the context item on an element match, which is consuming in streaming mode",
-						acc.Name, rule.Select.String())
+					acc.Streamable = false
+					demoted = true
+					break
 				}
 			}
 		}
 	}
 
 	// Check functions with declared streamability.
+	// On XTSE3430, clear the streamability annotation.
 	for _, fn := range ss.functions {
 		if fn.Streamability != "" {
 			if err := checkStreamableFunctionBody(ss, fn); err != nil {
-				return err
+				fn.Streamability = ""
 			}
 		}
 	}
 
 	return nil
+}
+
+// demoteStreamableSourceDocs walks instructions looking for sourceDocumentInst
+// with Streamable=true and checks their bodies. On XTSE3430, the
+// source-document is demoted to non-streamable (fallback to DOM).
+func demoteStreamableSourceDocs(ss *Stylesheet, instructions []instruction) {
+	for _, inst := range instructions {
+		if sd, ok := inst.(*sourceDocumentInst); ok && sd.Streamable {
+			if err := checkStreamableTemplateBody(ss, sd.Body); err != nil {
+				sd.Streamable = false
+			}
+		}
+		// Recurse into any nested instruction bodies to find source-document.
+		for _, child := range getChildInstructions(inst) {
+			demoteStreamableSourceDocs(ss, child)
+		}
+	}
 }
 
 // streamabilityModeNameForTemplate returns the mode name that should be used
@@ -144,24 +176,6 @@ func streamabilityModeNameForTemplate(tmpl *template) (string, bool) {
 	return tmpl.Mode, true
 }
 
-// checkInstructionsForStreamableSourceDoc walks instructions looking for
-// sourceDocumentInst with Streamable=true and checks their bodies.
-func checkInstructionsForStreamableSourceDoc(ss *Stylesheet, instructions []instruction) error {
-	for _, inst := range instructions {
-		if sd, ok := inst.(*sourceDocumentInst); ok && sd.Streamable {
-			if err := checkStreamableTemplateBody(ss, sd.Body); err != nil {
-				return err
-			}
-		}
-		// Recurse into any nested instruction bodies to find source-document.
-		for _, child := range getChildInstructions(inst) {
-			if err := checkInstructionsForStreamableSourceDoc(ss, child); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
 
 // checkStreamableTemplateBody checks a template body (or source-document body)
 // for non-streamable constructs.
