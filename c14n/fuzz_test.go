@@ -31,12 +31,12 @@ func FuzzCanonicalize(f *testing.F) {
 			mode = c14n.C14N11
 		}
 
-		var opts []c14n.Option
+		can := c14n.NewCanonicalizer(mode)
 		if withComments {
-			opts = append(opts, c14n.WithComments())
+			can = can.Comments()
 		}
 
 		var buf bytes.Buffer
-		_ = c14n.Canonicalize(&buf, doc, mode, opts...)
+		_ = can.Canonicalize(doc, &buf)
 	})
 }

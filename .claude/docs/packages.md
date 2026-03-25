@@ -27,9 +27,9 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 
 W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
 
-- **Canonicalize(io.Writer, *Document, Mode, ...Option) → error** — write canonical form
-- **CanonicalizeTo(*Document, Mode, ...Option) → ([]byte, error)** — return canonical form
-- Options: WithComments(), WithNodeSet([]Node), WithInclusiveNamespaces([]string), WithBaseURI(string)
+- **NewCanonicalizer(Mode) → Canonicalizer** — create fluent builder for the given mode
+- Canonicalizer methods: Comments(), NodeSet([]Node), InclusiveNamespaces([]string), BaseURI(string)
+- Terminal: **Canonicalize(*Document, io.Writer) → error**, **CanonicalizeTo(*Document) → ([]byte, error)**
 - Files: `c14n.go` (API), `canonicalizer.go` (engine), `nsstack.go`, `sort.go`, `escape.go`
 - Imports: helium
 

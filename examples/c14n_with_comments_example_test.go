@@ -19,18 +19,18 @@ func Example_c14n_with_comments() {
 	}
 
 	// By default, C14N strips comment nodes from the output.
-	without, err := c14n.CanonicalizeTo(doc, c14n.C14N10)
+	without, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
 	if err != nil {
 		fmt.Printf("failed: %s\n", err)
 		return
 	}
 	fmt.Println(string(without))
 
-	// WithComments() preserves comment nodes in the canonical output.
+	// Comments() preserves comment nodes in the canonical output.
 	// The C14N spec defines two variants for each algorithm: one that
-	// includes comments and one that omits them. WithComments() selects
+	// includes comments and one that omits them. Comments() selects
 	// the "with comments" variant.
-	with, err := c14n.CanonicalizeTo(doc, c14n.C14N10, c14n.WithComments())
+	with, err := c14n.NewCanonicalizer(c14n.C14N10).Comments().CanonicalizeTo(doc)
 	if err != nil {
 		fmt.Printf("failed: %s\n", err)
 		return

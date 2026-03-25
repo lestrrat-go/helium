@@ -471,7 +471,7 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		case 3:
 			mode = c14n.ExclusiveC14N10
 		}
-		cErr := c14n.Canonicalize(out, doc, mode, c14n.WithComments())
+		cErr := c14n.NewCanonicalizer(mode).Comments().Canonicalize(doc, out)
 		if cfg.timing {
 			_, _ = fmt.Fprintf(c.stderr, "Saving took %s\n", time.Since(t0))
 		}

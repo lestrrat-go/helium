@@ -129,7 +129,7 @@ func evaluateNodeSet(t *testing.T, doc *helium.Document, expr string, nss map[st
 	return result.NodeSet
 }
 
-func runC14NTest(t *testing.T, category, name string, mode c14n.Mode, opts ...c14n.Option) {
+func runC14NTest(t *testing.T, category, name string, mode c14n.Mode, can c14n.Canonicalizer) {
 	t.Helper()
 
 	key := category + "/" + name
@@ -148,22 +148,22 @@ func runC14NTest(t *testing.T, category, name string, mode c14n.Mode, opts ...c1
 	if _, err := os.Stat(xpathPath); err == nil {
 		expr, nss := parseXPathFile(t, xpathPath)
 		nodes := evaluateNodeSet(t, doc, expr, nss)
-		opts = append(opts, c14n.WithNodeSet(nodes))
+		can = can.NodeSet(nodes)
 	}
 
 	// Check for .ns file (inclusive namespace prefixes for exclusive C14N)
 	nsPath := filepath.Join(testdataBase, category, "test", name+".ns")
 	if _, err := os.Stat(nsPath); err == nil {
 		prefixes := parseNSFile(t, nsPath)
-		opts = append(opts, c14n.WithInclusiveNamespaces(prefixes))
+		can = can.InclusiveNamespaces(prefixes)
 	}
 
 	// Pass base URI for C14N 1.1 xml:base fixup
 	if mode == c14n.C14N11 {
-		opts = append(opts, c14n.WithBaseURI(inputPath))
+		can = can.BaseURI(inputPath)
 	}
 
-	got, err := c14n.CanonicalizeTo(doc, mode, opts...)
+	got, err := can.CanonicalizeTo(doc)
 	require.NoError(t, err)
 	require.Equal(t, string(expected), string(got))
 }
@@ -194,7 +194,7 @@ func TestC14N10WithoutComments(t *testing.T) {
 
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
-			runC14NTest(t, "without-comments", name, c14n.C14N10)
+			runC14NTest(t, "without-comments", name, c14n.C14N10, c14n.NewCanonicalizer(c14n.C14N10))
 		})
 	}
 }
@@ -223,7 +223,7 @@ func TestExclusiveC14N10WithoutComments(t *testing.T) {
 
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
-			runC14NTest(t, "exc-without-comments", name, c14n.ExclusiveC14N10)
+			runC14NTest(t, "exc-without-comments", name, c14n.ExclusiveC14N10, c14n.NewCanonicalizer(c14n.ExclusiveC14N10))
 		})
 	}
 }
@@ -241,7 +241,7 @@ func TestC14N10WithComments(t *testing.T) {
 
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
-			runC14NTest(t, "with-comments", name, c14n.C14N10, c14n.WithComments())
+			runC14NTest(t, "with-comments", name, c14n.C14N10, c14n.NewCanonicalizer(c14n.C14N10).Comments())
 		})
 	}
 }
@@ -280,7 +280,7 @@ func TestC14N11WithoutComments(t *testing.T) {
 
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
-			runC14NTest(t, "1-1-without-comments", name, c14n.C14N11)
+			runC14NTest(t, "1-1-without-comments", name, c14n.C14N11, c14n.NewCanonicalizer(c14n.C14N11))
 		})
 	}
 }
@@ -291,7 +291,7 @@ func TestRelativeNamespaceURIRejected(t *testing.T) {
 	doc, err := helium.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
-	_, err = c14n.CanonicalizeTo(doc, c14n.C14N10)
+	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "relative namespace URI")
 }
@@ -301,7 +301,7 @@ func TestAbsoluteNamespaceURIAccepted(t *testing.T) {
 	doc, err := helium.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
-	_, err = c14n.CanonicalizeTo(doc, c14n.C14N10)
+	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
 	require.NoError(t, err)
 }
 
@@ -311,6 +311,6 @@ func TestEmptyNamespaceURIAccepted(t *testing.T) {
 	doc, err := helium.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
-	_, err = c14n.CanonicalizeTo(doc, c14n.C14N10)
+	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
 	require.NoError(t, err)
 }
