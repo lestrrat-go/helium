@@ -1248,10 +1248,6 @@ var w3cImplicitSkips = map[string]string{
 
 	// function tests: TVT namespace resolution
 	"function-1034": "text value template with expand-text fails to resolve user function in AVT",
-	"function-1009": "xsl:function returning zero-length text nodes produces wrong count",
-
-	// json-to-xml tests: null character handling
-	"json-to-xml-error-015": "json-to-xml \\u0000 null character handling in copy-of",
 
 	// copy tests: external entity resolution
 	"copy-1401": "requires external entity resolution (SYSTEM entity reference)",
