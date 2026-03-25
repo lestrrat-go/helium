@@ -115,14 +115,29 @@ func (c *UTF8Cursor) Peek() rune {
 }
 
 func (c *UTF8Cursor) PeekN(n int) rune {
-	// Get byte offset of the (n-1)th rune — that's where the nth rune starts.
+	// Fast path: if the first n bytes from bufpos are all ASCII, then byte
+	// position == rune position. This is the common case for XML names,
+	// delimiters, and most content.
+	if err := c.fillBuffer(n); err != nil {
+		return utf8.RuneError
+	}
+	allASCII := true
+	for i := 0; i < n; i++ {
+		if c.buf[c.bufpos+i] >= 0x80 {
+			allASCII = false
+			break
+		}
+	}
+	if allASCII {
+		return rune(c.buf[c.bufpos+n-1])
+	}
+
+	// Slow path: multi-byte UTF-8 present. Scan rune boundaries.
 	off, err := c.nthRuneOffset(n - 1)
 	if err != nil {
 		return utf8.RuneError
 	}
-	// Ensure enough bytes for the nth rune itself.
 	if err := c.fillBuffer(off + utf8.UTFMax); err != nil {
-		// May still have enough for at least 1 byte.
 		if c.bufpos+off >= c.buflen {
 			return utf8.RuneError
 		}
@@ -136,10 +151,28 @@ func (c *UTF8Cursor) PeekN(n int) rune {
 }
 
 func (c *UTF8Cursor) PeekString(n int) string {
-	// Get byte span covering n runes.
+	// Fast path: if first n bytes are ASCII, byte count == rune count.
+	if err := c.fillBuffer(n); err != nil {
+		return ""
+	}
+	allASCII := true
+	for i := 0; i < n; i++ {
+		if c.bufpos+i >= c.buflen {
+			allASCII = false
+			break
+		}
+		if c.buf[c.bufpos+i] >= 0x80 {
+			allASCII = false
+			break
+		}
+	}
+	if allASCII {
+		return string(c.buf[c.bufpos : c.bufpos+n])
+	}
+
+	// Slow path: multi-byte.
 	off, err := c.nthRuneOffset(n)
 	if err != nil {
-		// Return what we have.
 		return ""
 	}
 	return string(c.buf[c.bufpos : c.bufpos+off])
