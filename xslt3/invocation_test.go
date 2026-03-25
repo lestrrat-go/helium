@@ -191,6 +191,11 @@ func TestInvocationCallTemplateValidation(t *testing.T) {
 	_, err = ss.CallTemplate("t").Selection(xpath3.SingleString("x")).Do(t.Context())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "Selection is not valid for CallTemplate")
+
+	// InitialModeParameter is invalid for CallTemplate.
+	_, err = ss.CallTemplate("t").SetInitialModeParameter("p", xpath3.SingleString("v")).Do(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "SetInitialModeParameter is not valid for CallTemplate")
 }
 
 func TestInvocationCallFunctionValidation(t *testing.T) {
@@ -211,6 +216,12 @@ func TestInvocationCallFunctionValidation(t *testing.T) {
 		Selection(xpath3.SingleString("x")).Do(t.Context())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "Selection is not valid for CallFunction")
+
+	// InitialModeParameter is invalid for CallFunction.
+	_, err = ss.CallFunction("{http://example.com/f}id", xpath3.SingleString("a")).
+		SetInitialModeParameter("p", xpath3.SingleString("v")).Do(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "SetInitialModeParameter is not valid for CallFunction")
 }
 
 func TestInvocationInitialTemplateParamRejectedForTransform(t *testing.T) {
