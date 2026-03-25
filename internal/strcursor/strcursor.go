@@ -16,6 +16,7 @@ type Cursor interface {
 	io.Reader
 
 	Advance(int) error
+	AdvanceFast(int) error
 	Column() int
 	Consume([]byte) bool
 	ConsumeString(string) bool
@@ -379,6 +380,42 @@ func (c *RuneCursor) Advance(n int) error {
 	return nil
 }
 
+// AdvanceFast advances by n runes, updating only line numbers and byte counts.
+// It skips the per-character line buffer tracking that Advance does, making it
+// faster for bulk character data consumption where the line context is not
+// needed for error reporting.
+func (c *RuneCursor) AdvanceFast(n int) error {
+	if c.count < n {
+		if err := c.ensure(n); err != nil {
+			return err
+		}
+	}
+	mask := c.ringMask
+	head := c.head
+	ring := c.ring
+	totalBytes := 0
+	lastNewline := -1
+	for i := 0; i < n; i++ {
+		e := ring[head]
+		totalBytes += e.width
+		if e.val == '\n' {
+			c.lineno++
+			lastNewline = i
+		}
+		head = (head + 1) & mask
+	}
+	c.nread += totalBytes
+	if lastNewline >= 0 {
+		c.column = n - lastNewline
+		c.line.Reset()
+	} else {
+		c.column += n
+	}
+	c.head = head
+	c.count -= n
+	return nil
+}
+
 func (c *RuneCursor) hasPrefix(s string, n int, consume bool) bool {
 	if c.count < n {
 		if err := c.ensure(n); err != nil {
@@ -589,6 +626,11 @@ func (c *ByteCursor) Advance(n int) error {
 	}
 	c.bufpos += n
 	return nil
+}
+
+// AdvanceFast advances by n bytes, skipping line buffer tracking.
+func (c *ByteCursor) AdvanceFast(n int) error {
+	return c.Advance(n)
 }
 
 func (c *ByteCursor) hasPrefix(s []byte, consume bool) bool {

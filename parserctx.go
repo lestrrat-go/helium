@@ -1110,7 +1110,7 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		return errors.New("invalid char data")
 	}
 
-	if err := cur.Advance(i); err != nil {
+	if err := cur.AdvanceFast(i); err != nil {
 		return err
 	}
 
