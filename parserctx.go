@@ -211,7 +211,7 @@ func (pctx *parserCtx) fireSAXCallback(ctx context.Context, typ int, args ...any
 	return nil
 }
 
-func (ctx *parserCtx) pushNode(e *Element) {
+func (ctx *parserCtx) pushNodeEntry(e nodeEntry) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START pushNode (%s)", e.Name())
 		defer g.IRelease("END pushNode")
@@ -219,19 +219,19 @@ func (ctx *parserCtx) pushNode(e *Element) {
 		if l := ctx.nodeTab.Len(); l <= 0 {
 			pdebug.Printf("  (EMPTY node stack)")
 		} else {
-			for i, e := range ctx.nodeTab.Stack {
-				pdebug.Printf("  %003d: %s (%p)", i, e.Name(), e)
+			for i := range ctx.nodeTab.Stack {
+				pdebug.Printf("  %003d: %s", i, ctx.nodeTab.Stack[i].Name())
 			}
 		}
 	}
 	ctx.nodeTab.Push(e)
 }
 
-func (ctx *parserCtx) peekNode() *Element {
+func (ctx *parserCtx) peekNode() *nodeEntry {
 	return ctx.nodeTab.PeekOne()
 }
 
-func (ctx *parserCtx) popNode() (elem *Element) {
+func (ctx *parserCtx) popNode() (elem *nodeEntry) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START popNode")
 		defer func() {
@@ -248,8 +248,8 @@ func (ctx *parserCtx) popNode() (elem *Element) {
 			if l := ctx.nodeTab.Len(); l <= 0 {
 				pdebug.Printf("  (EMPTY node stack)")
 			} else {
-				for i, e := range ctx.nodeTab.Stack {
-					pdebug.Printf("  %003d: %s (%p)", i, e.Name(), e)
+				for i := range ctx.nodeTab.Stack {
+					pdebug.Printf("  %003d: %s", i, ctx.nodeTab.Stack[i].Name())
 				}
 			}
 		}()
@@ -1298,11 +1298,6 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		return pctx.error(ctx, err)
 	}
 
-	elem, err := pctx.doc.CreateElement(local)
-	if err != nil {
-		return pctx.error(ctx, err)
-	}
-
 	// Push xml:space stack entry for this element (inherit parent's value by default)
 	pctx.spaceTab = append(pctx.spaceTab, -1)
 
@@ -1496,11 +1491,6 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	if prefix != "" && nsuri == "" {
 		return pctx.namespaceError(ctx, errors.New("namespace '"+prefix+"' not found"))
 	}
-	if nsuri != "" {
-		if err := elem.SetActiveNamespace(prefix, nsuri); err != nil {
-			return err
-		}
-	}
 
 	if s := pctx.sax; s != nil && !pctx.disableSAX {
 		var nslist []sax.Namespace
@@ -1511,14 +1501,18 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 				nslist[i] = ns
 			}
 		}
-		switch err := s.StartElementNS(ctx, elem.LocalName(), prefix, nsuri, nslist, attrs); err {
+		switch err := s.StartElementNS(ctx, local, prefix, nsuri, nslist, attrs); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
 		default:
 			return pctx.error(ctx, err)
 		}
 	}
-	pctx.pushNode(elem)
+	qname := local
+	if prefix != "" {
+		qname = prefix + ":" + local
+	}
+	pctx.pushNodeEntry(nodeEntry{local: local, prefix: prefix, uri: nsuri, qname: qname})
 	pctx.nsNrTab = append(pctx.nsNrTab, nbNs)
 
 	return nil
@@ -5636,7 +5630,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	if err != nil {
 		return nil, pctx.error(ctx, err)
 	}
-	newctx.pushNode(newRoot)
+	newctx.pushNodeEntry(nodeEntry{local: "pseudoroot", qname: "pseudoroot"})
 	newctx.elem = newRoot
 	if err := newctx.doc.AddChild(newRoot); err != nil {
 		return nil, err
@@ -5733,7 +5727,7 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	if err != nil {
 		return nil, pctx.error(ctx, err)
 	}
-	newctx.pushNode(newRoot)
+	newctx.pushNodeEntry(nodeEntry{local: "pseudoroot", qname: "pseudoroot"})
 	newctx.elem = newRoot // Set the current element context
 	if err := newctx.doc.AddChild(newRoot); err != nil {
 		return nil, err
