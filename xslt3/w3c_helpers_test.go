@@ -1609,8 +1609,6 @@ var w3cImplicitSkips = map[string]string{
 	// error-FODC0002a-ignore: processor now raises FODC0002 (ignore_doc_failure=false)
 	"error-FODC0002a-ignore": "processor raises FODC0002 instead of ignoring document failures",
 
-	"function-1034": "text value template with expand-text fails to resolve user function in AVT",
-
 	// embedded-stylesheet-007: xsl:apply-imports with simplified stylesheet import
 	"embedded-stylesheet-007": "xsl:apply-imports with imported simplified stylesheet not producing correct output",
 	// embedded-stylesheet-015: use-when='false()' on imported xsl:transform root not honored
