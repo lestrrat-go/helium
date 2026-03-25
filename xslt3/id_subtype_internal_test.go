@@ -10,7 +10,7 @@ import (
 )
 
 func TestAnnotateAttrRegistersIDSubtype(t *testing.T) {
-	schemaDoc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
+	schemaDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:test">
   <xs:simpleType name="myID">
     <xs:restriction base="xs:ID"/>

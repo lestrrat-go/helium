@@ -10,7 +10,7 @@ import (
 )
 
 func Example_xinclude_process_tree() {
-	doc, err := helium.Parse(context.Background(), []byte(`<doc xmlns:xi="http://www.w3.org/2001/XInclude"><wrapper><xi:include href="greeting.xml"/></wrapper></doc>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<doc xmlns:xi="http://www.w3.org/2001/XInclude"><wrapper><xi:include href="greeting.xml"/></wrapper></doc>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

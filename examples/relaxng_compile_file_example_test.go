@@ -35,7 +35,7 @@ func Example_relaxng_compile_file() {
 		return
 	}
 
-	doc, err := helium.Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

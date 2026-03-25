@@ -315,10 +315,7 @@ func (d *Decoder) startSAXEmitter(r io.Reader) {
 
 	go func() {
 		defer close(d.events)
-		p := helium.NewParser()
-		p.SetOption(helium.ParseLenientXMLDecl)
-		p.SetMaxDepth(maxParseDepth)
-		p.SetSAXHandler(h)
+		p := helium.NewParser().LenientXMLDecl(true).MaxDepth(maxParseDepth).SAXHandler(h)
 		_, err := p.ParseReader(d.ctx, r)
 		if err != nil {
 			select {

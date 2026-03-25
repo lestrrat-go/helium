@@ -23,7 +23,7 @@ func Example_xsd_schema_lookup() {
   <xs:element name="book" type="tns:BookType"/>
 </xs:schema>`
 
-	schemaDoc, err := helium.Parse(context.Background(), []byte(schemaSrc))
+	schemaDoc, err := helium.NewParser().Parse(context.Background(), []byte(schemaSrc))
 	if err != nil {
 		fmt.Printf("failed to parse schema: %s\n", err)
 		return

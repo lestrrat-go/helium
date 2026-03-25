@@ -8,7 +8,7 @@ import (
 )
 
 func Example_helium_lookup_namespace() {
-	doc, err := helium.Parse(context.Background(), []byte(`<root xmlns:a="urn:a"><child/></root>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root xmlns:a="urn:a"><child/></root>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

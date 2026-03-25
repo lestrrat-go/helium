@@ -143,7 +143,7 @@ func (c *xpathCommand) processInput(ctx context.Context, cfg *xpathConfig, input
 
 	p := helium.NewParser()
 	if !input.stdin {
-		p.SetBaseURI(input.name)
+		p = p.BaseURI(input.name)
 	}
 
 	doc, err := p.Parse(ctx, buf)

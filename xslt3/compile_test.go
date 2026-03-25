@@ -17,7 +17,7 @@ const minimalStylesheet = `<?xml version="1.0"?>
 </xsl:stylesheet>`
 
 func TestCompilerBaseURI(t *testing.T) {
-	doc, err := helium.Parse(t.Context(), []byte(minimalStylesheet))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(minimalStylesheet))
 	require.NoError(t, err)
 
 	c1 := xslt3.NewCompiler()
@@ -54,7 +54,7 @@ func TestCompilerURIResolver(t *testing.T) {
   <xsl:template match="/"><out/></xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.Parse(t.Context(), []byte(importSheet))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(importSheet))
 	require.NoError(t, err)
 
 	// c1 (no resolver) should fail differently than c2 (with resolver).
@@ -87,7 +87,7 @@ func TestCompilerPackageResolver(t *testing.T) {
   <xsl:template match="/"><out/></xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.Parse(t.Context(), []byte(pkgSheet))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(pkgSheet))
 	require.NoError(t, err)
 
 	_, err = c.Compile(t.Context(), doc)
@@ -102,7 +102,7 @@ func TestUsePackageWithoutResolver(t *testing.T) {
   <xsl:template match="/"><out/></xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.Parse(t.Context(), []byte(pkgSheet))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(pkgSheet))
 	require.NoError(t, err)
 
 	// Compile without a PackageResolver — must fail, not silently succeed.
@@ -112,7 +112,7 @@ func TestUsePackageWithoutResolver(t *testing.T) {
 }
 
 func TestUsePackageExcludedByUseWhenDoesNotRequireResolver(t *testing.T) {
-	doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:param name="use-package" as="xs:boolean" static="yes" select="false()"
     xmlns:xs="http://www.w3.org/2001/XMLSchema"/>
@@ -140,7 +140,7 @@ func TestCompilerStaticParameters(t *testing.T) {
 	// Mutating the original Parameters does not affect c1.
 	p.SetString("debug", "no")
 
-	doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:param name="debug" static="yes" select="'no'"/>
   <xsl:template match="/" use-when="$debug = 'yes'">
@@ -164,7 +164,7 @@ func TestCompilerSetStaticParameter(t *testing.T) {
 	c1 := xslt3.NewCompiler().SetStaticParameter("mode", xpath3.SingleString("a"))
 	c2 := c1.SetStaticParameter("mode", xpath3.SingleString("b"))
 
-	doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:param name="mode" static="yes" select="'default'"/>
   <xsl:template match="/" use-when="$mode = 'a'">
@@ -200,7 +200,7 @@ func TestCompilerClearStaticParameters(t *testing.T) {
 	c1 := xslt3.NewCompiler().SetStaticParameter("mode", xpath3.SingleString("a"))
 	c2 := c1.ClearStaticParameters()
 
-	doc, err := helium.Parse(t.Context(), []byte(`<?xml version="1.0"?>
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:param name="mode" static="yes" select="'default'"/>
   <xsl:template match="/" use-when="$mode = 'a'">
@@ -221,7 +221,7 @@ func TestCompilerClearStaticParameters(t *testing.T) {
 }
 
 func TestMustCompilePanicsOnError(t *testing.T) {
-	doc, err := helium.Parse(t.Context(), []byte(`<not-a-stylesheet/>`))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<not-a-stylesheet/>`))
 	require.NoError(t, err)
 
 	require.Panics(t, func() {
@@ -230,7 +230,7 @@ func TestMustCompilePanicsOnError(t *testing.T) {
 }
 
 func TestMustCompileSuccess(t *testing.T) {
-	doc, err := helium.Parse(t.Context(), []byte(minimalStylesheet))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(minimalStylesheet))
 	require.NoError(t, err)
 
 	require.NotPanics(t, func() {
@@ -243,7 +243,7 @@ func TestCompilerCloneOnWrite(t *testing.T) {
 	c1 := xslt3.NewCompiler().BaseURI("file:///a.xsl")
 	c2 := c1.BaseURI("file:///b.xsl")
 
-	doc, err := helium.Parse(t.Context(), []byte(minimalStylesheet))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(minimalStylesheet))
 	require.NoError(t, err)
 
 	// Both compilers should compile without interference.
@@ -257,7 +257,7 @@ func TestCompilerCloneOnWrite(t *testing.T) {
 }
 
 func TestCompileStylesheetConvenience(t *testing.T) {
-	doc, err := helium.Parse(t.Context(), []byte(minimalStylesheet))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(minimalStylesheet))
 	require.NoError(t, err)
 
 	ss, err := xslt3.CompileStylesheet(t.Context(), doc)

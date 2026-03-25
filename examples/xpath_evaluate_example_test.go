@@ -9,7 +9,7 @@ import (
 )
 
 func Example_xpath_evaluate() {
-	doc, err := helium.Parse(context.Background(), []byte(`<prices><item>10</item><item>20</item><item>30</item></prices>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<prices><item>10</item><item>20</item><item>30</item></prices>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

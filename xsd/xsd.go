@@ -45,7 +45,7 @@ func CompileFile(ctx context.Context, path string, opts ...CompileOption) (*Sche
 	if err != nil {
 		return nil, fmt.Errorf("xsd: failed to read %q: %w", path, err)
 	}
-	doc, err := helium.Parse(ctx, data)
+	doc, err := helium.NewParser().Parse(ctx, data)
 	if err != nil {
 		return nil, fmt.Errorf("xsd: failed to parse %q: %w", path, err)
 	}

@@ -12,7 +12,7 @@ func Example_c14n_with_comments() {
 	// This document contains a comment node between <root> and <child>.
 	const src = `<root><!-- a comment --><child/></root>`
 
-	doc, err := helium.Parse(context.Background(), []byte(src))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(src))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

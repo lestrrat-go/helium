@@ -80,7 +80,7 @@ func (c *compiler) loadInclude(location string, includeElem *helium.Element) err
 		return fmt.Errorf("xsd: failed to load include %q: %w", location, err)
 	}
 
-	doc, err := helium.Parse(c.compileContext(), data)
+	doc, err := helium.NewParser().Parse(c.compileContext(), data)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to parse include %q: %w", location, err)
 	}
@@ -161,7 +161,7 @@ func (c *compiler) loadRedefine(location string, redefineElem *helium.Element) e
 		return fmt.Errorf("xsd: failed to load redefine %q: %w", location, err)
 	}
 
-	doc, err := helium.Parse(c.compileContext(), data)
+	doc, err := helium.NewParser().Parse(c.compileContext(), data)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to parse redefine %q: %w", location, err)
 	}
@@ -363,7 +363,7 @@ func (c *compiler) loadImport(location, _ string) error {
 		return fmt.Errorf("xsd: failed to load import %q: %w", location, err)
 	}
 
-	doc, err := helium.Parse(c.compileContext(), data)
+	doc, err := helium.NewParser().Parse(c.compileContext(), data)
 	if err != nil {
 		return fmt.Errorf("xsd: failed to parse import %q: %w", location, err)
 	}

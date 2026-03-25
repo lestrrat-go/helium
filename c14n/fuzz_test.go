@@ -18,7 +18,7 @@ func FuzzCanonicalize(f *testing.F) {
 		if len(data) > 1<<20 {
 			return
 		}
-		doc, err := helium.Parse(t.Context(), data)
+		doc, err := helium.NewParser().Parse(t.Context(), data)
 		if err != nil {
 			return
 		}

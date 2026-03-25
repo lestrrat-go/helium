@@ -69,8 +69,7 @@ func TestParseLenientXMLDecl(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := NewParser()
-			p.SetOption(ParseLenientXMLDecl)
+			p := NewParser().LenientXMLDecl(true)
 
 			doc, err := p.Parse(t.Context(), []byte(tt.input))
 			require.NoError(t, err, "Parse should succeed")

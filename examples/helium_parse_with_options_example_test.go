@@ -17,11 +17,9 @@ func Example_helium_parse_with_options() {
 	// Create a parser instance to configure parsing options.
 	// helium.NewParser() returns a reusable parser that can be customized
 	// before calling Parse.
-	p := helium.NewParser()
-
-	// ParseNoBlanks tells the parser to discard whitespace-only text nodes.
+	// NoBlanks tells the parser to discard whitespace-only text nodes.
 	// This is useful when you want a compact DOM without insignificant whitespace.
-	p.SetOption(helium.ParseNoBlanks)
+	p := helium.NewParser().NoBlanks(true)
 
 	doc, err := p.Parse(context.Background(), []byte(src))
 	if err != nil {

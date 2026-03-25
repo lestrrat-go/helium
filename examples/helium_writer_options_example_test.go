@@ -16,7 +16,7 @@ func Example_helium_writer_options() {
 ]>
 <root><item>hello</item><empty/></root>`
 
-	doc, err := helium.Parse(context.Background(), []byte(src))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(src))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

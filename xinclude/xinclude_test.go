@@ -15,7 +15,7 @@ import (
 
 func parseXML(t *testing.T, s string) *helium.Document {
 	t.Helper()
-	doc, err := helium.Parse(t.Context(), []byte(s))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(s))
 	require.NoError(t, err)
 	return doc
 }
@@ -529,11 +529,10 @@ func TestXIncludeParseFlags(t *testing.T) {
 		},
 	}
 
-	flags := helium.ParseNoXIncNode | helium.ParseNoBaseFix
-
 	count, err := xinclude.NewProcessor().
 		Resolver(resolver).
-		ParseFlags(flags).
+		NoXIncludeMarkers().
+		NoBaseFixup().
 		Process(t.Context(), doc)
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
@@ -621,7 +620,7 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 			data, err := os.ReadFile(docPath) //nolint:gosec // reading test data file from testdata directory
 			require.NoError(t, err)
 
-			doc, err := helium.Parse(t.Context(), data)
+			doc, err := helium.NewParser().Parse(t.Context(), data)
 			require.NoError(t, err, "parsing %s", name)
 
 			_, procErr := xinclude.NewProcessor().
@@ -672,7 +671,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			data, err := os.ReadFile(docPath) //nolint:gosec // reading test data file from testdata directory
 			require.NoError(t, err)
 
-			doc, err := helium.Parse(t.Context(), data)
+			doc, err := helium.NewParser().Parse(t.Context(), data)
 			require.NoError(t, err, "parsing %s", name)
 
 			_, err = xinclude.NewProcessor().
@@ -707,7 +706,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 			data, err := os.ReadFile(docPath) //nolint:gosec // reading test data file
 			require.NoError(t, err)
 
-			doc, err := helium.Parse(t.Context(), data)
+			doc, err := helium.NewParser().Parse(t.Context(), data)
 			require.NoError(t, err, "parsing %s", tc.name)
 
 			_, err = xinclude.NewProcessor().
@@ -961,9 +960,7 @@ func TestXIncludeEntityMerge(t *testing.T) {
 func TestXIncludeEntityMergeConflict(t *testing.T) {
 	// Target and included document both define the same entity with different content.
 	// Target's definition should win (first-definition-wins) and warning should fire.
-	parser := helium.NewParser()
-	parser.SetOption(helium.ParseDTDLoad)
-	doc, err := parser.Parse(t.Context(), []byte(`<?xml version="1.0"?>
+	doc, err := helium.NewParser().DTDLoad(true).Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ENTITY greeting "target-value">
 ]>

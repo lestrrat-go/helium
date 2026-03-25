@@ -14,8 +14,7 @@ func TestMaxDepthExceeded(t *testing.T) {
 	// 10 nested <a> elements, limit set to 5
 	input := []byte(strings.Repeat("<a>", 10) + strings.Repeat("</a>", 10))
 
-	p := helium.NewParser()
-	p.SetMaxDepth(5)
+	p := helium.NewParser().MaxDepth(5)
 
 	_, err := p.Parse(context.Background(), input)
 	require.Error(t, err)
@@ -26,8 +25,7 @@ func TestMaxDepthWithinLimit(t *testing.T) {
 	// 5 nested <a> elements, limit set to 10
 	input := []byte(strings.Repeat("<a>", 5) + "hello" + strings.Repeat("</a>", 5))
 
-	p := helium.NewParser()
-	p.SetMaxDepth(10)
+	p := helium.NewParser().MaxDepth(10)
 
 	doc, err := p.Parse(context.Background(), input)
 	require.NoError(t, err)
@@ -38,8 +36,7 @@ func TestMaxDepthExactLimit(t *testing.T) {
 	// 5 nested <a> elements, limit set to exactly 5
 	input := []byte(strings.Repeat("<a>", 5) + "hello" + strings.Repeat("</a>", 5))
 
-	p := helium.NewParser()
-	p.SetMaxDepth(5)
+	p := helium.NewParser().MaxDepth(5)
 
 	doc, err := p.Parse(context.Background(), input)
 	require.NoError(t, err)
@@ -62,8 +59,7 @@ func TestMaxDepthParseReader(t *testing.T) {
 	// Verify max depth is enforced via ParseReader too
 	input := strings.Repeat("<a>", 10) + strings.Repeat("</a>", 10)
 
-	p := helium.NewParser()
-	p.SetMaxDepth(5)
+	p := helium.NewParser().MaxDepth(5)
 
 	_, err := p.ParseReader(context.Background(), bytes.NewReader([]byte(input)))
 	require.Error(t, err)

@@ -11,7 +11,7 @@ import (
 func Example_xpath_must_compile() {
 	expr := xpath1.MustCompile("count(child::*)")
 
-	doc, err := helium.Parse(context.Background(), []byte(`<root><a/><b/></root>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root><a/><b/></root>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

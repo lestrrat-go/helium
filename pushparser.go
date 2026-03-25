@@ -103,7 +103,7 @@ type PushParser struct {
 // NewPushParser creates a PushParser using the given Parser's configuration.
 // The parser runs in a background goroutine, reading from an internal buffer
 // as data is pushed.
-func (p *Parser) NewPushParser(ctx context.Context) *PushParser {
+func (p Parser) NewPushParser(ctx context.Context) *PushParser {
 	stream := newPushStream()
 	pp := &PushParser{
 		stream: stream,

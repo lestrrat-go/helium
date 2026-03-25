@@ -63,9 +63,7 @@ func Unmarshal(data []byte, v any) error {
 		return io.EOF
 	}
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseLenientXMLDecl)
-	p.SetMaxDepth(maxParseDepth)
+	p := helium.NewParser().LenientXMLDecl(true).MaxDepth(maxParseDepth)
 	doc, err := p.Parse(context.Background(), trimmed)
 	if err != nil {
 		// helium's lenient mode is still stricter than stdlib for some

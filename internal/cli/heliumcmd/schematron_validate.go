@@ -149,7 +149,7 @@ func (c *schematronValidateCommand) processInput(ctx context.Context, cfg *schem
 
 	p := helium.NewParser()
 	if !input.stdin {
-		p.SetBaseURI(input.name)
+		p = p.BaseURI(input.name)
 	}
 	doc, err := p.Parse(ctx, buf)
 	if cfg.timing {

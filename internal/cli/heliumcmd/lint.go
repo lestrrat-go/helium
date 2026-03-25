@@ -28,15 +28,18 @@ const (
 )
 
 type config struct {
-	parseOptions helium.ParseOption
+	parser helium.Parser
 
-	doXInclude bool
-	c14nMode   int
-	schemaFile string
-	xpathExpr  string
-	catalogs   bool
-	noCatalogs bool
-	pathDirs   string
+	doXInclude     bool
+	noXIncNode     bool
+	noBaseFixup    bool
+	dtdValid       bool
+	c14nMode       int
+	schemaFile     string
+	xpathExpr      string
+	catalogs       bool
+	noCatalogs     bool
+	pathDirs       string
 
 	noout      bool
 	format     bool
@@ -196,6 +199,7 @@ func (c *command) showUsage() {
 
 func (c *command) parseArgs(args []string) (*config, []string) {
 	cfg := &config{
+		parser: helium.NewParser(),
 		pretty: -1,
 		repeat: 1,
 	}
@@ -211,37 +215,36 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 		case "--version":
 			cfg.version = true
 		case "--recover":
-			cfg.parseOptions.Set(helium.ParseRecover)
+			cfg.parser = cfg.parser.Recover(true)
 		case "--noent":
-			cfg.parseOptions.Set(helium.ParseNoEnt)
+			cfg.parser = cfg.parser.NoEnt(true)
 		case "--loaddtd":
-			cfg.parseOptions.Set(helium.ParseDTDLoad)
+			cfg.parser = cfg.parser.DTDLoad(true)
 		case "--dtdattr":
-			cfg.parseOptions.Set(helium.ParseDTDAttr)
-			cfg.parseOptions.Set(helium.ParseDTDLoad)
+			cfg.parser = cfg.parser.DTDAttr(true)
 		case "--valid":
-			cfg.parseOptions.Set(helium.ParseDTDValid)
-			cfg.parseOptions.Set(helium.ParseDTDLoad)
+			cfg.parser = cfg.parser.DTDValid(true)
+			cfg.dtdValid = true
 		case "--nowarning":
-			cfg.parseOptions.Set(helium.ParseNoWarning)
+			cfg.parser = cfg.parser.NoWarning(true)
 		case "--pedantic":
-			cfg.parseOptions.Set(helium.ParsePedantic)
+			cfg.parser = cfg.parser.Pedantic(true)
 		case "--noblanks":
-			cfg.parseOptions.Set(helium.ParseNoBlanks)
+			cfg.parser = cfg.parser.NoBlanks(true)
 		case "--nsclean":
-			cfg.parseOptions.Set(helium.ParseNsClean)
+			cfg.parser = cfg.parser.NsClean(true)
 		case "--nocdata":
-			cfg.parseOptions.Set(helium.ParseNoCDATA)
+			cfg.parser = cfg.parser.NoCDATA(true)
 		case "--nonet":
-			cfg.parseOptions.Set(helium.ParseNoNet)
+			cfg.parser = cfg.parser.NoNet(true)
 		case "--huge":
-			cfg.parseOptions.Set(helium.ParseHuge)
+			cfg.parser = cfg.parser.Huge(true)
 		case "--noenc":
-			cfg.parseOptions.Set(helium.ParseIgnoreEnc)
+			cfg.parser = cfg.parser.IgnoreEnc(true)
 		case "--noxincludenode":
-			cfg.parseOptions.Set(helium.ParseNoXIncNode)
+			cfg.noXIncNode = true
 		case "--nofixup-base-uris":
-			cfg.parseOptions.Set(helium.ParseNoBaseFix)
+			cfg.noBaseFixup = true
 		case "--noout":
 			cfg.noout = true
 		case "--format":
@@ -254,7 +257,7 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 			cfg.c14nMode = 3
 		case "--xinclude":
 			cfg.doXInclude = true
-			cfg.parseOptions.Set(helium.ParseXInclude)
+			cfg.parser = cfg.parser.XInclude(true)
 		case "--catalogs":
 			cfg.catalogs = true
 		case "--nocatalogs":
@@ -385,13 +388,12 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 			t0 = time.Now()
 		}
 
-		p := helium.NewParser()
-		p.SetOption(cfg.parseOptions)
+		p := cfg.parser
 		if !input.stdin {
-			p.SetBaseURI(input.name)
+			p = p.BaseURI(input.name)
 		}
 		if cat != nil {
-			p.SetCatalog(cat)
+			p = p.Catalog(cat)
 		}
 
 		doc, err = p.Parse(ctx, buf)
@@ -415,7 +417,13 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		if cfg.timing {
 			t0 = time.Now()
 		}
-		xiProc := xinclude.NewProcessor().ParseFlags(cfg.parseOptions)
+		xiProc := xinclude.NewProcessor()
+		if cfg.noXIncNode {
+			xiProc = xiProc.NoXIncludeMarkers()
+		}
+		if cfg.noBaseFixup {
+			xiProc = xiProc.NoBaseFixup()
+		}
 		if !input.stdin {
 			xiProc = xiProc.BaseURI(input.name)
 		}
@@ -443,7 +451,7 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		}
 	}
 
-	if cfg.parseOptions.IsSet(helium.ParseDTDValid) && err != nil {
+	if cfg.dtdValid && err != nil {
 		return ExitValidation
 	}
 

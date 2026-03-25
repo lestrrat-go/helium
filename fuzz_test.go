@@ -20,7 +20,7 @@ func FuzzParse(f *testing.F) {
 		if len(data) > 1<<20 {
 			return
 		}
-		_, _ = helium.Parse(t.Context(), data)
+		_, _ = helium.NewParser().Parse(t.Context(), data)
 	})
 }
 
@@ -33,7 +33,7 @@ func FuzzParseRoundtrip(f *testing.F) {
 		if len(data) > 1<<20 {
 			return
 		}
-		doc, err := helium.Parse(t.Context(), data)
+		doc, err := helium.NewParser().Parse(t.Context(), data)
 		if err != nil {
 			return
 		}
@@ -43,7 +43,7 @@ func FuzzParseRoundtrip(f *testing.F) {
 		err = w.WriteDoc(&buf, doc)
 		require.NoError(t, err)
 
-		_, err = helium.Parse(t.Context(), buf.Bytes())
+		_, err = helium.NewParser().Parse(t.Context(), buf.Bytes())
 		require.NoError(t, err)
 	})
 }

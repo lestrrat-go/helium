@@ -11,7 +11,7 @@ import (
 func Example_xpath3_with_namespaces() {
 	const src = `<root xmlns:ns="http://example.com/ns"><ns:item>one</ns:item><ns:item>two</ns:item></root>`
 
-	doc, err := helium.Parse(context.Background(), []byte(src))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(src))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

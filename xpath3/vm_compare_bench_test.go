@@ -16,7 +16,7 @@ const (
 
 func benchmarkDoc(b *testing.B) *helium.Document {
 	b.Helper()
-	doc, err := helium.Parse(b.Context(), []byte(testXML))
+	doc, err := helium.NewParser().Parse(b.Context(), []byte(testXML))
 	require.NoError(b, err)
 	return doc
 }

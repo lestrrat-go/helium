@@ -375,9 +375,7 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 	// preserves the infoset for XSLT document() loads over the W3C source tree.
 	data = bytes.ReplaceAll(data, []byte("\uFFFD"), []byte("&#xFFFD;"))
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseDTDLoad | helium.ParseDTDAttr | helium.ParseNoEnt | helium.ParseNoBaseFix)
-	p.SetBaseURI(resolvedURI)
+	p := helium.NewParser().DTDLoad(true).DTDAttr(true).NoEnt(true).NoBaseFix(true).BaseURI(resolvedURI)
 	doc, err := p.Parse(ctx, data)
 	if err != nil {
 		return nil, dynamicError(errCodeFODC0002, "cannot parse document %q: %v", uri, err)

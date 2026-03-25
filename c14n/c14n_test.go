@@ -35,11 +35,7 @@ func parseTestDoc(t *testing.T, path string) *helium.Document {
 	data, err := os.ReadFile(path)
 	require.NoError(t, err, "reading test file %s", path)
 
-	p := helium.NewParser()
-	p.SetOption(helium.ParseNoEnt)
-	p.SetOption(helium.ParseDTDLoad)
-	p.SetOption(helium.ParseDTDAttr)
-	p.SetBaseURI(path)
+	p := helium.NewParser().NoEnt(true).DTDLoad(true).DTDAttr(true).BaseURI(path)
 
 	doc, err := p.Parse(t.Context(), data)
 	require.NoError(t, err, "parsing test file %s", path)
@@ -62,10 +58,7 @@ func parseXPathFile(t *testing.T, path string) (string, map[string]string) {
 	require.NoError(t, err, "reading xpath file %s", path)
 
 	// Parse the .xpath file as XML
-	p := helium.NewParser()
-	p.SetOption(helium.ParseNoEnt)
-	p.SetOption(helium.ParseDTDLoad)
-	p.SetOption(helium.ParseDTDAttr)
+	p := helium.NewParser().NoEnt(true).DTDLoad(true).DTDAttr(true)
 	doc, err := p.Parse(t.Context(), data)
 	require.NoError(t, err, "parsing xpath file %s", path)
 
@@ -288,7 +281,7 @@ func TestC14N11WithoutComments(t *testing.T) {
 func TestRelativeNamespaceURIRejected(t *testing.T) {
 	// C14N spec requires failure on relative namespace URIs.
 	xml := `<?xml version="1.0"?><root xmlns:bad="relative/uri"><child/></root>`
-	doc, err := helium.Parse(t.Context(), []byte(xml))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
 	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
@@ -298,7 +291,7 @@ func TestRelativeNamespaceURIRejected(t *testing.T) {
 
 func TestAbsoluteNamespaceURIAccepted(t *testing.T) {
 	xml := `<?xml version="1.0"?><root xmlns:ok="http://example.com"><child/></root>`
-	doc, err := helium.Parse(t.Context(), []byte(xml))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
 	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
@@ -308,7 +301,7 @@ func TestAbsoluteNamespaceURIAccepted(t *testing.T) {
 func TestEmptyNamespaceURIAccepted(t *testing.T) {
 	// Empty namespace URI (default namespace undeclaration) must be allowed.
 	xml := `<?xml version="1.0"?><root xmlns="http://example.com"><child xmlns=""/></root>`
-	doc, err := helium.Parse(t.Context(), []byte(xml))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 
 	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)

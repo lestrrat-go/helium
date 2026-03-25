@@ -13,7 +13,7 @@ func TestChildren(t *testing.T) {
 	t.Run("direct children", func(t *testing.T) {
 		t.Parallel()
 
-		doc, err := helium.Parse(t.Context(), []byte(`<root><a/><b/><c/></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/><b/><c/></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
@@ -27,7 +27,7 @@ func TestChildren(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		t.Parallel()
 
-		doc, err := helium.Parse(t.Context(), []byte(`<root/>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
 		var count int
@@ -50,7 +50,7 @@ func TestChildren(t *testing.T) {
 	t.Run("break early", func(t *testing.T) {
 		t.Parallel()
 
-		doc, err := helium.Parse(t.Context(), []byte(`<root><a/><b/><c/></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/><b/><c/></root>`))
 		require.NoError(t, err)
 
 		var names []string
@@ -66,7 +66,7 @@ func TestChildren(t *testing.T) {
 	t.Run("mixed node types", func(t *testing.T) {
 		t.Parallel()
 
-		doc, err := helium.Parse(t.Context(), []byte(`<root>text<a/><!--comment--></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>text<a/><!--comment--></root>`))
 		require.NoError(t, err)
 
 		var types []helium.ElementType
@@ -87,7 +87,7 @@ func TestDescendants(t *testing.T) {
 	t.Run("flat children", func(t *testing.T) {
 		t.Parallel()
 
-		doc, err := helium.Parse(t.Context(), []byte(`<root><a/><b/></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/><b/></root>`))
 		require.NoError(t, err)
 
 		var names []string
@@ -100,7 +100,7 @@ func TestDescendants(t *testing.T) {
 	t.Run("nested pre-order", func(t *testing.T) {
 		t.Parallel()
 
-		doc, err := helium.Parse(t.Context(), []byte(`<root><a><b/></a><c/></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a><b/></a><c/></root>`))
 		require.NoError(t, err)
 
 		var names []string
@@ -115,7 +115,7 @@ func TestDescendants(t *testing.T) {
 	t.Run("excludes self", func(t *testing.T) {
 		t.Parallel()
 
-		doc, err := helium.Parse(t.Context(), []byte(`<root><a/></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/></root>`))
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
@@ -137,7 +137,7 @@ func TestDescendants(t *testing.T) {
 	t.Run("break early", func(t *testing.T) {
 		t.Parallel()
 
-		doc, err := helium.Parse(t.Context(), []byte(`<root><a><b/></a><c/></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a><b/></a><c/></root>`))
 		require.NoError(t, err)
 
 		var names []string
@@ -159,7 +159,7 @@ func TestChildElements(t *testing.T) {
 	t.Run("filters non-elements", func(t *testing.T) {
 		t.Parallel()
 
-		doc, err := helium.Parse(t.Context(), []byte(`<root>text<a/><!--comment--><b/></root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>text<a/><!--comment--><b/></root>`))
 		require.NoError(t, err)
 
 		var names []string
@@ -172,7 +172,7 @@ func TestChildElements(t *testing.T) {
 	t.Run("empty when only text", func(t *testing.T) {
 		t.Parallel()
 
-		doc, err := helium.Parse(t.Context(), []byte(`<root>hello</root>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>hello</root>`))
 		require.NoError(t, err)
 
 		var count int

@@ -9,7 +9,7 @@ import (
 )
 
 func Example_helium_parse_reader() {
-	doc, err := helium.ParseReader(context.Background(), strings.NewReader(`<root><child>ok</child></root>`))
+	doc, err := helium.NewParser().ParseReader(context.Background(), strings.NewReader(`<root><child>ok</child></root>`))
 	if err != nil {
 		fmt.Printf("parse failed: %s\n", err)
 		return

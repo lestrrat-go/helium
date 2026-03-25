@@ -81,19 +81,6 @@ func (p Processor) BaseURI(uri string) Processor {
 	return p
 }
 
-// ParseFlags reads XInclude-related parse flags and configures the
-// processor accordingly. Recognized flags: ParseNoXIncNode, ParseNoBaseFix.
-func (p Processor) ParseFlags(flags helium.ParseOption) Processor {
-	p = p.clone()
-	if flags.IsSet(helium.ParseNoXIncNode) {
-		p.cfg.noMarkers = true
-	}
-	if flags.IsSet(helium.ParseNoBaseFix) {
-		p.cfg.noBaseFixup = true
-	}
-	return p
-}
-
 // WarningHandler sets a callback for non-fatal warnings such as
 // entity definition mismatches during XInclude entity merging.
 func (p Processor) WarningHandler(fn func(msg string)) Processor {
@@ -569,13 +556,10 @@ func (p *processor) loadXMLDoc(ctx context.Context, uri string, substituteEntiti
 }
 
 func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, substituteEntities bool) (*helium.Document, error) {
-	parser := helium.NewParser()
-	opts := helium.ParseDTDLoad
+	parser := helium.NewParser().DTDLoad(true).BaseURI(uri)
 	if substituteEntities {
-		opts |= helium.ParseNoEnt
+		parser = parser.NoEnt(true)
 	}
-	parser.SetOption(opts)
-	parser.SetBaseURI(uri)
 	doc, err := parser.Parse(ctx, data)
 	if err != nil {
 		return nil, fmt.Errorf("xi:include: error parsing %q: %w", uri, err)

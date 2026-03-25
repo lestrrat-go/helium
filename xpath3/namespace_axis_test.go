@@ -15,7 +15,7 @@ const namespaceAxisXML = `<root xmlns="urn:root" xmlns:xlink="http://www.w3.org/
 func parseNamespaceAxisDoc(t *testing.T) *helium.Document {
 	t.Helper()
 
-	doc, err := helium.Parse(t.Context(), []byte(namespaceAxisXML))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(namespaceAxisXML))
 	require.NoError(t, err)
 	return doc
 }

@@ -44,8 +44,7 @@ func Example_sax_parse() {
 
 	// Attach the SAX handler to a parser. When a SAX handler is set,
 	// the parser fires events instead of building a full DOM tree.
-	p := helium.NewParser()
-	p.SetSAXHandler(handler)
+	p := helium.NewParser().SAXHandler(handler)
 
 	// Parse triggers the SAX events. The returned document may be nil
 	// or minimal when using SAX mode, since the purpose is event-driven

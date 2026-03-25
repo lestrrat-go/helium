@@ -22,7 +22,7 @@ func Example_xslt3_compiler_builder() {
 
 	ctx := context.Background()
 
-	doc, err := helium.Parse(ctx, []byte(stylesheetSrc))
+	doc, err := helium.NewParser().Parse(ctx, []byte(stylesheetSrc))
 	if err != nil {
 		fmt.Printf("parse error: %s\n", err)
 		return

@@ -38,7 +38,7 @@ func (c *compiler) compileUsePackage(elem *helium.Element) error {
 		return fmt.Errorf("xsl:use-package: cannot read package %q: %w", pkgName, err)
 	}
 
-	doc, err := helium.Parse(c.ctx, data)
+	doc, err := helium.NewParser().Parse(c.ctx, data)
 	if err != nil {
 		return fmt.Errorf("xsl:use-package: cannot parse package %q: %w", pkgName, err)
 	}

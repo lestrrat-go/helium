@@ -217,9 +217,7 @@ func TestDocumentLocatorIDs(t *testing.T) {
 	s.SetOnEndElementNS(sax.EndElementNSFunc(func(_ context.Context, _, _, _ string) error { return nil }))
 	s.SetOnCharacters(sax.CharactersFunc(func(_ context.Context, _ []byte) error { return nil }))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(s)
-	p.SetBaseURI(baseURI)
+	p := helium.NewParser().SAXHandler(s).BaseURI(baseURI)
 
 	_, err := p.Parse(t.Context(), []byte(`<root/>`))
 	require.NoError(t, err, "Parse should succeed")
@@ -263,8 +261,7 @@ func TestSAXEvents(t *testing.T) {
 		require.NoError(t, err, "os.ReadFile should succeed")
 
 		out := bytes.Buffer{}
-		p := helium.NewParser()
-		p.SetSAXHandler(newEventEmitter(&out))
+		p := helium.NewParser().SAXHandler(newEventEmitter(&out))
 
 		_, err = p.Parse(t.Context(), in)
 		if err != nil {

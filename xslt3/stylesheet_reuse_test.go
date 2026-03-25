@@ -83,7 +83,7 @@ func TestStylesheetReuseConcurrent(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	source, err := helium.Parse(t.Context(), []byte(`<root/>`))
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
 	require.NoError(t, err)
 
 	// Run multiple transforms concurrently on the same stylesheet.

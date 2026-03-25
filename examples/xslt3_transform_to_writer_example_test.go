@@ -30,7 +30,7 @@ func Example_xslt3_transform_to_writer() {
 		return
 	}
 
-	sourceDoc, err := helium.Parse(ctx, []byte(sourceSrc))
+	sourceDoc, err := helium.NewParser().Parse(ctx, []byte(sourceSrc))
 	if err != nil {
 		fmt.Printf("parse error: %s\n", err)
 		return

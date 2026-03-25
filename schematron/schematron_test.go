@@ -150,7 +150,7 @@ func TestGoldenFiles(t *testing.T) {
 			} else {
 				xmlData, err := os.ReadFile(tc.xmlPath)
 				require.NoError(t, err)
-				doc, err := helium.Parse(t.Context(), xmlData)
+				doc, err := helium.NewParser().Parse(t.Context(), xmlData)
 				require.NoError(t, err, "XML parse failed for %s", tc.xmlPath)
 
 				filename := "./test/schematron/" + tc.xmlBase
@@ -196,14 +196,14 @@ func TestWithQuiet(t *testing.T) {
 </schema>`
 
 	// Compile the schema once for all sub-tests.
-	sDoc, err := helium.Parse(t.Context(), []byte(sct))
+	sDoc, err := helium.NewParser().Parse(t.Context(), []byte(sct))
 	require.NoError(t, err)
 	schema, err := schematron.NewCompiler().Compile(t.Context(), sDoc)
 	require.NoError(t, err)
 
 	t.Run("failing document", func(t *testing.T) {
 		// Without quiet: per-error lines + "fails to validate"
-		doc, err := helium.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
 		require.NoError(t, err)
 
 		err = schematron.NewValidator(schema).Filename("test.xml").Validate(t.Context(), doc)
@@ -212,7 +212,7 @@ func TestWithQuiet(t *testing.T) {
 		require.Contains(t, err.Error(), "fails to validate")
 
 		// With quiet: only "fails to validate" line, no per-error lines
-		doc2, err := helium.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
+		doc2, err := helium.NewParser().Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
 		require.NoError(t, err)
 
 		quietErr := schematron.NewValidator(schema).Filename("test.xml").Quiet().Validate(t.Context(), doc2)
@@ -230,20 +230,20 @@ func TestWithQuiet(t *testing.T) {
     </rule>
   </pattern>
 </schema>`
-		rDoc, err := helium.Parse(t.Context(), []byte(reportOnly))
+		rDoc, err := helium.NewParser().Parse(t.Context(), []byte(reportOnly))
 		require.NoError(t, err)
 		rSchema, err := schematron.NewCompiler().Compile(t.Context(), rDoc)
 		require.NoError(t, err)
 
 		// Without quiet: report fires, "fails to validate"
-		doc, err := helium.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
 		require.NoError(t, err)
 		err = schematron.NewValidator(rSchema).Filename("test.xml").Validate(t.Context(), doc)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "CCC is present")
 
 		// With quiet: report suppressed, but since the report fired, it still "fails to validate"
-		doc2, err := helium.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
+		doc2, err := helium.NewParser().Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
 		require.NoError(t, err)
 		quietErr := schematron.NewValidator(rSchema).Filename("test.xml").Quiet().Validate(t.Context(), doc2)
 		require.Error(t, quietErr)
@@ -262,7 +262,7 @@ func TestWithErrorHandler(t *testing.T) {
   </pattern>
 </schema>`
 
-	sDoc, err := helium.Parse(t.Context(), []byte(sct))
+	sDoc, err := helium.NewParser().Parse(t.Context(), []byte(sct))
 	require.NoError(t, err)
 	schema, err := schematron.NewCompiler().Compile(t.Context(), sDoc)
 	require.NoError(t, err)
@@ -273,7 +273,7 @@ func TestWithErrorHandler(t *testing.T) {
 			errors = append(errors, e)
 		})
 
-		doc, err := helium.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
 		require.NoError(t, err)
 
 		err = schematron.NewValidator(schema).
@@ -301,7 +301,7 @@ func TestWithErrorHandler(t *testing.T) {
 			errors = append(errors, e)
 		})
 
-		doc, err := helium.Parse(t.Context(), []byte(`<AAA name="x"><BBB/></AAA>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<AAA name="x"><BBB/></AAA>`))
 		require.NoError(t, err)
 
 		err = schematron.NewValidator(schema).
@@ -320,7 +320,7 @@ func TestWithErrorHandler(t *testing.T) {
 			errors = append(errors, e)
 		})
 
-		doc, err := helium.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
 		require.NoError(t, err)
 
 		err = schematron.NewValidator(schema).

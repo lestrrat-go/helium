@@ -64,7 +64,7 @@ const (
 )
 
 type parserCtx struct {
-	options ParseOption
+	options parseOption
 	// ctx.encoding contains the explicit encoding. ctx.detectedEncoding
 	// contains the encoding as detected by inspecting BOM, etc.
 	// It is important to differentiate between the two, otherwise
@@ -109,7 +109,7 @@ type parserCtx struct {
 	elemidx     int
 	sizeentcopy int64 // cumulative entity expansion bytes (non-entity-specific)
 	inputSize   int64 // total input document size
-	maxAmpl     int   // max amplification factor (default 5, 0 = disabled via ParseHuge)
+	maxAmpl     int   // max amplification factor (default 5, 0 = disabled via parseHuge)
 	// nbentities int
 	inputTab     inputStack
 	cachedCursor strcursor.Cursor // cached result of getCursor(); invalidated on push/pop
@@ -372,7 +372,7 @@ func (ctx *parserCtx) currentInputID() any {
 	return ctx.inputTab.PeekOne()
 }
 
-func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
+func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.pushInput(strcursor.NewByteCursor(in))
 	ctx.detectedEncoding = encUTF8
 	ctx.encoding = ""
@@ -393,25 +393,25 @@ func (ctx *parserCtx) init(p *Parser, in io.Reader) error {
 		ctx.charBufferSize = p.charBufferSize
 		ctx.options = p.options
 		ctx.catalog = p.catalog
-		if ctx.options.IsSet(ParseNoBlanks) {
+		if ctx.options.IsSet(parseNoBlanks) {
 			ctx.keepBlanks = false
 		}
-		if ctx.options.IsSet(ParsePedantic) {
+		if ctx.options.IsSet(parsePedantic) {
 			ctx.pedantic = true
 		}
-		if ctx.options.IsSet(ParseDTDLoad) {
+		if ctx.options.IsSet(parseDTDLoad) {
 			ctx.loadsubset.Set(DetectIDs)
 		}
-		if ctx.options.IsSet(ParseDTDAttr) {
+		if ctx.options.IsSet(parseDTDAttr) {
 			ctx.loadsubset.Set(CompleteAttrs)
 		}
-		if ctx.options.IsSet(ParseNoEnt) {
+		if ctx.options.IsSet(parseNoEnt) {
 			ctx.replaceEntities = true
 		}
-		if ctx.options.IsSet(ParseHuge) {
+		if ctx.options.IsSet(parseHuge) {
 			ctx.maxAmpl = 0
 		}
-		if ctx.options.IsSet(ParseSkipIDs) {
+		if ctx.options.IsSet(parseSkipIDs) {
 			ctx.loadsubset.Set(SkipIDs)
 		}
 		ctx.maxElemDepth = p.maxDepth
@@ -508,12 +508,12 @@ func (pctx *parserCtx) errorAtLevel(ctx context.Context, err error, level ErrorL
 	if s := pctx.sax; s != nil {
 		switch level {
 		case ErrorLevelWarning:
-			if !pctx.options.IsSet(ParseNoWarning) {
+			if !pctx.options.IsSet(parseNoWarning) {
 				_ = s.Warning(ctx, e)
 			}
 		default:
-			// Fire the SAX Error callback unless ParseNoError is set.
-			if !pctx.options.IsSet(ParseNoError) {
+			// Fire the SAX Error callback unless parseNoError is set.
+			if !pctx.options.IsSet(parseNoError) {
 				_ = s.Error(ctx, e)
 			}
 		}
@@ -528,7 +528,7 @@ func (pctx *parserCtx) errorAtLevel(ctx context.Context, err error, level ErrorL
 // returns an error, returns the ErrParseError.
 func (pctx *parserCtx) warning(ctx context.Context, format string, args ...any) error {
 	msg := fmt.Sprintf(format, args...)
-	if s := pctx.sax; s != nil && !pctx.options.IsSet(ParseNoWarning) {
+	if s := pctx.sax; s != nil && !pctx.options.IsSet(parseNoWarning) {
 		e := ErrParseError{Err: errors.New(msg), Level: ErrorLevelWarning, File: pctx.baseURI}
 		if cur := pctx.getCursor(); cur != nil {
 			e.Column = cur.Column()
@@ -939,7 +939,7 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 		panic("did not get rune cursor")
 	}
 
-	recover := pctx.options.IsSet(ParseRecover)
+	recover := pctx.options.IsSet(parseRecover)
 
 	for !cur.Done() && !pctx.stopped {
 		if cur.HasPrefixString("</") {
@@ -1003,7 +1003,7 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 }
 
 // skipToRecoverPoint advances the cursor past unrecoverable content to the
-// next '<' character or EOF, for re-synchronization in ParseRecover mode.
+// next '<' character or EOF, for re-synchronization in parseRecover mode.
 func (ctx *parserCtx) skipToRecoverPoint() {
 	cur := ctx.getCursor()
 	if cur == nil {
@@ -1238,8 +1238,8 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			// during attribute value parsing (replaceEntities forced true in
 			// parseAttribute for namespace attrs), so no post-processing needed.
 
-			// ParseNsClean: skip redundant namespace declarations
-			if pctx.options.IsSet(ParseNsClean) && pctx.nsTab.Lookup("") == attvalue {
+			// parseNsClean: skip redundant namespace declarations
+			if pctx.options.IsSet(parseNsClean) && pctx.nsTab.Lookup("") == attvalue {
 				goto SkipDefaultNS
 			}
 			pctx.pushNS("", attvalue)
@@ -1294,14 +1294,14 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			// element is valid shadowing, not a duplicate.
 			existingURI = pctx.nsTab.LookupInTopN(attname, nbNs)
 			if existingURI != "" {
-				if pctx.options.IsSet(ParseNsClean) && existingURI == attvalue {
+				if pctx.options.IsSet(parseNsClean) && existingURI == attvalue {
 					goto SkipNS
 				}
 				return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
 			}
-			// ParseNsClean: skip if an ancestor already binds this prefix
+			// parseNsClean: skip if an ancestor already binds this prefix
 			// to the same URI (redundant redeclaration).
-			if pctx.options.IsSet(ParseNsClean) && pctx.nsTab.Lookup(attname) == attvalue {
+			if pctx.options.IsSet(parseNsClean) && pctx.nsTab.Lookup(attname) == attvalue {
 				goto SkipNS
 			}
 			pctx.pushNS(attname, attvalue)
@@ -1333,7 +1333,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 
 	// Attributes defaulting: apply DTD-declared default attribute values.
 	// NOTE: #FIXED/#REQUIRED validation and element content model checking
-	// are done post-parse via validateDocument() when ParseDTDValid is set.
+	// are done post-parse via validateDocument() when parseDTDValid is set.
 	// ID/IDREF uniqueness checks are done post-parse via validateDocument().
 	if len(pctx.attsDefault) > 0 {
 		var elemName string
@@ -1817,7 +1817,7 @@ func (pctx *parserCtx) parseXMLDecl(ctx context.Context) error {
 		return errors.New("blank needed after '<?xml'")
 	}
 
-	if pctx.options.IsSet(ParseLenientXMLDecl) {
+	if pctx.options.IsSet(parseLenientXMLDecl) {
 		return pctx.parseXMLDeclLenient(ctx)
 	}
 
@@ -1843,7 +1843,7 @@ func (pctx *parserCtx) parseXMLDecl(ctx context.Context) error {
 
 	// we *may* have encoding decl
 	v, err = pctx.parseEncodingDecl(ctx)
-	if err == nil && !pctx.options.IsSet(ParseIgnoreEnc) {
+	if err == nil && !pctx.options.IsSet(parseIgnoreEnc) {
 		pctx.encoding = v
 	}
 
@@ -1891,7 +1891,7 @@ func (pctx *parserCtx) parseXMLDeclLenient(ctx context.Context) error {
 		}
 
 		if v, err := pctx.parseEncodingDecl(ctx); err == nil {
-			if !pctx.options.IsSet(ParseIgnoreEnc) {
+			if !pctx.options.IsSet(parseIgnoreEnc) {
 				pctx.encoding = v
 			}
 			continue
@@ -1923,7 +1923,7 @@ func (pctx *parserCtx) parseXMLDeclFromCursor(ctx context.Context) error {
 		return errors.New("blank needed after '<?xml'")
 	}
 
-	if pctx.options.IsSet(ParseLenientXMLDecl) {
+	if pctx.options.IsSet(parseLenientXMLDecl) {
 		return pctx.parseXMLDeclFromCursorLenient(ctx)
 	}
 
@@ -1952,7 +1952,7 @@ func (pctx *parserCtx) parseXMLDeclFromCursor(ctx context.Context) error {
 
 	// encoding (optional)
 	ev, err := pctx.parseEncodingDeclFromCursor(ctx)
-	if err == nil && !pctx.options.IsSet(ParseIgnoreEnc) {
+	if err == nil && !pctx.options.IsSet(parseIgnoreEnc) {
 		pctx.encoding = ev
 	}
 
@@ -2017,7 +2017,7 @@ func (pctx *parserCtx) parseXMLDeclFromCursorLenient(ctx context.Context) error 
 		}
 
 		if ev, err := pctx.parseEncodingDeclFromCursor(ctx); err == nil {
-			if !pctx.options.IsSet(ParseIgnoreEnc) {
+			if !pctx.options.IsSet(parseIgnoreEnc) {
 				pctx.encoding = ev
 			}
 			continue
@@ -2605,7 +2605,7 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 
 		i++
 	}
-	if i > MaxNameLength && !pctx.options.IsSet(ParseHuge) {
+	if i > MaxNameLength && !pctx.options.IsSet(parseHuge) {
 		err = pctx.error(ctx, ErrNameTooLong)
 		return
 	}
@@ -2787,7 +2787,7 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 		}
 		i++
 	}
-	if i > MaxNameLength && !pctx.options.IsSet(ParseHuge) {
+	if i > MaxNameLength && !pctx.options.IsSet(parseHuge) {
 		err = pctx.error(ctx, ErrNameTooLong)
 		return
 	}
@@ -2917,7 +2917,7 @@ func (pctx *parserCtx) parseCDSect(ctx context.Context) error {
 	}
 
 	if s := pctx.sax; s != nil && !pctx.disableSAX {
-		if pctx.options.IsSet(ParseNoCDATA) {
+		if pctx.options.IsSet(parseNoCDATA) {
 			if err := pctx.deliverCharacters(ctx, s.Characters, []byte(str)); err != nil {
 				return err
 			}
@@ -3806,7 +3806,7 @@ func (pctx *parserCtx) parseElementChildrenContentDeclPriv(ctx context.Context, 
 	}
 
 	maxDepth := 128
-	if pctx.options.IsSet(ParseHuge) {
+	if pctx.options.IsSet(parseHuge) {
 		maxDepth = 2048
 	}
 	if depth > maxDepth {
@@ -4920,7 +4920,7 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 
 	// NOTE: Multiple-ID-per-element check and namespace-default attribute
 	// ordering are handled post-parse via validateDocument() when
-	// ParseDTDValid is set.
+	// parseDTDValid is set.
 
 	if err := dtd.AddChild(attr); err != nil {
 		return nil, err
@@ -5255,7 +5255,7 @@ func (pctx *parserCtx) parseExternalID(ctx context.Context) (string, string, err
 }
 
 func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, externalID string) (Node, error) {
-	if pctx.options.IsSet(ParseNoXXE) {
+	if pctx.options.IsSet(parseNoXXE) {
 		return nil, nil
 	}
 
@@ -5383,10 +5383,10 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 				if uri != "" {
 					// Track the entity base URI on each top-level node
 					// from the external entity so that base-uri() can
-					// resolve it even when ParseNoBaseFix suppresses
+					// resolve it even when parseNoBaseFix suppresses
 					// synthetic xml:base attributes.
 					e.baseDocNode().entityBaseURI = uri
-					if !pctx.options.IsSet(ParseNoBaseFix) {
+					if !pctx.options.IsSet(parseNoBaseFix) {
 						if elem, ok := e.(*Element); ok {
 							if _, exists := elem.GetAttributeNS("base", XMLNamespace); !exists {
 								_ = elem.SetAttributeNS("base", uri, newNamespace("xml", XMLNamespace))
@@ -5572,7 +5572,7 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 	// far more secure as the parser will only process data coming from
 	// the document entity by default.
 	var parsedEnt Node
-	if (wasChecked == 0 || (ent.firstChild == nil && pctx.options.IsSet(ParseNoEnt))) && (ent.EntityType() != enum.ExternalGeneralParsedEntity || pctx.options.IsSet(ParseNoEnt|ParseDTDValid)) {
+	if (wasChecked == 0 || (ent.firstChild == nil && pctx.options.IsSet(parseNoEnt))) && (ent.EntityType() != enum.ExternalGeneralParsedEntity || pctx.options.IsSet(parseNoEnt|parseDTDValid)) {
 		sizeBefore := pctx.sizeentcopy
 
 		if ent.EntityType() == enum.InternalGeneralEntity {

@@ -8,7 +8,7 @@ import (
 )
 
 func Example_helium_tree_navigation() {
-	doc, err := helium.Parse(context.Background(), []byte(`<root><a/><b/><c/></root>`))
+	doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root><a/><b/><c/></root>`))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)
 		return

@@ -24,12 +24,10 @@ func Example_helium_parse_dtd() {
 ]>
 <root><child>hello</child></root>`
 
-	p := helium.NewParser()
-
-	// ParseDTDAttr tells the parser to apply default attribute values
+	// DTDAttr tells the parser to apply default attribute values
 	// defined in the DTD. Without this option, the "lang" attribute
 	// would not appear on the <child> element.
-	p.SetOption(helium.ParseDTDAttr)
+	p := helium.NewParser().DTDAttr(true)
 
 	doc, err := p.Parse(context.Background(), []byte(src))
 	if err != nil {

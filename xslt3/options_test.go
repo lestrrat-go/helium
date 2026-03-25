@@ -15,7 +15,7 @@ const testSourceXML = `<root/>`
 func compileStylesheetString(t *testing.T, src string) *xslt3.Stylesheet {
 	t.Helper()
 
-	doc, err := helium.Parse(t.Context(), []byte(src))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
 	require.NoError(t, err)
 
 	ss, err := xslt3.CompileStylesheet(t.Context(), doc)
@@ -26,7 +26,7 @@ func compileStylesheetString(t *testing.T, src string) *xslt3.Stylesheet {
 func parseTransformSource(t *testing.T) *helium.Document {
 	t.Helper()
 
-	doc, err := helium.Parse(t.Context(), []byte(testSourceXML))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(testSourceXML))
 	require.NoError(t, err)
 	return doc
 }

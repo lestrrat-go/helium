@@ -498,7 +498,7 @@ func loadParameterDocumentFromFile(ctx context.Context, outDef *OutputDef, baseU
 	if err != nil {
 		return staticError(errCodeXTSE0090, "cannot read parameter-document %q: %v", href, err)
 	}
-	doc, err := helium.Parse(ctx, data)
+	doc, err := helium.NewParser().Parse(ctx, data)
 	if err != nil {
 		return staticError(errCodeXTSE0090, "cannot parse parameter-document %q: %v", href, err)
 	}

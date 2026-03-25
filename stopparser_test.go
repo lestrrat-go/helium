@@ -96,8 +96,7 @@ func TestStopParserInCharacters(t *testing.T) {
 		return nil
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(s)
+	p := helium.NewParser().SAXHandler(s)
 
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "StopParser should not produce an error")
@@ -121,8 +120,7 @@ func TestStopParserInStartElementNS(t *testing.T) {
 		return nil
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(s)
+	p := helium.NewParser().SAXHandler(s)
 
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "StopParser should not produce an error")
@@ -147,8 +145,7 @@ func TestStopParserViaPushParser(t *testing.T) {
 		return nil
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(s)
+	p := helium.NewParser().SAXHandler(s)
 	pp := p.NewPushParser(t.Context())
 	require.NoError(t, pp.Push([]byte(input)))
 	_, err := pp.Close()
@@ -164,8 +161,7 @@ func TestStopParserInStartDocument(t *testing.T) {
 		return nil
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(s)
+	p := helium.NewParser().SAXHandler(s)
 
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "StopParser in StartDocument should not produce an error")
@@ -222,8 +218,7 @@ func TestStopParserReturnsPartialDoc(t *testing.T) {
 		return tb.Reference(ctx, name)
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(wrapper)
+	p := helium.NewParser().SAXHandler(wrapper)
 
 	doc, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err)
@@ -262,8 +257,7 @@ func TestStopParserViaParseReader(t *testing.T) {
 		return nil
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(s)
+	p := helium.NewParser().SAXHandler(s)
 
 	_, err := p.ParseReader(t.Context(), bytes.NewReader([]byte(input)))
 	require.NoError(t, err, "StopParser should not produce an error via ParseReader")
@@ -279,9 +273,7 @@ func TestStopParserInExpandedInternalEntity(t *testing.T) {
 	var seen []string
 	s := newStopParserEntityHandler(&seen, nil)
 
-	p := helium.NewParser()
-	p.SetSAXHandler(s)
-	p.SetOption(helium.ParseNoEnt)
+	p := helium.NewParser().SAXHandler(s).NoEnt(true)
 
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "StopParser should work while expanding internal parsed entities")
@@ -306,9 +298,7 @@ func TestStopParserInExpandedExternalEntity(t *testing.T) {
 		return nil, sax.ErrHandlerUnspecified
 	}))
 
-	p := helium.NewParser()
-	p.SetSAXHandler(s)
-	p.SetOption(helium.ParseNoEnt)
+	p := helium.NewParser().SAXHandler(s).NoEnt(true)
 
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.NoError(t, err, "StopParser should work while expanding external parsed entities")

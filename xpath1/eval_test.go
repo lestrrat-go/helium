@@ -19,7 +19,7 @@ var (
 
 func parseXML(t *testing.T, s string) *helium.Document {
 	t.Helper()
-	doc, err := helium.Parse(t.Context(), []byte(s))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(s))
 	require.NoError(t, err)
 	return doc
 }
