@@ -155,6 +155,14 @@ func (ec *execContext) evaluateAllGlobals() error {
 			if !ok {
 				continue // already evaluated as a dependency
 			}
+			// Abstract variables have no implementation — skip eager
+			// evaluation. They will raise XTDE3052 if actually referenced.
+			// Also skip variables from used packages: they may reference
+			// abstract components that have not been overridden, and should
+			// only be evaluated when actually referenced (lazy semantics).
+			if v.Visibility == visAbstract || v.OwnerPackage != nil {
+				continue
+			}
 			if _, err := ec.evaluateGlobalVar(v); err != nil {
 				return err
 			}
@@ -266,6 +274,12 @@ func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
 		ec.xpathDefaultNS = savedXPathDefaultNS
 		ec.hasXPathDefaultNS = savedHasXPathDefaultNS
 	}()
+
+	// Abstract variables have no implementation — raise XTDE3052.
+	if v.Visibility == visAbstract {
+		return nil, dynamicError(errCodeXTDE3052,
+			"abstract variable $%s was invoked without being overridden", v.Name)
+	}
 
 	// Static variables use their pre-computed compile-time value.
 	if v.StaticValue != nil {

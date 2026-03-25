@@ -1293,27 +1293,10 @@ var w3cImplicitSkips = map[string]string{
 	"as-3603": "requires schema-aware processing (schema-attribute type check)",
 	"as-3701": "requires schema-aware processing (schema-element type check)",
 
-	// accept tests: xsl:accept/use-package visibility control not fully implemented
-	"accept-003":  "xsl:accept package visibility control not implemented",
-	"accept-004":  "xsl:accept package visibility control not implemented",
-	"accept-009":  "xsl:accept package visibility control not implemented",
-	"accept-010":  "xsl:accept package visibility control not implemented",
-	"accept-011":  "xsl:accept package visibility control not implemented",
-	"accept-020":  "xsl:accept package visibility control not implemented",
-	"accept-023":  "xsl:accept package visibility control not implemented",
-	"accept-040":  "xsl:accept package visibility control not implemented",
-	"accept-041a": "xsl:accept package visibility control not implemented",
-	"accept-042":  "xsl:accept package visibility control not implemented",
-	"accept-043a": "xsl:accept package visibility control not implemented",
-	"accept-044":  "xsl:accept package visibility control not implemented",
-	"accept-045a": "xsl:accept package visibility control not implemented",
-	"accept-046":  "xsl:accept package visibility control not implemented",
-	"accept-047a": "xsl:accept package visibility control not implemented",
-	"accept-909":  "xsl:accept package visibility control not implemented",
-	"accept-910":  "xsl:accept package visibility control not implemented",
-	"accept-911":  "xsl:accept package visibility control not implemented",
-	"accept-912":  "xsl:accept package visibility control not implemented",
-	"accept-913":  "xsl:accept package visibility control not implemented",
+	// accept: override function not visible in package scope during xsl:call-template
+	"accept-042":  "override function not visible in package scope via function-lookup",
+	"accept-043a": "override function not visible in package scope via function-lookup",
+	"accept-047a": "override function not visible in package scope via function-lookup",
 
 	// package: xsl:expose visibility control not implemented
 	"package-001j": "xsl:expose mode visibility control not implemented",
