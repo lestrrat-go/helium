@@ -533,6 +533,11 @@ func (c *compiler) loadExternalStylesheet(baseURI, href string, isImport bool) e
 				mode := tmpl.Mode
 				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
 			}
+			// Bump import precedence so the importing module's templates
+			// have higher precedence than the imported simplified stylesheet.
+			if isImport {
+				c.importPrec++
+			}
 			return nil
 		}
 		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
