@@ -244,12 +244,6 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 
 		doc, err := ec.loadDocument(ctx, uri, itemBaseDir)
 		if err != nil {
-			// XSLT spec allows returning an empty sequence when document()
-			// fails to retrieve a resource (implementation-defined).
-			// Skip this URI instead of raising a fatal error.
-			if isXSLTError(err, errCodeFODC0002) {
-				continue
-			}
 			return nil, err
 		}
 

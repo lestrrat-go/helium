@@ -1511,9 +1511,6 @@ var w3cImplicitSkips = map[string]string{
 	// whitespace-011: external parameter entity resolution not supported
 	"whitespace-011": "parser limitation: external parameter entity resolution not supported",
 
-	// expression-0932/0933: XPTY0018 mixed nodes/non-nodes in path expr not detected
-	"expression-0932": "XPTY0018 detection for mixed node/non-node path results not implemented",
-	"expression-0933": "XPTY0018 detection for mixed node/non-node path results not implemented",
 
 	// embedded-stylesheet-007: xsl:apply-imports with simplified stylesheet import
 	"embedded-stylesheet-007": "xsl:apply-imports with imported simplified stylesheet not producing correct output",
@@ -1606,8 +1603,8 @@ var w3cImplicitSkips = map[string]string{
 	// package: upstream test data uses on-no-match=fail as primary stylesheet
 	"package-015": "upstream W3C test: on-no-match=fail primary stylesheet",
 
-	// error: upstream test now expects mandatory error we don't raise
-	"error-FODC0002a": "upstream W3C test change: FODC0002 now required (was optional)",
+	// error-FODC0002a-ignore: processor now raises FODC0002 (ignore_doc_failure=false)
+	"error-FODC0002a-ignore": "processor raises FODC0002 instead of ignoring document failures",
 
 	// merge: schema-element instance test on merged items
 	"merge-049": "schema-element() instance test on merged items fails",
