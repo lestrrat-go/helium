@@ -311,8 +311,18 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		if _, overridden := overrideNames[xslElemFunction+":"+key]; overridden {
 			continue
 		}
-		if _, exists := c.stylesheet.functions[fk]; !exists {
+		if fn.OwnerPackage == nil {
+			fn.OwnerPackage = pkg
+		}
+		fn.AcceptedFrom = pkg
+		if existing, exists := c.stylesheet.functions[fk]; !exists {
 			c.stylesheet.functions[fk] = fn
+		} else if existing.AcceptedFrom != nil && existing.AcceptedFrom != pkg {
+			// XTSE3050: two use-packages accept the same function
+			// with non-hidden visibility.
+			return staticError(errCodeXTSE3050,
+				"function %q accepted from multiple packages with non-hidden visibility",
+				key)
 		}
 	}
 

@@ -205,6 +205,7 @@ type xslFunction struct {
 	Visibility    string      // "public", "private", "final", "abstract"
 	NewEachTime   string      // "yes", "no", "maybe"; "" = unspecified (defaults to "maybe")
 	OwnerPackage  *Stylesheet   // package that defined this function (nil = main stylesheet)
+	AcceptedFrom  *Stylesheet  // use-package that accepted this function (for XTSE3050 detection)
 	ImportPrec    int           // import precedence for XTSE0770 conflict detection
 	OriginalFunc  *xslFunction // original function being overridden (for xsl:original calls)
 }

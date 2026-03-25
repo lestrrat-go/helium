@@ -1321,13 +1321,7 @@ var w3cImplicitSkips = map[string]string{
 
 	// package: static error detection not implemented
 	"package-909":  "XTSE0020 package static error detection not implemented",
-	"package-912":  "XPDY0002 absent context item in package not detected",
-	"package-913":  "XTSE3008 package use-package conflict detection not implemented",
-	"package-913a": "XTSE3008 package use-package conflict detection not implemented",
-	"package-913b": "XTSE3008 package use-package conflict detection not implemented",
-	"package-022err": "XTSE3050 package xsl:override static check not implemented",
 	"package-100":    "package cross-reference variable resolution not implemented",
-	"package-101":    "package cross-reference variable resolution not implemented",
 
 	// use-package: package-scoped component isolation not implemented
 	"use-package-101": "package-scoped decimal format isolation not implemented",
@@ -1353,7 +1347,6 @@ var w3cImplicitSkips = map[string]string{
 	"override-f-018":    "xsl:original function reference not implemented",
 	"override-f-024":    "xsl:override function replacement not fully implemented",
 	"override-f-026":    "xsl:override function visibility not propagated",
-	"override-f-031":    "xsl:original function reference not implemented",
 	"override-f-033":    "xsl:override function replacement not fully implemented",
 	"override-t-003a":   "xsl:override template replacement not fully implemented",
 	"override-t-003d":   "XTSE3080 override static check not implemented",
@@ -1365,7 +1358,6 @@ var w3cImplicitSkips = map[string]string{
 	"override-t-015":    "xsl:original template reference not implemented",
 	"override-v-002":    "xsl:override variable visibility not propagated",
 	"override-v-003":    "xsl:original variable reference not implemented",
-	"override-v-006":    "XTSE3070 override static check not implemented",
 	"override-v-007":    "XTSE3070 override static check not implemented",
 	"override-v-011":    "XTSE3050 override static check not implemented",
 	"override-v-012":    "XTSE3050 override static check not implemented",
@@ -1420,10 +1412,6 @@ var w3cImplicitSkips = map[string]string{
 	"streamable-148": "streaming for-each-group grouping result incorrect",
 
 	// package version resolution: lowest_version not supported (we use highest_version)
-	"use-package-203b": "package_version_resolution=lowest_version not supported",
-	"use-package-204b": "package_version_resolution=lowest_version not supported",
-	"use-package-206b": "package_version_resolution=lowest_version not supported",
-	"use-package-210b": "package_version_resolution=lowest_version not supported",
 
 	// castable tests: schema-aware union/list type casting
 	"castable-005": "requires schema-aware union type casting (import-schema)",
