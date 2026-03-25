@@ -51,7 +51,7 @@ Primary file: `internal/cli/heliumcmd/lint.go`
 1. READ      — os.ReadFile() / io.ReadAll(os.Stdin)
 2. PARSE     — parser.Parse() with parseOptions
 3. XINCLUDE  — xinclude.Process() if --xinclude
-4. SCHEMA    — xsd.CompileFile() + xsd.Validate() if --schema
+4. SCHEMA    — xsd.NewCompiler().CompileFile() + xsd.NewValidator().Validate() if --schema
 5. DTD       — parser/DTD validation result if --valid
 6. XPATH     — xpath.Evaluate() if --xpath
 7. OUTPUT    — C14N or helium.Writer unless --noout
@@ -100,8 +100,8 @@ Primary file: `internal/cli/heliumcmd/xsd_validate.go`
 
 - Usage: `helium xsd validate [--timing] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
-- Schema compiled once with `xsd.CompileFile()`
-- Each XML input parsed with `helium.NewParser()` + validated with `xsd.Validate()`
+- Schema compiled once with `xsd.NewCompiler().CompileFile()`
+- Each XML input parsed with `helium.NewParser()` + validated with `xsd.NewValidator(schema).Validate()`
 
 ## `helium relaxng validate`
 

@@ -627,7 +627,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 			var importSchemas []*xsd.Schema
 			for _, sp := range tc.ImportSchemaPaths {
 				schemaPath := w3cResolvePath(sp)
-				schema, schemaErr := xsd.CompileFile(t.Context(), schemaPath)
+				schema, schemaErr := xsd.NewCompiler().CompileFile(t.Context(), schemaPath)
 				if schemaErr != nil {
 					t.Fatalf("compile import schema %q: %v", sp, schemaErr)
 				}
@@ -904,7 +904,7 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	// Load source document schema if specified by the test case.
 	if tc.SourceSchemaPath != "" {
 		schemaPath := w3cResolvePath(tc.SourceSchemaPath)
-		schema, schemaErr := xsd.CompileFile(ctx, schemaPath)
+		schema, schemaErr := xsd.NewCompiler().CompileFile(ctx, schemaPath)
 		if schemaErr != nil {
 			t.Fatalf("compile source schema %q: %v", schemaPath, schemaErr)
 		}

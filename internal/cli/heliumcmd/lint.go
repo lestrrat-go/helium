@@ -358,7 +358,7 @@ func (c *command) loadCatalogFromEnv(ctx context.Context) (*catalog.Catalog, err
 }
 
 func (c *command) compileSchema(ctx context.Context, cfg *config) (*xsd.Schema, error) {
-	schema, err := xsd.CompileFile(ctx, cfg.schemaFile)
+	schema, err := xsd.NewCompiler().CompileFile(ctx, cfg.schemaFile)
 	if err != nil {
 		return nil, fmt.Errorf("%s: failed to compile schema: %w", c.prog, err)
 	}
@@ -433,7 +433,7 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		if cfg.timing {
 			t0 = time.Now()
 		}
-		err := xsd.Validate(ctx, doc, schema)
+		err := xsd.NewValidator(schema).Validate(ctx, doc)
 		if cfg.timing {
 			_, _ = fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
 		}

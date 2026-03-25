@@ -32,7 +32,7 @@ func Example_xsd_schema_lookup() {
 	// Once a schema is compiled, you can query its global declarations. That is
 	// useful for tooling, schema inspection, or building validation workflows
 	// that need to discover elements and types programmatically.
-	schema, err := xsd.Compile(context.Background(), schemaDoc)
+	schema, err := xsd.NewCompiler().Compile(context.Background(), schemaDoc)
 	if err != nil {
 		fmt.Printf("failed to compile schema: %s\n", err)
 		return

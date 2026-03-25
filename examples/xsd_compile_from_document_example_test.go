@@ -22,10 +22,10 @@ func Example_xsd_compile_from_document() {
 		return
 	}
 
-	// xsd.Compile compiles a schema from an in-memory Document, as opposed
-	// to xsd.CompileFile which reads from a file path. Use Compile when the
-	// schema is available as a string or byte slice rather than on disk.
-	schema, err := xsd.Compile(context.Background(), schemaDoc)
+	// NewCompiler().Compile compiles a schema from an in-memory Document,
+	// as opposed to CompileFile which reads from a file path. Use Compile
+	// when the schema is available as a string or byte slice rather than on disk.
+	schema, err := xsd.NewCompiler().Compile(context.Background(), schemaDoc)
 	if err != nil {
 		fmt.Printf("failed to compile schema: %s\n", err)
 		return
@@ -39,7 +39,7 @@ func Example_xsd_compile_from_document() {
 	}
 
 	// Validate the document against the compiled schema.
-	if err := xsd.Validate(context.Background(), doc, schema); err != nil {
+	if err := xsd.NewValidator(schema).Validate(context.Background(), doc); err != nil {
 		fmt.Println(err)
 	}
 	// Output:

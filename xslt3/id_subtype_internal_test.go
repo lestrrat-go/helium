@@ -18,7 +18,7 @@ func TestAnnotateAttrRegistersIDSubtype(t *testing.T) {
 </xs:schema>`))
 	require.NoError(t, err)
 
-	schema, err := xsd.Compile(t.Context(), schemaDoc)
+	schema, err := xsd.NewCompiler().Compile(t.Context(), schemaDoc)
 	require.NoError(t, err)
 
 	doc := helium.NewDefaultDocument()

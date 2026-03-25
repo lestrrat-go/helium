@@ -67,7 +67,7 @@ func (c *xsdValidateCommand) runContext(ctx context.Context, args []string) int 
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	schema, err := xsd.CompileFile(ctx, cfg.schemaFile)
+	schema, err := xsd.NewCompiler().CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
 	}
@@ -163,7 +163,7 @@ func (c *xsdValidateCommand) processInput(ctx context.Context, cfg *xsdValidateC
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	err = xsd.Validate(ctx, doc, schema)
+	err = xsd.NewValidator(schema).Validate(ctx, doc)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
 	}
