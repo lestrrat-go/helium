@@ -21,15 +21,39 @@ func NewCompiler() Compiler {
 
 // Compile parses an XPath 3.1 expression string into a reusable Expression.
 func (c Compiler) Compile(expr string) (*Expression, error) {
-	return Compile(expr)
+	l, err := newLexer(expr)
+	if err != nil {
+		return nil, err
+	}
+	program, prefixPlan, err := compileFromLexer(l)
+	if err != nil {
+		return nil, err
+	}
+	return &Expression{
+		source:     expr,
+		program:    program,
+		prefixPlan: prefixPlan,
+	}, nil
 }
 
 // MustCompile is like Compile but panics on error.
 func (c Compiler) MustCompile(expr string) *Expression {
-	return MustCompile(expr)
+	e, err := c.Compile(expr)
+	if err != nil {
+		panic("xpath3: Compile(" + expr + "): " + err.Error())
+	}
+	return e
 }
 
 // CompileExpr compiles a pre-parsed AST Expr into an Expression.
 func (c Compiler) CompileExpr(ast Expr) (*Expression, error) {
-	return CompileExpr(ast)
+	program, prefixPlan, err := compileVMProgram(ast)
+	if err != nil {
+		return nil, err
+	}
+	return &Expression{
+		ast:        ast,
+		program:    program,
+		prefixPlan: prefixPlan,
+	}, nil
 }

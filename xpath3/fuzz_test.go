@@ -38,6 +38,6 @@ func FuzzCompile(f *testing.F) {
 		if len(expr) > 4096 {
 			return
 		}
-		_, _ = xpath3.Compile(expr)
+		_, _ = xpath3.NewCompiler().Compile(expr)
 	})
 }

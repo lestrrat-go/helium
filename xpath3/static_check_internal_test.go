@@ -7,7 +7,7 @@ import (
 )
 
 func TestCompileBuildsPrefixValidationPlan(t *testing.T) {
-	expr, err := Compile(`p:noop()`)
+	expr, err := NewCompiler().Compile(`p:noop()`)
 	require.NoError(t, err)
 	require.NotEmpty(t, expr.prefixPlan.prefixes)
 	require.NoError(t, expr.prefixPlan.Validate(map[string]string{
@@ -33,7 +33,7 @@ func (noNamespaceSchemaDecls) ListItemType(typeName string) (string, bool) { ret
 func (noNamespaceSchemaDecls) UnionMemberTypes(typeName string) []string   { return nil }
 
 func TestPrefixValidationAllowsImportedNoNamespaceSchemaType(t *testing.T) {
-	expr, err := Compile(`$v instance of nota`)
+	expr, err := NewCompiler().Compile(`$v instance of nota`)
 	require.NoError(t, err)
 	require.NoError(t, expr.prefixPlan.Validate(nil, true, noNamespaceSchemaDecls{}))
 }

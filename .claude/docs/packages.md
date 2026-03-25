@@ -55,11 +55,11 @@ XPath 1.0 expression parsing and evaluation.
 
 XPath 3.1 expression parsing and evaluation.
 
-- **Compile(string) → (*Expression, error)** / **MustCompile(string) → *Expression** — parse XPath 3.1
-- **Expression.Evaluate(ctx, Node) → (*Result, error)**
+- **NewCompiler() → Compiler** — create fluent builder for expression compilation
+  - `Compile(string) → (*Expression, error)` / `MustCompile(string) → *Expression` / `CompileExpr(Expr) → (*Expression, error)` — terminal methods
+- **NewEvaluator(EvaluatorOptions) → Evaluator** — create evaluator
+  - `Evaluate(ctx, *Expression, Node) → (*Result, error)` — terminal method
 - **Expression.DumpVM(io.Writer) → error** — write compiled VM instruction dump for debugging/tooling
-- **Find(ctx, Node, string) → ([]Node, error)** — convenience: compile+evaluate→node-set
-- **Evaluate(ctx, Node, string) → (*Result, error)** — convenience: compile+evaluate
 - **WithNamespaces(ctx, ns) → context.Context** / **WithVariables(ctx, vars) → context.Context** / **WithOpLimit(ctx, n) → context.Context** — attach XPath 3.1 evaluation settings to `context.Context`
 - **WithFunction(ctx, name, fn) → context.Context** / **WithFunctionNS(ctx, uri, name, fn) → context.Context** — register custom functions on `context.Context`
 - **WithFunctions(ctx, fns) → context.Context** / **WithFunctionsNS(ctx, fns) → context.Context** — bulk function registration

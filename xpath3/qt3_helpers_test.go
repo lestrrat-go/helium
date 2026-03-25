@@ -238,7 +238,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 					if len(vars) > 0 {
 						paramEval = paramEval.Variables(xpath3.VariablesFromMap(vars))
 					}
-					compiledParam, err := xpath3.Compile(param.Select)
+					compiledParam, err := xpath3.NewCompiler().Compile(param.Select)
 					require.NoError(t, err, "compile param $%s: %s", param.Name, param.Select)
 					result, err := paramEval.Evaluate(ctx, compiledParam, doc)
 					require.NoError(t, err, "eval param $%s: %s", param.Name, param.Select)
@@ -250,7 +250,7 @@ func qt3RunTests(t *testing.T, tests []qt3Test) {
 				opts = append(opts, func(e xpath3.Evaluator) xpath3.Evaluator { return e.Variables(xpath3.VariablesFromMap(v)) })
 			}
 			eval := qt3ApplyEval(xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), opts)
-			compiled, err := xpath3.Compile(tc.XPath)
+			compiled, err := xpath3.NewCompiler().Compile(tc.XPath)
 			if err != nil {
 				if tc.ExpectError || tc.AcceptError {
 					return
@@ -451,7 +451,7 @@ func qt3BuildCollectionResolver(t *testing.T, ctx context.Context, tc qt3Test, o
 			continue
 		}
 
-		expr, err := xpath3.Compile(col.Query)
+		expr, err := xpath3.NewCompiler().Compile(col.Query)
 		require.NoError(t, err, "compile collection %q query: %s", col.URI, col.Query)
 		result, err := queryEval.Evaluate(ctx, expr, doc)
 		require.NoError(t, err, "eval collection %q query: %s", col.URI, col.Query)
@@ -544,7 +544,7 @@ func qt3AssertEq(expected string) qt3Assertion {
 	return func(t *testing.T, seq xpath3.Sequence) {
 		t.Helper()
 		// assert-eq: expected is an XPath expression; evaluate it and compare using eq operator
-		compiled, err := xpath3.Compile(expected)
+		compiled, err := xpath3.NewCompiler().Compile(expected)
 		if err != nil {
 			// Not a valid XPath expr — compare as literal string
 			require.Equal(t, expected, qt3StringValue(seq))
@@ -635,7 +635,7 @@ func qt3AssertType(_ string) qt3Assertion {
 func qt3AssertDeepEq(expected string) qt3Assertion {
 	return func(t *testing.T, seq xpath3.Sequence) {
 		t.Helper()
-		compiled, err := xpath3.Compile(expected)
+		compiled, err := xpath3.NewCompiler().Compile(expected)
 		if err != nil {
 			// Fall back to string comparison if the expected value doesn't compile
 			require.Equal(t, expected, qt3StringValue(seq), "deep-eq")
@@ -664,7 +664,7 @@ func qt3AssertSkip() qt3Assertion {
 
 func qt3CheckEq(expected string) qt3Check {
 	return func(seq xpath3.Sequence) bool {
-		compiled, err := xpath3.Compile(expected)
+		compiled, err := xpath3.NewCompiler().Compile(expected)
 		if err != nil {
 			return qt3StringValue(seq) == expected
 		}
@@ -727,7 +727,7 @@ func qt3CheckCount(n int) qt3Check {
 
 func qt3CheckDeepEq(expected string) qt3Check {
 	return func(seq xpath3.Sequence) bool {
-		compiled, err := xpath3.Compile(expected)
+		compiled, err := xpath3.NewCompiler().Compile(expected)
 		if err != nil {
 			return qt3StringValue(seq) == expected
 		}

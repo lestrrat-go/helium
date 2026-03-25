@@ -24,7 +24,7 @@ func benchmarkDoc(b *testing.B) *helium.Document {
 func BenchmarkCompilePath(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		expr, err := xpath3.Compile(benchPathExpr)
+		expr, err := xpath3.NewCompiler().Compile(benchPathExpr)
 		require.NoError(b, err)
 		require.NotNil(b, expr)
 	}
@@ -32,7 +32,7 @@ func BenchmarkCompilePath(b *testing.B) {
 
 func BenchmarkEvaluateCompiledCount(b *testing.B) {
 	doc := benchmarkDoc(b)
-	expr := xpath3.MustCompile(benchCountExpr)
+	expr := xpath3.NewCompiler().MustCompile(benchCountExpr)
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 
 	b.ReportAllocs()
@@ -52,7 +52,7 @@ func BenchmarkEvaluateConvenienceCount(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		result, err := xpath3.Evaluate(b.Context(), doc, benchCountExpr)
+		result, err := evaluate(b.Context(), doc, benchCountExpr)
 		require.NoError(b, err)
 		value, ok := result.IsNumber()
 		require.True(b, ok)
@@ -62,7 +62,7 @@ func BenchmarkEvaluateConvenienceCount(b *testing.B) {
 
 func BenchmarkEvaluateCompiledFLWOR(b *testing.B) {
 	doc := benchmarkDoc(b)
-	expr := xpath3.MustCompile(benchFLWORExpr)
+	expr := xpath3.NewCompiler().MustCompile(benchFLWORExpr)
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 
 	b.ReportAllocs()
