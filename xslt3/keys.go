@@ -158,21 +158,23 @@ func canonicalQNameValue(av xpath3.AtomicValue) (xpath3.QNameValue, bool) {
 
 // compositeCanonicalKey produces a canonical key for a sequence of atomic values
 // used as a composite key. Individual canonical keys are joined with NUL bytes.
-func compositeCanonicalKey(avs []xpath3.AtomicValue) string {
+// When keyFn is non-nil, string-like values use the collation key function.
+func compositeCanonicalKey(avs []xpath3.AtomicValue, keyFn func(string) string) string {
 	parts := make([]string, len(avs))
 	for i, av := range avs {
-		parts[i] = canonicalKey(av)
+		parts[i] = collationCanonicalKey(av, keyFn)
 	}
 	return strings.Join(parts, "\x00")
 }
 
 // compositeAtomicEquals tests whether two composite keys are equal element-by-element.
-func compositeAtomicEquals(a, b []xpath3.AtomicValue) bool {
+// When cmpFn is non-nil, string-like values use the collation compare function.
+func compositeAtomicEquals(a, b []xpath3.AtomicValue, cmpFn func(string, string) int) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for i := range a {
-		if !xpath3.AtomicEquals(a[i], b[i]) {
+		if !collationAtomicEquals(a[i], b[i], cmpFn) {
 			return false
 		}
 	}
@@ -332,7 +334,7 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 				if len(avs) == 0 {
 					continue
 				}
-				ck := compositeCanonicalKey(avs)
+				ck := compositeCanonicalKey(avs, kt.collationKey)
 				sk := seenKey{canonical: ck, node: node}
 				if _, dup := seen[sk]; dup {
 					continue
@@ -442,7 +444,7 @@ func (ec *execContext) lookupCompositeKey(name string, values []xpath3.AtomicVal
 		return nil, nil
 	}
 
-	ck := compositeCanonicalKey(values)
+	ck := compositeCanonicalKey(values, kt.collationKey)
 	candidates := kt.compositeEntry[ck]
 	if len(candidates) == 0 {
 		return nil, nil
@@ -450,7 +452,7 @@ func (ec *execContext) lookupCompositeKey(name string, values []xpath3.AtomicVal
 
 	var result []helium.Node
 	for _, entry := range candidates {
-		if compositeAtomicEquals(values, entry.keys) {
+		if compositeAtomicEquals(values, entry.keys, kt.collationCmp) {
 			result = append(result, entry.node)
 		}
 	}
