@@ -228,8 +228,9 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 
 	// Return captured items if any, otherwise collect from DOM.
 	// For atomic return types, atomize the captured items.
-	// Adjacent text nodes are merged (XSLT spec: constructing a temporary
-	// tree merges adjacent text nodes in the result).
+	// Per XSLT 3.0 §5.7.2, adjacent text nodes in a sequence are NOT
+	// merged (merging only applies to tree construction). Zero-length
+	// text nodes are preserved as distinct items.
 	var result xpath3.ItemSlice
 	if len(frame.pendingItems) > 0 {
 		if tmpRoot.FirstChild() != nil {
@@ -238,16 +239,15 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 				seq = append(seq, xpath3.NodeItem{Node: child})
 			}
 			seq = append(seq, frame.pendingItems...)
-			merged := mergeAdjacentTextNodes(seq)
 			if atomicReturn {
-				result = xpath3.ItemSlice(sequence.Materialize(atomizeSequence(merged)))
+				result = xpath3.ItemSlice(sequence.Materialize(atomizeSequence(seq)))
 			} else {
-				result = xpath3.ItemSlice(sequence.Materialize(merged))
+				result = xpath3.ItemSlice(sequence.Materialize(seq))
 			}
 		} else if atomicReturn {
-			result = xpath3.ItemSlice(sequence.Materialize(atomizeSequence(mergeAdjacentTextNodes(frame.pendingItems))))
+			result = xpath3.ItemSlice(sequence.Materialize(atomizeSequence(frame.pendingItems)))
 		} else {
-			result = xpath3.ItemSlice(sequence.Materialize(mergeAdjacentTextNodes(frame.pendingItems)))
+			result = xpath3.ItemSlice(sequence.Materialize(frame.pendingItems))
 		}
 	} else {
 		result = ec.collectNodeChildren(tmpRoot)
