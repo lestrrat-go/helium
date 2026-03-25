@@ -1641,6 +1641,26 @@ func emitAssertions(assertions []assertion) []string {
 	for _, a := range assertions {
 		out = append(out, emitAssertion(a)...)
 	}
+	// Filter out w3cAssertSkip() when real assertions exist alongside.
+	// This handles W3C tests with mixed result alternatives (e.g.
+	// assert-xml + assert-posture-and-sweep): the unsupported assertion
+	// would cause a t.Skip that hides the passing real assertion.
+	hasReal := false
+	for _, e := range out {
+		if e != "w3cAssertSkip()" {
+			hasReal = true
+			break
+		}
+	}
+	if hasReal {
+		filtered := out[:0]
+		for _, e := range out {
+			if e != "w3cAssertSkip()" {
+				filtered = append(filtered, e)
+			}
+		}
+		out = filtered
+	}
 	return out
 }
 
