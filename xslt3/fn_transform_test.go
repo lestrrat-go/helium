@@ -54,6 +54,32 @@ func TestFnTransformStylesheetParams(t *testing.T) {
 	require.Contains(t, out, "hello-world")
 }
 
+// TestFnTransformStylesheetParamsNS verifies that stylesheet-params with
+// namespaced QName keys are expanded to Clark notation and matched correctly.
+func TestFnTransformStylesheetParamsNS(t *testing.T) {
+	ss := compileFnTransformOuter(t, `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map">
+  <xsl:param name="inner-loc"/>
+  <xsl:template match="/">
+    <xsl:variable name="result" select="transform(map{
+      'stylesheet-location': $inner-loc,
+      'stylesheet-params': map{ QName('http://example.com/my','greeting'): 'ns-hello' },
+      'delivery-format': 'serialized'
+    })"/>
+    <result><xsl:value-of select="$result('output')"/></result>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	src, _ := helium.NewParser().Parse(t.Context(), []byte(`<dummy/>`))
+	out, err := ss.Transform(src).
+		SetParameter("inner-loc", xpath3.SingleString(innerXSL("inner-ns-param.xsl"))).
+		Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "ns-hello")
+}
+
 // TestFnTransformStaticParams verifies that static-params passed through
 // fn:transform() reach the inner stylesheet's static xsl:param.
 func TestFnTransformStaticParams(t *testing.T) {

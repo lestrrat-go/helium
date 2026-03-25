@@ -13,6 +13,19 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
+// paramKeyToClark converts an XPath map key to the Clark notation string
+// used internally for parameter lookup. QName keys are expanded to {uri}local;
+// non-QName keys (xs:string) pass through AtomicToString unchanged.
+func paramKeyToClark(key xpath3.AtomicValue) (string, error) {
+	if q, ok := key.Value.(xpath3.QNameValue); ok {
+		if q.URI != "" {
+			return helium.ClarkName(q.URI, q.Local), nil
+		}
+		return q.Local, nil
+	}
+	return xpath3.AtomicToString(key)
+}
+
 func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Function {
 	if ec.cachedFnsNS != nil {
 		return ec.cachedFnsNS
@@ -349,7 +362,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		if sm, ok := staticParamsSeq.Get(0).(xpath3.MapItem); ok {
 			staticParamValues = make(map[string]xpath3.Sequence, sm.Size())
 			_ = sm.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
-				name, sErr := xpath3.AtomicToString(key)
+				name, sErr := paramKeyToClark(key)
 				if sErr != nil {
 					return nil
 				}
@@ -505,7 +518,7 @@ func (ec *execContext) fnTransform(ctx context.Context, args []xpath3.Sequence) 
 		}
 		params := make(map[string]xpath3.Sequence, sm.Size())
 		_ = sm.ForEach(func(key xpath3.AtomicValue, value xpath3.Sequence) error {
-			name, sErr := xpath3.AtomicToString(key)
+			name, sErr := paramKeyToClark(key)
 			if sErr != nil {
 				return nil
 			}
