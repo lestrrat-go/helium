@@ -29,7 +29,7 @@ import (
 func Example_helium_parse() {
   // helium.Parse is the simplest way to parse an XML document from a byte slice.
   // It returns a *helium.Document representing the parsed DOM tree.
-  doc, err := helium.Parse(context.Background(), []byte(`<root><child>hello</child></root>`))
+  doc, err := helium.NewParser().Parse(context.Background(), []byte(`<root><child>hello</child></root>`))
   if err != nil {
     fmt.Printf("failed to parse: %s\n", err)
     return
@@ -101,8 +101,7 @@ func Example_sax_parse() {
 
   // Attach the SAX handler to a parser. When a SAX handler is set,
   // the parser fires events instead of building a full DOM tree.
-  p := helium.NewParser()
-  p.SetSAXHandler(handler)
+  p := helium.NewParser().SAXHandler(handler)
 
   // Parse triggers the SAX events. The returned document may be nil
   // or minimal when using SAX mode, since the purpose is event-driven
@@ -180,7 +179,7 @@ import (
 )
 
 func Example_xpath_find() {
-  doc, err := helium.Parse(context.Background(), []byte(`<catalog><book id="1">Go</book><book id="2">XML</book><magazine/></catalog>`))
+  doc, err := helium.NewParser().Parse(context.Background(), []byte(`<catalog><book id="1">Go</book><book id="2">XML</book><magazine/></catalog>`))
   if err != nil {
     fmt.Printf("failed to parse: %s\n", err)
     return
@@ -227,7 +226,7 @@ import (
 )
 
 func Example_xpath3_find() {
-  doc, err := helium.Parse(context.Background(), []byte(`<catalog><book id="1">Go</book><book id="2">XML</book><magazine/></catalog>`))
+  doc, err := helium.NewParser().Parse(context.Background(), []byte(`<catalog><book id="1">Go</book><book id="2">XML</book><magazine/></catalog>`))
   if err != nil {
     fmt.Printf("failed to parse: %s\n", err)
     return
@@ -297,7 +296,7 @@ func Example_xslt3_transform_string() {
 
   ctx := context.Background()
 
-  stylesheetDoc, err := helium.Parse(ctx, []byte(stylesheetSrc))
+  stylesheetDoc, err := helium.NewParser().Parse(ctx, []byte(stylesheetSrc))
   if err != nil {
     fmt.Printf("parse stylesheet error: %s\n", err)
     return
@@ -309,7 +308,7 @@ func Example_xslt3_transform_string() {
     return
   }
 
-  sourceDoc, err := helium.Parse(ctx, []byte(sourceSrc))
+  sourceDoc, err := helium.NewParser().Parse(ctx, []byte(sourceSrc))
   if err != nil {
     fmt.Printf("parse error: %s\n", err)
     return
@@ -396,8 +395,7 @@ func Example_xinclude_process() {
     if err != nil {
       return nil, err
     }
-    p := helium.NewParser()
-    p.SetBaseURI(mainPath)
+    p := helium.NewParser().BaseURI(mainPath)
     return p.Parse(context.Background(), data)
   }
 
@@ -497,7 +495,7 @@ func Example_c14n_canonicalize() {
   // so the canonical form will have a="1" before b="2".
   const src = `<root b="2" a="1"><child/></root>`
 
-  doc, err := helium.Parse(context.Background(), []byte(src))
+  doc, err := helium.NewParser().Parse(context.Background(), []byte(src))
   if err != nil {
     fmt.Printf("failed to parse: %s\n", err)
     return
@@ -541,7 +539,7 @@ import (
 
 func Example_relaxng_validate() {
   // Compile a small RELAX NG schema from XML syntax.
-  schemaDoc, err := helium.Parse(context.Background(), []byte(
+  schemaDoc, err := helium.NewParser().Parse(context.Background(), []byte(
     `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
   <start>
     <element name="book">
@@ -560,7 +558,7 @@ func Example_relaxng_validate() {
     return
   }
 
-  doc, err := helium.Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
+  doc, err := helium.NewParser().Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
   if err != nil {
     fmt.Printf("xml parse failed: %s\n", err)
     return
@@ -591,7 +589,7 @@ import (
 
 func Example_schematron_validate() {
   // Compile a minimal Schematron schema with one assertion.
-  schemaDoc, err := helium.Parse(context.Background(), []byte(
+  schemaDoc, err := helium.NewParser().Parse(context.Background(), []byte(
     `<schema xmlns="http://www.ascc.net/xml/schematron">
   <pattern name="book-check">
     <rule context="book">
@@ -610,7 +608,7 @@ func Example_schematron_validate() {
     return
   }
 
-  doc, err := helium.Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
+  doc, err := helium.NewParser().Parse(context.Background(), []byte(`<book><title>Helium</title></book>`))
   if err != nil {
     fmt.Printf("xml parse failed: %s\n", err)
     return
