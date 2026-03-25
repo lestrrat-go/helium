@@ -20,7 +20,7 @@ func Example_c14n_canonicalize_writer() {
 	// to stream canonical XML to a file, network connection, or hash function
 	// without building an intermediate byte slice first.
 	var buf bytes.Buffer
-	if err := c14n.Canonicalize(&buf, doc, c14n.C14N10); err != nil {
+	if err := c14n.NewCanonicalizer(c14n.C14N10).Canonicalize(doc, &buf); err != nil {
 		fmt.Printf("canonicalize failed: %s\n", err)
 		return
 	}

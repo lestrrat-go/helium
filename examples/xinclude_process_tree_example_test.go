@@ -17,15 +17,15 @@ func Example_xinclude_process_tree() {
 	}
 
 	wrapper := doc.DocumentElement().FirstChild()
-	n, err := xinclude.ProcessTree(context.Background(), wrapper,
-		xinclude.WithResolver(&memoryResolver{
+	n, err := xinclude.NewProcessor().
+		Resolver(&memoryResolver{
 			files: map[string]string{
 				"greeting.xml": `<greeting>hello</greeting>`,
 			},
-		}),
-		xinclude.WithNoBaseFixup(),
-		xinclude.WithNoXIncludeMarkers(),
-	)
+		}).
+		NoBaseFixup().
+		NoXIncludeMarkers().
+		ProcessTree(context.Background(), wrapper)
 	if err != nil {
 		fmt.Printf("xinclude failed: %s\n", err)
 		return

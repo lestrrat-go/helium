@@ -125,6 +125,16 @@ func fnBaseURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	if n.Type() == helium.NamespaceNode {
 		return nil, nil
 	}
+	// Per XDM: attribute, text, comment, and PI nodes derive their base URI
+	// from their parent element. If they have no parent, their base URI is
+	// the empty sequence.
+	nodeType := n.Type()
+	if nodeType == helium.AttributeNode || nodeType == helium.TextNode ||
+		nodeType == helium.CommentNode || nodeType == helium.ProcessingInstructionNode {
+		if n.Parent() == nil {
+			return nil, nil
+		}
+	}
 	// Walk up the parent chain to find the actual document the node lives
 	// in. OwnerDocument() may return a different document when nodes are
 	// created in one document and then moved to another (e.g. in XSLT
