@@ -9,7 +9,7 @@ import (
 )
 
 func TestPartialApplicationPlaceholderVM(t *testing.T) {
-	result, err := xpath3.Evaluate(t.Context(), nil, `let $f := concat("a", ?, "c") return $f("b")`)
+	result, err := evaluate(t.Context(), nil, `let $f := concat("a", ?, "c") return $f("b")`)
 	require.NoError(t, err)
 
 	value, ok := result.IsString()
@@ -18,7 +18,7 @@ func TestPartialApplicationPlaceholderVM(t *testing.T) {
 }
 
 func TestGeneralComparisonAgainstLargeRangeVM(t *testing.T) {
-	result, err := xpath3.Evaluate(t.Context(), nil, `1000000000000000020001 = 1000000000000000000000 to 1000000000000010000003`)
+	result, err := evaluate(t.Context(), nil, `1000000000000000020001 = 1000000000000000000000 to 1000000000000010000003`)
 	require.NoError(t, err)
 
 	value, ok := result.IsBoolean()
@@ -27,7 +27,7 @@ func TestGeneralComparisonAgainstLargeRangeVM(t *testing.T) {
 }
 
 func TestLiteralArgsFunctionCallVM(t *testing.T) {
-	result, err := xpath3.Evaluate(t.Context(), nil, `concat("go", "-", "vm")`)
+	result, err := evaluate(t.Context(), nil, `concat("go", "-", "vm")`)
 	require.NoError(t, err)
 
 	value, ok := result.IsString()
@@ -38,7 +38,7 @@ func TestLiteralArgsFunctionCallVM(t *testing.T) {
 func TestLocationPathPredicateVM(t *testing.T) {
 	doc := parseTestDoc(t)
 
-	result, err := xpath3.Evaluate(t.Context(), doc, `/library/book[@lang="en"]/title/string()`)
+	result, err := evaluate(t.Context(), doc, `/library/book[@lang="en"]/title/string()`)
 	require.NoError(t, err)
 
 	atomics, err := result.Atomics()
@@ -51,7 +51,7 @@ func TestLocationPathPredicateVM(t *testing.T) {
 func TestCountPathWithPredicateWhitespaceVM(t *testing.T) {
 	doc := parseTestDoc(t)
 
-	result, err := xpath3.Evaluate(t.Context(), doc, `count( /library/book [ @lang = "en" ] /title )`)
+	result, err := evaluate(t.Context(), doc, `count( /library/book [ @lang = "en" ] /title )`)
 	require.NoError(t, err)
 
 	value, ok := result.IsNumber()
@@ -62,7 +62,7 @@ func TestCountPathWithPredicateWhitespaceVM(t *testing.T) {
 func TestPositionalPredicateVM(t *testing.T) {
 	doc := parseTestDoc(t)
 
-	result, err := xpath3.Evaluate(t.Context(), doc, `string(/library/book[1]/@id)`)
+	result, err := evaluate(t.Context(), doc, `string(/library/book[1]/@id)`)
 	require.NoError(t, err)
 
 	value, ok := result.IsString()
@@ -73,7 +73,7 @@ func TestPositionalPredicateVM(t *testing.T) {
 func TestPositionFunctionPredicateVM(t *testing.T) {
 	doc := parseTestDoc(t)
 
-	result, err := xpath3.Evaluate(t.Context(), doc, `string(/library/book[position() = 2]/title)`)
+	result, err := evaluate(t.Context(), doc, `string(/library/book[position() = 2]/title)`)
 	require.NoError(t, err)
 
 	value, ok := result.IsString()
@@ -84,7 +84,7 @@ func TestPositionFunctionPredicateVM(t *testing.T) {
 func TestAttributeExistencePredicateVM(t *testing.T) {
 	doc := parseTestDoc(t)
 
-	result, err := xpath3.Evaluate(t.Context(), doc, `count(/library/book[@lang])`)
+	result, err := evaluate(t.Context(), doc, `count(/library/book[@lang])`)
 	require.NoError(t, err)
 
 	value, ok := result.IsNumber()
@@ -96,7 +96,7 @@ func TestContextItemCompiledIsContextItem(t *testing.T) {
 	doc := parseTestDoc(t)
 	root := doc.DocumentElement()
 
-	compiled, err := xpath3.Compile(".")
+	compiled, err := xpath3.NewCompiler().Compile(".")
 	require.NoError(t, err)
 
 	state := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).NewEvalState(t.Context(), root)
@@ -112,7 +112,7 @@ func TestContextItemCompiledIsContextItem(t *testing.T) {
 func TestAttributeEqualityPredicateReverseOperandsVM(t *testing.T) {
 	doc := parseTestDoc(t)
 
-	result, err := xpath3.Evaluate(t.Context(), doc, `string(/library/book["en" = @lang][2]/title)`)
+	result, err := evaluate(t.Context(), doc, `string(/library/book["en" = @lang][2]/title)`)
 	require.NoError(t, err)
 
 	value, ok := result.IsString()
@@ -121,7 +121,7 @@ func TestAttributeEqualityPredicateReverseOperandsVM(t *testing.T) {
 }
 
 func TestDumpVM(t *testing.T) {
-	compiled, err := xpath3.Compile(`count(/library/book[@lang="en"])`)
+	compiled, err := xpath3.NewCompiler().Compile(`count(/library/book[@lang="en"])`)
 	require.NoError(t, err)
 
 	var buf bytes.Buffer

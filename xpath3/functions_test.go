@@ -413,7 +413,7 @@ func TestFnURI(t *testing.T) {
 
 func TestFnError(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
-	compiled, err := xpath3.Compile(`error()`)
+	compiled, err := xpath3.NewCompiler().Compile(`error()`)
 	require.NoError(t, err)
 	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
 	require.Error(t, err)

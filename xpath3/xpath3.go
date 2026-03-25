@@ -3,7 +3,6 @@
 package xpath3
 
 import (
-	"context"
 	"fmt"
 	"io"
 
@@ -16,51 +15,6 @@ type Expression struct {
 	ast        Expr
 	program    *vmProgram
 	prefixPlan prefixValidationPlan
-}
-
-// Compile parses an XPath 3.1 expression string into a reusable Expression.
-//
-// Deprecated: use NewCompiler().Compile(expr) instead.
-func Compile(expr string) (*Expression, error) {
-	l, err := newLexer(expr)
-	if err != nil {
-		return nil, err
-	}
-	program, prefixPlan, err := compileFromLexer(l)
-	if err != nil {
-		return nil, err
-	}
-	return &Expression{
-		source:     expr,
-		program:    program,
-		prefixPlan: prefixPlan,
-	}, nil
-}
-
-// CompileExpr compiles a pre-parsed AST Expr into an Expression.
-//
-// Deprecated: use NewCompiler().CompileExpr(ast) instead.
-func CompileExpr(ast Expr) (*Expression, error) {
-	program, prefixPlan, err := compileVMProgram(ast)
-	if err != nil {
-		return nil, err
-	}
-	return &Expression{
-		ast:        ast,
-		program:    program,
-		prefixPlan: prefixPlan,
-	}, nil
-}
-
-// MustCompile is like Compile but panics on error.
-//
-// Deprecated: use NewCompiler().MustCompile(expr) instead.
-func MustCompile(expr string) *Expression {
-	e, err := Compile(expr)
-	if err != nil {
-		panic("xpath3: Compile(" + expr + "): " + err.Error())
-	}
-	return e
 }
 
 // Validate runs static namespace prefix validation using the given bindings.
@@ -187,46 +141,6 @@ func (r *Result) IsString() (string, bool) {
 	}
 	s, ok := av.Value.(string)
 	return s, ok
-}
-
-// Find is a convenience function: compile + evaluate, returning a node-set.
-// Returns an error if the expression does not evaluate to a node-set.
-//
-// Deprecated: use NewCompiler().Compile + NewEvaluator().Evaluate instead.
-func Find(ctx context.Context, node helium.Node, expr string) ([]helium.Node, error) {
-	compiled, err := Compile(expr)
-	if err != nil {
-		return nil, err
-	}
-	r, err := NewEvaluator(DefaultEvaluatorOptions).Evaluate(ctx, compiled, node)
-	if err != nil {
-		return nil, err
-	}
-	return r.Nodes()
-}
-
-// Evaluate is a convenience function: compile + evaluate in one call.
-//
-// Deprecated: use NewCompiler().Compile + NewEvaluator().Evaluate instead.
-func Evaluate(ctx context.Context, node helium.Node, expr string) (*Result, error) {
-	compiled, err := Compile(expr)
-	if err != nil {
-		return nil, err
-	}
-	return NewEvaluator(DefaultEvaluatorOptions).Evaluate(ctx, compiled, node)
-}
-
-// EvaluateExpr evaluates a parsed AST expression directly against a node.
-// This is useful when you already have the parsed Expr (e.g., from Parse)
-// and want to evaluate it without going through Compile.
-//
-// Deprecated: use NewCompiler().CompileExpr + NewEvaluator().Evaluate instead.
-func EvaluateExpr(ctx context.Context, expr Expr, node helium.Node) (*Result, error) {
-	compiled, err := CompileExpr(expr)
-	if err != nil {
-		return nil, err
-	}
-	return NewEvaluator(DefaultEvaluatorOptions).Evaluate(ctx, compiled, node)
 }
 
 func (e *Expression) evaluate(ec *evalContext) (Sequence, error) {

@@ -5,10 +5,15 @@ Mirrors `xpath1` shape. Key difference: `Result` wraps `Sequence` (not union str
 ## Entry Points
 
 ```go
-func Compile(expr string) (*Expression, error)
-func MustCompile(expr string) *Expression
-func Evaluate(ctx context.Context, node helium.Node, expr string) (*Result, error)
-func Find(ctx context.Context, node helium.Node, expr string) ([]helium.Node, error)
+// Compiler — fluent builder (clone-on-write, value type)
+func NewCompiler() Compiler
+func (c Compiler) Compile(expr string) (*Expression, error)
+func (c Compiler) MustCompile(expr string) *Expression
+func (c Compiler) CompileExpr(ast Expr) (*Expression, error)
+
+// Evaluator
+func NewEvaluator(opts EvaluatorOptions) Evaluator
+func (e Evaluator) Evaluate(ctx, expr, node) (*Result, error)
 ```
 
 ## Expression

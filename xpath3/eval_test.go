@@ -26,7 +26,7 @@ func mustParseExpr(t *testing.T, s string) xpath3.Expr {
 
 func evalExpr(t *testing.T, node helium.Node, expr string) xpath3.Sequence {
 	t.Helper()
-	compiled, err := xpath3.Compile(expr)
+	compiled, err := xpath3.NewCompiler().Compile(expr)
 	require.NoError(t, err)
 	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, node)
 	require.NoError(t, err)
@@ -35,7 +35,7 @@ func evalExpr(t *testing.T, node helium.Node, expr string) xpath3.Sequence {
 
 func evalExprWithEval(t *testing.T, eval xpath3.Evaluator, node helium.Node, expr string) xpath3.Sequence {
 	t.Helper()
-	compiled, err := xpath3.Compile(expr)
+	compiled, err := xpath3.NewCompiler().Compile(expr)
 	require.NoError(t, err)
 	result, err := eval.Evaluate(t.Context(), compiled, node)
 	require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestEvalVariable(t *testing.T) {
 
 func TestEvalUndefinedVariable(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
-	compiled, err := xpath3.Compile("$y")
+	compiled, err := xpath3.NewCompiler().Compile("$y")
 	require.NoError(t, err)
 	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
 	require.Error(t, err)
@@ -447,7 +447,7 @@ func TestEvalInlineFunction(t *testing.T) {
 
 	// Inline function that returns its argument
 	parsed := mustParseExpr(t, `let $f := function($x) { $x } return $f(42)`)
-	compiled, err := xpath3.CompileExpr(parsed)
+	compiled, err := xpath3.NewCompiler().CompileExpr(parsed)
 	require.NoError(t, err)
 	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
 	require.NoError(t, err)
@@ -543,7 +543,7 @@ func TestEvalUserFunction(t *testing.T) {
 		}, nil))
 
 	parsed := mustParseExpr(t, `myfunc("arg")`)
-	compiled, err := xpath3.CompileExpr(parsed)
+	compiled, err := xpath3.NewCompiler().CompileExpr(parsed)
 	require.NoError(t, err)
 	result, err := eval.Evaluate(t.Context(), compiled, doc)
 	require.NoError(t, err)

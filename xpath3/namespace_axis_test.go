@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,14 +22,14 @@ func parseNamespaceAxisDoc(t *testing.T) *helium.Document {
 func TestNamespaceAxisStringValueAndParent(t *testing.T) {
 	doc := parseNamespaceAxisDoc(t)
 
-	result, err := xpath3.Evaluate(t.Context(), doc, `string(/*/namespace::xlink)`)
+	result, err := evaluate(t.Context(), doc, `string(/*/namespace::xlink)`)
 	require.NoError(t, err)
 
 	s, ok := result.IsString()
 	require.True(t, ok)
 	require.Equal(t, "http://www.w3.org/1999/xlink", s)
 
-	nodes, err := xpath3.Find(t.Context(), doc, `/*/namespace::*/..`)
+	nodes, err := find(t.Context(), doc, `/*/namespace::*/..`)
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
 	require.Equal(t, "root", nodes[0].Name())
@@ -39,21 +38,21 @@ func TestNamespaceAxisStringValueAndParent(t *testing.T) {
 func TestNamespaceAxisNodeIdentity(t *testing.T) {
 	doc := parseNamespaceAxisDoc(t)
 
-	result, err := xpath3.Evaluate(t.Context(), doc, `/*/namespace::xlink is /*/*[1]/namespace::xlink`)
+	result, err := evaluate(t.Context(), doc, `/*/namespace::xlink is /*/*[1]/namespace::xlink`)
 	require.NoError(t, err)
 
 	sameInherited, ok := result.IsBoolean()
 	require.True(t, ok)
 	require.False(t, sameInherited)
 
-	result, err = xpath3.Evaluate(t.Context(), doc, `/*/namespace::xlink is /*/namespace::*[. = 'http://www.w3.org/1999/xlink']`)
+	result, err = evaluate(t.Context(), doc, `/*/namespace::xlink is /*/namespace::*[. = 'http://www.w3.org/1999/xlink']`)
 	require.NoError(t, err)
 
 	sameLogical, ok := result.IsBoolean()
 	require.True(t, ok)
 	require.True(t, sameLogical)
 
-	result, err = xpath3.Evaluate(t.Context(), doc, `generate-id(/*/namespace::xlink) eq generate-id(/*/namespace::*[. = 'http://www.w3.org/1999/xlink'])`)
+	result, err = evaluate(t.Context(), doc, `generate-id(/*/namespace::xlink) eq generate-id(/*/namespace::*[. = 'http://www.w3.org/1999/xlink'])`)
 	require.NoError(t, err)
 
 	sameID, ok := result.IsBoolean()
@@ -64,14 +63,14 @@ func TestNamespaceAxisNodeIdentity(t *testing.T) {
 func TestNamespaceAxisPath(t *testing.T) {
 	doc := parseNamespaceAxisDoc(t)
 
-	result, err := xpath3.Evaluate(t.Context(), doc, `path((//namespace::xml)[1])`)
+	result, err := evaluate(t.Context(), doc, `path((//namespace::xml)[1])`)
 	require.NoError(t, err)
 
 	xmlPath, ok := result.IsString()
 	require.True(t, ok)
 	require.Equal(t, "/Q{urn:root}root[1]/namespace::xml", xmlPath)
 
-	result, err = xpath3.Evaluate(t.Context(), doc, `path((//namespace::*[name()=''])[1])`)
+	result, err = evaluate(t.Context(), doc, `path((//namespace::*[name()=''])[1])`)
 	require.NoError(t, err)
 
 	defaultPath, ok := result.IsString()
