@@ -1684,9 +1684,7 @@ var w3cImplicitSkips = map[string]string{
 	"evaluate-048": "requires network access to saxonica.com",
 
 
-	"base-uri-024": "xsl:copy base-uri propagation depends on result context",
 	"base-uri-052": "XInclude processing not applied to source documents",
-	"base-uri-053": "xsl:copy base-uri propagation in built-in templates incorrect",
 
 	// snapshot: f:snapshot reference impl namespace-node graft produces empty root
 	"snapshot-0102a": "snapshot()/root() returns empty for some namespace nodes",

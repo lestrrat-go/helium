@@ -135,6 +135,10 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 		out := ec.currentOutput()
 		if out.sequenceMode || (out.captureItems && out.current != nil && out.current.Type() != helium.DocumentNode) {
 			tmpDoc := helium.NewDefaultDocument()
+			// Preserve source document URL for fn:base-uri on the copy.
+			if srcDoc, ok := node.(*helium.Document); ok {
+				tmpDoc.SetURL(srcDoc.URL())
+			}
 			frame := &outputFrame{doc: tmpDoc, current: tmpDoc}
 			ec.outputStack = append(ec.outputStack, frame)
 			for child := range helium.Children(node) {
@@ -144,10 +148,9 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 				}
 			}
 			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
-			if tmpDoc.FirstChild() != nil {
-				out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: tmpDoc})
-				out.noteOutput()
-			}
+			// Always capture the document (even empty) so fn:base-uri works.
+			out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: tmpDoc})
+			out.noteOutput()
 			return nil
 		}
 		for child := range helium.Children(node) {
@@ -170,6 +173,11 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 		}
 		if err := ec.addNode(newElem); err != nil {
 			return err
+		}
+		if newElem.Parent() == nil {
+			if srcBase := helium.NodeGetBase(srcElem.OwnerDocument(), srcElem); srcBase != "" {
+				helium.SetNodeBaseURI(newElem, srcBase)
+			}
 		}
 		out := ec.currentOutput()
 		savedCurrent := out.current
@@ -234,7 +242,22 @@ func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
 	// Deep copy: copy the entire subtree to the output without template matching.
 	switch node.Type() {
 	case helium.DocumentNode:
-		// For document nodes, deep-copy each child.
+		out := ec.currentOutput()
+		if out.sequenceMode || (out.captureItems && out.current != nil && out.current.Type() != helium.DocumentNode) {
+			srcDoc, _ := node.(*helium.Document)
+			copied, err := helium.CopyNode(node, ec.resultDoc)
+			if err != nil {
+				return err
+			}
+			if srcDoc != nil {
+				if copiedDoc, ok := copied.(*helium.Document); ok {
+					copiedDoc.SetURL(srcDoc.URL())
+				}
+			}
+			out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: copied})
+			out.noteOutput()
+			return nil
+		}
 		for child := range helium.Children(node) {
 			if err := ec.onNoMatchDeepCopy(child); err != nil {
 				return err
@@ -247,7 +270,16 @@ func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
 		if err != nil {
 			return err
 		}
-		return ec.addNode(copied)
+		if err := ec.addNode(copied); err != nil {
+			return err
+		}
+		if node.Type() == helium.ElementNode && copied.Parent() == nil {
+			srcElem := node.(*helium.Element)
+			if srcBase := helium.NodeGetBase(srcElem.OwnerDocument(), srcElem); srcBase != "" {
+				helium.SetNodeBaseURI(copied, srcBase)
+			}
+		}
+		return nil
 	case helium.AttributeNode:
 		attr, ok := node.(*helium.Attribute)
 		if !ok {

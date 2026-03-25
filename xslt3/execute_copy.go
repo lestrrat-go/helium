@@ -309,6 +309,12 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 		if err := ec.addNode(elem); err != nil {
 			return err
 		}
+		// Propagate source element's base URI to orphan copies (spec §11.9.4).
+		if elem.Parent() == nil {
+			if srcBase := helium.NodeGetBase(srcElem.OwnerDocument(), srcElem); srcBase != "" {
+				helium.SetNodeBaseURI(elem, srcBase)
+			}
+		}
 
 		// Execute body in element context.
 		// Temporarily disable sequenceMode so that children are added to
