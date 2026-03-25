@@ -63,6 +63,23 @@ func TestNilStylesheetWriteTo(t *testing.T) {
 	})
 }
 
+func TestZeroCompilerCompile(t *testing.T) {
+	ctx := t.Context()
+	var c xslt3.Compiler
+	require.NotPanics(t, func() {
+		_, err := c.Compile(ctx, nil)
+		require.Error(t, err)
+	})
+}
+
+func TestZeroCompilerFluent(t *testing.T) {
+	var c xslt3.Compiler
+	require.NotPanics(t, func() {
+		c2 := c.BaseURI("http://example.com")
+		_ = c2
+	})
+}
+
 func TestCompilerCompileNilDoc(t *testing.T) {
 	ctx := t.Context()
 	require.NotPanics(t, func() {
