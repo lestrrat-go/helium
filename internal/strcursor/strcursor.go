@@ -30,6 +30,9 @@ type Cursor interface {
 	PeekN(int) rune
 	// PeekString returns the first n runes/bytes as a string without consuming.
 	PeekString(int) string
+	// ScanCharDataInto scans XML character data into dst, returning rune count
+	// and whether '\r' was seen. Does not consume — call AdvanceFast after.
+	ScanCharDataInto(dst *bytes.Buffer) (int, bool)
 	Unused() io.Reader
 }
 
@@ -416,6 +419,59 @@ func (c *RuneCursor) AdvanceFast(n int) error {
 	return nil
 }
 
+// ScanCharDataInto scans contiguous XML character data from the ring buffer
+// and writes it into dst. It stops at '<', '&', ']]>', or any non-XML-char.
+// Returns the rune count consumed and whether '\r' was encountered.
+// The caller should call AdvanceFast(nRunes) after processing.
+//
+// This is faster than the PeekN(i+1) loop because it accesses the ring buffer
+// directly without function call overhead per character, and pre-grows dst.
+func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer) (int, bool) {
+	if c.count == 0 {
+		if err := c.ensure(1); err != nil {
+			return 0, false
+		}
+	}
+
+	mask := c.ringMask
+	ring := c.ring
+	head := c.head
+	count := c.count
+	hasCarriageReturn := false
+	nRunes := 0
+
+	// Pre-grow to avoid repeated buffer growth.
+	dst.Grow(count)
+
+	for nRunes < count {
+		e := ring[(head+nRunes)&mask]
+		r := e.val
+		if r == '<' || r == '&' || r == utf8.RuneError {
+			break
+		}
+		u := uint32(r)
+		if u < 0x20 && u != 0x9 && u != 0xa && u != 0xd {
+			break
+		}
+		if r == ']' && nRunes+2 < count {
+			if ring[(head+nRunes+1)&mask].val == ']' && ring[(head+nRunes+2)&mask].val == '>' {
+				break
+			}
+		}
+		if r == '\r' {
+			hasCarriageReturn = true
+		}
+		if e.width == 1 {
+			dst.WriteByte(byte(r))
+		} else {
+			dst.WriteRune(r)
+		}
+		nRunes++
+	}
+
+	return nRunes, hasCarriageReturn
+}
+
 func (c *RuneCursor) hasPrefix(s string, n int, consume bool) bool {
 	if c.count < n {
 		if err := c.ensure(n); err != nil {
@@ -631,6 +687,36 @@ func (c *ByteCursor) Advance(n int) error {
 // AdvanceFast advances by n bytes, skipping line buffer tracking.
 func (c *ByteCursor) AdvanceFast(n int) error {
 	return c.Advance(n)
+}
+
+// ScanCharDataInto scans XML character data into dst for ByteCursor.
+func (c *ByteCursor) ScanCharDataInto(dst *bytes.Buffer) (int, bool) {
+	if c.fillBuffer(1) != nil {
+		return 0, false
+	}
+	hasCarriageReturn := false
+	i := 0
+	for c.bufpos+i < c.buflen {
+		b := c.buf[c.bufpos+i]
+		if b == '<' || b == '&' {
+			break
+		}
+		if b < 0x20 && b != 0x9 && b != 0xa && b != 0xd {
+			break
+		}
+		if b == ']' && c.bufpos+i+2 < c.buflen && c.buf[c.bufpos+i+1] == ']' && c.buf[c.bufpos+i+2] == '>' {
+			break
+		}
+		if b == '\r' {
+			hasCarriageReturn = true
+		}
+		i++
+	}
+	if i == 0 {
+		return 0, false
+	}
+	dst.Write(c.buf[c.bufpos : c.bufpos+i])
+	return i, hasCarriageReturn
 }
 
 func (c *ByteCursor) hasPrefix(s []byte, consume bool) bool {

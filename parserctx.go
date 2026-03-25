@@ -1087,25 +1087,12 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		panic("did not get rune cursor")
 	}
 
-	needsNormalize := false
-	i := 0
-	for c := cur.PeekN(i + 1); c != 0x0; c = cur.PeekN(i + 1) {
-		if c == '<' || c == '&' || !isChar(c) {
-			break
-		}
-
-		if c == ']' && cur.PeekN(i+2) == ']' && cur.PeekN(i+3) == '>' {
+	i, needsNormalize := cur.ScanCharDataInto(buf)
+	if i <= 0 {
+		// ScanCharDataInto stops at ]]> but doesn't error — check for it.
+		if cur.PeekN(1) == ']' && cur.PeekN(2) == ']' && cur.PeekN(3) == '>' {
 			return pctx.error(ctx, ErrMisplacedCDATAEnd)
 		}
-
-		if c == '\r' {
-			needsNormalize = true
-		}
-		_, _ = buf.WriteRune(c)
-		i++
-	}
-
-	if i <= 0 {
 		pdebug.Dump(cur)
 		return errors.New("invalid char data")
 	}
