@@ -347,10 +347,16 @@ func (inv Invocation) validate() error {
 		if c.matchSelection != nil {
 			return fmt.Errorf("xslt3: Selection is not valid for Transform (use ApplyTemplates)")
 		}
+		if c.initialTemplateParams != nil {
+			return fmt.Errorf("xslt3: SetInitialTemplateParameter is not valid for Transform (use CallTemplate)")
+		}
 	case InvocationApplyTemplates:
 		// nil source is allowed when a match selection is provided, or when
 		// the stylesheet does not require a source document.
 		// executeTransform will raise XTDE0040 if needed.
+		if c.initialTemplateParams != nil {
+			return fmt.Errorf("xslt3: SetInitialTemplateParameter is not valid for ApplyTemplates (use CallTemplate)")
+		}
 	case InvocationCallTemplate:
 		if c.initialTemplate == "" {
 			return fmt.Errorf("xslt3: CallTemplate requires a template name")
@@ -361,6 +367,9 @@ func (inv Invocation) validate() error {
 		if c.matchSelection != nil {
 			return fmt.Errorf("xslt3: Selection is not valid for CallTemplate")
 		}
+		if c.initialModeParams != nil {
+			return fmt.Errorf("xslt3: SetInitialModeParameter is not valid for CallTemplate (use Transform or ApplyTemplates)")
+		}
 	case InvocationCallFunction:
 		if c.initialFunction == "" {
 			return fmt.Errorf("xslt3: CallFunction requires a function name")
@@ -370,6 +379,12 @@ func (inv Invocation) validate() error {
 		}
 		if c.matchSelection != nil {
 			return fmt.Errorf("xslt3: Selection is not valid for CallFunction")
+		}
+		if c.initialTemplateParams != nil {
+			return fmt.Errorf("xslt3: SetInitialTemplateParameter is not valid for CallFunction (use CallTemplate)")
+		}
+		if c.initialModeParams != nil {
+			return fmt.Errorf("xslt3: SetInitialModeParameter is not valid for CallFunction (use Transform or ApplyTemplates)")
 		}
 	default:
 		return fmt.Errorf("xslt3: invalid invocation kind %d", c.kind)

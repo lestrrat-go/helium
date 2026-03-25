@@ -213,6 +213,73 @@ func TestInvocationCallFunctionValidation(t *testing.T) {
 	require.Contains(t, err.Error(), "Selection is not valid for CallFunction")
 }
 
+func TestInvocationInitialTemplateParamRejectedForTransform(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.Transform(parseTransformSource(t)).
+		SetInitialTemplateParameter("p", xpath3.SingleString("v")).
+		Do(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "SetInitialTemplateParameter is not valid for Transform")
+}
+
+func TestInvocationInitialTemplateParamRejectedForApplyTemplates(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.ApplyTemplates(parseTransformSource(t)).
+		SetInitialTemplateParameter("p", xpath3.SingleString("v")).
+		Do(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "SetInitialTemplateParameter is not valid for ApplyTemplates")
+}
+
+func TestInvocationInitialTemplateParamRejectedForCallFunction(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:f="http://example.com/f">
+  <xsl:function name="f:id"><xsl:param name="x"/><xsl:sequence select="$x"/></xsl:function>
+</xsl:stylesheet>`)
+
+	_, err := ss.CallFunction("{http://example.com/f}id", xpath3.SingleString("a")).
+		SetInitialTemplateParameter("p", xpath3.SingleString("v")).
+		Do(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "SetInitialTemplateParameter is not valid for CallFunction")
+}
+
+func TestInvocationInitialModeParamRejectedForCallTemplate(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template name="t"><out/></xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.CallTemplate("t").
+		SetInitialModeParameter("p", xpath3.SingleString("v")).
+		Do(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "SetInitialModeParameter is not valid for CallTemplate")
+}
+
+func TestInvocationInitialModeParamRejectedForCallFunction(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:f="http://example.com/f">
+  <xsl:function name="f:id"><xsl:param name="x"/><xsl:sequence select="$x"/></xsl:function>
+</xsl:stylesheet>`)
+
+	_, err := ss.CallFunction("{http://example.com/f}id", xpath3.SingleString("a")).
+		SetInitialModeParameter("p", xpath3.SingleString("v")).
+		Do(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "SetInitialModeParameter is not valid for CallFunction")
+}
+
 func TestOnMultipleMatchModeString(t *testing.T) {
 	require.Equal(t, "use-last", xslt3.OnMultipleMatchUseLast.String())
 	require.Equal(t, "fail", xslt3.OnMultipleMatchFail.String())
