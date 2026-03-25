@@ -277,7 +277,10 @@ func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
 	}
 
 	if v.Select != nil {
-		sourceNode := normalizeNode(ec.sourceDoc)
+		var sourceNode helium.Node
+		if !ec.globalContextAbsent {
+			sourceNode = normalizeNode(ec.sourceDoc)
+		}
 		result, err := ec.evalXPath(v.Select, sourceNode)
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global variable %q: %w", v.Name, err)
@@ -288,7 +291,10 @@ func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
 		// context node, not whatever the current template context is. Save
 		// and restore ec.contextNode so that XPath expressions inside the
 		// body (e.g. value-of select="doc/a") resolve relative to "/".
-		sourceNode := normalizeNode(ec.sourceDoc)
+		var sourceNode helium.Node
+		if !ec.globalContextAbsent {
+			sourceNode = normalizeNode(ec.sourceDoc)
+		}
 		savedCtx := ec.contextNode
 		ec.contextNode = sourceNode
 		ec.temporaryOutputDepth++
@@ -365,7 +371,10 @@ func (ec *execContext) evaluateGlobalParam(p *param) (xpath3.Sequence, error) {
 	}
 
 	if p.Select != nil {
-		sourceNode := normalizeNode(ec.sourceDoc)
+		var sourceNode helium.Node
+		if !ec.globalContextAbsent {
+			sourceNode = normalizeNode(ec.sourceDoc)
+		}
 		result, err := ec.evalXPath(p.Select, sourceNode)
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating global param %q: %w", p.Name, err)
@@ -374,7 +383,10 @@ func (ec *execContext) evaluateGlobalParam(p *param) (xpath3.Sequence, error) {
 	} else if len(p.Body) > 0 {
 		// Global param body must evaluate with the source document as
 		// context node (same as the Select path above).
-		sourceNode := normalizeNode(ec.sourceDoc)
+		var sourceNode helium.Node
+		if !ec.globalContextAbsent {
+			sourceNode = normalizeNode(ec.sourceDoc)
+		}
 		savedCtx := ec.contextNode
 		ec.contextNode = sourceNode
 		ec.temporaryOutputDepth++

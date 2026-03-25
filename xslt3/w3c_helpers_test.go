@@ -737,6 +737,9 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		if sourceDoc != nil {
 			inv = inv.SourceDocument(sourceDoc)
 		}
+		if tc.InitialModeSelect != "" {
+			inv = inv.GlobalContextSelect(tc.InitialModeSelect)
+		}
 		for pName, pVal := range tc.InitialTemplateParams {
 			inv = inv.SetInitialTemplateParameter(pName, w3cEvaluateParamSequence(ctx, pVal))
 		}
@@ -1461,7 +1464,6 @@ var w3cImplicitSkips = map[string]string{
 	"strip-space-007": "schema-aware whitespace stripping not implemented",
 	"strip-space-008": "schema-aware whitespace stripping not implemented",
 	"strip-space-022": "xsl:strip-space with xml:space=preserve interaction incorrect",
-	"strip-space-023": "XPDY0002 context-dependent expression in strip-space not detected",
 
 	// base-uri: static-base-uri and base URI propagation through includes
 	"base-uri-005": "base-uri on result document nodes incorrect",

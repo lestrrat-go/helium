@@ -156,6 +156,20 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		ec.stripWhitespaceFromDoc(effectiveSource)
 	}
 
+	// When a globalContextSelect expression is provided, evaluate it against
+	// the (possibly stripped) source document.  If the result is empty, the
+	// global context item is absent and global variables referencing "."
+	// will raise XPDY0002.
+	if cfg != nil && cfg.globalContextSelect != "" && effectiveSource != nil {
+		expr, compErr := xpath3.NewCompiler().Compile(cfg.globalContextSelect)
+		if compErr == nil {
+			result, evalErr := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(ctx, expr, effectiveSource)
+			if evalErr != nil || sequence.Len(result.Sequence()) == 0 {
+				ec.globalContextAbsent = true
+			}
+		}
+	}
+
 	// Store exec context in Go context for avt evaluation
 	ctx = withExecContext(ctx, ec)
 
