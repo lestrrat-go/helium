@@ -91,6 +91,38 @@ func TestEvaluator(t *testing.T) {
 		require.Equal(t, "two", s2)
 	})
 
+	t.Run("zero value evaluator", func(t *testing.T) {
+		expr, err := compiler.Compile("//a/text()")
+		require.NoError(t, err)
+
+		// A zero-value Evaluator must not panic.
+		var ev xpath3.Evaluator
+		result, err := ev.Evaluate(t.Context(), expr, doc)
+		require.NoError(t, err)
+
+		nodes, err := result.Nodes()
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		require.Equal(t, "hello", string(nodes[0].Content()))
+	})
+
+	t.Run("zero value evaluator with fluent methods", func(t *testing.T) {
+		expr, err := compiler.Compile("$x")
+		require.NoError(t, err)
+
+		vars := xpath3.NewVariables()
+		vars.Set("x", xpath3.SingleString("from-zero"))
+
+		// Fluent methods on a zero-value Evaluator must not panic.
+		var ev xpath3.Evaluator
+		result, err := ev.Variables(vars).Evaluate(t.Context(), expr, doc)
+		require.NoError(t, err)
+
+		s, ok := result.IsString()
+		require.True(t, ok)
+		require.Equal(t, "from-zero", s)
+	})
+
 	t.Run("MustCompile", func(t *testing.T) {
 		expr := compiler.MustCompile("1 + 2")
 		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
