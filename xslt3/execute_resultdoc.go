@@ -125,8 +125,15 @@ func (ec *execContext) execDocument(ctx context.Context, inst *documentInst) err
 	// When the temporary document has no children (e.g. empty TVT body),
 	// the xsl:document node still acts as a text-node boundary that breaks
 	// the atomic adjacency chain (XSLT 3.0 §5.7.2).
+	// In sequence/capture mode the empty document node must still be emitted
+	// as an item so it is visible to the caller.
 	out := ec.currentOutput()
 	if tmpDoc.FirstChild() == nil {
+		if out.sequenceMode || (out.captureItems && out.current != nil && out.current.Type() != helium.DocumentNode) {
+			out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: tmpDoc})
+			out.noteOutput()
+			return nil
+		}
 		if !out.wherePopulated {
 			out.prevWasAtomic = false
 		}
