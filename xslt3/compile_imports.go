@@ -14,6 +14,11 @@ import (
 )
 
 func (c *compiler) compileImport(elem *helium.Element) error {
+	// XTSE0165: xsl:import is not allowed in an xsl:package (or any module
+	// included via xsl:include in a package); packages use xsl:use-package.
+	if c.stylesheet.isPackage {
+		return staticError(errCodeXTSE0165, "xsl:import is not allowed in an xsl:package (use xsl:use-package instead)")
+	}
 	if err := c.validateXSLTAttrs(elem, map[string]struct{}{
 		"href": {}, "use-when": {},
 	}); err != nil {
