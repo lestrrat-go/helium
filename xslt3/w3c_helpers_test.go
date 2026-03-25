@@ -1631,8 +1631,6 @@ var w3cImplicitSkips = map[string]string{
 	// error-FODC0002a-ignore: processor now raises FODC0002 (ignore_doc_failure=false)
 	"error-FODC0002a-ignore": "processor raises FODC0002 instead of ignoring document failures",
 
-	// embedded-stylesheet-007: xsl:apply-imports with simplified stylesheet import
-	"embedded-stylesheet-007": "xsl:apply-imports with imported simplified stylesheet not producing correct output",
 
 	// merge: schema-element instance test on merged items
 	"merge-049": "schema-element() instance test on merged items fails",
@@ -1689,9 +1687,7 @@ var w3cImplicitSkips = map[string]string{
 	"evaluate-048": "requires network access to saxonica.com",
 
 
-	"base-uri-024": "xsl:copy base-uri propagation depends on result context",
 	"base-uri-052": "XInclude processing not applied to source documents",
-	"base-uri-053": "xsl:copy base-uri propagation in built-in templates incorrect",
 
 	// snapshot: f:snapshot reference impl namespace-node graft produces empty root
 	"snapshot-0102a": "snapshot()/root() returns empty for some namespace nodes",
@@ -1702,10 +1698,6 @@ var w3cImplicitSkips = map[string]string{
 	"validation-1301":  "XSD 1.1 xs:alternative type selection not implemented",
 	"import-schema-164": "XSD validation fails for namespaced attribute ref with default",
 	"strip-space-009":  "schema-aware whitespace stripping not implemented",
-	"package-910":      "XSD 1.1 package static error XTSE0165 not detected",
-	"package-913":      "XSD 1.1 package static error XTSE0165 not detected",
-	"package-913a":     "XSD 1.1 package static error XTSE0165 not detected",
-	"package-913b":     "XSD 1.1 package static error XTSE0165 not detected",
 
 
 	// higher-order functions: nested for-each-group grouping bug
