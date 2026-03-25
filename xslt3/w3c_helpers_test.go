@@ -1657,13 +1657,6 @@ var w3cImplicitSkips = map[string]string{
 	"streamable-015": "streaming for-each-group grouping result incorrect",
 	"streamable-016": "streaming for-each-group grouping result incorrect",
 	"streamable-019": "streaming for-each-group position tracking incorrect",
-	"streamable-035": "streaming for-each-group grouping result incorrect",
-	"streamable-045": "streaming for-each-group sum/avg calculation incorrect",
-	"streamable-054": "streaming for-each-group min calculation incorrect",
-	"streamable-059": "streaming for-each-group value concatenation incorrect",
-	"streamable-107": "XTSE3430 streamability analysis not implemented",
-	"streamable-110": "XTSE3430 streamability analysis not implemented",
-	"streamable-148": "streaming for-each-group grouping result incorrect",
 
 	// package version resolution: lowest_version not supported (we use highest_version)
 
