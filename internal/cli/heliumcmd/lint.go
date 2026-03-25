@@ -415,12 +415,11 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		if cfg.timing {
 			t0 = time.Now()
 		}
-		var xiOpts []xinclude.Option
-		xiOpts = append(xiOpts, xinclude.WithParseFlags(cfg.parseOptions))
+		xiProc := xinclude.NewProcessor().ParseFlags(cfg.parseOptions)
 		if !input.stdin {
-			xiOpts = append(xiOpts, xinclude.WithBaseURI(input.name))
+			xiProc = xiProc.BaseURI(input.name)
 		}
-		_, xiErr := xinclude.Process(ctx, doc, xiOpts...)
+		_, xiErr := xiProc.Process(ctx, doc)
 		if cfg.timing {
 			_, _ = fmt.Fprintf(c.stderr, "XInclude took %s\n", time.Since(t0))
 		}

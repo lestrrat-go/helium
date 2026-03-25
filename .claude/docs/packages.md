@@ -161,9 +161,9 @@ HTML 4.01 parser producing helium DOM or SAX events.
 
 XInclude 1.0 processing with recursive inclusion and fallback.
 
-- **Process(*Document, ...Option) → (int, error)** — process entire document
-- **ProcessTree(Node, ...Option) → (int, error)** — process subtree
-- Options: WithNoXIncludeMarkers(), WithNoBaseFixup(), WithResolver(Resolver), WithBaseURI(string), WithParseFlags(), WithWarningHandler()
+- **NewProcessor() → Processor** — create fluent builder
+- Processor methods: NoXIncludeMarkers(), NoBaseFixup(), Resolver(Resolver), BaseURI(string), ParseFlags(ParseOption), WarningHandler(func)
+- Terminal: **Process(ctx, *Document) → (int, error)**, **ProcessTree(ctx, Node) → (int, error)**
 - `Resolver` interface — custom resource loader
 - Max depth 40, max URI 2000 chars, circular detection, doc/text caching
 - Files: `xinclude.go`
