@@ -422,6 +422,55 @@ func isNCNameChar(r rune) bool {
 		r == 0xB7 || (r >= 0x0300 && r <= 0x036F) || (r >= 0x203F && r <= 0x2040)
 }
 
+// ScanSimpleAttrValue scans a simple attribute value (no entities, no special
+// whitespace) between the current position and the given quote character.
+// Returns the value string and rune count, or ("", 0) if the value contains
+// entities or special characters that require the slow path.
+// Does NOT consume — caller must call Advance(nRunes) after.
+func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte) (string, int) {
+	if c.fillBuffer(1) != nil {
+		return "", 0
+	}
+
+	off := 0
+	nRunes := 0
+	for {
+		if c.bufpos+off >= c.buflen {
+			if c.fillBuffer(off + 1) != nil {
+				return "", 0
+			}
+			if c.bufpos+off >= c.buflen {
+				return "", 0
+			}
+		}
+		b := c.buf[c.bufpos+off]
+		if b == quote {
+			// End of value.
+			return string(c.buf[c.bufpos : c.bufpos+off]), nRunes
+		}
+		if b == '&' || b == '<' {
+			// Entity reference or invalid char — need slow path.
+			return "", 0
+		}
+		if b < 0x80 {
+			if b < 0x20 && b != 0x9 {
+				// \r, \n, or other control chars need normalization.
+				return "", 0
+			}
+			off++
+			nRunes++
+		} else {
+			_ = c.fillBuffer(off + utf8.UTFMax)
+			_, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
+			if w == 0 {
+				return "", 0
+			}
+			off += w
+			nRunes++
+		}
+	}
+}
+
 // ScanCharDataInto scans XML character data with inline EOL normalization.
 // Does NOT consume — caller must call AdvanceFast(nRunes) after processing.
 // The returned rune count counts \r\n as 2 runes to match what AdvanceFast sees.

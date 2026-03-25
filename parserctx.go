@@ -1546,6 +1546,21 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch rune
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
+
+	// Fast path: for simple attribute values (no entities, no whitespace
+	// normalization, no \r\n), scan directly from the byte buffer.
+	if !normalize {
+		if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
+			if v, nRunes := u8.ScanSimpleAttrValue(byte(qch)); nRunes > 0 {
+				if err = cur.Advance(nRunes); err != nil {
+					return
+				}
+				value = v
+				return
+			}
+		}
+	}
+
 	inSpace := false
 	b := bufferPool.Get().(*bytes.Buffer)
 	defer releaseBuffer(b)
