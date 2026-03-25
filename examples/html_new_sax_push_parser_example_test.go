@@ -18,7 +18,7 @@ func Example_html_new_sax_push_parser() {
 		return nil
 	}))
 
-	pp := html.NewSAXPushParser(context.Background(), handler)
+	pp := html.NewParser().NewSAXPushParser(context.Background(), handler)
 	if err := pp.Push([]byte(`<h1>Title</h1>`)); err != nil {
 		fmt.Printf("push failed: %s\n", err)
 		return

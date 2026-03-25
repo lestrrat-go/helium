@@ -23,17 +23,17 @@ const testHTML = `<!DOCTYPE html>
 func dumpHTMLDoc(t *testing.T, doc *helium.Document) string {
 	t.Helper()
 	var buf bytes.Buffer
-	require.NoError(t, html.WriteDoc(&buf, doc))
+	require.NoError(t, html.NewWriter().WriteDoc(&buf, doc))
 	return buf.String()
 }
 
 func TestHTMLPushParserSingleChunk(t *testing.T) {
 	input := []byte(testHTML)
 
-	want, err := html.Parse(t.Context(), input)
+	want, err := html.NewParser().Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	pp := html.NewPushParser(t.Context())
+	pp := html.NewParser().NewPushParser(t.Context())
 	require.NoError(t, pp.Push(input))
 	got, err := pp.Close()
 	require.NoError(t, err)
@@ -43,10 +43,10 @@ func TestHTMLPushParserSingleChunk(t *testing.T) {
 func TestHTMLPushParserMultiChunk(t *testing.T) {
 	input := []byte(testHTML)
 
-	want, err := html.Parse(t.Context(), input)
+	want, err := html.NewParser().Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	pp := html.NewPushParser(t.Context())
+	pp := html.NewParser().NewPushParser(t.Context())
 	// Push in 20-byte chunks
 	for i := 0; i < len(input); i += 20 {
 		end := i + 20
@@ -83,7 +83,7 @@ func TestHTMLPushParserSAXMode(t *testing.T) {
 	handler.SetOnWarning(html.WarningFunc(func(err error) error { return nil }))
 	handler.SetOnSetDocumentLocator(html.SetDocumentLocatorFunc(func(loc html.DocumentLocator) error { return nil }))
 
-	pp := html.NewSAXPushParser(t.Context(), handler)
+	pp := html.NewParser().NewSAXPushParser(t.Context(), handler)
 	require.NoError(t, pp.Push(input))
 	doc, err := pp.Close()
 	require.NoError(t, err)
@@ -97,10 +97,10 @@ func TestHTMLPushParserSAXMode(t *testing.T) {
 func TestHTMLPushParserIOCopy(t *testing.T) {
 	input := []byte(testHTML)
 
-	want, err := html.Parse(t.Context(), input)
+	want, err := html.NewParser().Parse(t.Context(), input)
 	require.NoError(t, err)
 
-	pp := html.NewPushParser(t.Context())
+	pp := html.NewParser().NewPushParser(t.Context())
 	n, err := io.Copy(pp, bytes.NewReader(input))
 	require.NoError(t, err)
 	require.Equal(t, int64(len(input)), n)

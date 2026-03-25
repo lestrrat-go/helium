@@ -1855,7 +1855,7 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 			// The result may be HTML output with void elements
 			// (e.g. <meta>, <img>) that are not valid XML. Try
 			// the HTML parser as a last resort.
-			htmlDoc, htmlErr := htmlparser.Parse(context.TODO(), []byte(resultXML))
+			htmlDoc, htmlErr := htmlparser.NewParser().Parse(context.TODO(), []byte(resultXML))
 			if htmlErr != nil {
 				t.Errorf("assert: cannot parse result XML: %v", err)
 				return false
@@ -2038,7 +2038,7 @@ func evalXPathAssertWithRawResult(t *testing.T, expr string, resultXML string, r
 		wrapped := "<_w3c_wrap_>" + resultXML + "</_w3c_wrap_>"
 		wrapDoc, wrapErr := helium.Parse(context.TODO(), []byte(wrapped))
 		if wrapErr != nil {
-			htmlDoc, htmlErr := htmlparser.Parse(context.TODO(), []byte(resultXML))
+			htmlDoc, htmlErr := htmlparser.NewParser().Parse(context.TODO(), []byte(resultXML))
 			if htmlErr != nil {
 				t.Errorf("assert: cannot parse result XML: %v", err)
 				return false
