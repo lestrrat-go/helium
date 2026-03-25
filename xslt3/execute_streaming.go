@@ -359,11 +359,12 @@ func (ec *execContext) execNextIteration(ctx context.Context, inst *nextIteratio
 // mergeKeyValue holds a single merge key as an XPath atomic value for
 // type-aware comparison (dates, numbers, strings, etc.).
 type mergeKeyValue struct {
-	atom    xpath3.AtomicValue // the actual typed atomic value
-	str     string             // string fallback (used when atom is zero)
-	num     float64            // numeric value (used when numeric is true)
-	numeric bool               // true when data-type="number" was applied
-	isNaN   bool               // true when numeric conversion produced NaN
+	atom       xpath3.AtomicValue   // the actual typed atomic value
+	str        string               // string fallback (used when atom is zero)
+	num        float64              // numeric value (used when numeric is true)
+	numeric    bool                 // true when data-type="number" was applied
+	isNaN      bool                 // true when numeric conversion produced NaN
+	collCompare func(a, b string) int // collation compare function (nil = codepoint)
 }
 
 // mergeSourceItems holds the items from one merge source along with
@@ -466,6 +467,14 @@ func compareSingleMergeKey(a, b mergeKeyValue) (int, error) {
 		if err == nil {
 			bStr = s
 		}
+	}
+	// Use collation compare function if available.
+	cmpFn := a.collCompare
+	if cmpFn == nil {
+		cmpFn = b.collCompare
+	}
+	if cmpFn != nil {
+		return cmpFn(aStr, bStr), nil
 	}
 	if aStr < bStr {
 		return -1, nil
@@ -681,18 +690,20 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 			}
 		} else {
 			// Default: verify items are already sorted (XTDE2210).
-			// Skip verification when merge keys use collation attributes
-			// (lang, collation, case-order) that we don't fully support,
-			// since data may be validly sorted in a locale-specific order.
+			// Resolve collation for each key level and apply to verify keys.
+			// Skip verification when collation uses unsupported options
+			// (alternate=shifted/blanked) or lang/case-order without an
+			// explicit collation URI, since the Go UCA fallback may differ
+			// from the original sort order.
 			srcKeyDefs := inst.Sources[src.sourceIdx].Keys
-			hasCollation := false
+			skipVerify := false
 			for _, mk := range srcKeyDefs {
 				if mk.HasCollation {
-					hasCollation = true
+					skipVerify = true
 					break
 				}
 			}
-			if !hasCollation {
+			if !skipVerify {
 				for i := 1; i < len(verifyKeys); i++ {
 					cmp, cmpErr := compareMergeKeyValues(verifyKeys[i-1], verifyKeys[i], orders)
 					if cmpErr != nil {
@@ -706,14 +717,27 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 		}
 	}
 
-	// Apply the first source's data-type for the n-way merge comparison.
+	// Apply the first source's data-type and collation for the n-way merge comparison.
 	firstDTs := perSourceDataTypes[0]
+	firstKeyDefs := inst.Sources[0].Keys
+	// Pre-resolve collations for the first source's key definitions.
+	var nwayCollations []func(a, b string) int
+	for _, mk := range firstKeyDefs {
+		collFn, collErr := ec.resolveMergeKeyCollation(ctx, mk)
+		if collErr != nil {
+			return collErr
+		}
+		nwayCollations = append(nwayCollations, collFn)
+	}
 	for si := range allSources {
 		src := &allSources[si]
 		for i := range src.keys {
 			for k := range src.keys[i] {
 				if k < len(firstDTs) && firstDTs[k] == "number" {
 					applyNumericMergeKey(&src.keys[i][k])
+				}
+				if k < len(nwayCollations) && nwayCollations[k] != nil {
+					src.keys[i][k].collCompare = nwayCollations[k]
 				}
 			}
 		}
@@ -1509,4 +1533,60 @@ func mergeKeyValueToSequence(mkv mergeKeyValue) xpath3.Sequence {
 		return xpath3.SingleString(mkv.str)
 	}
 	return xpath3.EmptySequence()
+}
+
+// resolveCollationURIOnly resolves the collation URI string for a merge key
+// definition at runtime (evaluating any AVT), but does not build a compare
+// function. Returns "" when no explicit collation is specified.
+func (ec *execContext) resolveCollationURIOnly(ctx context.Context, mk *mergeKey) (string, error) {
+	collURI := mk.Collation
+	if mk.CollationAVT != nil {
+		evaluated, err := mk.CollationAVT.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return "", err
+		}
+		collURI = evaluated
+	}
+	return collURI, nil
+}
+
+// resolveMergeKeyCollation resolves the collation URI for a merge key
+// definition at runtime. Returns nil compare function if no collation is
+// specified or if the collation is the default codepoint collation.
+// Raises XTDE2220 if the collation URI is not recognized.
+func (ec *execContext) resolveMergeKeyCollation(ctx context.Context, mk *mergeKey) (func(a, b string) int, error) {
+	cmpFn, _, err := ec.resolveMergeKeyCollationURI(ctx, mk)
+	return cmpFn, err
+}
+
+// resolveMergeKeyCollationURI is like resolveMergeKeyCollation but also
+// returns the resolved collation URI string for inspection.
+func (ec *execContext) resolveMergeKeyCollationURI(ctx context.Context, mk *mergeKey) (func(a, b string) int, string, error) {
+	collURI := mk.Collation
+	if mk.CollationAVT != nil {
+		evaluated, err := mk.CollationAVT.evaluate(ctx, ec.contextNode)
+		if err != nil {
+			return nil, "", err
+		}
+		collURI = evaluated
+	}
+	if collURI == "" {
+		// No explicit collation — use lang/case-order to build a UCA URI.
+		if mk.Lang != "" {
+			collURI = "http://www.w3.org/2013/collation/UCA?lang=" + mk.Lang
+			if mk.CaseOrder == "upper-first" {
+				collURI += ";caseFirst=upper"
+			} else if mk.CaseOrder == "lower-first" {
+				collURI += ";caseFirst=lower"
+			}
+		}
+	}
+	if collURI == "" || collURI == "http://www.w3.org/2005/xpath-functions/collation/codepoint" {
+		return nil, collURI, nil
+	}
+	cmpFn, err := xpath3.ResolveCollationCompareFunc(collURI)
+	if err != nil {
+		return nil, collURI, dynamicError(errCodeXTDE2220, "unsupported collation URI %q: %v", collURI, err)
+	}
+	return cmpFn, collURI, nil
 }

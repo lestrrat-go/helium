@@ -98,6 +98,7 @@ const (
 	errCodeXTDE1490 = "XTDE1490" // two result documents with same URI
 	errCodeXTDE1665 = "XTDE1665" // validation of copy fails
 	errCodeXTDE2210 = "XTDE2210" // merge input inconsistent or not sorted
+	errCodeXTDE2220 = "XTDE2220" // unsupported collation URI
 	errCodeXTDE3052 = "XTDE3052" // runtime: abstract component invoked
 	errCodeXTDE3086 = "XTDE3086" // required global context item absent
 	errCodeXTDE3160 = "XTDE3160" // xsl:evaluate runtime error
