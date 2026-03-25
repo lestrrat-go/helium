@@ -630,8 +630,14 @@ func (c *compiler) pushElementNamespaces(elem *helium.Element) map[string]string
 		prefix := ns.Prefix()
 		uri := ns.URI()
 		newBindings[prefix] = uri
-		// Also add to stylesheet namespaces for runtime XPath evaluation
-		c.stylesheet.namespaces[prefix] = uri
+		// Also add to stylesheet namespaces for runtime XPath evaluation,
+		// but only for prefixes not already declared at a higher scope.
+		// Local redeclarations (e.g. xmlns:x="..." on a literal result
+		// element inside a template) must not overwrite the top-level
+		// stylesheet binding that user-defined functions are registered under.
+		if _, exists := c.stylesheet.namespaces[prefix]; !exists {
+			c.stylesheet.namespaces[prefix] = uri
+		}
 	}
 	c.nsBindings = newBindings
 	return saved

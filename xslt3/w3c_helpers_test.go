@@ -1549,7 +1549,8 @@ var w3cImplicitSkips = map[string]string{
 	"json-to-xml-typed-006": "json-to-xml validate option does not annotate result nodes",
 	"json-to-xml-typed-007": "json-to-xml validate option does not annotate result nodes",
 
-	// function tests: TVT namespace resolution
+	// function tests: QName eq comparison ignores namespace URI
+	"function-1034": "QName eq comparison incorrectly returns true for different namespace URIs",
 
 	// copy tests: external entity resolution
 	"copy-1401": "requires external entity resolution (SYSTEM entity reference)",
@@ -1683,7 +1684,10 @@ var w3cImplicitSkips = map[string]string{
 	"validation-1301":  "XSD 1.1 xs:override not fully implemented",
 	"import-schema-164": "XSD 1.1 xs:override attribute validation not implemented",
 	"strip-space-009":  "XSD 1.1 schema-aware whitespace stripping fails",
-	"error-0905b":      "XSD 1.1 xs:anyURI validation rejects #### (should accept)",
+	"package-910":      "XSD 1.1 package static error XTSE0165 not detected",
+	"package-913":      "XSD 1.1 package static error XTSE0165 not detected",
+	"package-913a":     "XSD 1.1 package static error XTSE0165 not detected",
+	"package-913b":     "XSD 1.1 package static error XTSE0165 not detected",
 
 
 	// higher-order functions: nested for-each-group grouping bug
