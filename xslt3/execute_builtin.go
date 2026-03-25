@@ -265,6 +265,11 @@ func (ec *execContext) shouldStripWhitespace(node helium.Node) bool {
 		return false
 	}
 	elem := parent.(*helium.Element)
+	// xml:space="preserve" on the element or an ancestor overrides strip-space.
+	// Walk up to find the nearest xml:space declaration.
+	if inheritedXMLSpace(elem) == "preserve" {
+		return false
+	}
 	if ec.isElementStripped(elem) {
 		return true
 	}
@@ -273,6 +278,22 @@ func (ec *execContext) shouldStripWhitespace(node helium.Node) bool {
 	// are stripped. This ensures documents parsed with DTD element content
 	// models behave correctly even without xsl:strip-space.
 	return hasElementOnlyContent(elem)
+}
+
+// inheritedXMLSpace walks up the ancestor chain to find the nearest
+// xml:space attribute and returns its value ("preserve" or "default").
+// Returns "" if no xml:space is declared on any ancestor.
+func inheritedXMLSpace(elem *helium.Element) string {
+	for n := helium.Node(elem); n != nil; n = n.Parent() {
+		e, ok := n.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if v, ok := e.GetAttribute("xml:space"); ok {
+			return v
+		}
+	}
+	return ""
 }
 
 // isElementStripped checks if an element matches strip-space rules.
@@ -338,6 +359,10 @@ func matchSpaceNameTest(nt nameTest, elem *helium.Element, nsBindings map[string
 	if nt.Local == "*" && nt.Prefix == "" {
 		return true // "*" matches all
 	}
+	if nt.Prefix == "*" {
+		// "*:NCName" matches elements with given local name in any namespace
+		return elem.LocalName() == nt.Local
+	}
 	if nt.Local == "*" && nt.Prefix != "" {
 		// "prefix:*" matches elements in that namespace
 		nsURI := nsBindings[nt.Prefix]
@@ -348,18 +373,22 @@ func matchSpaceNameTest(nt nameTest, elem *helium.Element, nsBindings map[string
 		nsURI := nsBindings[nt.Prefix]
 		return elem.LocalName() == nt.Local && elem.URI() == nsURI
 	}
+	// Unprefixed name: use resolved URI if xpath-default-namespace was applied
+	if nt.HasURI {
+		return elem.LocalName() == nt.Local && elem.URI() == nt.URI
+	}
 	// "local" matches elements with that local name (no namespace)
 	return elem.LocalName() == nt.Local && elem.URI() == ""
 }
 
 // nameTestPriority returns the priority of a nameTest for conflict resolution.
-// Specific names > prefix:* > *
+// Specific names > prefix:* or *:NCName > *
 func nameTestPriority(nt nameTest) int {
 	if nt.Local == "*" && nt.Prefix == "" {
 		return 0 // "*"
 	}
-	if nt.Local == "*" {
-		return 1 // "prefix:*"
+	if nt.Local == "*" || nt.Prefix == "*" {
+		return 1 // "prefix:*" or "*:NCName"
 	}
 	return 2 // specific name
 }

@@ -137,9 +137,9 @@ import (
 )
 
 func Example_html_parse() {
-  // html.Parse builds a helium DOM from HTML input and applies HTML-specific
-  // parsing rules (implied elements, case-insensitive tag handling, etc.).
-  doc, err := html.Parse(context.Background(), []byte(`<h1>Title</h1><div>Hello</div>`))
+  // html.NewParser().Parse builds a helium DOM from HTML input and applies
+  // HTML-specific parsing rules (implied elements, case-insensitive tag handling, etc.).
+  doc, err := html.NewParser().Parse(context.Background(), []byte(`<h1>Title</h1><div>Hello</div>`))
   if err != nil {
     fmt.Printf("failed to parse: %s\n", err)
     return
@@ -414,10 +414,10 @@ func Example_xinclude_process() {
     return
   }
 
-  n, err := xinclude.Process(context.Background(), doc,
-    xinclude.WithBaseURI(mainPath),
-    xinclude.WithNoBaseFixup(),
-  )
+  n, err := xinclude.NewProcessor().
+    BaseURI(mainPath).
+    NoBaseFixup().
+    Process(context.Background(), doc)
   if err != nil {
     fmt.Printf("xinclude error: %s\n", err)
     return
@@ -442,11 +442,11 @@ func Example_xinclude_process() {
     return
   }
 
-  n, err = xinclude.Process(context.Background(), doc,
-    xinclude.WithBaseURI(mainPath),
-    xinclude.WithNoBaseFixup(),
-    xinclude.WithNoXIncludeMarkers(),
-  )
+  n, err = xinclude.NewProcessor().
+    BaseURI(mainPath).
+    NoBaseFixup().
+    NoXIncludeMarkers().
+    Process(context.Background(), doc)
   if err != nil {
     fmt.Printf("xinclude error: %s\n", err)
     return
@@ -512,7 +512,7 @@ func Example_c14n_canonicalize() {
   //   - Attributes sorted by namespace URI then local name
   //   - Empty elements use start-tag + end-tag (not self-closing)
   //   - Whitespace in attribute values is normalized
-  out, err := c14n.CanonicalizeTo(doc, c14n.C14N10)
+  out, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
   if err != nil {
     fmt.Printf("failed to canonicalize: %s\n", err)
     return
@@ -604,7 +604,7 @@ func Example_schematron_validate() {
     return
   }
 
-  schema, err := schematron.Compile(context.Background(), schemaDoc)
+  schema, err := schematron.NewCompiler().Compile(context.Background(), schemaDoc)
   if err != nil {
     fmt.Printf("schema compile failed: %s\n", err)
     return
@@ -616,7 +616,7 @@ func Example_schematron_validate() {
     return
   }
 
-  if err := schematron.Validate(context.Background(), doc, schema, schematron.WithFilename("doc.xml")); err != nil {
+  if err := schematron.NewValidator(schema).Filename("doc.xml").Validate(context.Background(), doc); err != nil {
     fmt.Println(err)
   }
   // Output:

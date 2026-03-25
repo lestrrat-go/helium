@@ -118,7 +118,7 @@ Primary file: `internal/cli/heliumcmd/schematron_validate.go`
 
 - Usage: `helium schematron validate [--timing] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
-- Schema compiled once with `schematron.CompileFile()` + `schematron.WithSchemaFilename()`
-- Each XML input parsed with `helium.NewParser()` + validated with `schematron.Validate()`
-- Validation passes `schematron.WithFilename(input.name)` so error output names the current XML source
+- Schema compiled once with `schematron.NewCompiler().SchemaFilename(path).CompileFile(ctx, path)`
+- Each XML input parsed with `helium.NewParser()` + validated with `schematron.NewValidator(schema).Filename(name).Validate(ctx, doc)`
+- Validation passes `.Filename(input.name)` so error output names the current XML source
 

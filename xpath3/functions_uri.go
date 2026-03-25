@@ -96,13 +96,13 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 			if err != nil {
 				return nil, err
 			}
-			return SingleString(base), nil
+			return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: base}), nil
 		}
 		// 1-arg with empty relative: return static base URI
 		if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
-			return SingleString(ec.baseURI), nil
+			return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: ec.baseURI}), nil
 		}
-		return SingleString(""), nil
+		return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: ""}), nil
 	}
 	base := ""
 	baseFromContext := false
@@ -120,7 +120,7 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 	if base == "" {
-		return SingleString(relative), nil
+		return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: relative}), nil
 	}
 	if err := validateIRI(base); err != nil {
 		return nil, &XPathError{Code: "FORG0002", Message: "invalid base URI: " + base}
@@ -131,7 +131,7 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	// Check if relative URI is already absolute
 	if idx := strings.Index(relative, ":"); idx > 0 && !strings.ContainsAny(relative[:idx], "/?#") {
-		return SingleString(relative), nil
+		return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: relative}), nil
 	}
 
 	// Convert absolute file paths to file: URIs so that resolve-uri works
@@ -159,7 +159,7 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, &XPathError{Code: "FORG0002", Message: "invalid relative URI: " + relative}
 	}
-	return SingleString(result), nil
+	return SingleAtomic(AtomicValue{TypeName: TypeAnyURI, Value: result}), nil
 }
 
 // validateIRI checks that a string is a valid IRI reference.
