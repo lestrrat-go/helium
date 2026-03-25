@@ -737,6 +737,9 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 		if sourceDoc != nil {
 			inv = inv.SourceDocument(sourceDoc)
 		}
+		if tc.InitialModeSelect != "" {
+			inv = inv.GlobalContextSelect(tc.InitialModeSelect)
+		}
 		for pName, pVal := range tc.InitialTemplateParams {
 			inv = inv.SetInitialTemplateParameter(pName, w3cEvaluateParamSequence(ctx, pVal))
 		}
@@ -1421,15 +1424,11 @@ var w3cImplicitSkips = map[string]string{
 	// strip-space: various whitespace stripping issues
 	"strip-space-007": "schema-aware whitespace stripping not implemented",
 	"strip-space-008": "schema-aware whitespace stripping not implemented",
-	"strip-space-023": "XPDY0002 context-dependent expression in strip-space not detected",
 
-	// base-uri: external entity base URI tracking and xsl:copy base URI propagation
-	"base-uri-024": "xsl:copy does not preserve original node base URI on orphaned elements",
-	"base-uri-051":  "external entity base URI not tracked by parser",
-	"base-uri-051a": "external entity base URI not tracked by parser",
-	"base-uri-051b": "external entity base URI not tracked by parser",
-	"base-uri-052":  "external entity base URI not tracked by parser",
-	"base-uri-053":  "xsl:copy does not preserve original node base URI on orphaned elements",
+	// base-uri: xsl:copy base URI propagation
+	"base-uri-024": "xsl:copy base-uri propagation depends on result context",
+	"base-uri-052": "XInclude processing not applied to source documents",
+	"base-uri-053": "xsl:copy base-uri propagation in built-in templates incorrect",
 
 	// arrays: array construction and apply-templates on arrays
 
@@ -1458,8 +1457,9 @@ var w3cImplicitSkips = map[string]string{
 	"evaluate-013": "schema-aware xsl:evaluate not implemented (XTDE3160)",
 	"evaluate-048": "requires network access to saxonica.com",
 
-	// snapshot: deep-equal mismatch between built-in and reference snapshot
-	"snapshot-0102a": "snapshot()/root() returns empty for namespace nodes in snapshot tree",
+
+	// snapshot: f:snapshot reference impl namespace-node graft produces empty root
+	"snapshot-0102a": "snapshot()/root() returns empty for some namespace nodes",
 
 	// higher-order functions: nested for-each-group grouping bug
 }
