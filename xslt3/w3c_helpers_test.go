@@ -1416,10 +1416,6 @@ var w3cImplicitSkips = map[string]string{
 	"streamable-059": "streaming for-each-group value concatenation incorrect",
 	"streamable-107": "XTSE3430 streamability analysis not implemented",
 	"streamable-110": "XTSE3430 streamability analysis not implemented",
-	"streamable-116": "XPDY0002 streaming absent context not detected",
-	"streamable-126": "XTSE3430 streamability analysis not implemented",
-	"streamable-127": "XTSE3430 streamability analysis not implemented",
-	"streamable-128": "XTSE3430 streamability analysis not implemented",
 	"streamable-148": "streaming for-each-group grouping result incorrect",
 
 	// package version resolution: lowest_version not supported (we use highest_version)

@@ -656,6 +656,51 @@ func ExprUsesDescendantOrSelf(expr *Expression) bool {
 	return false
 }
 
+// ExprHasUpThenDownNavigation returns true if any location path in the
+// expression first navigates upward (parent/ancestor) and then downward
+// (child/descendant). This up-then-down pattern is not streamable.
+func ExprHasUpThenDownNavigation(expr *Expression) bool {
+	if expr == nil {
+		return false
+	}
+	found := false
+	WalkExpr(expr.AST(), func(e Expr) bool {
+		if found {
+			return false
+		}
+		checkSteps := func(axes []AxisType) {
+			seenUp := false
+			for _, axis := range axes {
+				switch axis {
+				case AxisParent, AxisAncestor, AxisAncestorOrSelf:
+					seenUp = true
+				case AxisChild, AxisDescendant, AxisDescendantOrSelf:
+					if seenUp {
+						found = true
+						return
+					}
+				}
+			}
+		}
+		switch v := e.(type) {
+		case LocationPath:
+			axes := make([]AxisType, len(v.Steps))
+			for i, s := range v.Steps {
+				axes[i] = s.Axis
+			}
+			checkSteps(axes)
+		case vmLocationPathExpr:
+			axes := make([]AxisType, len(v.Steps))
+			for i, s := range v.Steps {
+				axes[i] = s.Axis
+			}
+			checkSteps(axes)
+		}
+		return true
+	})
+	return found
+}
+
 // ExprUsesContextItem returns true if the expression references the context
 // item (.) at any level. This is used to detect consuming operations in
 // streaming accumulator rule select expressions.

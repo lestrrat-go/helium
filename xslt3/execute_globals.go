@@ -10,6 +10,24 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
+// checkGlobalVarsStreamingContext raises XPDY0002 if any global variable has
+// a select expression that depends on the implicit document context. When the
+// initial mode is streamable, the principal source document is not available
+// for random access in global variable initialisers.
+func checkGlobalVarsStreamingContext(ss *Stylesheet) error {
+	for _, v := range ss.globalVars {
+		if v.Select == nil {
+			continue
+		}
+		if xpath3.ExprHasDownwardStep(v.Select) || xpath3.ExprUsesContextItem(v.Select) || xpath3.ExprUsesDescendantOrSelf(v.Select) {
+			return dynamicError(errCodeXPDY0002,
+				"global variable $%s references the document context, which is absent when the initial mode is streamable",
+				v.Name)
+		}
+	}
+	return nil
+}
+
 // Params with caller-provided values are set immediately; all others are
 // evaluated on first access to support arbitrary declaration order.
 func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig) error {

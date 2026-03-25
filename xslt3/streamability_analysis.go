@@ -265,6 +265,22 @@ func checkStreamableTemplateBody(ss *Stylesheet, body []instruction) error {
 		}
 	}
 
+	// Check for xsl:sequence at the template body level that returns
+	// streaming nodes. Inside an LRE or xsl:element, nodes are consumed
+	// into the output and are fine; at the top level they would be returned
+	// to the caller, which is not streamable.
+	for _, inst := range body {
+		seq, ok := inst.(*xslSequenceInst)
+		if !ok || seq.Select == nil {
+			continue
+		}
+		if exprTopLevelReturnsStreamingNodes(seq.Select.AST()) {
+			return staticError(errCodeXTSE3430,
+				"xsl:sequence select %q returns streaming nodes from template body, which is not streamable",
+				seq.Select.String())
+		}
+	}
+
 	// Check for variables bound to the streaming context that are used
 	// consumingly in subsequent loop bodies.
 	if err := checkStreamingVarInLoop(body); err != nil {
@@ -398,10 +414,18 @@ func checkStreamableInstructionCtx(ss *Stylesheet, inst instruction, inResultDoc
 	// Recurse into child instructions.
 	// For xsl:for-each whose select does NOT consume the stream (motionless/upward),
 	// skip body checks: the body operates in a new, non-streaming context where
-	// last(), position(), etc. are allowed.
+	// last(), position(), etc. are allowed. However, when the select navigates
+	// upward (parent/ancestor), check for downward navigation in the body only
+	// (up-then-down is not streamable).
 	if fe, ok := inst.(*forEachInst); ok {
 		if fe.Select != nil && !xpath3.ExprHasDownwardStep(fe.Select) && !xpath3.ExprUsesDescendantOrSelf(fe.Select) {
-			// Body of for-each over motionless/attribute axis — skip streaming checks.
+			// Check up-then-down: for-each navigates upward and body goes down.
+			if xpath3.ExprUsesUpwardAxis(fe.Select) && bodyHasDownwardNavigation(fe.Body) {
+				return staticError(errCodeXTSE3430,
+					"xsl:for-each select %q navigates upward and body navigates downward, which is not streamable (up-then-down)",
+					fe.Select.String())
+			}
+			// Body of for-each over motionless/upward axis — skip streaming checks.
 			return nil
 		}
 	}
@@ -426,4 +450,51 @@ func checkStreamableInstructionCtx(ss *Stylesheet, inst instruction, inResultDoc
 	}
 
 	return nil
+}
+
+// exprTopLevelReturnsStreamingNodes returns true if the top-level expression
+// returns nodes from the streaming document (path/step expressions that select
+// child/descendant elements). Does NOT flag function calls that consume nodes
+// internally and return atomic values (e.g., string-join, count).
+func exprTopLevelReturnsStreamingNodes(expr xpath3.Expr) bool {
+	expr = derefXPathExpr(expr)
+	switch v := expr.(type) {
+	case xpath3.LocationPath:
+		for _, step := range v.Steps {
+			switch step.Axis {
+			case xpath3.AxisChild, xpath3.AxisDescendant, xpath3.AxisDescendantOrSelf:
+				return true
+			}
+		}
+	case xpath3.PathExpr:
+		return true // path expression returns nodes
+	case xpath3.PathStepExpr:
+		return true // step expression returns nodes
+	case xpath3.IfExpr:
+		return exprTopLevelReturnsStreamingNodes(v.Then) || exprTopLevelReturnsStreamingNodes(v.Else)
+	case xpath3.ContextItemExpr:
+		return true // "." returns the streaming node itself
+	}
+	return false
+}
+
+// bodyHasDownwardNavigation returns true if any instruction in the body
+// has an expression that navigates downward (child/descendant axis).
+func bodyHasDownwardNavigation(body []instruction) bool {
+	for _, inst := range body {
+		for _, expr := range getInstructionExprs(inst) {
+			if expr == nil {
+				continue
+			}
+			if xpath3.ExprHasDownwardStep(expr) {
+				return true
+			}
+		}
+		for _, children := range getChildInstructions(inst) {
+			if bodyHasDownwardNavigation(children) {
+				return true
+			}
+		}
+	}
+	return false
 }
