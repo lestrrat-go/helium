@@ -71,10 +71,13 @@ func NewEvaluator(flags EvaluatorOption) Evaluator {
 }
 
 func (e Evaluator) borrowing() bool {
-	return e.cfg.options&EvalBorrowing != 0
+	return e.cfg != nil && e.cfg.options&EvalBorrowing != 0
 }
 
 func (e Evaluator) clone() Evaluator {
+	if e.cfg == nil {
+		return Evaluator{cfg: &evaluatorCfg{}}
+	}
 	cp := *e.cfg
 	return Evaluator{cfg: &cp}
 }
@@ -318,6 +321,9 @@ func (e Evaluator) newEvalCtx(ctx context.Context, node helium.Node) *evalContex
 	now := time.Now()
 
 	cfg := e.cfg
+	if cfg == nil {
+		cfg = &evaluatorCfg{}
+	}
 
 	ec := &evalContext{
 		goCtx:    ctx,
