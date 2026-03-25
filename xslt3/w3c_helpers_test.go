@@ -2805,7 +2805,9 @@ func w3cExtractEmbeddedStylesheet(t *testing.T, doc *helium.Document) *helium.Do
 	if err != nil {
 		t.Fatalf("embedded stylesheet: copy element: %v", err)
 	}
-	ssDoc.AddChild(copied)
+	if err := ssDoc.AddChild(copied); err != nil {
+		t.Fatalf("embedded stylesheet: add child: %v", err)
+	}
 
 	return ssDoc
 }
