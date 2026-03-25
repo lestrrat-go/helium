@@ -1711,13 +1711,6 @@ var w3cImplicitSkips = map[string]string{
 	"package-913b":     "XSD 1.1 package static error XTSE0165 not detected",
 	"error-0905b":      "XSD 1.1 xs:anyURI validation rejects #### (should accept)",
 
-	// streaming-fallback: XTSE3430 raised as compile error instead of falling back to non-streaming
-	"streaming-fallback-001": "XTSE3430 fallback to non-streaming not implemented",
-	"streaming-fallback-002": "XTSE3430 fallback to non-streaming not implemented",
-	"streaming-fallback-003": "XTSE3430 fallback to non-streaming not implemented",
-	"streaming-fallback-004": "XTSE3430 fallback to non-streaming not implemented",
-	"streaming-fallback-005": "XTSE3430 fallback to non-streaming not implemented",
-	"streaming-fallback-006": "XTSE3430 fallback to non-streaming not implemented",
 
 	// higher-order functions: nested for-each-group grouping bug
 }
