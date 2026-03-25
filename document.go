@@ -501,19 +501,21 @@ func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
 	return nil, false
 }
 
+var errElementDeclNotFound = errors.New("element declaration not found")
+
 func (d *Document) IsMixedElement(name string) (bool, error) {
 	if d.intSubset == nil {
-		return false, errors.New("element declaration not found")
+		return false, errElementDeclNotFound
 	}
 
 	edecl, ok := d.intSubset.GetElementDesc(name)
 	if !ok {
-		return false, errors.New("element declaration not found")
+		return false, errElementDeclNotFound
 	}
 
 	switch edecl.decltype {
 	case enum.UndefinedElementType:
-		return false, errors.New("element declaration not found")
+		return false, errElementDeclNotFound
 	case enum.ElementElementType:
 		return false, nil
 	case enum.EmptyElementType, enum.AnyElementType, enum.MixedElementType:
