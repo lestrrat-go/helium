@@ -1311,20 +1311,18 @@ var w3cImplicitSkips = map[string]string{
 	"package-100":    "package cross-reference variable resolution not implemented",
 	"package-101":    "package cross-reference variable resolution (used-package private vars not accessible)",
 
-	// use-package: package-scoped component isolation not implemented
-	"use-package-101": "package-scoped decimal format isolation not implemented",
-	"use-package-102": "package-scoped key isolation not implemented",
-	"use-package-104": "package-scoped decimal format error isolation not implemented",
-	"use-package-105": "package-scoped key isolation not implemented",
-	"use-package-106": "package-scoped namespace-alias isolation not implemented",
-	"use-package-108": "package-scoped character map isolation not implemented",
-	"use-package-108b": "package-scoped character map isolation not implemented",
-	"use-package-150": "xml-to-json function argument handling incorrect",
-	"use-package-151": "xml-to-json function argument handling incorrect",
-	"use-package-152": "xml-to-json function argument handling incorrect",
-	"use-package-161": "package-scoped variable resolution not implemented",
-	"use-package-175": "package-scoped variable resolution not implemented",
-	"use-package-176": "package template override precedence incorrect",
+	// use-package: package template override precedence
+	"use-package-176": "package template override precedence with versioned packages incorrect",
+
+	// use-package: character map namespace serialization in package context
+	"use-package-108":  "package-scoped character map with namespace serialization not fully implemented",
+	"use-package-108b": "package-scoped character map with namespace serialization not fully implemented",
+
+	// use-package: xml-to-json package mode template matching
+	"use-package-150": "xml-to-json package mode template matching not implemented",
+	"use-package-151": "xml-to-json package mode template matching not implemented",
+	"use-package-152": "xml-to-json package mode template matching not implemented",
+
 
 	// override: xsl:original and override static checks not implemented
 	"override-f-012":    "xsl:override function replacement not fully implemented",

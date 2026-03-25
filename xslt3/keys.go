@@ -186,8 +186,9 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 		ec.keyTables = make(map[string]*keyTable)
 	}
 
-	// Cache key includes both the key name and the document identity
-	cacheKey := fmt.Sprintf("%s@%p", name, root)
+	// Cache key includes the key name, the document identity, and the
+	// owning package (for package-scoped key isolation).
+	cacheKey := fmt.Sprintf("%s@%p@%p", name, root, ec.currentPackage)
 	if kt, ok := ec.keyTables[cacheKey]; ok {
 		if kt.built {
 			return kt, nil
@@ -211,7 +212,7 @@ func (ec *execContext) buildKeyTable(name string, root helium.Node) (*keyTable, 
 		}
 	}
 
-	defs, ok := ec.stylesheet.keys[name]
+	defs, ok := ec.effectiveKeys()[name]
 	if !ok || len(defs) == 0 {
 		return nil, dynamicError(errCodeXTDE1170, "unknown key %q", name)
 	}

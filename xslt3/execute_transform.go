@@ -457,25 +457,27 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		allMapNames := outDef.UseCharacterMaps
 		allMapNames = append(allMapNames, ec.primaryCharacterMaps...)
 		if len(allMapNames) > 0 {
-			outDef.ResolvedCharMap = resolveCharacterMaps(ss, allMapNames)
+			// If we already have package-resolved character maps, use those
+			// instead of re-resolving from the main stylesheet (package
+			// isolation: character maps are scoped per-package).
+			if len(ec.primaryResolvedCharMap) > 0 {
+				outDef.ResolvedCharMap = ec.primaryResolvedCharMap
+			} else {
+				outDef.ResolvedCharMap = resolveCharacterMaps(ss, allMapNames)
+			}
 		}
 	} else if len(ec.primaryCharacterMaps) > 0 {
 		outDef = &OutputDef{Method: methodXML, Encoding: "UTF-8"}
-		outDef.ResolvedCharMap = resolveCharacterMaps(ss, ec.primaryCharacterMaps)
-	}
-	// Merge resolved character maps from parameter-document (xsl:output or format).
-	if len(ec.primaryResolvedCharMap) > 0 {
+		if len(ec.primaryResolvedCharMap) > 0 {
+			outDef.ResolvedCharMap = ec.primaryResolvedCharMap
+		} else {
+			outDef.ResolvedCharMap = resolveCharacterMaps(ss, ec.primaryCharacterMaps)
+		}
+	} else if len(ec.primaryResolvedCharMap) > 0 {
 		if outDef == nil {
 			outDef = &OutputDef{Method: methodXML, Encoding: "UTF-8"}
 		}
-		if outDef.ResolvedCharMap == nil {
-			outDef.ResolvedCharMap = make(map[rune]string)
-		}
-		for k, v := range ec.primaryResolvedCharMap {
-			if _, exists := outDef.ResolvedCharMap[k]; !exists {
-				outDef.ResolvedCharMap[k] = v
-			}
-		}
+		outDef.ResolvedCharMap = ec.primaryResolvedCharMap
 	}
 
 	// Apply serialization parameter overrides from primary xsl:result-document.
