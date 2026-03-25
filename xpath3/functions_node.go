@@ -852,8 +852,96 @@ func fnIDRef(ctx context.Context, args []Sequence) (Sequence, error) {
 	return sequenceFromDocOrderedNodes(ctx, nodes)
 }
 
+// fnElementWithID implements fn:element-with-id(). It differs from fn:id()
+// when the ID is carried by an element's text content (xs:ID-typed element):
+// fn:id returns the element itself, while fn:element-with-id returns its
+// parent element.
 func fnElementWithID(ctx context.Context, args []Sequence) (Sequence, error) {
-	return fnID(ctx, args)
+	doc, err := resolveIDLookupDocument(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+
+	tokens, err := idLookupTokens(args[0])
+	if err != nil {
+		return nil, err
+	}
+	if len(tokens) == 0 {
+		return nil, nil
+	}
+
+	// DTD-based IDs are always on attributes, so GetElementByID behaves
+	// identically for id() and element-with-id().
+	nodes := make([]helium.Node, 0, len(tokens))
+	for _, token := range tokens {
+		if elem := doc.GetElementByID(token); elem != nil {
+			nodes = append(nodes, elem)
+		}
+	}
+	nodes = append(nodes, elementWithIDFromTypeAnnotations(doc, tokens, getFnContext(ctx))...)
+	return sequenceFromDocOrderedNodes(ctx, nodes)
+}
+
+// elementWithIDFromTypeAnnotations is like idElementsFromTypeAnnotations but
+// for fn:element-with-id: when the ID is on an element node, it returns the
+// parent element rather than the element itself.
+func elementWithIDFromTypeAnnotations(doc *helium.Document, tokens []string, ec *evalContext) []helium.Node {
+	if ec == nil || len(tokens) == 0 {
+		return nil
+	}
+	if ec.typeAnnotations == nil && ec.preservedIDAnnotations == nil {
+		return nil
+	}
+
+	wanted := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
+		wanted[token] = struct{}{}
+	}
+
+	seen := make(map[helium.Node]struct{})
+	var nodes []helium.Node
+
+	for _, annMap := range []map[helium.Node]string{ec.typeAnnotations, ec.preservedIDAnnotations} {
+		for node, typeName := range annMap {
+			if !annotationMatchesIDType(typeName, ec) {
+				continue
+			}
+			if ixpath.DocumentRoot(node) != doc {
+				continue
+			}
+
+			switch typed := node.(type) {
+			case *helium.Attribute:
+				if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; !ok {
+					continue
+				}
+				parent, ok := typed.Parent().(*helium.Element)
+				if !ok {
+					continue
+				}
+				if _, dup := seen[parent]; dup {
+					continue
+				}
+				seen[parent] = struct{}{}
+				nodes = append(nodes, parent)
+			case *helium.Element:
+				if _, ok := wanted[strings.TrimSpace(ixpath.StringValue(typed))]; !ok {
+					continue
+				}
+				// element-with-id: return the PARENT of the ID-bearing element
+				parent, ok := typed.Parent().(*helium.Element)
+				if !ok {
+					continue
+				}
+				if _, dup := seen[parent]; dup {
+					continue
+				}
+				seen[parent] = struct{}{}
+				nodes = append(nodes, parent)
+			}
+		}
+	}
+	return nodes
 }
 
 func fnCollection(ctx context.Context, args []Sequence) (Sequence, error) {

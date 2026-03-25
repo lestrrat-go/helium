@@ -1618,10 +1618,6 @@ var w3cImplicitSkips = map[string]string{
 
 	// package version resolution: lowest_version not supported (we use highest_version)
 
-	// castable tests: schema-aware union/list type casting
-	"castable-005": "schema-aware union type casting fails",
-	"castable-006": "schema-aware list type casting fails",
-
 	// attribute-set tests
 
 	// regex-090/091: regex-group#N function reference captures regex context as closure
@@ -1641,8 +1637,6 @@ var w3cImplicitSkips = map[string]string{
 	// arrays: array construction and apply-templates on arrays
 
 	// schema-aware match tests: pattern matching with schema types
-	"match-054": "element-with-id pattern match returns child instead of parent",
-	"match-055": "element-with-id pattern match returns child instead of parent",
 	"match-174": "xsl:type annotation on constructed elements not propagated",
 	"match-181": "xsl:type annotation on constructed elements not propagated",
 	"match-210": "schema-aware attribute type pattern match fails",
