@@ -14,7 +14,7 @@ func compileTestSchema(t *testing.T, xml string) (*Schema, string) {
 	doc, err := helium.Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-	schema, err := Compile(t.Context(), doc, WithCompileErrorHandler(collector))
+	schema, err := NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
 	require.NoError(t, err)
 	_ = collector.Close()
 	var b strings.Builder
@@ -239,7 +239,7 @@ func TestLetVariableChainedDependency(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(`<root><item val="bad"/></root>`))
 		require.NoError(t, err)
 
-		err = Validate(t.Context(), doc, schema)
+		err = NewValidator(schema).Validate(t.Context(), doc)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "x is bad")
 		require.Contains(t, err.Error(), "y is hello")
@@ -272,7 +272,7 @@ func TestLetVariableChainedDependency(t *testing.T) {
 		doc, err := helium.Parse(t.Context(), []byte(`<root><item/></root>`))
 		require.NoError(t, err)
 
-		err = Validate(t.Context(), doc, schema)
+		err = NewValidator(schema).Validate(t.Context(), doc)
 		// a=1 should be reported since $a is properly registered.
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "a=1")
@@ -358,7 +358,7 @@ func TestUnionContextIntegration(t *testing.T) {
 	doc, err := helium.Parse(t.Context(), []byte(`<root><invoice/><credit-note/><other/></root>`))
 	require.NoError(t, err)
 
-	err = Validate(t.Context(), doc, schema)
+	err = NewValidator(schema).Validate(t.Context(), doc)
 	// Both invoice and credit-note should trigger the assert.
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invoice")

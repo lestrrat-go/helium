@@ -26,7 +26,7 @@ func Example_schematron_compile_file() {
 		return
 	}
 
-	schema, err := schematron.CompileFile(context.Background(), f.Name())
+	schema, err := schematron.NewCompiler().CompileFile(context.Background(), f.Name())
 	if err != nil {
 		fmt.Printf("compile failed: %s\n", err)
 		return
@@ -38,7 +38,7 @@ func Example_schematron_compile_file() {
 		return
 	}
 
-	if err := schematron.Validate(context.Background(), doc, schema, schematron.WithFilename("doc.xml")); err != nil {
+	if err := schematron.NewValidator(schema).Filename("doc.xml").Validate(context.Background(), doc); err != nil {
 		fmt.Println(err)
 	}
 	// Output:
