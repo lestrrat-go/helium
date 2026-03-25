@@ -1310,11 +1310,7 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *namespaceInst) e
 			"namespace URI %q is reserved and cannot be used", value)
 	}
 	// XTDE0905: namespace URI must be valid in the lexical space of xs:anyURI.
-	// A URI can have at most one '#' (fragment separator).
-	if value != "" && strings.Count(value, "#") > 1 {
-		return dynamicError(errCodeXTDE0905,
-			"namespace URI %q is not a valid xs:anyURI", value)
-	}
+	// Under XSD 1.1, xs:anyURI accepts any string, so no further check is needed.
 	// XTDE0930: non-empty prefix with zero-length namespace URI
 	if name != "" && value == "" {
 		return dynamicError(errCodeXTDE0930,

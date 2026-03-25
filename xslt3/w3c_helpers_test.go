@@ -1549,7 +1549,8 @@ var w3cImplicitSkips = map[string]string{
 	"json-to-xml-typed-006": "json-to-xml validate option does not annotate result nodes",
 	"json-to-xml-typed-007": "json-to-xml validate option does not annotate result nodes",
 
-	// function tests: TVT namespace resolution
+	// function tests: QName eq comparison ignores namespace URI
+	"function-1034": "QName eq comparison incorrectly returns true for different namespace URIs",
 
 	// copy tests: external entity resolution
 	"copy-1401": "requires external entity resolution (SYSTEM entity reference)",
@@ -1607,8 +1608,6 @@ var w3cImplicitSkips = map[string]string{
 
 	// error-FODC0002a-ignore: processor now raises FODC0002 (ignore_doc_failure=false)
 	"error-FODC0002a-ignore": "processor raises FODC0002 instead of ignoring document failures",
-
-	"function-1034": "text value template with expand-text fails to resolve user function in AVT",
 
 	// embedded-stylesheet-007: xsl:apply-imports with simplified stylesheet import
 	"embedded-stylesheet-007": "xsl:apply-imports with imported simplified stylesheet not producing correct output",
@@ -1680,10 +1679,13 @@ var w3cImplicitSkips = map[string]string{
 
 
 	// XSD 1.1 features: newly unlocked but failing
-	"validation-1301":  "XSD 1.1 xs:override not fully implemented",
-	"import-schema-164": "XSD 1.1 xs:override attribute validation not implemented",
-	"strip-space-009":  "XSD 1.1 schema-aware whitespace stripping fails",
-	"error-0905b":      "XSD 1.1 xs:anyURI validation rejects #### (should accept)",
+	"validation-1301":  "XSD 1.1 xs:alternative type selection not implemented",
+	"import-schema-164": "XSD validation fails for namespaced attribute ref with default",
+	"strip-space-009":  "schema-aware whitespace stripping not implemented",
+	"package-910":      "XSD 1.1 package static error XTSE0165 not detected",
+	"package-913":      "XSD 1.1 package static error XTSE0165 not detected",
+	"package-913a":     "XSD 1.1 package static error XTSE0165 not detected",
+	"package-913b":     "XSD 1.1 package static error XTSE0165 not detected",
 
 
 	// higher-order functions: nested for-each-group grouping bug
