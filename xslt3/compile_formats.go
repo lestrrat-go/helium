@@ -754,6 +754,12 @@ func checkAttributeSetCycles(ss *Stylesheet) error {
 		state[name] = visiting
 		if asd := ss.attributeSets[name]; asd != nil {
 			for _, ref := range asd.UseAttrSets {
+				// use-attribute-sets="xsl:original" refers to the
+				// original attribute-set being overridden, not a
+				// named attribute-set in the stylesheet.
+				if ref == "{"+lexicon.NamespaceXSLT+"}original" && asd.OriginalAttrSet != nil {
+					continue
+				}
 				if _, ok := ss.attributeSets[ref]; !ok {
 					return staticError(errCodeXTSE0710,
 						"attribute-set %q references undeclared attribute-set %q", name, ref)

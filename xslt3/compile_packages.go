@@ -310,8 +310,18 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		if _, overridden := overrideNames[xslElemFunction+":"+key]; overridden {
 			continue
 		}
-		if _, exists := c.stylesheet.functions[fk]; !exists {
+		if fn.OwnerPackage == nil {
+			fn.OwnerPackage = pkg
+		}
+		fn.AcceptedFrom = pkg
+		if existing, exists := c.stylesheet.functions[fk]; !exists {
 			c.stylesheet.functions[fk] = fn
+		} else if existing.AcceptedFrom != nil && existing.AcceptedFrom != pkg {
+			// XTSE3050: two use-packages accept the same function
+			// with non-hidden visibility.
+			return staticError(errCodeXTSE3050,
+				"function %q accepted from multiple packages with non-hidden visibility",
+				key)
 		}
 	}
 
@@ -459,6 +469,15 @@ func (c *compiler) mergePackageComponents(pkg *Stylesheet, usePackageElem *heliu
 		for name, as := range oset.attributeSets {
 			if c.stylesheet.attributeSets == nil {
 				c.stylesheet.attributeSets = make(map[string]*attributeSetDef)
+			}
+			// Link original attribute-set for xsl:original support.
+			// The original comes from the used package, not the
+			// stylesheet (it was skipped during merge because it's
+			// overridden).
+			if pkg.attributeSets != nil {
+				if origAS, ok := pkg.attributeSets[name]; ok {
+					as.OriginalAttrSet = origAS
+				}
 			}
 			c.stylesheet.attributeSets[name] = as
 		}

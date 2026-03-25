@@ -254,6 +254,27 @@ func (ec *execContext) evaluateGlobalVar(v *variable) (xpath3.Sequence, error) {
 		}
 	}()
 
+	// XPDY0002: when a variable belongs to a library package that does not
+	// declare xsl:global-context-item (or declares use="absent"), the global
+	// context item is absent during evaluation. Temporarily clear the context
+	// node so XPath expressions that depend on it raise XPDY0002.
+	savedContextNode := ec.contextNode
+	savedContextItem := ec.contextItem
+	savedSourceDoc := ec.sourceDoc
+	if v.OwnerPackage != nil && v.OwnerPackage != ec.stylesheet {
+		gci := v.OwnerPackage.globalContextItem
+		if gci == nil || gci.Use == ctxItemAbsent {
+			ec.contextNode = nil
+			ec.contextItem = nil
+			ec.sourceDoc = nil
+		}
+	}
+	defer func() {
+		ec.contextNode = savedContextNode
+		ec.contextItem = savedContextItem
+		ec.sourceDoc = savedSourceDoc
+	}()
+
 	// Track overriding variable for $xsl:original support
 	savedOverridingVarDef := ec.overridingVarDef
 	if v.OriginalVar != nil {
