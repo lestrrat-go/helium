@@ -243,6 +243,11 @@ func (ec *execContext) applyAttributeSetsGuarded(ctx context.Context, names []st
 		// attribute-set that was overridden via xsl:override.
 		if name == xslOriginalName {
 			if ec.currentAttrSetOriginal != nil {
+				// Temporarily remove the override's name from the active
+				// set so the original (same name) doesn't trigger cycle
+				// detection. xsl:original is by definition non-circular.
+				origName := ec.currentAttrSetOriginal.Name
+				delete(active, origName)
 				if err := ec.applyOneAttributeSet(ctx, ec.currentAttrSetOriginal, active); err != nil {
 					return err
 				}

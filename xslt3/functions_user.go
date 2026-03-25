@@ -123,9 +123,15 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 	defer func() { ec.depth-- }()
 
 	// If the function belongs to a package, switch function scope.
+	// Override functions always run in the main stylesheet context
+	// (currentPackage=nil) because their body is defined in the using
+	// stylesheet and may reference functions from that scope.
 	savedFnsNS := ec.cachedFnsNS
 	savedPackage := ec.currentPackage
-	if f.def.OwnerPackage != nil && f.def.OwnerPackage != ec.currentPackage {
+	if f.def.IsOverride && ec.currentPackage != nil {
+		ec.cachedFnsNS = nil
+		ec.currentPackage = nil
+	} else if f.def.OwnerPackage != nil && f.def.OwnerPackage != ec.currentPackage {
 		ec.cachedFnsNS = nil
 		ec.currentPackage = f.def.OwnerPackage
 	}
