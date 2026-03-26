@@ -130,7 +130,6 @@ type FunctionContext interface {
 	Variable(name string) (any, bool)
 }
 
-type evalConfigKey struct{}
 type functionContextKey struct{}
 
 // withFunctionContext stores a FunctionContext in a context.Context.
@@ -153,31 +152,6 @@ type evalConfig struct {
 	functionsNS map[QualifiedName]Function // namespace-qualified custom functions
 }
 
-func getEvalConfig(ctx context.Context) *evalConfig {
-	if ctx == nil {
-		return nil
-	}
-	c, _ := ctx.Value(evalConfigKey{}).(*evalConfig)
-	return c
-}
-
-func deriveEvalConfig(ctx context.Context) *evalConfig {
-	if c := getEvalConfig(ctx); c != nil {
-		return c.clone()
-	}
-	return &evalConfig{}
-}
-
-func withEvalConfig(ctx context.Context, cfg *evalConfig) context.Context {
-	return context.WithValue(ctx, evalConfigKey{}, cfg)
-}
-
-func updateEvalConfig(ctx context.Context, fn func(*evalConfig)) context.Context {
-	cfg := deriveEvalConfig(ctx)
-	fn(cfg)
-	return withEvalConfig(ctx, cfg)
-}
-
 func (c *evalConfig) clone() *evalConfig {
 	if c == nil {
 		return &evalConfig{}
@@ -188,85 +162,6 @@ func (c *evalConfig) clone() *evalConfig {
 	cp.functions = maps.Clone(c.functions)
 	cp.functionsNS = maps.Clone(c.functionsNS)
 	return &cp
-}
-
-// Deprecated: Use Evaluator.Namespaces instead.
-func WithNamespaces(ctx context.Context, ns map[string]string) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.namespaces = maps.Clone(ns)
-	})
-}
-
-// Deprecated: Use Evaluator.AdditionalNamespaces instead.
-func WithAdditionalNamespaces(ctx context.Context, ns map[string]string) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		if c.namespaces == nil {
-			c.namespaces = make(map[string]string, len(ns))
-		}
-		for k, v := range ns {
-			c.namespaces[k] = v
-		}
-	})
-}
-
-// Deprecated: Use Evaluator.Variables instead.
-func WithVariables(ctx context.Context, vars map[string]any) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.variables = maps.Clone(vars)
-	})
-}
-
-// Deprecated: Use Evaluator.AdditionalVariables instead.
-func WithAdditionalVariables(ctx context.Context, vars map[string]any) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		if c.variables == nil {
-			c.variables = make(map[string]any, len(vars))
-		}
-		for k, v := range vars {
-			c.variables[k] = v
-		}
-	})
-}
-
-// Deprecated: Use Evaluator.OpLimit instead.
-func WithOpLimit(ctx context.Context, limit int) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.opLimit = limit
-	})
-}
-
-// Deprecated: Use Evaluator.Function instead.
-func WithFunction(ctx context.Context, name string, fn Function) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		if c.functions == nil {
-			c.functions = make(map[string]Function)
-		}
-		c.functions[name] = fn
-	})
-}
-
-// Deprecated: Use Evaluator.Function instead.
-func WithFunctions(ctx context.Context, fns map[string]Function) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.functions = maps.Clone(fns)
-	})
-}
-
-// Deprecated: Use Evaluator.FunctionNS instead.
-func WithFunctionNS(ctx context.Context, uri, name string, fn Function) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		if c.functionsNS == nil {
-			c.functionsNS = make(map[QualifiedName]Function)
-		}
-		c.functionsNS[QualifiedName{URI: uri, Name: name}] = fn
-	})
-}
-
-// Deprecated: Use Evaluator.FunctionNS instead.
-func WithFunctionsNS(ctx context.Context, fns map[QualifiedName]Function) context.Context {
-	return updateEvalConfig(ctx, func(c *evalConfig) {
-		c.functionsNS = maps.Clone(fns)
-	})
 }
 
 // Evaluator evaluates compiled XPath 1.0 expressions against nodes.
@@ -421,11 +316,9 @@ func MustCompile(expr string) *Expression {
 }
 
 // Evaluate evaluates the compiled expression against the given context node.
-// The context.Context may carry xpath1 evaluation settings attached via
-// WithNamespaces, WithVariables, WithFunction(s), or WithOpLimit.
 // (libxml2: xmlXPathCompiledEval)
 func (e *Expression) Evaluate(ctx context.Context, node helium.Node) (*Result, error) {
-	ectx := newEvalContext(ctx, node)
+	ectx := newEvalContextWithConfig(ctx, node, nil)
 	return eval(ectx, e.ast)
 }
 

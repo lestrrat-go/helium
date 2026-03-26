@@ -44,7 +44,7 @@ func TestFunctionFuncImplementsFunction(t *testing.T) {
 func TestFunctionContextAccessors(t *testing.T) {
 	doc := parseDoc(t, `<root><item/></root>`)
 	root := docRoot(t, doc)
-	ctx := newEvalContext(context.Background(), root)
+	ctx := newEvalContextWithConfig(t.Context(), root, nil)
 	ctx.position = 2
 	ctx.size = 3
 	ctx.namespaces = map[string]string{"ext": "urn:test"}
