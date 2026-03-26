@@ -10,9 +10,9 @@ import (
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
-func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig) (string, bool) {
+func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig) ([]ValidationError, bool) {
 	filename := cfg.filename
-	var out strings.Builder
+	var errs []ValidationError
 	valid := true
 
 	ev := xpath1.NewEvaluator().Namespaces(schema.namespaces)
@@ -65,19 +65,24 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 
 					if fire {
 						valid = false
+						msg, xpathErr := formatMessage(ctx, ruleEv, t.message, node)
+						if xpathErr != "" {
+							if cfg.errorHandler != nil {
+								cfg.errorHandler.Handle(ctx, helium.NewLeveledError(xpathErr+"\n", helium.ErrorLevelError))
+							}
+						}
+						ve := ValidationError{
+							Filename: filename,
+							Line:     node.Line(),
+							Element:  node.Name(),
+							Path:     getNodePath(node),
+							Message:  msg,
+						}
+						if !cfg.quiet {
+							errs = append(errs, ve)
+						}
 						if cfg.errorHandler != nil {
-							msg := formatMessage(ctx, ruleEv, t.message, node, &out)
-							cfg.errorHandler.Handle(ctx, &ValidationError{
-								Filename: filename,
-								Line:     node.Line(),
-								Element:  node.Name(),
-								Path:     getNodePath(node),
-								Message:  msg,
-							})
-						} else if !cfg.quiet {
-							msg := formatMessage(ctx, ruleEv, t.message, node, &out)
-							nodePath := getNodePath(node)
-							out.WriteString(schematronError(filename, node.Line(), node.Name(), nodePath, msg))
+							cfg.errorHandler.Handle(ctx, &ve)
 						}
 					}
 				}
@@ -85,12 +90,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		}
 	}
 
-	if valid {
-		out.WriteString(filename + " validates\n")
-	} else {
-		out.WriteString(filename + " fails to validate\n")
-	}
-	return out.String(), valid
+	return errs, valid
 }
 
 // formatMessage interpolates message parts against a context node.
@@ -101,7 +101,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 // after each segment (text, name, value-of), if the accumulated buffer
 // ends with whitespace, all trailing whitespace is replaced with a
 // single space. Internal whitespace within segments is preserved.
-func formatMessage(ctx context.Context, ev xpath1.Evaluator, parts []messagePart, node helium.Node, out *strings.Builder) string {
+func formatMessage(ctx context.Context, ev xpath1.Evaluator, parts []messagePart, node helium.Node) (msg string, xpathErr string) {
 	var buf []byte
 	for _, part := range parts {
 		switch p := part.(type) {
@@ -117,19 +117,30 @@ func formatMessage(ctx context.Context, ev xpath1.Evaluator, parts []messagePart
 		case valueOfPart:
 			if p.expr == nil {
 				// Compile-time error -- should not happen (caught during compilation).
-				return string(buf)
+				return string(buf), ""
 			}
 			result, err := ev.Evaluate(ctx, p.expr, node)
 			if err != nil {
-				// Runtime XPath error -- emit error line and stop processing.
-				fmt.Fprintf(out, "XPath error : %s\n", formatXPathError(err))
-				return string(buf)
+				// Runtime XPath error — report alongside the validation error.
+				return string(buf), fmt.Sprintf("XPath error : %s", formatXPathError(err))
 			}
 			buf = append(buf, xpathResultToString(result)...)
 		}
 		buf = trimTrailingWS(buf)
 	}
-	return string(buf)
+	return string(buf), ""
+}
+
+// formatXPathError converts XPath error messages to libxml2-compatible format.
+func formatXPathError(err error) string {
+	msg := err.Error()
+	if strings.HasPrefix(msg, "xpath: unknown function: ") {
+		return "Unregistered function: " + strings.TrimPrefix(msg, "xpath: unknown function: ")
+	}
+	if strings.HasPrefix(msg, "unknown function: ") {
+		return "Unregistered function: " + strings.TrimPrefix(msg, "unknown function: ")
+	}
+	return msg
 }
 
 // trimTrailingWS replaces trailing whitespace in buf with a single space.
@@ -153,19 +164,6 @@ func trimTrailingWS(buf []byte) []byte {
 	}
 	buf = buf[:end]
 	return append(buf, ' ')
-}
-
-// formatXPathError converts XPath error messages to libxml2-compatible format.
-func formatXPathError(err error) string {
-	msg := err.Error()
-	// Map helium xpath error messages to libxml2 format.
-	if strings.HasPrefix(msg, "xpath: unknown function: ") {
-		return "Unregistered function: " + strings.TrimPrefix(msg, "xpath: unknown function: ")
-	}
-	if strings.HasPrefix(msg, "unknown function: ") {
-		return "Unregistered function: " + strings.TrimPrefix(msg, "unknown function: ")
-	}
-	return msg
 }
 
 // xpathResultToBool converts an XPath result to a boolean.

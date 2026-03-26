@@ -167,7 +167,7 @@ func TestGoldenFiles(t *testing.T) {
 				filename := "./test/relaxng/" + tc.xmlBase
 				err = relaxng.NewValidator(grammar).Filename(filename).Validate(t.Context(), doc)
 				if err != nil {
-					got = compileWarnings + err.Error()
+					got = compileWarnings + err.Error() + filename + " fails to validate\n"
 				} else {
 					got = compileWarnings + filename + " validates\n"
 				}

@@ -156,11 +156,17 @@ func TestGoldenFiles(t *testing.T) {
 				require.NoError(t, err, "XML parse failed for %s", tc.xmlPath)
 
 				filename := "./test/schematron/" + tc.xmlBase
-				err = schematron.NewValidator(schema).Filename(filename).Validate(t.Context(), doc)
+				valCollector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+				err = schematron.NewValidator(schema).Filename(filename).ErrorHandler(valCollector).Validate(t.Context(), doc)
+				_ = valCollector.Close()
+				var valErrs strings.Builder
+				for _, e := range valCollector.Errors() {
+					valErrs.WriteString(e.Error())
+				}
 				if err != nil {
-					got = compileWarnings + err.Error()
+					got = compileWarnings + valErrs.String() + filename + " fails to validate\n"
 				} else {
-					got = compileWarnings + filename + " validates\n"
+					got = compileWarnings + valErrs.String() + filename + " validates\n"
 				}
 			}
 
@@ -208,17 +214,19 @@ func TestWithQuiet(t *testing.T) {
 		doc, err := p.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
 		require.NoError(t, err)
 
-		// Without quiet: per-error lines + "fails to validate"
+		// Without quiet: ValidateError contains structured errors
 		err = schematron.NewValidator(schema).Filename("test.xml").Validate(t.Context(), doc)
 		require.Error(t, err)
+		var ve *schematron.ValidateError
+		require.ErrorAs(t, err, &ve)
+		require.NotEmpty(t, ve.Errors)
 		require.Contains(t, err.Error(), "schematron error")
-		require.Contains(t, err.Error(), "fails to validate")
 
-		// With quiet: only "fails to validate" line, no per-error lines
+		// With quiet: ValidateError has no errors (suppressed)
 		quietErr := schematron.NewValidator(schema).Filename("test.xml").Quiet().Validate(t.Context(), doc)
 		require.Error(t, quietErr)
-		require.NotContains(t, quietErr.Error(), "schematron error")
-		require.Equal(t, "test.xml fails to validate\n", quietErr.Error())
+		require.ErrorAs(t, quietErr, &ve)
+		require.Empty(t, ve.Errors)
 	})
 
 	t.Run("passing document", func(t *testing.T) {
@@ -238,16 +246,17 @@ func TestWithQuiet(t *testing.T) {
 		doc, err := p.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
 		require.NoError(t, err)
 
-		// Without quiet: report fires, "fails to validate"
+		// Without quiet: report fires
 		err = schematron.NewValidator(rSchema).Filename("test.xml").Validate(t.Context(), doc)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "CCC is present")
 
-		// With quiet: report suppressed, but since the report fired, it still "fails to validate"
+		// With quiet: report suppressed
 		quietErr := schematron.NewValidator(rSchema).Filename("test.xml").Quiet().Validate(t.Context(), doc)
 		require.Error(t, quietErr)
-		require.NotContains(t, quietErr.Error(), "CCC is present")
-		require.Equal(t, "test.xml fails to validate\n", quietErr.Error())
+		var ve *schematron.ValidateError
+		require.ErrorAs(t, quietErr, &ve)
+		require.Empty(t, ve.Errors)
 	})
 }
 
@@ -279,10 +288,7 @@ func TestWithErrorHandler(t *testing.T) {
 			ErrorHandler(handler).
 			Validate(t.Context(), doc)
 
-		// Error output should not contain per-error lines
 		require.Error(t, err)
-		require.NotContains(t, err.Error(), "schematron error")
-		require.Contains(t, err.Error(), "fails to validate")
 
 		// Handler should have received both errors
 		require.Len(t, collected, 2)
@@ -324,8 +330,10 @@ func TestWithErrorHandler(t *testing.T) {
 			Validate(t.Context(), doc)
 
 		require.Error(t, err)
-		require.NotContains(t, err.Error(), "schematron error")
-		require.Contains(t, err.Error(), "fails to validate")
+		// Quiet suppresses Errors on ValidateError but handler still receives them
+		var ve *schematron.ValidateError
+		require.ErrorAs(t, err, &ve)
+		require.Empty(t, ve.Errors)
 		require.Len(t, collected, 2)
 	})
 }

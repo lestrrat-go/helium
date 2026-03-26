@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -163,12 +164,15 @@ func (e *ValidationError) Error() string {
 
 // ValidateError holds detailed validation failure output.
 type ValidateError struct {
-	Output string            // libxml2-compatible validation output
 	Errors []ValidationError // structured per-error details
 }
 
 func (e *ValidateError) Error() string {
-	return e.Output
+	var sb strings.Builder
+	for i := range e.Errors {
+		sb.WriteString(e.Errors[i].Error())
+	}
+	return sb.String()
 }
 
 func (v Validator) closeHandler() {
@@ -190,10 +194,10 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 	if cfg == nil {
 		cfg = &validateConfig{}
 	}
-	output, valid, validationErrors := validateDocument(ctx, doc, v.grammar, cfg)
+	valid, validationErrors := validateDocument(ctx, doc, v.grammar, cfg)
 	v.closeHandler()
 	if valid {
 		return nil
 	}
-	return &ValidateError{Output: output, Errors: validationErrors}
+	return &ValidateError{Errors: validationErrors}
 }
