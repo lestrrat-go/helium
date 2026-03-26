@@ -271,6 +271,111 @@ func WithFunctionsNS(ctx context.Context, fns map[QualifiedName]Function) contex
 	})
 }
 
+// Evaluator evaluates compiled XPath 1.0 expressions against nodes.
+// Configuration is set via fluent clone-on-write methods that return
+// a new Evaluator with the updated setting, mirroring the xpath3 API.
+type Evaluator struct {
+	cfg *evalConfig
+}
+
+// NewEvaluator returns a new Evaluator with default (empty) configuration.
+func NewEvaluator() Evaluator {
+	return Evaluator{cfg: &evalConfig{}}
+}
+
+func (e Evaluator) clone() Evaluator {
+	return Evaluator{cfg: e.cfg.clone()}
+}
+
+// Namespaces returns a new Evaluator with the given namespace prefix->URI bindings,
+// replacing any previously set namespaces.
+func (e Evaluator) Namespaces(ns map[string]string) Evaluator {
+	out := e.clone()
+	out.cfg.namespaces = maps.Clone(ns)
+	return out
+}
+
+// AdditionalNamespaces returns a new Evaluator with the given namespace bindings
+// merged into the existing set.
+func (e Evaluator) AdditionalNamespaces(ns map[string]string) Evaluator {
+	out := e.clone()
+	if out.cfg.namespaces == nil {
+		out.cfg.namespaces = make(map[string]string, len(ns))
+	}
+	for k, v := range ns {
+		out.cfg.namespaces[k] = v
+	}
+	return out
+}
+
+// Variables returns a new Evaluator with the given variable name->value bindings,
+// replacing any previously set variables.
+func (e Evaluator) Variables(vars map[string]any) Evaluator {
+	out := e.clone()
+	out.cfg.variables = maps.Clone(vars)
+	return out
+}
+
+// AdditionalVariables returns a new Evaluator with the given variable bindings
+// merged into the existing set.
+func (e Evaluator) AdditionalVariables(vars map[string]any) Evaluator {
+	out := e.clone()
+	if out.cfg.variables == nil {
+		out.cfg.variables = make(map[string]any, len(vars))
+	}
+	for k, v := range vars {
+		out.cfg.variables[k] = v
+	}
+	return out
+}
+
+// OpLimit returns a new Evaluator with the given operation counter limit.
+// A value of 0 means unlimited (the default).
+func (e Evaluator) OpLimit(n int) Evaluator {
+	out := e.clone()
+	out.cfg.opLimit = n
+	return out
+}
+
+// Function returns a new Evaluator with the given unqualified custom function registered.
+func (e Evaluator) Function(name string, fn Function) Evaluator {
+	out := e.clone()
+	if out.cfg.functions == nil {
+		out.cfg.functions = make(map[string]Function)
+	}
+	out.cfg.functions[name] = fn
+	return out
+}
+
+// FunctionNS returns a new Evaluator with the given namespace-qualified custom function registered.
+func (e Evaluator) FunctionNS(uri, name string, fn Function) Evaluator {
+	out := e.clone()
+	if out.cfg.functionsNS == nil {
+		out.cfg.functionsNS = make(map[QualifiedName]Function)
+	}
+	out.cfg.functionsNS[QualifiedName{URI: uri, Name: name}] = fn
+	return out
+}
+
+// Evaluate evaluates a compiled expression against the given context node.
+func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.Node) (*Result, error) {
+	ectx := newEvalContextWithConfig(ctx, node, e.cfg)
+	return eval(ectx, expr.ast)
+}
+
+// Find evaluates a compiled expression and returns the resulting node-set.
+// Returns ErrNotNodeSet if the expression does not evaluate to a node-set.
+func (e Evaluator) Find(ctx context.Context, expr *Expression, node helium.Node) ([]helium.Node, error) {
+	r, err := e.Evaluate(ctx, expr, node)
+	if err != nil {
+		return nil, err
+	}
+	if r.Type != NodeSetResult {
+		return nil, ErrNotNodeSet
+	}
+	return r.NodeSet, nil
+}
+
 // Expression is a compiled XPath expression, reusable across evaluations.
 type Expression struct {
 	source string
