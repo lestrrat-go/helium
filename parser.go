@@ -610,7 +610,7 @@ found:
 	if err != nil {
 		return nil, err
 	}
-	newctx.pushNode(newRoot)
+	newctx.pushNodeEntry(nodeEntry{local: "pseudoroot", qname: "pseudoroot"})
 	newctx.elem = newRoot
 	if err := doc.AddChild(newRoot); err != nil {
 		return nil, err

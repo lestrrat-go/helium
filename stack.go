@@ -2,8 +2,34 @@ package helium
 
 import "github.com/lestrrat-go/helium/internal/stack"
 
+// nodeEntry is a lightweight record for the parser's element stack.
+// It stores only the data needed for end-tag matching and SAX callbacks,
+// avoiding a full *Element allocation per start tag.
+type nodeEntry struct {
+	local  string
+	prefix string
+	uri    string
+	qname  string
+}
+
+func (e *nodeEntry) Name() string {
+	return e.qname
+}
+
+func (e *nodeEntry) LocalName() string {
+	return e.local
+}
+
+func (e *nodeEntry) Prefix() string {
+	return e.prefix
+}
+
+func (e *nodeEntry) URI() string {
+	return e.uri
+}
+
 type nodeStack struct {
-	stack.Stack[*Element]
+	stack.Stack[nodeEntry]
 }
 
 type inputStack struct {
@@ -62,24 +88,26 @@ func (s *nsStack) LookupInTopN(prefix string, n int) string {
 	return ""
 }
 
-func (s *nodeStack) Push(e *Element) {
+func (s *nodeStack) Push(e nodeEntry) {
 	s.Stack.Push(e)
 }
 
-func (s *nodeStack) Pop() *Element {
-	defer s.Stack.Pop()
-	if e := s.PeekOne(); e != nil {
-		return e
-	}
-	return nil
-}
-
-func (s *nodeStack) PeekOne() *Element {
+func (s *nodeStack) Pop() *nodeEntry {
 	l := s.Peek(1)
 	if len(l) != 1 {
 		return nil
 	}
-	return l[0]
+	e := &l[0]
+	s.Stack.Pop()
+	return e
+}
+
+func (s *nodeStack) PeekOne() *nodeEntry {
+	l := s.Peek(1)
+	if len(l) != 1 {
+		return nil
+	}
+	return &l[0]
 }
 
 // the reason we're using any here is that we may have to

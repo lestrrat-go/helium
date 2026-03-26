@@ -660,6 +660,30 @@ Applies an XSLT 3.0 stylesheet to one or more XML documents, similar to `xsltpro
 | `--timing` | Print compile/parse/transform timing to stderr |
 | `--version` | Display version |
 
+# Performance
+
+Helium parses XML into a full DOM tree. Despite the richer output, its
+throughput is competitive with `encoding/xml` (which only produces a token
+stream) and approaches libxml2 (C, via cgo) on larger documents.
+
+Benchmarks parse real-world XML files of varying sizes (AMD Ryzen 9 7900X3D,
+Go 1.24, `go test -bench -benchmem -count=5`, median shown):
+
+| File | Helium | `encoding/xml` | libxml2 (cgo) |
+|------|--------|----------------|---------------|
+| 109 KB | 86 MB/s | 80 MB/s | 165 MB/s |
+| 196 KB | 69 MB/s | 67 MB/s | 125 MB/s |
+| 3 MB | 228 MB/s | 132 MB/s | 368 MB/s |
+
+Helium consistently allocates 40-60% fewer objects than `encoding/xml`.
+
+To run the benchmarks yourself:
+
+```
+go test -bench='BenchmarkHeliumParse|BenchmarkStdlibXMLDecode' -benchmem ./bench/
+# Include libxml2 (requires cgo and libxml2-dev):
+go test -tags cgo,libxml2bench -bench=. -benchmem ./bench/
+```
 # Current status
 
 * Core functionality is implemented: XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RelaxNG, Schematron, XSD, and `encoding/xml` compatibility (`shim` package).

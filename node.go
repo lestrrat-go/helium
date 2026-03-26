@@ -57,6 +57,7 @@ type node struct {
 	properties *Attribute
 	ns         *Namespace
 	nsDefs     []*Namespace
+	qname      string // cached qualified name (prefix:local or just local)
 }
 
 type ElementType int
@@ -266,24 +267,29 @@ func (n docnode) LastChild() Node {
 }
 
 func addChild(n Node, cur Node) error {
-	l := n.LastChild()
-	if l == nil { // No children, set firstChild to cur
+	pdn := n.baseDocNode()
+	cdn := cur.baseDocNode()
+
+	l := pdn.lastChild
+	if l == nil {
 		if pdebug.Enabled {
 			pdebug.Printf("LastChild is nil, setting firstChild and lastChild")
 		}
-		setFirstChild(n, cur)
-		setLastChild(n, cur)
-		cur.SetParent(n)
+		pdn.firstChild = cur
+		pdn.lastChild = cur
+		cdn.parent = n
 		return nil
 	}
 
+	ldn := l.baseDocNode()
+	curType := cdn.etype
 	// Fast path: when lastChild has no next sibling (the normal case),
 	// link directly without virtual dispatch through AddSibling.
-	if l.NextSibling() == nil && (cur.Type() != TextNode || l.Type() != TextNode) {
-		l.SetNextSibling(cur)
-		cur.SetPrevSibling(l)
-		cur.SetParent(n)
-		setLastChild(n, cur)
+	if ldn.next == nil && (curType != TextNode || ldn.etype != TextNode) {
+		ldn.next = cur
+		cdn.prev = l
+		cdn.parent = n
+		pdn.lastChild = cur
 		return nil
 	}
 
@@ -294,8 +300,8 @@ func addChild(n Node, cur Node) error {
 	}
 
 	// If the last child was a text node, keep the old LastChild
-	if cur.Type() == TextNode && l.Type() == TextNode {
-		setLastChild(n, l)
+	if curType == TextNode && ldn.etype == TextNode {
+		pdn.lastChild = l
 	}
 	return nil
 }
@@ -431,6 +437,7 @@ func (n *node) SetActiveNamespace(prefix, uri string) error {
 		return err
 	}
 	n.ns = ns
+	n.invalidateQName()
 	return nil
 }
 
@@ -438,6 +445,7 @@ func (n *node) SetActiveNamespace(prefix, uri string) error {
 // without creating a new declaration.
 func (n *node) SetNs(ns *Namespace) {
 	n.ns = ns
+	n.invalidateQName()
 }
 
 func (n node) Prefix() string {
@@ -454,11 +462,19 @@ func (n node) URI() string {
 	return ""
 }
 
-func (n node) Name() string {
+func (n *node) Name() string {
+	if n.qname != "" {
+		return n.qname
+	}
 	if ns := n.ns; ns != nil && ns.Prefix() != "" {
-		return ns.Prefix() + ":" + n.name
+		n.qname = ns.Prefix() + ":" + n.name
+		return n.qname
 	}
 	return n.name
+}
+
+func (n *node) invalidateQName() {
+	n.qname = ""
 }
 
 func SetListDoc(n Node, doc *Document) {

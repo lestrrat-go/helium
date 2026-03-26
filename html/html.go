@@ -9,6 +9,7 @@ package html
 import (
 	"context"
 	"os"
+	"path/filepath"
 
 	"github.com/lestrrat-go/helium"
 )
@@ -104,7 +105,16 @@ func (p Parser) ParseFile(ctx context.Context, filename string) (*helium.Documen
 	if err != nil {
 		return nil, err
 	}
-	return p.Parse(ctx, data)
+	doc, err := p.Parse(ctx, data)
+	if err != nil {
+		return nil, err
+	}
+	abs, err := filepath.Abs(filename)
+	if err != nil {
+		return nil, err
+	}
+	doc.SetURL(abs)
+	return doc, nil
 }
 
 // ParseWithSAX parses HTML data, firing SAX events to the given handler
