@@ -73,6 +73,10 @@ func compareSingletonAgainstRange(evalFn exprEvaluator, ec *evalContext, op Toke
 	if empty {
 		return false, true, nil
 	}
+	sv, sok := singletonInt.Int64Val()
+	if sok && start.IsInt64() && end.IsInt64() {
+		return compareRangeBoundsInt64(op, sv, start.Int64(), end.Int64(), rangeOnLeft), true, nil
+	}
 	return compareRangeBounds(op, singletonInt.BigInt(), start, end, rangeOnLeft), true, nil
 }
 
@@ -113,6 +117,37 @@ func evalRangeBounds(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (*big.I
 		return nil, nil, true, nil
 	}
 	return start, end, false, nil
+}
+
+func compareRangeBoundsInt64(op TokenType, singleton, start, end int64, rangeOnLeft bool) bool {
+	switch op {
+	case TokenEquals:
+		return singleton >= start && singleton <= end
+	case TokenNotEquals:
+		return start != end || singleton != start
+	case TokenLess:
+		if rangeOnLeft {
+			return start < singleton
+		}
+		return singleton < end
+	case TokenLessEq:
+		if rangeOnLeft {
+			return start <= singleton
+		}
+		return singleton <= end
+	case TokenGreater:
+		if rangeOnLeft {
+			return end > singleton
+		}
+		return singleton > start
+	case TokenGreaterEq:
+		if rangeOnLeft {
+			return end >= singleton
+		}
+		return singleton >= start
+	default:
+		return false
+	}
 }
 
 func compareRangeBounds(op TokenType, singleton, start, end *big.Int, rangeOnLeft bool) bool {
@@ -1022,8 +1057,20 @@ func applyCompare(op TokenType, cmp int) bool {
 // compareNumeric performs type-preserving numeric comparison.
 // Both integer → big.Int.Cmp; either decimal → big.Rat.Cmp; otherwise → float64.
 func compareNumeric(op TokenType, a, b AtomicValue) (bool, error) {
-	// Both integer → big.Int comparison
+	// Both integer → int64 fast path, fall back to big.Int
 	if isIntegerDerived(a.TypeName) && isIntegerDerived(b.TypeName) {
+		av, aok := a.Int64Val()
+		bv, bok := b.Int64Val()
+		if aok && bok {
+			var cmp int
+			switch {
+			case av < bv:
+				cmp = -1
+			case av > bv:
+				cmp = 1
+			}
+			return applyCompare(op, cmp), nil
+		}
 		cmp := a.BigInt().Cmp(b.BigInt())
 		return applyCompare(op, cmp), nil
 	}
@@ -1051,6 +1098,9 @@ func compareNumeric(op TokenType, a, b AtomicValue) (bool, error) {
 // toRatForCompare converts integer or decimal AtomicValue to *big.Rat for comparison.
 func toRatForCompare(a AtomicValue) *big.Rat {
 	if isIntegerDerived(a.TypeName) {
+		if v, ok := a.Value.(int64); ok {
+			return new(big.Rat).SetInt64(v)
+		}
 		return new(big.Rat).SetInt(a.BigInt())
 	}
 	return a.BigRat()
