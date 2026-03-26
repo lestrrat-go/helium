@@ -144,7 +144,9 @@ func (v Validator) Quiet() Validator {
 // When set, per-error messages are routed to the handler instead of
 // being accumulated in the returned string. This corresponds to
 // libxml2's XML_SCHEMATRON_OUT_ERROR flag.
-func (v Validator) ErrorHandler(h ErrorHandler) Validator {
+// Each error delivered to the handler is a *ValidationError that can
+// be extracted via errors.As.
+func (v Validator) ErrorHandler(h helium.ErrorHandler) Validator {
 	v = v.clone()
 	v.cfg.errorHandler = h
 	return v

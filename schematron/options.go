@@ -1,6 +1,8 @@
 package schematron
 
 import (
+	"fmt"
+
 	helium "github.com/lestrrat-go/helium"
 )
 
@@ -12,25 +14,21 @@ type compileConfig struct {
 type validateConfig struct {
 	filename     string
 	quiet        bool
-	errorHandler ErrorHandler
+	errorHandler helium.ErrorHandler
 }
-
-// ErrorHandler receives individual schematron validation errors.
-type ErrorHandler interface {
-	HandleError(e ValidationError)
-}
-
-// ErrorHandlerFunc is a function adapter for ErrorHandler.
-type ErrorHandlerFunc func(ValidationError)
-
-// HandleError implements ErrorHandler.
-func (f ErrorHandlerFunc) HandleError(e ValidationError) { f(e) }
 
 // ValidationError represents a single schematron validation error.
+// It implements the error interface so it can be passed to
+// helium.ErrorHandler.Handle and extracted via errors.As.
 type ValidationError struct {
 	Filename string
 	Line     int
 	Element  string
 	Path     string
 	Message  string
+}
+
+// Error implements the error interface.
+func (e *ValidationError) Error() string {
+	return fmt.Sprintf("%s:%d: element %s: Schematron error : %s", e.Filename, e.Line, e.Element, e.Message)
 }

@@ -1,6 +1,8 @@
 package schematron_test
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -266,10 +268,8 @@ func TestWithErrorHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("errors delivered to handler", func(t *testing.T) {
-		var errors []schematron.ValidationError
-		handler := schematron.ErrorHandlerFunc(func(e schematron.ValidationError) {
-			errors = append(errors, e)
-		})
+		var collected []*schematron.ValidationError
+		handler := validationErrorCollector{errors: &collected}
 
 		doc, err := p.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
 		require.NoError(t, err)
@@ -285,19 +285,17 @@ func TestWithErrorHandler(t *testing.T) {
 		require.Contains(t, err.Error(), "fails to validate")
 
 		// Handler should have received both errors
-		require.Len(t, errors, 2)
-		require.Equal(t, "BBB element is missing.", errors[0].Message)
-		require.Equal(t, "AAA", errors[0].Element)
-		require.Equal(t, "/AAA", errors[0].Path)
-		require.Equal(t, "test.xml", errors[0].Filename)
-		require.Equal(t, "AAA needs name attribute.", errors[1].Message)
+		require.Len(t, collected, 2)
+		require.Equal(t, "BBB element is missing.", collected[0].Message)
+		require.Equal(t, "AAA", collected[0].Element)
+		require.Equal(t, "/AAA", collected[0].Path)
+		require.Equal(t, "test.xml", collected[0].Filename)
+		require.Equal(t, "AAA needs name attribute.", collected[1].Message)
 	})
 
 	t.Run("passing document no handler calls", func(t *testing.T) {
-		var errors []schematron.ValidationError
-		handler := schematron.ErrorHandlerFunc(func(e schematron.ValidationError) {
-			errors = append(errors, e)
-		})
+		var collected []*schematron.ValidationError
+		handler := validationErrorCollector{errors: &collected}
 
 		doc, err := p.Parse(t.Context(), []byte(`<AAA name="x"><BBB/></AAA>`))
 		require.NoError(t, err)
@@ -308,15 +306,13 @@ func TestWithErrorHandler(t *testing.T) {
 			Validate(t.Context(), doc)
 
 		require.NoError(t, err)
-		require.Empty(t, errors)
+		require.Empty(t, collected)
 	})
 
 	t.Run("quiet with error handler delivers errors", func(t *testing.T) {
 		// When both quiet and error handler are set, errors go to the handler
-		var errors []schematron.ValidationError
-		handler := schematron.ErrorHandlerFunc(func(e schematron.ValidationError) {
-			errors = append(errors, e)
-		})
+		var collected []*schematron.ValidationError
+		handler := validationErrorCollector{errors: &collected}
 
 		doc, err := p.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
 		require.NoError(t, err)
@@ -330,6 +326,19 @@ func TestWithErrorHandler(t *testing.T) {
 		require.Error(t, err)
 		require.NotContains(t, err.Error(), "schematron error")
 		require.Contains(t, err.Error(), "fails to validate")
-		require.Len(t, errors, 2)
+		require.Len(t, collected, 2)
 	})
+}
+
+// validationErrorCollector implements helium.ErrorHandler and extracts
+// *schematron.ValidationError values via errors.As.
+type validationErrorCollector struct {
+	errors *[]*schematron.ValidationError
+}
+
+func (c validationErrorCollector) Handle(_ context.Context, err error) {
+	var ve *schematron.ValidationError
+	if errors.As(err, &ve) {
+		*c.errors = append(*c.errors, ve)
+	}
 }
