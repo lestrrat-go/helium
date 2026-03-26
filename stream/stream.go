@@ -75,37 +75,33 @@ type Writer struct {
 	wroteNL    bool          // true after EndComment/EndPI wrote trailing \n (suppresses writeIndent's \n)
 }
 
-// Option configures a Writer.
-type Option func(*Writer)
-
-// WithIndent enables indentation. Each nested level is indented by the
-// given string (e.g. "  " for two spaces, "\t" for tab).
-func WithIndent(indent string) Option {
-	return func(w *Writer) { w.indent = indent }
-}
-
-// WithQuoteChar sets the attribute value quote character. Must be '"' or '\''.
-// Any other value is silently ignored. The default is '"'.
-func WithQuoteChar(q byte) Option {
-	return func(w *Writer) {
-		if q == '\'' || q == '"' {
-			w.quoteChar = q
-		}
-	}
-}
-
-// NewWriter creates a Writer that writes to w.
+// NewWriter creates a Writer that writes to w. Configure the Writer
+// with fluent methods (Indent, QuoteChar) before calling action methods.
 // (libxml2: xmlNewTextWriterMemory)
-func NewWriter(w io.Writer, opts ...Option) *Writer {
-	wr := &Writer{
+func NewWriter(w io.Writer) Writer {
+	return Writer{
 		out:       w,
 		quoteChar: '"',
 		state:     stateNone,
 	}
-	for _, o := range opts {
-		o(wr)
+}
+
+// Indent returns a copy of the Writer with indentation enabled.
+// Each nested level is indented by the given string (e.g. "  " for
+// two spaces, "\t" for tab).
+func (w Writer) Indent(indent string) Writer {
+	w.indent = indent
+	return w
+}
+
+// QuoteChar returns a copy of the Writer with the attribute value
+// quote character set to q. Must be '"' or '\''. Any other value
+// is silently ignored. The default is '"'.
+func (w Writer) QuoteChar(q byte) Writer {
+	if q == '\'' || q == '"' {
+		w.quoteChar = q
 	}
-	return wr
+	return w
 }
 
 type escapeMode int
