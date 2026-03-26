@@ -1,7 +1,3 @@
-// Package schematron implements Schematron validation.
-//
-// It supports a subset of Schematron matching libxml2's implementation:
-// schema, pattern, rule, assert, report, let, name, value-of.
 package schematron
 
 import (

@@ -145,7 +145,8 @@ Errors written to `strings.Builder` AND sent to `ErrorHandler.Handle()` if confi
 
 ```
 type ValidateError struct {
-    Output string  // full libxml2-compatible formatted output
+    Output string             // full libxml2-compatible formatted output
+    Errors []ValidationError  // structured per-error details (xsd, relaxng)
 }
 func (e *ValidateError) Error() string { return e.Output }
 ```

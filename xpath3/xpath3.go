@@ -1,5 +1,3 @@
-// Package xpath3 implements XPath 3.1 expression parsing and evaluation
-// against helium XML document trees.
 package xpath3
 
 import (

@@ -12,21 +12,22 @@ import (
 
 // validator holds state during document validation.
 type validator struct {
-	ctx           context.Context
-	grammar       *Grammar
-	filename      string
-	errorHandler  helium.ErrorHandler
-	errors        strings.Builder
-	valid         bool
-	suppressDepth int // when > 0, errors are suppressed (inside choice branches)
-	depth         int // recursion depth guard
+	ctx              context.Context
+	grammar          *Grammar
+	filename         string
+	errorHandler     helium.ErrorHandler
+	errors           strings.Builder
+	structuredErrors []ValidationError
+	valid            bool
+	suppressDepth    int // when > 0, errors are suppressed (inside choice branches)
+	depth            int // recursion depth guard
 }
 
 const maxValidationDepth = 500
 
-func validateDocument(ctx context.Context, doc *helium.Document, grammar *Grammar, cfg *validateConfig) (string, bool) {
+func validateDocument(ctx context.Context, doc *helium.Document, grammar *Grammar, cfg *validateConfig) (string, bool, []ValidationError) {
 	if grammar == nil || grammar.start == nil {
-		return cfg.filename + " fails to validate\n", false
+		return cfg.filename + " fails to validate\n", false, nil
 	}
 
 	v := &validator{
@@ -41,7 +42,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 	if root == nil {
 		v.valid = false
 		v.errors.WriteString(v.filename + " fails to validate\n")
-		return v.errors.String(), false
+		return v.errors.String(), false, nil
 	}
 
 	// Create initial state: the root element
@@ -66,7 +67,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 		v.errors.WriteString(v.filename + " fails to validate\n")
 	}
 
-	return v.errors.String(), v.valid
+	return v.errors.String(), v.valid, v.structuredErrors
 }
 
 // validState tracks the current position during validation.
@@ -1870,6 +1871,12 @@ func (v *validator) addError(elem *helium.Element, msg string) {
 	line := elem.Line()
 	errStr := validityError(v.filename, line, elem.LocalName(), msg)
 	v.errors.WriteString(errStr)
+	v.structuredErrors = append(v.structuredErrors, ValidationError{
+		Filename: v.filename,
+		Line:     line,
+		Element:  elem.LocalName(),
+		Message:  msg,
+	})
 	if v.errorHandler != nil {
 		v.errorHandler.Handle(v.ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
 	}
@@ -1884,6 +1891,12 @@ func (v *validator) addErrorOnNode(elem *helium.Element, msg string) {
 	line := elem.Line()
 	errStr := validityError(v.filename, line, elem.LocalName(), msg)
 	v.errors.WriteString(errStr)
+	v.structuredErrors = append(v.structuredErrors, ValidationError{
+		Filename: v.filename,
+		Line:     line,
+		Element:  elem.LocalName(),
+		Message:  msg,
+	})
 	if v.errorHandler != nil {
 		v.errorHandler.Handle(v.ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
 	}
@@ -1897,6 +1910,9 @@ func (v *validator) addBareError(msg string) {
 	}
 	errStr := bareValidityError(msg)
 	v.errors.WriteString(errStr)
+	v.structuredErrors = append(v.structuredErrors, ValidationError{
+		Message: msg,
+	})
 	if v.errorHandler != nil {
 		v.errorHandler.Handle(v.ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
 	}

@@ -1,6 +1,3 @@
-// Package xsd implements XML Schema (XSD) validation.
-//
-// It supports a subset of the W3C XML Schema Definition Language 1.0.
 package xsd
 
 import (

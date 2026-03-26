@@ -1,6 +1,3 @@
-// Package c14n implements XML canonicalization (C14N) as defined by the W3C
-// specifications: Canonical XML 1.0, Exclusive Canonical XML 1.0, and
-// Canonical XML 1.1.
 package c14n
 
 import (

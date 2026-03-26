@@ -20,7 +20,7 @@ html           → helium, sax
 catalog        → helium, internal/catalog, internal/lexicon
 stream         → internal/encoding
 sax            → helium, enum
-helium (root)  → sax, enum, internal/catalog, internal/encoding, internal/bitset, internal/stack
+helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/stack
 sink           → (none)
 enum           → (none)
 internal/lexicon → (none)
