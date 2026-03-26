@@ -232,12 +232,9 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 // Writer serializes an XML document tree (libxml2: xmlSaveCtxt).
 //
 // It is a value-style wrapper: fluent methods return updated copies and the
-// original is never mutated.
-//
-// The escapeNonASCII flag is set automatically by WriteDoc based on the
-// document's encoding: when the output encoding is UTF-8 characters
-// U+0080-U+00FF are emitted as numeric character references (&#xNN;);
-// when an encoding handler is present they pass through for re-encoding.
+// original is never mutated. Mutable runtime state (indent depth, resolved
+// escapeNonASCII flag, XHTML detection) lives in a writeSession created
+// inside each terminal method.
 type Writer struct {
 	format            bool
 	indentString      string
@@ -245,11 +242,18 @@ type Writer struct {
 	noEmpty           bool
 	noDecl            bool
 	noEscapeNonASCII  bool
-	escapeNonASCII    bool
-	isXHTML           bool
-	encoding          string // document encoding, used for XHTML meta injection
-	indent            int    // current indent depth (used when format is true)
-	allowPrefixUndecl bool   // emit xmlns:prefix="" undeclarations (XML 1.1)
+	allowPrefixUndecl bool // emit xmlns:prefix="" undeclarations (XML 1.1)
+}
+
+// writeSession holds the mutable state for a single serialization pass.
+// It is created inside WriteDoc / WriteNode and threaded through the
+// internal helper methods so that Writer itself stays immutable.
+type writeSession struct {
+	Writer
+	escapeNonASCII bool
+	isXHTML        bool
+	encoding       string // document encoding, used for XHTML meta injection
+	indent         int    // current indent depth (used when format is true)
 }
 
 // NewWriter creates a new Writer with default settings.
@@ -303,20 +307,20 @@ func (w Writer) AllowPrefixUndeclarations(v bool) Writer {
 	return w
 }
 
-func (d *Writer) indentStr() string {
-	if d.indentString == "" {
+func (s *writeSession) indentStr() string {
+	if s.indentString == "" {
 		return "  "
 	}
-	return d.indentString
+	return s.indentString
 }
 
-func (d *Writer) writeIndent(out io.Writer) {
-	if !d.format || d.indent <= 0 {
+func (s *writeSession) writeIndent(out io.Writer) {
+	if !s.format || s.indent <= 0 {
 		return
 	}
-	s := d.indentStr()
-	for i := 0; i < d.indent; i++ {
-		_, _ = io.WriteString(out, s)
+	str := s.indentStr()
+	for i := 0; i < s.indent; i++ {
+		_, _ = io.WriteString(out, str)
 	}
 }
 
@@ -385,15 +389,17 @@ func (d Writer) WriteDoc(out io.Writer, doc *Document) error {
 		defer g.IRelease("END Writer.WriteDoc")
 	}
 
+	s := writeSession{Writer: d}
+
 	// Mirrors libxml2's xmlSaveWriteText: when output encoding is UTF-8
 	// (no encoder), escape non-ASCII chars 0x80-0xDF as numeric refs.
 	// When an encoder is present, pass them through for re-encoding.
-	d.escapeNonASCII = !d.noEscapeNonASCII
+	s.escapeNonASCII = !d.noEscapeNonASCII
 	if enc := doc.encoding; enc != "" {
 		lower := strings.ToLower(enc)
 		if lower != "utf-8" && lower != encUTF8 && lower != "us-ascii" && lower != "ascii" {
 			if e := henc.Load(enc); e != nil {
-				d.escapeNonASCII = false
+				s.escapeNonASCII = false
 				w := e.NewEncoder().Writer(out)
 				if closer, ok := w.(io.Closer); ok {
 					defer func() { _ = closer.Close() }()
@@ -404,26 +410,26 @@ func (d Writer) WriteDoc(out io.Writer, doc *Document) error {
 	}
 
 	// Detect XHTML. Mirrors xmlSaveDocInternal in xmlsave.c.
-	d.isXHTML = false
-	d.encoding = doc.encoding
+	s.isXHTML = false
+	s.encoding = doc.encoding
 	if dtd := doc.intSubset; dtd != nil {
-		d.isXHTML = isXHTMLDTD(dtd)
+		s.isXHTML = isXHTMLDTD(dtd)
 	}
 
-	if err := d.WriteNode(out, doc); err != nil {
+	if err := s.writeNode(out, doc); err != nil {
 		return err
 	}
 
 	for e := range Children(doc) {
-		if d.skipDTD && e.Type() == DTDNode {
+		if s.skipDTD && e.Type() == DTDNode {
 			continue
 		}
-		if d.isXHTML && e.Type() == ElementNode {
-			if err := d.dumpXHTMLNode(out, e); err != nil {
+		if s.isXHTML && e.Type() == ElementNode {
+			if err := s.dumpXHTMLNode(out, e); err != nil {
 				return err
 			}
 		} else {
-			if err := d.WriteNode(out, e); err != nil {
+			if err := s.writeNode(out, e); err != nil {
 				return err
 			}
 		}
@@ -432,7 +438,7 @@ func (d Writer) WriteDoc(out io.Writer, doc *Document) error {
 	return nil
 }
 
-func (d *Writer) dumpDocContent(out io.Writer, n Node) error {
+func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START Writer.dumpDocContent")
 		defer g.IRelease("END Writer.dumpDocContent")
@@ -469,7 +475,7 @@ func dtdQuoteChar(value string) byte {
 	return '"'
 }
 
-func (d *Writer) dumpDTD(out io.Writer, n Node) error {
+func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
 	dtd := n.(*DTD)
 	_, _ = io.WriteString(out, "<!DOCTYPE ")
 	_, _ = io.WriteString(out, dtd.Name())
@@ -498,7 +504,7 @@ func (d *Writer) dumpDTD(out io.Writer, n Node) error {
 	d.indent = -1
 
 	for e := range Children(dtd) {
-		if err := d.WriteNode(out, e); err != nil {
+		if err := d.writeNode(out, e); err != nil {
 			d.format = savedFormat
 			d.indent = savedIndent
 			return err
@@ -512,7 +518,7 @@ func (d *Writer) dumpDTD(out io.Writer, n Node) error {
 	return nil
 }
 
-func (d *Writer) dumpEnumeration(out io.Writer, n Enumeration) error {
+func (d *writeSession) dumpEnumeration(out io.Writer, n Enumeration) error {
 	l := len(n)
 	for i, v := range n {
 		_, _ = io.WriteString(out, v)
@@ -668,7 +674,7 @@ func dumpEntityContent(out io.Writer, content string) error {
 	return nil
 }
 
-func (d *Writer) dumpEntityDecl(out io.Writer, ent *Entity) error {
+func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	if ent == nil {
 		return nil
 	}
@@ -744,7 +750,7 @@ func (d *Writer) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	return nil
 }
 
-func (d *Writer) dumpNotationDecl(out io.Writer, n *Notation) error {
+func (d *writeSession) dumpNotationDecl(out io.Writer, n *Notation) error {
 	_, _ = io.WriteString(out, "<!NOTATION ")
 	_, _ = io.WriteString(out, n.name)
 	if n.publicID != "" {
@@ -762,7 +768,7 @@ func (d *Writer) dumpNotationDecl(out io.Writer, n *Notation) error {
 	return nil
 }
 
-func (d *Writer) dumpElementDecl(out io.Writer, n *ElementDecl) error {
+func (d *writeSession) dumpElementDecl(out io.Writer, n *ElementDecl) error {
 	switch n.decltype {
 	case enum.EmptyElementType:
 		dumpElementDeclPrologue(out, n)
@@ -783,7 +789,7 @@ func (d *Writer) dumpElementDecl(out io.Writer, n *ElementDecl) error {
 	return nil
 }
 
-func (d *Writer) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
+func (d *writeSession) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	_, _ = io.WriteString(out, "<!ATTLIST ")
 	_, _ = io.WriteString(out, n.elem)
 	_, _ = io.WriteString(out, " ")
@@ -847,7 +853,7 @@ func (d *Writer) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	return nil
 }
 
-func (d *Writer) dumpNsList(out io.Writer, nslist []*Namespace) error {
+func (d *writeSession) dumpNsList(out io.Writer, nslist []*Namespace) error {
 	for _, ns := range nslist {
 		if err := d.dumpNs(out, ns); err != nil {
 			return err
@@ -856,7 +862,7 @@ func (d *Writer) dumpNsList(out io.Writer, nslist []*Namespace) error {
 	return nil
 }
 
-func (d *Writer) dumpNs(out io.Writer, ns *Namespace) error {
+func (d *writeSession) dumpNs(out io.Writer, ns *Namespace) error {
 	if ns.href == "" && ns.prefix != "" {
 		// Prefixed namespace with empty URI — skip unless serializer
 		// opts in to XML 1.1 undeclarations (xmlns:prefix="").
@@ -908,6 +914,12 @@ func (d *Writer) dumpNs(out io.Writer, ns *Namespace) error {
 // WriteNode serializes a single node and its subtree to the given writer
 // (libxml2: xmlNodeDump).
 func (d Writer) WriteNode(out io.Writer, n Node) error {
+	s := writeSession{Writer: d, escapeNonASCII: !d.noEscapeNonASCII}
+	return s.writeNode(out, n)
+}
+
+// writeNode is the internal implementation used by both WriteDoc and WriteNode.
+func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START Writer.WriteNode '%s'", n.Name())
 		defer g.IRelease("END Writer.WriteNode")
@@ -1054,7 +1066,7 @@ func (d Writer) WriteNode(out io.Writer, n Node) error {
 						return err
 					}
 				} else {
-					if err := d.WriteNode(out, achld); err != nil {
+					if err := d.writeNode(out, achld); err != nil {
 						return err
 					}
 				}
@@ -1092,7 +1104,7 @@ func (d Writer) WriteNode(out io.Writer, n Node) error {
 			if d.format && !textOnly {
 				d.writeIndent(out)
 			}
-			if err := d.WriteNode(out, child); err != nil {
+			if err := d.writeNode(out, child); err != nil {
 				return err
 			}
 			if d.format && !textOnly {
@@ -1114,12 +1126,12 @@ func (d Writer) WriteNode(out io.Writer, n Node) error {
 
 // dumpXHTMLNode serializes a node using XHTML rules.
 // Mirrors xhtmlNodeDumpOutput in xmlsave.c.
-func (d *Writer) dumpXHTMLNode(out io.Writer, n Node) error {
+func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 	switch n.Type() {
 	case ElementNode:
 		// handled below
 	default:
-		return d.WriteNode(out, n)
+		return d.writeNode(out, n)
 	}
 
 	e := n.(*Element)
@@ -1230,7 +1242,7 @@ func (d *Writer) dumpXHTMLNode(out io.Writer, n Node) error {
 				return err
 			}
 		} else {
-			if err := d.WriteNode(out, child); err != nil {
+			if err := d.writeNode(out, child); err != nil {
 				return err
 			}
 		}
@@ -1254,7 +1266,7 @@ func (d *Writer) dumpXHTMLNode(out io.Writer, n Node) error {
 // - Boolean attribute normalization (C.5)
 // - lang/xml:lang mirroring (C.7)
 // - name/id mirroring (C.8)
-func (d *Writer) dumpXHTMLAttrList(out io.Writer, e *Element) {
+func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) {
 	var langAttr, xmlLangAttr, nameAttr, idAttr *Attribute
 	localName := e.LocalName()
 
@@ -1288,7 +1300,7 @@ func (d *Writer) dumpXHTMLAttrList(out io.Writer, e *Element) {
 				if achld.Type() == TextNode {
 					_ = escapeAttrValue(out, achld.Content(), d.escapeNonASCII)
 				} else {
-					_ = d.WriteNode(out, achld)
+					_ = d.writeNode(out, achld)
 				}
 			}
 		}
@@ -1322,7 +1334,7 @@ func (d *Writer) dumpXHTMLAttrList(out io.Writer, e *Element) {
 
 // headHasContentTypeMeta checks if a <head> element already has a
 // <meta http-equiv="Content-Type"> child.
-func (d *Writer) headHasContentTypeMeta(head *Element) bool {
+func (d *writeSession) headHasContentTypeMeta(head *Element) bool {
 	for child := range Children(head) {
 		if child.Type() != ElementNode {
 			continue
@@ -1350,7 +1362,7 @@ func (d *Writer) headHasContentTypeMeta(head *Element) bool {
 // writeMetaContentType writes the XHTML meta Content-Type tag.
 // When formatting is enabled, a newline and indent are emitted before
 // the meta tag, matching libxml2's behavior.
-func (d *Writer) writeMetaContentType(out io.Writer) {
+func (d *writeSession) writeMetaContentType(out io.Writer) {
 	enc := d.encoding
 	if enc == "" {
 		enc = "UTF-8"
