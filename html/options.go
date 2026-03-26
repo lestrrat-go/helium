@@ -8,68 +8,48 @@ type parseConfig struct {
 	noWarning bool
 }
 
-// writerCfg holds configuration for a Writer.
-type writerCfg struct {
-	dumpConfig
-}
-
 // Writer configures HTML serialization. It is a value-style wrapper:
 // fluent methods return updated copies and the original is never mutated.
 type Writer struct {
-	cfg *writerCfg
+	dumpConfig
 }
 
 // NewWriter creates a new HTML Writer with default settings.
 func NewWriter() Writer {
-	return Writer{cfg: &writerCfg{}}
+	return Writer{}
 }
 
-func (w Writer) clone() Writer {
-	if w.cfg == nil {
-		return Writer{cfg: &writerCfg{}}
-	}
-	cp := *w.cfg
-	return Writer{cfg: &cp}
-}
-
-// NoDefaultDTD suppresses output of a default DOCTYPE when the document
+// DefaultDTD controls whether a default DOCTYPE is emitted when the document
 // has no DTD.
-func (w Writer) NoDefaultDTD() Writer {
-	w = w.clone()
-	w.cfg.noDefaultDTD = true
+func (w Writer) DefaultDTD(v bool) Writer {
+	w.noDefaultDTD = !v
 	return w
 }
 
-// NoFormat suppresses formatting whitespace (newlines) in HTML output.
-func (w Writer) NoFormat() Writer {
-	w = w.clone()
-	w.cfg.noFormat = true
+// Format controls whether formatting whitespace is emitted in HTML output.
+func (w Writer) Format(v bool) Writer {
+	w.noFormat = !v
 	return w
 }
 
-// PreserveCase preserves the original case of element and attribute names
-// instead of lowercasing them. Used by XSLT HTML output method.
-func (w Writer) PreserveCase() Writer {
-	w = w.clone()
-	w.cfg.preserveCase = true
+// PreserveCase controls whether the original case of element and attribute
+// names is preserved instead of lowercasing them.
+func (w Writer) PreserveCase(v bool) Writer {
+	w.preserveCase = v
 	return w
 }
 
-// NoEscapeURIAttributes disables percent-encoding of non-ASCII characters
-// in URI attributes (href, src, action, etc.). Corresponds to
-// escape-uri-attributes="no" in the XSLT serialization spec.
-func (w Writer) NoEscapeURIAttributes() Writer {
-	w = w.clone()
-	w.cfg.noEscapeURIAttributes = true
+// EscapeURIAttributes controls whether non-ASCII characters in URI attributes
+// are percent-encoded.
+func (w Writer) EscapeURIAttributes(v bool) Writer {
+	w.noEscapeURIAttributes = !v
 	return w
 }
 
-// EscapeControlChars causes characters in the U+007F-U+009F range to be
-// emitted as numeric character references (e.g. &#x9F;). HTML5 serialization
-// requires this instead of raising SERE0014.
-func (w Writer) EscapeControlChars() Writer {
-	w = w.clone()
-	w.cfg.escapeControlChars = true
+// EscapeControlChars controls whether characters in the U+007F-U+009F range
+// are emitted as numeric character references.
+func (w Writer) EscapeControlChars(v bool) Writer {
+	w.escapeControlChars = v
 	return w
 }
 

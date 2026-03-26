@@ -7,10 +7,12 @@ Go implementation of libxml2. Module: `github.com/lestrrat-go/helium`
 XML parsing, DOM tree, serialization. Entry point for all XML processing.
 
 - **NewParser() → Parser** — create fluent builder for XML parsing (clone-on-write value type)
-  - Flag methods: `Recover(bool)`, `NoEnt(bool)`, `DTDLoad(bool)`, `DTDAttr(bool)`, `DTDValid(bool)`, `NoError(bool)`, `NoWarning(bool)`, `Pedantic(bool)`, `NoBlanks(bool)`, `XInclude(bool)`, `NoNet(bool)`, `NsClean(bool)`, `NoCDATA(bool)`, `NoXIncNode(bool)`, `NoBaseFix(bool)`, `Huge(bool)`, `IgnoreEnc(bool)`, `NoXXE(bool)`, `SkipIDs(bool)`, `LenientXMLDecl(bool)`
+  - Flag methods: `RecoverOnError(bool)`, `SubstituteEntities(bool)`, `LoadExternalDTD(bool)`, `DefaultDTDAttributes(bool)`, `ValidateDTD(bool)`, `SuppressErrors(bool)`, `SuppressWarnings(bool)`, `PedanticErrors(bool)`, `StripBlanks(bool)`, `ProcessXInclude(bool)`, `AllowNetwork(bool)`, `CleanNamespaces(bool)`, `MergeCDATA(bool)`, `XIncludeNodes(bool)`, `CompactTextNodes(bool)`, `FixBaseURIs(bool)`, `RelaxLimits(bool)`, `IgnoreEncoding(bool)`, `BigLineNumbers(bool)`, `BlockXXE(bool)`, `ReuseDict(bool)`, `SkipIDs(bool)`, `LenientXMLDecl(bool)`
   - Config methods: `SAXHandler(sax.SAX2Handler)`, `BaseURI(string)`, `CharBufferSize(int)`, `MaxDepth(int)`, `Catalog(icatalog.Resolver)`
   - Terminal methods: `Parse(ctx, []byte) → (*Document, error)`, `ParseReader(ctx, io.Reader) → (*Document, error)`, `ParseInNodeContext(ctx, Node, []byte) → (Node, error)`, `NewPushParser(ctx) → *PushParser`
-- **NewWriter(opts) → *Writer** — XML serializer; Writer.WriteDoc(io.Writer, *Document), Writer.WriteNode(io.Writer, Node)
+- **NewWriter() → Writer** — create fluent XML writer builder
+  - Writer methods: `Format(bool)`, `IndentString(string)`, `SelfCloseEmptyElements(bool)`, `XMLDeclaration(bool)`, `IncludeDTD(bool)`, `EscapeNonASCII(bool)`, `AllowPrefixUndeclarations(bool)`
+  - Terminal methods: `WriteDoc(io.Writer, *Document) → error`, `WriteNode(io.Writer, Node) → error`
 - **Element.FindAttribute(AttributePredicate) → (*Attribute, bool)** — attribute-node lookup by matcher; built-in matchers: `QNamePredicate`, `LocalNamePredicate`, `NSPredicate`
 - **Element.GetAttribute(qname) → (string, bool)** / **Element.GetAttributeNS(local, nsURI) → (string, bool)** — attribute value lookup by QName or expanded name
 - Key types: `Document`, `Element`, `Attribute`, `Namespace`, `DTD`, `Entity`, `Text`, `CDATASection`, `Comment`, `PI`
@@ -158,10 +160,10 @@ RELAX NG schema compilation and validation.
 HTML 4.01 parser producing helium DOM or SAX events.
 
 - **NewParser() → Parser** — create fluent parser builder
-- Parser methods: NoImplied(), NoBlanks(), NoError(), NoWarning()
+- Parser methods: `SuppressImplied(bool)`, `StripBlanks(bool)`, `SuppressErrors(bool)`, `SuppressWarnings(bool)`
 - Terminal: **Parse(ctx, []byte)**, **ParseFile(ctx, path)**, **ParseWithSAX(ctx, []byte, SAXHandler)**, **NewPushParser(ctx)**, **NewSAXPushParser(ctx, SAXHandler)**
 - **NewWriter() → Writer** — create fluent writer builder
-- Writer methods: NoDefaultDTD(), NoFormat(), PreserveCase(), NoEscapeURIAttributes(), EscapeControlChars()
+- Writer methods: `DefaultDTD(bool)`, `Format(bool)`, `PreserveCase(bool)`, `EscapeURIAttributes(bool)`, `EscapeControlChars(bool)`
 - Terminal: **WriteDoc(io.Writer, *Document)**, **WriteNode(io.Writer, Node)**
 - Auto-closing, void elements, implicit html/head/body insertion
 - Encoding: prescan charset=utf-8 → U+FFFD for invalid bytes; otherwise Latin-1/Win-1252→UTF-8
@@ -174,7 +176,7 @@ HTML 4.01 parser producing helium DOM or SAX events.
 XInclude 1.0 processing with recursive inclusion and fallback.
 
 - **NewProcessor() → Processor** — create fluent builder
-- Processor methods: NoXIncludeMarkers(), NoBaseFixup(), Resolver(Resolver), BaseURI(string), WarningHandler(func)
+- Processor methods: `NoXIncludeMarkers()`, `NoBaseFixup()`, `Resolver(Resolver)`, `BaseURI(string)`, `WarningHandler(func)`
 - Terminal: **Process(ctx, *Document) → (int, error)**, **ProcessTree(ctx, Node) → (int, error)**
 - `Resolver` interface — custom resource loader
 - Max depth 40, max URI 2000 chars, circular detection, doc/text caching

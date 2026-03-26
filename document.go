@@ -56,10 +56,10 @@ type Document struct {
 	// These reduce per-node heap allocation overhead by allocating
 	// nodes in chunks and handing them out one at a time.
 	// Chunks are obtained from global pools and returned on Free().
-	elemSlab  []Element
-	textSlab  []Text
-	nsSlab    []Namespace
-	attrSlab  []Attribute
+	elemSlab []Element
+	textSlab []Text
+	nsSlab   []Namespace
+	attrSlab []Attribute
 
 	// Track allocated chunks for pool return.
 	elemChunks []*[slabSize]Element
@@ -125,16 +125,20 @@ func (d *Document) Free() {
 	d.attrSlab = nil
 }
 
-func (d Document) XMLString(options ...WriteOption) (string, error) {
+func (d Document) XMLString(writers ...Writer) (string, error) {
 	out := bytes.Buffer{}
-	if err := d.XML(&out, options...); err != nil {
+	if err := d.XML(&out, writers...); err != nil {
 		return "", err
 	}
 	return out.String(), nil
 }
 
-func (d *Document) XML(out io.Writer, options ...WriteOption) error {
-	return NewWriter(options...).WriteDoc(out, d)
+func (d *Document) XML(out io.Writer, writers ...Writer) error {
+	writer := NewWriter()
+	if len(writers) > 0 {
+		writer = writers[0]
+	}
+	return writer.WriteDoc(out, d)
 }
 
 func (d *Document) AddChild(cur Node) error {

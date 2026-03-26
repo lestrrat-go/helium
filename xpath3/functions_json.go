@@ -1324,7 +1324,6 @@ type serializeOptions struct {
 	encoding            string
 }
 
-
 func parseSerializeOptions(args []Sequence) (serializeOptions, error) {
 	opts := serializeOptions{
 		method:        "adaptive",
@@ -1889,29 +1888,28 @@ func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
 	case *helium.Attribute:
 		return fmt.Sprintf(`%s="%s"`, n.Name(), n.Value()), nil
 	case *helium.Document:
-		writerOpts := make([]helium.WriteOption, 0, 2)
+		writer := helium.NewWriter()
 		if opts.omitXMLDeclaration {
-			writerOpts = append(writerOpts, helium.WithNoDecl())
+			writer = writer.XMLDeclaration(false)
 		}
 		if opts.indent {
-			writerOpts = append(writerOpts, helium.WithFormat())
+			writer = writer.Format(true)
 		}
-		s, err := n.XMLString(writerOpts...)
+		s, err := n.XMLString(writer)
 		if err != nil {
 			return "", err
 		}
 		return strings.TrimSuffix(s, "\n"), nil
 	default:
 		var buf bytes.Buffer
-		writerOpts := make([]helium.WriteOption, 0, 2)
+		writer := helium.NewWriter()
 		if opts.omitXMLDeclaration {
-			writerOpts = append(writerOpts, helium.WithNoDecl())
+			writer = writer.XMLDeclaration(false)
 		}
 		if opts.indent {
-			writerOpts = append(writerOpts, helium.WithFormat())
+			writer = writer.Format(true)
 		}
-		w := helium.NewWriter(writerOpts...)
-		if err := w.WriteNode(&buf, item.Node); err != nil {
+		if err := writer.WriteNode(&buf, item.Node); err != nil {
 			return "", err
 		}
 		return strings.TrimSuffix(buf.String(), "\n"), nil

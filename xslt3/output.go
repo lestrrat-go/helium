@@ -13,31 +13,31 @@ import (
 	"github.com/lestrrat-go/helium"
 	htmlpkg "github.com/lestrrat-go/helium/html"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/stream"
 	"github.com/lestrrat-go/helium/xpath3"
 	"golang.org/x/text/encoding/htmlindex"
 	xtunicode "golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/unicode/norm"
-	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 // outputFrame represents the current output target during transformation.
 type outputFrame struct {
-	doc                 *helium.Document // result document being built
-	current             helium.Node      // current insertion point
-	captureItems        bool             // when true, xsl:sequence adds to pendingItems instead of DOM
-	separateTextNodes   bool             // when true, text nodes are captured as separate string items (prevents DOM merging)
-	sequenceMode        bool             // when true, all nodes (text, element, attr, comment, PI) are captured as separate items
-	mapConstructor      bool             // when true, xsl:map-entry emits single-entry maps into pendingItems
-	pendingItems        xpath3.ItemSlice // captured items from xsl:sequence
-	prevWasAtomic       bool             // true when last xsl:sequence output was an atomic value (for inter-call space separation)
-	emptyAtomicGen      uint64           // seqConstructorGen when prevWasAtomic was set by an empty-string atomic
-	wherePopulated      bool             // when true, xsl:document emits document node (not children) so xsl:where-populated can check emptiness
-	itemSeparator       *string          // item-separator serialization parameter; nil means default (" " between adjacent atomics)
-	prevHadOutput       bool             // true when any item (node or atomic) was previously output; used for item-separator between non-atomic items
-	outputSerial        int              // monotonically increases whenever visible output is produced
-	seqConstructorGen   uint64           // incremented each time executeSequenceConstructor is called
-	conditionalScopes   []conditionalScope
+	doc               *helium.Document // result document being built
+	current           helium.Node      // current insertion point
+	captureItems      bool             // when true, xsl:sequence adds to pendingItems instead of DOM
+	separateTextNodes bool             // when true, text nodes are captured as separate string items (prevents DOM merging)
+	sequenceMode      bool             // when true, all nodes (text, element, attr, comment, PI) are captured as separate items
+	mapConstructor    bool             // when true, xsl:map-entry emits single-entry maps into pendingItems
+	pendingItems      xpath3.ItemSlice // captured items from xsl:sequence
+	prevWasAtomic     bool             // true when last xsl:sequence output was an atomic value (for inter-call space separation)
+	emptyAtomicGen    uint64           // seqConstructorGen when prevWasAtomic was set by an empty-string atomic
+	wherePopulated    bool             // when true, xsl:document emits document node (not children) so xsl:where-populated can check emptiness
+	itemSeparator     *string          // item-separator serialization parameter; nil means default (" " between adjacent atomics)
+	prevHadOutput     bool             // true when any item (node or atomic) was previously output; used for item-separator between non-atomic items
+	outputSerial      int              // monotonically increases whenever visible output is produced
+	seqConstructorGen uint64           // incremented each time executeSequenceConstructor is called
+	conditionalScopes []conditionalScope
 }
 
 type conditionalKind int
@@ -48,11 +48,11 @@ const (
 )
 
 type conditionalAction struct {
-	ctx            context.Context
-	kind           conditionalKind
-	content        xpath3.Sequence
-	placeholder    helium.Node
-	prevWasAtomic  bool // whether the output preceding this action was an atomic value
+	ctx           context.Context
+	kind          conditionalKind
+	content       xpath3.Sequence
+	placeholder   helium.Node
+	prevWasAtomic bool // whether the output preceding this action was an atomic value
 }
 
 type conditionalScope struct {
@@ -114,9 +114,9 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, doc *helium
 			var buf bytes.Buffer
 			switch n := v.Node.(type) {
 			case *helium.Element:
-				_ = n.XML(&buf, helium.WithNoDecl())
+				_ = n.XML(&buf, helium.NewWriter().XMLDeclaration(false))
 			case *helium.Document:
-				_ = n.XML(&buf, helium.WithNoDecl())
+				_ = n.XML(&buf, helium.NewWriter().XMLDeclaration(false))
 			default:
 				if v.Node.Type() == helium.CommentNode {
 					buf.WriteString("<!--")
@@ -422,9 +422,9 @@ func serializeNodeWithMethod(node helium.Node, method string) string {
 		return nodeStringValue(node)
 	default: // "xml" or empty
 		if elem, ok := node.(*helium.Element); ok {
-			_ = elem.XML(&buf, helium.WithNoDecl())
+			_ = elem.XML(&buf, helium.NewWriter().XMLDeclaration(false))
 		} else if doc, ok := node.(*helium.Document); ok {
-			_ = doc.XML(&buf, helium.WithNoDecl())
+			_ = doc.XML(&buf, helium.NewWriter().XMLDeclaration(false))
 		} else {
 			buf.WriteString(string(node.Content()))
 		}
@@ -726,9 +726,9 @@ func serializeItemAdaptive(item xpath3.Item, charMap map[rune]string) string {
 	case xpath3.NodeItem:
 		var buf bytes.Buffer
 		if elem, ok := v.Node.(*helium.Element); ok {
-			_ = elem.XML(&buf, helium.WithNoDecl())
+			_ = elem.XML(&buf, helium.NewWriter().XMLDeclaration(false))
 		} else if doc, ok := v.Node.(*helium.Document); ok {
-			_ = doc.XML(&buf, helium.WithNoDecl())
+			_ = doc.XML(&buf, helium.NewWriter().XMLDeclaration(false))
 		} else if attr, ok := v.Node.(*helium.Attribute); ok {
 			buf.WriteString(attr.Name())
 			buf.WriteString("=\"")
@@ -1329,14 +1329,12 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 			return err
 		}
 	}
-	opts := []helium.WriteOption{
-		helium.WithNoEscapeNonASCII(),
-	}
+	writer := helium.NewWriter().EscapeNonASCII(false)
 	if outDef.Indent {
-		opts = append(opts, helium.WithFormat())
+		writer = writer.Format(true)
 	}
 	if outDef.OmitDeclaration {
-		opts = append(opts, helium.WithNoDecl())
+		writer = writer.XMLDeclaration(false)
 	}
 	// When standalone is "yes" or "no", or when indent="no" and
 	// the declaration is not omitted, buffer and post-process.
@@ -1344,7 +1342,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	needStripNewline := !outDef.Indent && !outDef.OmitDeclaration
 	if needStandalone || needStripNewline {
 		var buf strings.Builder
-		if err := doc.XML(&buf, opts...); err != nil {
+		if err := doc.XML(&buf, writer); err != nil {
 			return err
 		}
 		out := buf.String()
@@ -1359,7 +1357,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 		_, err := io.WriteString(w, out)
 		return err
 	}
-	return doc.XML(w, opts...)
+	return doc.XML(w, writer)
 }
 
 // injectStandalone inserts standalone="yes" or standalone="no" into the
@@ -1775,12 +1773,12 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 	// children manually to insert <!DOCTYPE html> before the first element.
 	noEscapeURI := outDef.EscapeURIAttributes != nil && !*outDef.EscapeURIAttributes
 	if isHTML5 && !hasDoctypeAttrs {
-		hw := htmlpkg.NewWriter().NoFormat().PreserveCase()
+		hw := htmlpkg.NewWriter().Format(false).PreserveCase(true)
 		if escapeCtrl {
-			hw = hw.EscapeControlChars()
+			hw = hw.EscapeControlChars(true)
 		}
 		if noEscapeURI {
-			hw = hw.NoEscapeURIAttributes()
+			hw = hw.EscapeURIAttributes(false)
 		}
 		doctypeEmitted := false
 		for child := range helium.Children(doc) {
@@ -1798,12 +1796,12 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 		return nil
 	}
 
-	hw := htmlpkg.NewWriter().NoDefaultDTD().NoFormat().PreserveCase()
+	hw := htmlpkg.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true)
 	if noEscapeURI {
-		hw = hw.NoEscapeURIAttributes()
+		hw = hw.EscapeURIAttributes(false)
 	}
 	if escapeCtrl {
-		hw = hw.EscapeControlChars()
+		hw = hw.EscapeControlChars(true)
 	}
 	return hw.WriteDoc(w, doc)
 }
@@ -1889,7 +1887,6 @@ func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMa
 	return err
 }
 
-
 // normalizeXHTMLNamespace walks the document and converts prefixed XHTML
 // namespace elements to use the default namespace (unprefixed), as required
 // by the XHTML output method. The default namespace declaration is added
@@ -1947,7 +1944,6 @@ func normalizeXHTMLNamespace(doc *helium.Document) {
 		return nil
 	}))
 }
-
 
 // normalizeForeignNamespaces converts prefixed SVG and MathML elements to use
 // their default namespace (unprefixed) for HTML5 XHTML output. Each element

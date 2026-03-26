@@ -80,13 +80,13 @@ func dumpQuotedString(out io.Writer, s string) error {
 var (
 	esc_quot = []byte("&quot;")
 	// esc_apos = []byte("&#39;") // shorter than "&apos;"
-	esc_amp  = []byte("&amp;")
-	esc_lt   = []byte("&lt;")
-	esc_gt   = []byte("&gt;")
-	esc_tab  = []byte("&#9;")
-	esc_nl   = []byte("&#10;")
-	esc_cr   = []byte("&#13;")
-	esc_fffd     = []byte("\uFFFD")      // Unicode replacement character
+	esc_amp      = []byte("&amp;")
+	esc_lt       = []byte("&lt;")
+	esc_gt       = []byte("&gt;")
+	esc_tab      = []byte("&#9;")
+	esc_nl       = []byte("&#10;")
+	esc_cr       = []byte("&#13;")
+	esc_fffd     = []byte("\uFFFD")   // Unicode replacement character
 	esc_fffd_ref = []byte("&#xFFFD;") // U+FFFD as a numeric character reference
 )
 
@@ -229,65 +229,10 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 	return nil
 }
 
-// WriteOption configures serialization behavior for Writer, Document.XML,
-// Document.XMLString, Element.XML, and Element.XMLString.
-type WriteOption func(*Writer)
-
-// WithFormat enables indented (pretty-printed) output.  Each child element
-// is emitted on its own line with indentation.  Elements that contain only
-// text / entity-ref / CDATA children are kept inline (no extra whitespace).
-func WithFormat() WriteOption {
-	return func(d *Writer) { d.format = true }
-}
-
-// WithIndentString sets the string used for each indent level.
-// The default is two spaces ("  ").
-func WithIndentString(s string) WriteOption {
-	return func(d *Writer) { d.indentString = s }
-}
-
-// WithNoEmpty forces empty elements to be serialized as open+close tag
-// pairs (e.g., <br></br>) instead of self-closing tags (<br/>).
-// Mirrors libxml2's XML_SAVE_NO_EMPTY option.
-func WithNoEmpty() WriteOption {
-	return func(d *Writer) { d.noEmpty = true }
-}
-
-// WithNoDecl suppresses the <?xml ...?> declaration from the output.
-// Equivalent to libxml2's XML_SAVE_NO_DECL flag.
-func WithNoDecl() WriteOption {
-	return func(d *Writer) { d.noDecl = true }
-}
-
-// WithSkipDTD omits DTD nodes from serialized output (libxml2: XML_SAVE_NO_DTD).
-func WithSkipDTD() WriteOption {
-	return func(d *Writer) { d.skipDTD = true }
-}
-
-// WithNoEscapeNonASCII suppresses escaping of non-ASCII characters to
-// numeric character references. When set, non-ASCII characters are output
-// as raw UTF-8 bytes. Used by XSLT serialization.
-func WithNoEscapeNonASCII() WriteOption {
-	return func(d *Writer) { d.noEscapeNonASCII = true }
-}
-
-// WithAllowPrefixUndecl enables output of xmlns:prefix="" namespace
-// undeclarations. This is valid in XML 1.1 and required by XSLT 3.0 when
-// undeclare-prefixes="yes" is set on xsl:output.
-func WithAllowPrefixUndecl() WriteOption {
-	return func(d *Writer) { d.allowPrefixUndecl = true }
-}
-
 // Writer serializes an XML document tree (libxml2: xmlSaveCtxt).
 //
-// All serialization behavior is configured via WriteOption functional options
-// passed to NewWriter:
-//
-//   - WithFormat: indented (pretty-printed) output
-//   - WithIndentString: string used for each indent level (default "  ")
-//   - WithSkipDTD: omit DTD nodes from output
-//   - WithNoEmpty: force open+close tags for empty elements
-//   - WithNoDecl: suppress the <?xml ...?> declaration
+// It is a value-style wrapper: fluent methods return updated copies and the
+// original is never mutated.
 //
 // The escapeNonASCII flag is set automatically by WriteDoc based on the
 // document's encoding: when the output encoding is UTF-8 characters
@@ -307,13 +252,55 @@ type Writer struct {
 	allowPrefixUndecl bool   // emit xmlns:prefix="" undeclarations (XML 1.1)
 }
 
-// NewWriter creates a Writer configured with the given options.
-func NewWriter(opts ...WriteOption) *Writer {
-	d := &Writer{}
-	for _, opt := range opts {
-		opt(d)
-	}
-	return d
+// NewWriter creates a new Writer with default settings.
+func NewWriter() Writer {
+	return Writer{}
+}
+
+// Format controls whether indented (pretty-printed) output is emitted.
+func (w Writer) Format(v bool) Writer {
+	w.format = v
+	return w
+}
+
+// IndentString sets the string used for each indent level.
+func (w Writer) IndentString(s string) Writer {
+	w.indentString = s
+	return w
+}
+
+// SelfCloseEmptyElements controls whether empty elements are serialized as
+// self-closing tags (for example, <br/>). When false, they are emitted as
+// explicit open+close pairs (for example, <br></br>).
+func (w Writer) SelfCloseEmptyElements(v bool) Writer {
+	w.noEmpty = !v
+	return w
+}
+
+// XMLDeclaration controls whether the XML declaration is emitted.
+func (w Writer) XMLDeclaration(v bool) Writer {
+	w.noDecl = !v
+	return w
+}
+
+// IncludeDTD controls whether DTD nodes are emitted.
+func (w Writer) IncludeDTD(v bool) Writer {
+	w.skipDTD = !v
+	return w
+}
+
+// EscapeNonASCII controls whether non-ASCII characters are escaped as numeric
+// character references when serializing UTF-8 output.
+func (w Writer) EscapeNonASCII(v bool) Writer {
+	w.noEscapeNonASCII = !v
+	return w
+}
+
+// AllowPrefixUndeclarations controls whether xmlns:prefix="" undeclarations
+// may be emitted.
+func (w Writer) AllowPrefixUndeclarations(v bool) Writer {
+	w.allowPrefixUndecl = v
+	return w
 }
 
 func (d *Writer) indentStr() string {
@@ -392,7 +379,7 @@ var htmlBooleanAttrs = map[string]bool{
 
 // WriteDoc serializes a complete Document to the given writer
 // (libxml2: xmlDocDumpFormatMemory / xmlSaveDoc).
-func (d *Writer) WriteDoc(out io.Writer, doc *Document) error {
+func (d Writer) WriteDoc(out io.Writer, doc *Document) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START Writer.WriteDoc")
 		defer g.IRelease("END Writer.WriteDoc")
@@ -920,7 +907,7 @@ func (d *Writer) dumpNs(out io.Writer, ns *Namespace) error {
 
 // WriteNode serializes a single node and its subtree to the given writer
 // (libxml2: xmlNodeDump).
-func (d *Writer) WriteNode(out io.Writer, n Node) error {
+func (d Writer) WriteNode(out io.Writer, n Node) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START Writer.WriteNode '%s'", n.Name())
 		defer g.IRelease("END Writer.WriteNode")

@@ -34,10 +34,7 @@ const defaultHTMLDTD = `<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional
 // WriteDoc serializes an HTML document to the writer
 // (libxml2: htmlDocContentDumpOutput).
 func (w Writer) WriteDoc(out io.Writer, doc *helium.Document) error {
-	var cfg dumpConfig
-	if w.cfg != nil {
-		cfg = w.cfg.dumpConfig
-	}
+	cfg := w.dumpConfig
 
 	d := htmlDumper{
 		format:                !cfg.noFormat,
@@ -109,10 +106,7 @@ type htmlDumper struct {
 // WriteNode serializes an HTML node to the writer
 // (libxml2: htmlNodeDumpOutput).
 func (w Writer) WriteNode(out io.Writer, n helium.Node) error {
-	var cfg dumpConfig
-	if w.cfg != nil {
-		cfg = w.cfg.dumpConfig
-	}
+	cfg := w.dumpConfig
 	d := htmlDumper{
 		format:                !cfg.noFormat,
 		preserveCase:          cfg.preserveCase,

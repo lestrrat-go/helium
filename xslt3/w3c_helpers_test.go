@@ -17,13 +17,13 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	htmlparser "github.com/lestrrat-go/helium/html"
+	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/encoding/unicode"
-	"github.com/lestrrat-go/helium/internal/sequence"
 )
 
 const (
@@ -40,19 +40,19 @@ var w3cSem = make(chan struct{}, w3cMaxParallel)
 // w3cSlowTests lists tests that are too slow to run by default.
 // Set HELIUM_SLOW_TESTS=1 to include them.
 var w3cSlowTests = map[string]struct{}{
-	"sf-boolean-107":        {},
-	"sf-not-107":            {},
-	"si-iterate-133":        {}, // ~8.9s citygml.xml
-	"si-choose-012":         {}, // ~3.3s big-transactions.xml
-	"si-iterate-037":        {}, // ~2.3s ot.xml
-	"si-iterate-134":        {}, // ~1.7s citygml.xml
-	"si-iterate-135":        {}, // ~1.7s citygml.xml
-	"si-next-match-067":     {}, // ~1.7s ot.xml
-	"si-apply-imports-068":  {}, // ~1.8s ot.xml
-	"si-apply-imports-069":  {}, // ~1.8s ot.xml
-	"si-apply-imports-070":  {}, // ~1.8s ot.xml
-	"si-lre-904":            {}, // ~1.0s ot.xml
-	"si-lre-905":            {}, // ~1.0s ot.xml
+	"sf-boolean-107":       {},
+	"sf-not-107":           {},
+	"si-iterate-133":       {}, // ~8.9s citygml.xml
+	"si-choose-012":        {}, // ~3.3s big-transactions.xml
+	"si-iterate-037":       {}, // ~2.3s ot.xml
+	"si-iterate-134":       {}, // ~1.7s citygml.xml
+	"si-iterate-135":       {}, // ~1.7s citygml.xml
+	"si-next-match-067":    {}, // ~1.7s ot.xml
+	"si-apply-imports-068": {}, // ~1.8s ot.xml
+	"si-apply-imports-069": {}, // ~1.8s ot.xml
+	"si-apply-imports-070": {}, // ~1.8s ot.xml
+	"si-lre-904":           {}, // ~1.0s ot.xml
+	"si-lre-905":           {}, // ~1.0s ot.xml
 }
 
 // isSlowSourceDoc returns true for source documents that are too large
@@ -148,15 +148,15 @@ type w3cTest struct {
 	Params                      map[string]string
 	ParamTypes                  map[string]string // as types for params (from catalog <param as="...">)
 	InitialFunction             string            // QName of function to call as entry point
-	InitialFunctionParams       []string // positional params (XPath select expressions)
+	InitialFunctionParams       []string          // positional params (XPath select expressions)
 	ExpectError                 bool
 	AcceptErrors                []string // error codes accepted as alternative outcomes (from any-of)
 	ErrorCode                   string
 	Assertions                  []w3cAssertion
 	Skip                        string
 	Collections                 []w3cCollection
-	OnMultipleMatch             string // "use-last" or "fail" (W3C dependency override)
-	BaseOutputURI               string // base output URI for current-output-uri(); empty = not set
+	OnMultipleMatch             string   // "use-last" or "fail" (W3C dependency override)
+	BaseOutputURI               string   // base output URI for current-output-uri(); empty = not set
 	SourceSchemaPath            string   // path to XSD schema for source document validation (relative to testdata dir)
 	ImportSchemaPaths           []string // schema paths for xsl:import-schema resolution (relative to testdata dir)
 	VersionResolution           string   // "lowest" to select lowest matching package version (default: highest)
@@ -510,7 +510,7 @@ func w3cAssertResultDocument(uri string, checks ...w3cCheck) w3cAssertion {
 					return false
 				}
 			} else {
-				if err := doc.XML(&buf, helium.WithNoDecl()); err != nil {
+				if err := doc.XML(&buf, helium.NewWriter().XMLDeclaration(false)); err != nil {
 					t.Errorf("assert-result-document: cannot serialize result document %q: %v", uri, err)
 					return false
 				}
@@ -742,7 +742,7 @@ func w3cCheckAllOf(checks ...w3cCheck) w3cCheck {
 				} else {
 					// Fall back to fn with serialized form.
 					var buf bytes.Buffer
-					if err := doc.XML(&buf, helium.WithNoDecl()); err != nil {
+					if err := doc.XML(&buf, helium.NewWriter().XMLDeclaration(false)); err != nil {
 						return false
 					}
 					if !chk.fn(strings.TrimSpace(buf.String()), nil, nil) {
@@ -1191,11 +1191,11 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	var resultSchemaDecl xpath3.SchemaDeclarations
 	testName := t.Name()
 	recv := &w3cReceiver{
-		messages:   &messages,
-		resultDocs: resultDocs,
-		testName:   testName,
-		rawResult:  &rawResult,
-		primaryItems: &primaryItems,
+		messages:          &messages,
+		resultDocs:        resultDocs,
+		testName:          testName,
+		rawResult:         &rawResult,
+		primaryItems:      &primaryItems,
 		resultAnnotations: &resultAnnotations,
 		resultSchemaDecl:  &resultSchemaDecl,
 	}
@@ -1286,11 +1286,11 @@ func w3cRunOne(t *testing.T, tc w3cTest) {
 	} else if needsSerializer {
 		err = xslt3.SerializeResult(&buf, resultDoc, outDef)
 	} else {
-		opts := []helium.WriteOption{helium.WithNoDecl()}
+		writer := helium.NewWriter().XMLDeclaration(false)
 		if outDef != nil && outDef.UndeclarePrefixes {
-			opts = append(opts, helium.WithAllowPrefixUndecl())
+			writer = writer.AllowPrefixUndeclarations(true)
 		}
-		err = resultDoc.XML(&buf, opts...)
+		err = resultDoc.XML(&buf, writer)
 	}
 	if expectSerializationError {
 		if err != nil {
@@ -1538,8 +1538,6 @@ var w3cImplicitSkips = map[string]string{
 	// whitespace-011: external parameter entity resolution not supported
 	"whitespace-011": "parser limitation: external parameter entity resolution not supported",
 
-
-
 	// nodetest: child::schema-attribute axis conversion produces non-empty result
 	"nodetest-032": "child::schema-attribute axis conversion vs XPath 2.0 expected output mismatch",
 
@@ -1554,7 +1552,6 @@ var w3cImplicitSkips = map[string]string{
 
 	// copy tests: external entity resolution
 	"copy-1401": "requires external entity resolution (SYSTEM entity reference)",
-
 
 	// copy tests: namespace handling
 
@@ -1586,28 +1583,21 @@ var w3cImplicitSkips = map[string]string{
 	"override-f-031": "schema-aware union type conversion fails",
 	"override-v-006": "schema-aware union type comparison fails",
 
-
-
 	// use-package: package-scoped namespace serialization in result-document
 	"use-package-108":  "package-scoped namespace alias serialization not implemented",
 	"use-package-108b": "package-scoped namespace alias serialization not implemented",
 
-
-
-
 	// error-FODC0002a-ignore: processor now raises FODC0002 (ignore_doc_failure=false)
 	"error-FODC0002a-ignore": "processor raises FODC0002 instead of ignoring document failures",
 
-
 	// merge: schema-element instance test on merged items
-	"merge-049": "schema-element() instance test on merged items fails",
-	"merge-051": "schema-element() instance test on merged items fails",
-	"merge-072":  "XTDE2220 alternate=shifted collation sort-order verification not supported",
-	"merge-079":  "DOM-materialized merge exposes ancestor::record outside streaming snapshot",
-	"merge-097":  "uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable)",
-	"merge-097s": "uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable)",
+	"merge-049":   "schema-element() instance test on merged items fails",
+	"merge-051":   "schema-element() instance test on merged items fails",
+	"merge-072":   "XTDE2220 alternate=shifted collation sort-order verification not supported",
+	"merge-079":   "DOM-materialized merge exposes ancestor::record outside streaming snapshot",
+	"merge-097":   "uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable)",
+	"merge-097s":  "uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable)",
 	"merge-097sf": "uri-collection Saxon-format ?select=glob URIs not supported (W3C catalog notes non-interoperable)",
-
 
 	// package version resolution: lowest_version not supported (we use highest_version)
 
@@ -1625,7 +1615,6 @@ var w3cImplicitSkips = map[string]string{
 	"xpath-default-namespace-0503": "schema-type validation with xpath-default-namespace fails",
 	"xpath-default-namespace-0701": "schema-element with xpath-default-namespace fails",
 	"xpath-default-namespace-0703": "schema-element with xpath-default-namespace fails",
-
 
 	// strip-space: schema-aware whitespace stripping
 	"strip-space-007": "schema-aware whitespace stripping fails",
@@ -1654,9 +1643,9 @@ var w3cImplicitSkips = map[string]string{
 	"evaluate-048": "requires network access to saxonica.com",
 
 	// slow xsl:evaluate tests (~30s each with -race on CI)
-	"evaluate-010": "too slow for CI: large iteration count in xsl:evaluate",
-	"evaluate-039": "too slow for CI: large iteration count in xsl:evaluate",
-	"evaluate-040": "too slow for CI: large iteration count in xsl:evaluate",
+	"evaluate-010":  "too slow for CI: large iteration count in xsl:evaluate",
+	"evaluate-039":  "too slow for CI: large iteration count in xsl:evaluate",
+	"evaluate-040":  "too slow for CI: large iteration count in xsl:evaluate",
 	"variable-0108": "too slow for CI: large iteration count with variable binding",
 
 	"base-uri-052": "XInclude processing not applied to source documents",
@@ -1664,13 +1653,10 @@ var w3cImplicitSkips = map[string]string{
 	// snapshot: f:snapshot reference impl namespace-node graft produces empty root
 	"snapshot-0102a": "snapshot()/root() returns empty for some namespace nodes",
 
-
-
 	// XSD 1.1 features: newly unlocked but failing
-	"validation-1301":  "XSD 1.1 xs:alternative type selection not implemented",
+	"validation-1301":   "XSD 1.1 xs:alternative type selection not implemented",
 	"import-schema-164": "XSD validation fails for namespaced attribute ref with default",
-	"strip-space-009":  "schema-aware whitespace stripping not implemented",
-
+	"strip-space-009":   "schema-aware whitespace stripping not implemented",
 
 	// higher-order functions: nested for-each-group grouping bug
 }
@@ -2173,7 +2159,7 @@ func evalXPathAssertWithAnnotations(t *testing.T, expr string, doc *helium.Docum
 	}
 	if !ebv {
 		var buf bytes.Buffer
-		_ = doc.XML(&buf, helium.WithNoDecl())
+		_ = doc.XML(&buf, helium.NewWriter().XMLDeclaration(false))
 		t.Errorf("assert failed: %s evaluated to false (result: %s)", expr, buf.String())
 		return false
 	}
