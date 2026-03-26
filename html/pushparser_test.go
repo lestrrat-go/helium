@@ -2,6 +2,7 @@ package html_test
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"testing"
 
@@ -92,6 +93,35 @@ func TestHTMLPushParserSAXMode(t *testing.T) {
 	require.Contains(t, elements, "body")
 	require.Contains(t, elements, "h1")
 	require.Contains(t, elements, "p")
+}
+
+func TestHTMLParseRespectsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // cancel immediately
+
+	_, err := html.NewParser().Parse(ctx, []byte(testHTML))
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestHTMLParseWithSAXRespectsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	handler := &html.SAXCallbacks{}
+	err := html.NewParser().ParseWithSAX(ctx, []byte(testHTML), handler)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestHTMLPushParserCloseRespectsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+
+	pp := html.NewParser().NewPushParser(ctx)
+	require.NoError(t, pp.Push([]byte(testHTML)))
+
+	cancel()
+
+	_, err := pp.Close()
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestHTMLPushParserIOCopy(t *testing.T) {

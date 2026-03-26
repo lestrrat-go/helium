@@ -41,11 +41,11 @@ func (pp *PushParser) Write(p []byte) (int, error) {
 func (pp *PushParser) Close() (*helium.Document, error) {
 	data := pp.buf.Bytes()
 	if pp.sax != nil {
-		hp := newParser(data, pp.sax, pp.cfg)
+		hp := newParser(pp.ctx, data, pp.sax, pp.cfg)
 		return nil, hp.parse()
 	}
 	tb := newTreeBuilder()
-	hp := newParser(data, tb, pp.cfg)
+	hp := newParser(pp.ctx, data, tb, pp.cfg)
 	if err := hp.parse(); err != nil {
 		return nil, err
 	}

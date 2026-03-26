@@ -2,6 +2,7 @@ package html
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"slices"
 	"strconv"
@@ -20,6 +21,7 @@ const (
 
 // parser is the HTML parser. It drives the tokenizer and fires SAX events.
 type parser struct {
+	ctx   context.Context
 	input []byte
 	pos   int
 	line  int
@@ -66,7 +68,7 @@ func (l *parserLocator) GetPublicID() string { return "" }
 // GetSystemID returns the system identifier (URI/filename) of the document being parsed (libxml2: xmlSAXLocator.getSystemId).
 func (l *parserLocator) GetSystemID() string { return "" }
 
-func newParser(input []byte, sax SAXHandler, cfg parseConfig) *parser {
+func newParser(ctx context.Context, input []byte, sax SAXHandler, cfg parseConfig) *parser {
 	// Normalize \r\n → \n and standalone \r → \n (HTML spec line normalization)
 	normalized := normalizeNewlines(input)
 
@@ -97,6 +99,7 @@ func newParser(input []byte, sax SAXHandler, cfg parseConfig) *parser {
 	}
 
 	p := &parser{
+		ctx:               ctx,
 		input:             normalized,
 		pos:               0,
 		line:              1,
@@ -445,6 +448,9 @@ func (p *parser) parse() error {
 	_ = p.sax.StartDocument()
 
 	for !p.atEnd() {
+		if err := p.ctx.Err(); err != nil {
+			return err
+		}
 		if p.peek() == '<' {
 			if p.peekAt(1) == '/' {
 				p.parseEndTag()
