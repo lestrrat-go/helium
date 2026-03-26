@@ -192,14 +192,14 @@ func (c *evalConfig) clone() *evalConfig {
 	return &cp
 }
 
-// WithNamespaces sets namespace prefix->URI bindings on the returned context.
+// Deprecated: Use Evaluator.Namespaces instead.
 func WithNamespaces(ctx context.Context, ns map[string]string) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.namespaces = maps.Clone(ns)
 	})
 }
 
-// WithAdditionalNamespaces merges namespace prefix->URI bindings into the returned context.
+// Deprecated: Use Evaluator.AdditionalNamespaces instead.
 func WithAdditionalNamespaces(ctx context.Context, ns map[string]string) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		if c.namespaces == nil {
@@ -211,14 +211,14 @@ func WithAdditionalNamespaces(ctx context.Context, ns map[string]string) context
 	})
 }
 
-// WithVariables sets variable name->value bindings on the returned context.
+// Deprecated: Use Evaluator.Variables instead.
 func WithVariables(ctx context.Context, vars map[string]any) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.variables = maps.Clone(vars)
 	})
 }
 
-// WithAdditionalVariables merges variable name->value bindings into the returned context.
+// Deprecated: Use Evaluator.AdditionalVariables instead.
 func WithAdditionalVariables(ctx context.Context, vars map[string]any) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		if c.variables == nil {
@@ -230,14 +230,14 @@ func WithAdditionalVariables(ctx context.Context, vars map[string]any) context.C
 	})
 }
 
-// WithOpLimit sets the operation counter limit (0 = unlimited) on the returned context.
+// Deprecated: Use Evaluator.OpLimit instead.
 func WithOpLimit(ctx context.Context, limit int) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.opLimit = limit
 	})
 }
 
-// WithFunction registers an unqualified custom XPath function on the returned context.
+// Deprecated: Use Evaluator.Function instead.
 func WithFunction(ctx context.Context, name string, fn Function) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		if c.functions == nil {
@@ -247,14 +247,14 @@ func WithFunction(ctx context.Context, name string, fn Function) context.Context
 	})
 }
 
-// WithFunctions sets unqualified custom function registrations on the returned context.
+// Deprecated: Use Evaluator.Function instead.
 func WithFunctions(ctx context.Context, fns map[string]Function) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.functions = maps.Clone(fns)
 	})
 }
 
-// WithFunctionNS registers a namespace-qualified custom XPath function on the returned context.
+// Deprecated: Use Evaluator.FunctionNS instead.
 func WithFunctionNS(ctx context.Context, uri, name string, fn Function) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		if c.functionsNS == nil {
@@ -264,7 +264,7 @@ func WithFunctionNS(ctx context.Context, uri, name string, fn Function) context.
 	})
 }
 
-// WithFunctionsNS sets namespace-qualified custom function registrations on the returned context.
+// Deprecated: Use Evaluator.FunctionNS instead.
 func WithFunctionsNS(ctx context.Context, fns map[QualifiedName]Function) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.functionsNS = maps.Clone(fns)
