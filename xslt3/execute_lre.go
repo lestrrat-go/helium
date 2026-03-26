@@ -335,7 +335,7 @@ func (ec *execContext) applyOneAttributeSet(ctx context.Context, asDef *attribut
 // declared on an ancestor element in the current output tree.
 func (ec *execContext) isNSDeclaredInScope(prefix, uri string) bool {
 	out := ec.currentOutput()
-	for node := out.current; node != nil; node = node.Parent() {
+	for node := helium.Node(out.current); node != nil; node = node.Parent() {
 		elem, ok := node.(*helium.Element)
 		if !ok {
 			continue
@@ -360,7 +360,7 @@ func (ec *execContext) isNSDeclaredInScope(prefix, uri string) bool {
 // with a non-empty URI declared on any ancestor in the result tree.
 func (ec *execContext) hasDefaultNSInScope() bool {
 	out := ec.currentOutput()
-	for node := out.current; node != nil; node = node.Parent() {
+	for node := helium.Node(out.current); node != nil; node = node.Parent() {
 		elem, ok := node.(*helium.Element)
 		if !ok {
 			continue

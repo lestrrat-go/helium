@@ -414,7 +414,7 @@ func (ec *execContext) collectNodeChildren(node helium.Node) xpath3.ItemSlice {
 		children = append(children, child)
 	}
 	for _, child := range children {
-		helium.UnlinkNode(child)
+		helium.UnlinkNode(child.(helium.MutableNode))
 		seq = append(seq, xpath3.NodeItem{Node: child})
 	}
 	return seq

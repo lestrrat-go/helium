@@ -8,14 +8,10 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
-// Node represents a node in an XML document tree (libxml2: xmlNode).
+// Node is a read-only view of an XML document tree node (libxml2: xmlNode).
 type Node interface {
 	baseDocNode() *docnode // prevents external implementation
 
-	AddChild(Node) error
-	// AppendText appends text content to this node (libxml2: xmlNodeAddContent).
-	AppendText([]byte) error
-	AddSibling(Node) error
 	Content() []byte
 	FirstChild() Node
 	LastChild() Node
@@ -25,6 +21,17 @@ type Node interface {
 	OwnerDocument() *Document
 	Parent() Node
 	PrevSibling() Node
+	Type() ElementType
+}
+
+// MutableNode extends Node with tree-mutation operations.
+type MutableNode interface {
+	Node
+
+	AddChild(Node) error
+	AddSibling(Node) error
+	// AppendText appends text content to this node (libxml2: xmlNodeAddContent).
+	AppendText([]byte) error
 	Replace(Node) error
 	SetLine(int)
 	SetNextSibling(Node)
@@ -32,7 +39,6 @@ type Node interface {
 	SetParent(Node)
 	SetPrevSibling(Node)
 	SetTreeDoc(doc *Document)
-	Type() ElementType
 }
 
 // docnode is responsible for handling the basic tree-ish operations
@@ -135,18 +141,18 @@ func (n *docnode) baseDocNode() *docnode {
 	return n
 }
 
-func setFirstChild(n Node, cur Node) {
+func setFirstChild(n MutableNode, cur Node) {
 	n.baseDocNode().firstChild = cur
 }
 
-func setLastChild(n Node, cur Node) {
+func setLastChild(n MutableNode, cur Node) {
 	n.baseDocNode().lastChild = cur
 }
 
 // SetLastChild updates the last-child pointer of a parent node.
 // This is needed when manually splicing nodes into a sibling list
 // without going through AddChild/AddSibling.
-func SetLastChild(n Node, cur Node) {
+func SetLastChild(n MutableNode, cur Node) {
 	setLastChild(n, cur)
 }
 
@@ -170,7 +176,7 @@ func (n docnode) Content() []byte {
 	return b.Bytes()
 }
 
-func appendText(n Node, b []byte) error {
+func appendText(n MutableNode, b []byte) error {
 	// Fast path: if last child is already a text node, append directly
 	// without allocating a new Text node.
 	if last := n.LastChild(); last != nil && last.Type() == TextNode {
@@ -266,7 +272,7 @@ func (n docnode) LastChild() Node {
 	return n.lastChild
 }
 
-func addChild(n Node, cur Node) error {
+func addChild(n MutableNode, cur Node) error {
 	pdn := n.baseDocNode()
 	cdn := cur.baseDocNode()
 
@@ -295,7 +301,7 @@ func addChild(n Node, cur Node) error {
 
 	// AddSibling handles setting the parent, and the
 	// lastChild pointer (also merges adjacent text nodes)
-	if err := l.AddSibling(cur); err != nil {
+	if err := l.(MutableNode).AddSibling(cur); err != nil {
 		return err
 	}
 
@@ -317,19 +323,22 @@ func (n docnode) PrevSibling() Node {
 	return n.prev
 }
 
-func addSibling(n, cur Node) error {
-	for n != nil {
-		if n.NextSibling() == nil {
-			n.SetNextSibling(cur)
-			cur.SetPrevSibling(n)
-			parent := n.Parent()
-			cur.SetParent(parent)
+func addSibling(n MutableNode, cur Node) error {
+	cdn := cur.baseDocNode()
+	iter := Node(n)
+	for iter != nil {
+		if iter.NextSibling() == nil {
+			idn := iter.baseDocNode()
+			idn.next = cur
+			cdn.prev = iter
+			parent := iter.Parent()
+			cdn.parent = parent
 			if parent != nil {
-				setLastChild(parent, cur)
+				parent.baseDocNode().lastChild = cur
 			}
 			return nil
 		}
-		n = n.NextSibling()
+		iter = iter.NextSibling()
 	}
 
 	return errors.New("cannot add sibling to nil node")
@@ -349,51 +358,58 @@ func (n *docnode) SetParent(cur Node) {
 
 // UnlinkNode detaches a node from its parent and sibling chain.
 // After unlinking, the node has no parent, prev, or next pointers.
-func UnlinkNode(n Node) {
+func UnlinkNode(n MutableNode) {
 	if n == nil {
 		return
 	}
 
-	if parent := n.Parent(); parent != nil {
-		if parent.FirstChild() == n {
-			setFirstChild(parent, n.NextSibling())
+	ndn := n.baseDocNode()
+
+	if parent := ndn.parent; parent != nil {
+		pdn := parent.baseDocNode()
+		if pdn.firstChild == n {
+			pdn.firstChild = ndn.next
 		}
-		if parent.LastChild() == n {
-			setLastChild(parent, n.PrevSibling())
+		if pdn.lastChild == n {
+			pdn.lastChild = ndn.prev
 		}
 	}
 
-	if prev := n.PrevSibling(); prev != nil {
-		prev.SetNextSibling(n.NextSibling())
+	if prev := ndn.prev; prev != nil {
+		prev.baseDocNode().next = ndn.next
 	}
-	if next := n.NextSibling(); next != nil {
-		next.SetPrevSibling(n.PrevSibling())
+	if next := ndn.next; next != nil {
+		next.baseDocNode().prev = ndn.prev
 	}
 
-	n.SetParent(nil)
-	n.SetPrevSibling(nil)
-	n.SetNextSibling(nil)
+	ndn.parent = nil
+	ndn.prev = nil
+	ndn.next = nil
 }
 
-func replaceNode(n Node, cur Node) error {
-	if next := n.NextSibling(); next != nil {
-		cur.SetNextSibling(next) // cur.next = n.next
-		next.SetPrevSibling(cur) // n.next.prev = cur
+func replaceNode(n MutableNode, cur Node) error {
+	cdn := cur.baseDocNode()
+	ndn := n.baseDocNode()
+
+	if next := ndn.next; next != nil {
+		cdn.next = next        // cur.next = n.next
+		next.baseDocNode().prev = cur // n.next.prev = cur
 	}
 
-	if prev := n.PrevSibling(); prev != nil {
-		cur.SetPrevSibling(prev) // cur.prev = n.prev
-		prev.SetNextSibling(cur) // n.prev.next = cur
+	if prev := ndn.prev; prev != nil {
+		cdn.prev = prev        // cur.prev = n.prev
+		prev.baseDocNode().next = cur // n.prev.next = cur
 	}
 
-	if parent := n.Parent(); parent != nil {
-		if parent.FirstChild() == n {
-			setFirstChild(parent, cur)
+	if parent := ndn.parent; parent != nil {
+		pdn := parent.baseDocNode()
+		if pdn.firstChild == n {
+			pdn.firstChild = cur
 		}
-		if parent.LastChild() == n {
-			setLastChild(parent, cur)
+		if pdn.lastChild == n {
+			pdn.lastChild = cur
 		}
-		cur.SetParent(parent)
+		cdn.parent = parent
 	}
 	return nil
 }
@@ -477,19 +493,19 @@ func (n *node) invalidateQName() {
 	n.qname = ""
 }
 
-func SetListDoc(n Node, doc *Document) {
+func SetListDoc(n MutableNode, doc *Document) {
 	if n == nil || n.Type() == NamespaceDeclNode {
 		return
 	}
 
-	for ; n != nil; n = n.NextSibling() {
-		if n.OwnerDocument() != doc {
-			n.SetTreeDoc(doc)
+	for cur := Node(n); cur != nil; cur = cur.NextSibling() {
+		if cur.OwnerDocument() != doc {
+			cur.(MutableNode).SetTreeDoc(doc)
 		}
 	}
 }
 
-func setTreeDoc(n Node, doc *Document) {
+func setTreeDoc(n MutableNode, doc *Document) {
 	if n == nil || n.Type() == NamespaceDeclNode {
 		return
 	}
@@ -504,12 +520,12 @@ func setTreeDoc(n Node, doc *Document) {
 			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
 			prop.doc = doc
 			if child := prop.firstChild; child != nil {
-				SetListDoc(child, doc)
+				SetListDoc(child.(MutableNode), doc)
 			}
 		}
 	}
 	if child := n.FirstChild(); child != nil {
-		SetListDoc(child, doc)
+		SetListDoc(child.(MutableNode), doc)
 	}
 	n.SetOwnerDocument(doc)
 }

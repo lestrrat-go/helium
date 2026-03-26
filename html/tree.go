@@ -7,7 +7,7 @@ import (
 // treeBuilder implements SAXHandler and builds a helium DOM tree.
 type treeBuilder struct {
 	doc *helium.Document
-	cur helium.Node // current insertion point
+	cur helium.MutableNode // current insertion point
 }
 
 func newTreeBuilder() *treeBuilder {
@@ -57,8 +57,7 @@ func (t *treeBuilder) EndElement(name string) error {
 	if t.cur == nil || t.cur == t.doc {
 		return nil
 	}
-	parent := t.cur.Parent()
-	if parent != nil {
+	if parent, ok := t.cur.Parent().(helium.MutableNode); ok && parent != nil {
 		t.cur = parent
 	} else {
 		t.cur = t.doc

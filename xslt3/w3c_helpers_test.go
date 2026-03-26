@@ -2008,7 +2008,7 @@ func evalXPathAssert(t *testing.T, expr string, resultXML string) bool {
 				children = append(children, child)
 			}
 			for _, child := range children {
-				helium.UnlinkNode(child)
+				helium.UnlinkNode(child.(helium.MutableNode))
 				if addErr := fragDoc.AddChild(child); addErr != nil {
 					t.Errorf("assert: cannot build fragment document: %v", addErr)
 					return false
@@ -2192,7 +2192,7 @@ func evalXPathAssertWithRawResult(t *testing.T, expr string, resultXML string, r
 				children = append(children, child)
 			}
 			for _, child := range children {
-				helium.UnlinkNode(child)
+				helium.UnlinkNode(child.(helium.MutableNode))
 				if addErr := fragDoc.AddChild(child); addErr != nil {
 					t.Errorf("assert: cannot build fragment document: %v", addErr)
 					return false

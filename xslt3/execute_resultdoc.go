@@ -167,7 +167,7 @@ func (ec *execContext) execDocument(ctx context.Context, inst *documentInst) err
 				children = append(children, child)
 			}
 			for _, child := range children {
-				helium.UnlinkNode(child)
+				helium.UnlinkNode(child.(helium.MutableNode))
 				if err := ec.addNode(child); err != nil {
 					return err
 				}

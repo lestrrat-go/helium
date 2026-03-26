@@ -227,7 +227,7 @@ func (d *Document) DocumentElement() *Element {
 	return nil
 }
 
-func (d *Document) SetDocumentElement(root Node) error {
+func (d *Document) SetDocumentElement(root MutableNode) error {
 	if d == nil {
 		// what are you trying to do?
 		return nil
@@ -250,7 +250,7 @@ func (d *Document) SetDocumentElement(root Node) error {
 			return err
 		}
 	} else {
-		if err := old.Replace(root); err != nil {
+		if err := old.(MutableNode).Replace(root); err != nil {
 			return err
 		}
 	}
@@ -302,7 +302,7 @@ func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Att
 
 		setFirstChild(attr, n)
 		for n != nil {
-			n.SetParent(attr)
+			n.baseDocNode().parent = attr
 			x := n.NextSibling()
 			if x == nil {
 				setLastChild(attr, n)
@@ -413,14 +413,14 @@ func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD
 		}
 	} else {
 		// Insert cur before root.
-		cur.SetNextSibling(root)
+		cur.next = root
 		if prev := root.PrevSibling(); prev != nil {
-			prev.SetNextSibling(cur)
-			cur.SetPrevSibling(prev)
+			prev.baseDocNode().next = cur
+			cur.prev = prev
 		} else {
 			setFirstChild(d, cur)
 		}
-		root.SetPrevSibling(cur)
+		root.baseDocNode().prev = cur
 	}
 
 	return cur, nil
@@ -702,14 +702,14 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 					if pdebug.Enabled {
 						pdebug.Printf("Flushing content so far... '%s'", buf.Bytes())
 					}
-					node := Node(d.CreateText(buf.Bytes()))
+					node := d.CreateText(buf.Bytes())
 					buf.Reset()
 
 					if last == nil {
 						last = node
 						ret = node
 					} else {
-						if err2 := last.AddSibling(node); err2 != nil {
+						if err2 := last.(MutableNode).AddSibling(node); err2 != nil {
 							err = err2
 							return
 						}
@@ -738,7 +738,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 					}
 					setFirstChild(ent, refchildren)
 					for n := refchildren; n != nil; {
-						n.SetParent(ent)
+						n.baseDocNode().parent = ent
 						if x := n.NextSibling(); x != nil {
 							n = x
 						} else {
@@ -751,7 +751,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 					last = node
 					ret = node
 				} else {
-					if err2 := last.AddSibling(node); err2 != nil {
+					if err2 := last.(MutableNode).AddSibling(node); err2 != nil {
 						err = err2
 						return
 					}
@@ -767,12 +767,12 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 	}
 
 	if buf.Len() > 0 {
-		n := Node(d.CreateText(buf.Bytes()))
+		n := d.CreateText(buf.Bytes())
 
 		if last == nil {
 			ret = n
 		} else {
-			if err := last.AddSibling(n); err != nil {
+			if err := last.(MutableNode).AddSibling(n); err != nil {
 				return nil, err
 			}
 		}

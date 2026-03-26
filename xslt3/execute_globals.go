@@ -759,7 +759,7 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []instru
 	for child := tmpDoc.FirstChild(); child != nil; {
 		next := child.NextSibling()
 		if child.Type() == helium.TextNode && len(child.Content()) == 0 {
-			helium.UnlinkNode(child)
+			helium.UnlinkNode(child.(helium.MutableNode))
 		}
 		child = next
 	}
