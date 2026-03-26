@@ -253,16 +253,6 @@ func isSpecialAttr(a *helium.Attribute) bool {
 	return false
 }
 
-// attrLocalName returns the true local name of an attribute, stripping
-// any prefix that may be embedded in LocalName() (parser/API quirk).
-func attrLocalName(a *helium.Attribute) string {
-	ln := a.LocalName()
-	if i := strings.IndexByte(ln, ':'); i >= 0 {
-		return ln[i+1:]
-	}
-	return ln
-}
-
 func elemDisplayName(elem *helium.Element) string {
 	if elem.URI() != "" {
 		return helium.ClarkName(elem.URI(), elem.LocalName())
@@ -314,7 +304,7 @@ func (vc *validationContext) validateAttributes(elem *helium.Element, td *TypeDe
 		if isSpecialAttr(a) {
 			continue
 		}
-		aqn := QName{Local: attrLocalName(a), NS: a.URI()}
+		aqn := QName{Local: a.LocalName(), NS: a.URI()}
 		present[aqn] = struct{}{}
 		if au, ok := allowed[aqn]; ok {
 			if au.Fixed != nil && a.Value() != *au.Fixed {

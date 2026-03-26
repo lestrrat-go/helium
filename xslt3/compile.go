@@ -901,7 +901,7 @@ func (c *compiler) resolveShadowAttributes(elem *helium.Element) error {
 		// Remove the shadow attribute and set the real one.
 		// Use literal mode: avt values are plain text that may contain &.
 		elem.RemoveAttribute("_" + realName)
-		elem.SetLiteralAttribute(realName, val)
+		_ = elem.SetLiteralAttribute(realName, val)
 	}
 	return nil
 }
@@ -926,7 +926,7 @@ func (c *compiler) resolveSingleShadowAttribute(elem *helium.Element, name strin
 			"error evaluating shadow attribute _%s: %v", name, err)
 	}
 	elem.RemoveAttribute(shadowName)
-	elem.SetLiteralAttribute(name, val)
+	_ = elem.SetLiteralAttribute(name, val)
 	return nil
 }
 

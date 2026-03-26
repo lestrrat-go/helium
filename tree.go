@@ -301,7 +301,7 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 				// references are already resolved in the attribute
 				// value. Use literal mode to avoid re-parsing & as
 				// new entity reference starts.
-				e.SetLiteralAttributeNS(attr.LocalName(), attr.Value(), ns)
+				_ = e.SetLiteralAttributeNS(attr.LocalName(), attr.Value(), ns)
 			} else {
 				if _, err := e.SetAttributeNS(attr.LocalName(), attr.Value(), ns); err != nil {
 					return err
@@ -309,7 +309,7 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 			}
 		} else {
 			if ctx.replaceEntities {
-				e.SetLiteralAttribute(attr.Name(), attr.Value())
+				_ = e.SetLiteralAttribute(attr.Name(), attr.Value())
 			} else {
 				if _, err := e.SetAttribute(attr.Name(), attr.Value()); err != nil {
 					return err

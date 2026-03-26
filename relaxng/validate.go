@@ -1014,8 +1014,8 @@ func (v *validator) matchOneAttr(pat *pattern, attrs []*helium.Attribute, used [
 }
 
 func (v *validator) attributeMatches(pat *pattern, attr *helium.Attribute) bool {
-	localName := attrLocalName(attr)
-	uri := attrNS(attr)
+	localName := attr.LocalName()
+	uri := attr.URI()
 	if pat.nameClass != nil {
 		return nameClassMatches(pat.nameClass, localName, uri)
 	}
@@ -1026,35 +1026,6 @@ func (v *validator) attributeMatches(pat *pattern, attr *helium.Attribute) bool 
 		return false
 	}
 	return true
-}
-
-// attrLocalName returns the true local name of an attribute,
-// stripping any embedded prefix (e.g. "xml:lang" → "lang").
-func attrLocalName(attr *helium.Attribute) string {
-	ln := attr.LocalName()
-	if i := strings.IndexByte(ln, ':'); i >= 0 {
-		return ln[i+1:]
-	}
-	return ln
-}
-
-// attrNS returns the namespace URI of an attribute,
-// handling the xml: prefix special case.
-func attrNS(attr *helium.Attribute) string {
-	ln := attr.LocalName()
-	name := attr.Name()
-	// Check for xml: prefix embedded in LocalName (parser quirk)
-	if strings.HasPrefix(ln, "xml:") {
-		return helium.XMLNamespace
-	}
-	// Check for prefix in Name() vs LocalName()
-	if len(name) > len(ln) {
-		prefix := name[:len(name)-len(ln)-1]
-		if prefix == helium.XMLPrefix {
-			return helium.XMLNamespace
-		}
-	}
-	return attr.URI()
 }
 
 func (v *validator) validateAttributeValue(pat *pattern, attr *helium.Attribute, elem *helium.Element) int {

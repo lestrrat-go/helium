@@ -40,9 +40,9 @@ func (t *treeBuilder) StartElement(name string, attrs []Attribute) error {
 	// serializer can distinguish them from attrs with empty string values.
 	for _, a := range attrs {
 		if a.Boolean {
-			elem.SetBooleanAttribute(a.Name)
+			_ = elem.SetBooleanAttribute(a.Name)
 		} else {
-			elem.SetLiteralAttribute(a.Name, a.Value)
+			_ = elem.SetLiteralAttribute(a.Name, a.Value)
 		}
 	}
 

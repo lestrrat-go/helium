@@ -163,10 +163,10 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *liter
 			// Use literal mode: avt evaluation produces plain text that
 			// may contain & from resolved entities (e.g. &amp; -> &).
 			// SetAttributeNS would re-parse those as entity references.
-			elem.SetLiteralAttributeNS(attr.LocalName, val, ns)
+			_ = elem.SetLiteralAttributeNS(attr.LocalName, val, ns)
 		} else {
 			// Use literal mode for the same reason as above.
-			elem.SetLiteralAttribute(attr.Name, val)
+			_ = elem.SetLiteralAttribute(attr.Name, val)
 		}
 	}
 

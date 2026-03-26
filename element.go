@@ -2,7 +2,9 @@ package helium
 
 import (
 	"bytes"
+	"fmt"
 	"io"
+	"strings"
 
 	"github.com/lestrrat-go/pdebug"
 )
@@ -110,7 +112,10 @@ func (n *Element) SetAttribute(name, value string) (*Element, error) {
 // This is useful for HTML where the parser has already resolved entities.
 // An empty value creates a text child with empty content (distinguishing
 // it from a boolean attribute which has no children).
-func (n *Element) SetLiteralAttribute(name, value string) {
+func (n *Element) SetLiteralAttribute(name, value string) error {
+	if strings.ContainsRune(name, ':') {
+		return fmt.Errorf("attribute name %q contains a colon: use SetLiteralAttributeNS with a local name and Namespace parameter", name)
+	}
 	attr := newAttribute(name, nil)
 	attr.doc = n.doc
 	t := newText([]byte(value))
@@ -119,15 +124,20 @@ func (n *Element) SetLiteralAttribute(name, value string) {
 	setLastChild(attr, t)
 	t.SetParent(attr)
 	n.addProperty(attr)
+	return nil
 }
 
 // SetBooleanAttribute creates a boolean attribute (name only, no value).
 // The attribute has no children, distinguishing it from an attribute with
 // an empty string value.
-func (n *Element) SetBooleanAttribute(name string) {
+func (n *Element) SetBooleanAttribute(name string) error {
+	if strings.ContainsRune(name, ':') {
+		return fmt.Errorf("attribute name %q contains a colon", name)
+	}
 	attr := newAttribute(name, nil)
 	attr.doc = n.doc
 	n.addProperty(attr)
+	return nil
 }
 
 // addProperty inserts or replaces an attribute in the element's property list.
@@ -176,7 +186,10 @@ func (n *Element) addProperty(attr *Attribute) {
 // value and namespace. Unlike SetAttributeNS, the value is not parsed for
 // entity references. This is useful when the parser has already resolved
 // entities in attribute values.
-func (n *Element) SetLiteralAttributeNS(localname, value string, ns *Namespace) {
+func (n *Element) SetLiteralAttributeNS(localname, value string, ns *Namespace) error {
+	if strings.ContainsRune(localname, ':') {
+		return fmt.Errorf("attribute local name %q contains a colon", localname)
+	}
 	attr := newAttribute(localname, ns)
 	attr.doc = n.doc
 	t := newText([]byte(value))
@@ -185,6 +198,7 @@ func (n *Element) SetLiteralAttributeNS(localname, value string, ns *Namespace) 
 	setLastChild(attr, t)
 	t.SetParent(attr)
 	n.addProperty(attr)
+	return nil
 }
 
 // SetAttributeNS creates an attribute with the given local name, value, and namespace.

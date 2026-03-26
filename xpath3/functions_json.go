@@ -595,9 +595,9 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 				return err
 			}
 			keyText := key.StringVal()
-			child.SetLiteralAttribute("key", keyText)
+			_ = child.SetLiteralAttribute("key", keyText)
 			if opts.escape {
-				child.SetLiteralAttribute("escaped-key", "true")
+				_ = child.SetLiteralAttribute("escaped-key", "true")
 			}
 			if err := elem.AddChild(child); err != nil {
 				return &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to attach child: %v", err)}
@@ -620,7 +620,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 		switch v.TypeName {
 		case TypeString:
 			if opts.escape {
-				elem.SetLiteralAttribute("escaped", "true")
+				_ = elem.SetLiteralAttribute("escaped", "true")
 			}
 			if err := elem.AppendText([]byte(v.StringVal())); err != nil {
 				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append string value: %v", err)}

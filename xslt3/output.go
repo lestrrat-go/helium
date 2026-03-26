@@ -2538,7 +2538,7 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 			for _, attr := range e.Attributes() {
 				if strings.EqualFold(attr.Name(), "http-equiv") && strings.EqualFold(attr.Value(), "Content-Type") {
 					// Update the existing content attribute
-					e.SetLiteralAttribute("content", contentValue)
+					_ = e.SetLiteralAttribute("content", contentValue)
 					return
 				}
 			}
@@ -2550,8 +2550,8 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 	if headURI := string(head.URI()); headURI != "" {
 		_ = meta.SetActiveNamespace(string(head.Prefix()), headURI)
 	}
-	meta.SetLiteralAttribute("http-equiv", "Content-Type")
-	meta.SetLiteralAttribute("content", contentValue)
+	_ = meta.SetLiteralAttribute("http-equiv", "Content-Type")
+	_ = meta.SetLiteralAttribute("content", contentValue)
 	// Insert meta as first child of <head>.
 	// Unlink existing children, add meta, then re-add them.
 	var children []helium.Node

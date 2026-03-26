@@ -7,6 +7,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestSetAttributeRejectsColon(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDefaultDocument()
+	elem := doc.CreateElement("root")
+
+	// A colon in the name parameter is invalid — callers should use
+	// SetAttributeNS with a proper Namespace object.
+	_, err := elem.SetAttribute("xml:space", "preserve")
+	require.Error(t, err)
+
+	// Passing a proper local name should succeed.
+	_, err = elem.SetAttribute("id", "123")
+	require.NoError(t, err)
+}
+
+func TestSetLiteralAttributeRejectsColon(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDefaultDocument()
+	elem := doc.CreateElement("root")
+
+	// A colon in the name parameter is invalid.
+	err := elem.SetLiteralAttribute("xml:lang", "en")
+	require.Error(t, err)
+
+	// Passing a proper local name should succeed.
+	err = elem.SetLiteralAttribute("lang", "en")
+	require.NoError(t, err)
+}
+
 func mustCreateElement(t *testing.T, doc *helium.Document, name string) *helium.Element {
 	t.Helper()
 	e := doc.CreateElement(name)

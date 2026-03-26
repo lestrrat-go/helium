@@ -3,6 +3,7 @@ package helium
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -286,6 +287,9 @@ func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Att
 		defer func() {
 			g.IRelease("END document.CreateAttribute (attr.Value = '%s')", attr.Value())
 		}()
+	}
+	if strings.ContainsRune(name, ':') {
+		return nil, fmt.Errorf("attribute name %q contains a colon: use CreateAttribute with a local name and Namespace parameter", name)
 	}
 	var n Node
 	if d != nil {
