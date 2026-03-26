@@ -1,0 +1,52 @@
+# sink
+
+The `sink` package provides a generic asynchronous event sink backed by a
+channel and worker goroutine.
+
+Import path: `github.com/lestrrat-go/helium/sink`
+
+<!-- INCLUDE(examples/sink_example_test.go) -->
+```go
+package examples_test
+
+import (
+  "context"
+  "fmt"
+
+  "github.com/lestrrat-go/helium/sink"
+)
+
+func Example_sink_new() {
+  // Sink[T] is a generic, channel-based async processor. Items sent via
+  // Handle are delivered to a Handler in a background goroutine.
+  //
+  // When T is error, *Sink[error] satisfies the helium.ErrorHandler
+  // interface via structural typing.
+
+  ctx := context.Background()
+
+  // Create a sink that collects strings. HandlerFunc adapts a plain
+  // function into a Handler.
+  var collected []string
+  s := sink.New[string](ctx, sink.HandlerFunc[string](func(_ context.Context, v string) {
+    collected = append(collected, v)
+  }))
+
+  for _, v := range []string{"alpha", "bravo", "charlie"} {
+    s.Handle(ctx, v)
+  }
+
+  // Close waits for all buffered items to be processed.
+  _ = s.Close()
+
+  for _, v := range collected {
+    fmt.Println(v)
+  }
+  // Output:
+  // alpha
+  // bravo
+  // charlie
+}
+```
+source: [examples/sink_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/sink_example_test.go)
+<!-- END INCLUDE -->
