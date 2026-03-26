@@ -694,10 +694,10 @@ func tryUnmarshalXMLHook(field reflect.Value, elem *helium.Element) (bool, error
 
 // elementTokenReader walks a helium DOM subtree and emits stdxml.Token values.
 type elementTokenReader struct {
-	elem    *helium.Element
-	tokens  []stdxml.Token
-	pos     int
-	built   bool
+	elem   *helium.Element
+	tokens []stdxml.Token
+	pos    int
+	built  bool
 }
 
 func (r *elementTokenReader) Token() (stdxml.Token, error) {
@@ -1203,7 +1203,7 @@ func innerXML(elem *helium.Element) string {
 		return ""
 	}
 	var b bytes.Buffer
-	w := helium.NewWriter(helium.WithNoDecl())
+	w := helium.NewWriter().XMLDeclaration(false)
 	for child := range helium.Children(elem) {
 		_ = w.WriteNode(&b, child)
 	}

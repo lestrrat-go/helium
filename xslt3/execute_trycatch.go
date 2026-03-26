@@ -8,8 +8,8 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 func (ec *execContext) execMessage(ctx context.Context, inst *messageInst) error {
@@ -125,7 +125,7 @@ func serializeMessageSequence(seq xpath3.Sequence) string {
 		var buf bytes.Buffer
 		switch n := ni.Node.(type) {
 		case *helium.Document:
-			_ = n.XML(&buf, helium.WithNoDecl())
+			_ = n.XML(&buf, helium.NewWriter().XMLDeclaration(false))
 		case *helium.Element:
 			_ = n.XML(&buf)
 		case *helium.Comment:

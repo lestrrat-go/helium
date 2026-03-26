@@ -74,7 +74,7 @@ func (r exampleXSLTResolver) Resolve(uri string) (io.ReadCloser, error) {
 
 func serializeExampleDocument(doc *helium.Document) (string, error) {
 	var buf bytes.Buffer
-	if err := doc.XML(&buf, helium.WithNoDecl()); err != nil {
+	if err := doc.XML(&buf, helium.NewWriter().XMLDeclaration(false)); err != nil {
 		return "", err
 	}
 	return buf.String(), nil

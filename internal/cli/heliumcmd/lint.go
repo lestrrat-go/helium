@@ -30,16 +30,16 @@ const (
 type config struct {
 	parser helium.Parser
 
-	doXInclude     bool
-	noXIncNode     bool
-	noBaseFixup    bool
-	dtdValid       bool
-	c14nMode       int
-	schemaFile     string
-	xpathExpr      string
-	catalogs       bool
-	noCatalogs     bool
-	pathDirs       string
+	doXInclude  bool
+	noXIncNode  bool
+	noBaseFixup bool
+	dtdValid    bool
+	c14nMode    int
+	schemaFile  string
+	xpathExpr   string
+	catalogs    bool
+	noCatalogs  bool
+	pathDirs    string
 
 	noout      bool
 	format     bool
@@ -489,16 +489,14 @@ func (c *command) processInput(ctx context.Context, cfg *config, input namedInpu
 		return ExitOK
 	}
 
-	var opts []helium.WriteOption
+	writer := helium.NewWriter().IndentString("  ")
 	if cfg.format {
-		opts = append(opts, helium.WithFormat())
+		writer = writer.Format(true)
 	}
-	opts = append(opts, helium.WithIndentString("  "))
 	if cfg.dropdtd {
-		opts = append(opts, helium.WithSkipDTD())
+		writer = writer.IncludeDTD(false)
 	}
-	d := helium.NewWriter(opts...)
-	if dErr := d.WriteDoc(out, doc); dErr != nil {
+	if dErr := writer.WriteDoc(out, doc); dErr != nil {
 		if cfg.timing {
 			_, _ = fmt.Fprintf(c.stderr, "Saving took %s\n", time.Since(t0))
 		}
@@ -546,8 +544,8 @@ func (c *command) evalXPath(ctx context.Context, cfg *config, doc *helium.Docume
 					_, _ = fmt.Fprintf(out, " xmlns:%s=%q\n", ns.Prefix(), ns.URI())
 				}
 			default:
-				d := helium.NewWriter()
-				if err := d.WriteNode(out, n); err != nil {
+				writer := helium.NewWriter()
+				if err := writer.WriteNode(out, n); err != nil {
 					_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 					return ExitErr
 				}

@@ -59,7 +59,7 @@ func TestOptionsNoDefaultDTD(t *testing.T) {
 
 	// With NoDefaultDTD, no DOCTYPE in output
 	var noDTD bytes.Buffer
-	require.NoError(t, html.NewWriter().NoDefaultDTD().WriteDoc(&noDTD, doc))
+	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteDoc(&noDTD, doc))
 	require.False(t, strings.Contains(noDTD.String(), "<!DOCTYPE"), "WithNoDefaultDTD should suppress DOCTYPE")
 }
 
@@ -81,7 +81,7 @@ func TestWriteNameAttrURIOnAnchor(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, html.NewWriter().NoDefaultDTD().WriteDoc(&buf, doc))
+	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteDoc(&buf, doc))
 	output := buf.String()
 	require.Contains(t, output, `name="foo%20bar"`, "name on <a> should be URI-escaped")
 }
@@ -93,7 +93,7 @@ func TestWriteNameAttrNonURIOnMeta(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, html.NewWriter().NoDefaultDTD().WriteDoc(&buf, doc))
+	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteDoc(&buf, doc))
 	output := buf.String()
 	require.Contains(t, output, `name="foo bar"`, "name on <meta> should not be URI-escaped")
 }
@@ -105,7 +105,7 @@ func TestDuplicateAttrKeepsFirst(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, html.NewWriter().NoDefaultDTD().WriteDoc(&buf, doc))
+	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteDoc(&buf, doc))
 	output := buf.String()
 	require.Contains(t, output, `class="first"`, "first occurrence should be kept")
 	require.NotContains(t, output, `class="second"`, "duplicate should be dropped")
@@ -118,7 +118,7 @@ func TestDuplicateAttrCaseInsensitive(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, html.NewWriter().NoDefaultDTD().WriteDoc(&buf, doc))
+	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteDoc(&buf, doc))
 	output := buf.String()
 	require.Contains(t, output, `class="upper"`, "first (case-insensitive) should be kept")
 	require.NotContains(t, output, `class="lower"`, "duplicate should be dropped")
@@ -130,7 +130,7 @@ func TestOptionsNoBlanks(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, html.NewWriter().NoDefaultDTD().WriteDoc(&buf, doc))
+	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteDoc(&buf, doc))
 	output := buf.String()
 
 	// The output should not contain whitespace between tags

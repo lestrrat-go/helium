@@ -23,11 +23,12 @@ func Example_helium_writer_options() {
 	}
 
 	s, err := doc.XMLString(
-		helium.WithNoDecl(),
-		helium.WithSkipDTD(),
-		helium.WithNoEmpty(),
-		helium.WithFormat(),
-		helium.WithIndentString("\t"),
+		helium.NewWriter().
+			XMLDeclaration(false).
+			IncludeDTD(false).
+			SelfCloseEmptyElements(false).
+			Format(true).
+			IndentString("\t"),
 	)
 	if err != nil {
 		fmt.Printf("failed to serialize: %s\n", err)
