@@ -380,5 +380,6 @@ Importable implementation behind `helium` CLI. Used by `cmd/helium` wrapper and 
 Thin executable wrapper around `internal/cli/heliumcmd`.
 
 - Main behavior: `main()` → `os.Exit(heliumcmd.Execute(context.Background(), os.Args[1:]))`
+- User docs: `README.md`
 - Files: `main.go`
 - Imports: internal/cli/heliumcmd/
