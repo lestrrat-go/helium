@@ -34,33 +34,33 @@ type Evaluator struct {
 }
 
 type evaluatorCfg struct {
-	options            EvaluatorOption
-	namespaces         map[string]string
-	variables          *Variables
-	functions          *FunctionLibrary
-	opLimit            int
-	currentTime        *time.Time
-	implicitTimezone   *time.Location
-	defaultLanguage    string
-	defaultCollation   string
-	defaultDecimal     *DecimalFormat
-	decimalFormats     map[QualifiedName]DecimalFormat
-	baseURI            string
-	uriResolver        URIResolver
-	collectionResolver CollectionResolver
-	httpClient         *http.Client
-	position           int
-	size               int
-	contextItem        Item
+	options                EvaluatorOption
+	namespaces             map[string]string
+	variables              *Variables
+	functions              *FunctionLibrary
+	opLimit                int
+	currentTime            *time.Time
+	implicitTimezone       *time.Location
+	defaultLanguage        string
+	defaultCollation       string
+	defaultDecimal         *DecimalFormat
+	decimalFormats         map[QualifiedName]DecimalFormat
+	baseURI                string
+	uriResolver            URIResolver
+	collectionResolver     CollectionResolver
+	httpClient             *http.Client
+	position               int
+	size                   int
+	contextItem            Item
 	typeAnnotations        map[helium.Node]string
 	preservedIDAnnotations map[helium.Node]string // ID/IDREF annotations preserved after input-type-annotations="strip"
 	variableResolver       VariableResolver
-	functionResolver   FunctionResolver
-	strictPrefixes     bool
-	schemaDeclarations SchemaDeclarations
-	allowXML11Chars    bool
-	docOrder           *DocOrderCache
-	traceWriter        io.Writer
+	functionResolver       FunctionResolver
+	strictPrefixes         bool
+	schemaDeclarations     SchemaDeclarations
+	allowXML11Chars        bool
+	docOrder               *DocOrderCache
+	traceWriter            io.Writer
 }
 
 // NewEvaluator creates a new Evaluator with the given options.
@@ -302,6 +302,10 @@ func (e Evaluator) TraceWriter(w io.Writer) Evaluator {
 // Evaluate evaluates the compiled expression against the given context node.
 // ctx is used for cancellation/deadlines only, not for configuration.
 func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.Node) (*Result, error) {
+	if err := expr.requireCompiledProgram(); err != nil {
+		return nil, err
+	}
+
 	ec := e.newEvalCtx(ctx, node)
 
 	if err := expr.prefixPlan.Validate(ec.namespaces, ec.strictPrefixes, ec.schemaDeclarations); err != nil {
