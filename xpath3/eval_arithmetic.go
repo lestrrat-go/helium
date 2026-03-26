@@ -162,6 +162,9 @@ func integerArithInt64(op TokenType, a, b int64) (Sequence, error) {
 		if b == 0 {
 			return nil, &XPathError{Code: errCodeFOAR0001, Message: "integer division by zero"}
 		}
+		if a == math.MinInt64 && b == -1 {
+			return integerArith(op, big.NewInt(a), big.NewInt(b))
+		}
 		return SingleInteger(a / b), nil
 	case TokenMod:
 		if b == 0 {
