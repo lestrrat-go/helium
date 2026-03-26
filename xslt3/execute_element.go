@@ -757,7 +757,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			tmpDoc := helium.NewDefaultDocument()
 			tmpElem, err := tmpDoc.CreateElement("_tmp")
 			if err == nil {
-				_ = tmpElem.SetAttribute(name, value)
+				_, _ = tmpElem.SetAttribute(name, value)
 				for _, attr := range tmpElem.Attributes() {
 					out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: attr})
 					out.noteOutput()

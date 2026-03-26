@@ -139,7 +139,8 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(e))
 		ns := helium.NewNamespace("foo", "http://example.com/foo")
-		require.NoError(t, e.SetAttributeNS("bar", "val", ns))
+		_, err = e.SetAttributeNS("bar", "val", ns)
+		require.NoError(t, err)
 
 		// Find the attribute.
 		var attr *helium.Attribute
@@ -163,7 +164,8 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 		e, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(e))
-		require.NoError(t, e.SetAttribute("baz", "val"))
+		_, err = e.SetAttribute("baz", "val")
+		require.NoError(t, err)
 
 		var attr *helium.Attribute
 		for _, a := range e.Attributes() {

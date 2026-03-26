@@ -109,7 +109,8 @@ func TestStringValue_Attribute(t *testing.T) {
 	root, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
-	require.NoError(t, root.SetAttribute("key", "value"))
+	_, err = root.SetAttribute("key", "value")
+	require.NoError(t, err)
 
 	attrs := root.Attributes()
 	require.Len(t, attrs, 1)
@@ -153,7 +154,8 @@ func TestLocalNameOf(t *testing.T) {
 	// Namespaced attribute local name
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 	ns := helium.NewNamespace("ns", "urn:ns")
-	require.NoError(t, root.SetAttributeNS("myattr", "v", ns))
+	_, err = root.SetAttributeNS("myattr", "v", ns)
+	require.NoError(t, err)
 	attrs := root.Attributes()
 	require.NotEmpty(t, attrs)
 	require.Equal(t, "myattr", ixpath.LocalNameOf(attrs[len(attrs)-1]))
@@ -181,7 +183,8 @@ func TestNodeNamespaceURI(t *testing.T) {
 	// Namespaced attribute
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 	ns := helium.NewNamespace("ns", "urn:ns")
-	require.NoError(t, root.SetAttributeNS("a", "v", ns))
+	_, err = root.SetAttributeNS("a", "v", ns)
+	require.NoError(t, err)
 	attrs := root.Attributes()
 	require.NotEmpty(t, attrs)
 	require.Equal(t, "urn:ns", ixpath.NodeNamespaceURI(attrs[len(attrs)-1]))
@@ -204,7 +207,8 @@ func TestNodePrefix(t *testing.T) {
 	// Namespaced attribute has prefix
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 	ns := helium.NewNamespace("ns", "urn:ns")
-	require.NoError(t, root.SetAttributeNS("a", "v", ns))
+	_, err = root.SetAttributeNS("a", "v", ns)
+	require.NoError(t, err)
 	attrs := root.Attributes()
 	require.NotEmpty(t, attrs)
 	require.Equal(t, "ns", ixpath.NodePrefix(attrs[len(attrs)-1]))

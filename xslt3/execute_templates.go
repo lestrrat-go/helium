@@ -643,7 +643,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 							return dynamicError(errCodeXTRE0540,
 								"cannot add attribute to element after children have been added")
 						}
-						if err := elem.SetAttribute(attr.Name(), string(attr.Content())); err != nil {
+						if _, err := elem.SetAttribute(attr.Name(), string(attr.Content())); err != nil {
 							return err
 						}
 					}

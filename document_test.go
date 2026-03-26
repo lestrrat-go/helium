@@ -70,7 +70,8 @@ func TestGetElementByID(t *testing.T) {
 		child, err := doc.CreateElement("child")
 		require.NoError(t, err)
 		ns := helium.NewNamespace("xml", helium.XMLNamespace)
-		require.NoError(t, child.SetAttributeNS("id", "myid", ns))
+		_, err = child.SetAttributeNS("id", "myid", ns)
+		require.NoError(t, err)
 		require.NoError(t, root.AddChild(child))
 
 		elem := doc.GetElementByID("myid")

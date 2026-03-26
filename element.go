@@ -90,7 +90,7 @@ func (n *Element) SetTreeDoc(doc *Document) {
 	setTreeDoc(n, doc)
 }
 
-func (n *Element) SetAttribute(name, value string) error {
+func (n *Element) SetAttribute(name, value string) (*Element, error) {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START Element.SetAttribute '%s' (%s)", name, value)
 		defer g.IRelease("END Element.SetAttribute")
@@ -98,11 +98,11 @@ func (n *Element) SetAttribute(name, value string) error {
 
 	attr, err := n.doc.CreateAttribute(name, value, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	n.addProperty(attr)
-	return nil
+	return n, nil
 }
 
 // SetLiteralAttribute creates or replaces an attribute with a literal text
@@ -187,23 +187,23 @@ func (n *Element) SetLiteralAttributeNS(localname, value string, ns *Namespace) 
 }
 
 // SetAttributeNS creates an attribute with the given local name, value, and namespace.
-func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) error {
+func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) (*Element, error) {
 	attr, err := n.doc.CreateAttribute(localname, value, ns)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	p := n.properties
 	if p == nil {
 		n.properties = attr
 		attr.SetParent(n)
-		return nil
+		return n, nil
 	}
 
 	var last *Attribute
 	for ; p != nil; p = p.NextAttribute() {
 		if p.LocalName() == localname && p.ns == ns {
-			return ErrDuplicateAttribute
+			return nil, ErrDuplicateAttribute
 		}
 		last = p
 	}
@@ -212,7 +212,7 @@ func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) error {
 	attr.SetPrevSibling(last)
 	attr.SetParent(n)
 
-	return nil
+	return n, nil
 }
 
 // AttributePredicate reports whether an attribute matches a lookup.

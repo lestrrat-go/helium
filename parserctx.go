@@ -5632,7 +5632,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 					if !pctx.options.IsSet(parseNoBaseFix) {
 						if elem, ok := e.(*Element); ok {
 							if _, exists := elem.GetAttributeNS("base", XMLNamespace); !exists {
-								_ = elem.SetAttributeNS("base", uri, newNamespace("xml", XMLNamespace))
+								_, _ = elem.SetAttributeNS("base", uri, newNamespace("xml", XMLNamespace))
 							}
 						}
 					}

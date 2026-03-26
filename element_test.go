@@ -27,9 +27,12 @@ func TestElementTree(t *testing.T) {
 	e2 := mustCreateElement(t, doc, "e2")
 	e3 := mustCreateElement(t, doc, "e3")
 	e4 := mustCreateElement(t, doc, "e4")
-	require.NoError(t, e2.SetAttribute("id", "e2"))
-	require.NoError(t, e3.SetAttribute("id", "e3"))
-	require.NoError(t, e4.SetAttribute("id", "e4"))
+	_, err := e2.SetAttribute("id", "e2")
+	require.NoError(t, err)
+	_, err = e3.SetAttribute("id", "e3")
+	require.NoError(t, err)
+	_, err = e4.SetAttribute("id", "e4")
+	require.NoError(t, err)
 
 	require.NoError(t, e1.AddChild(e2), "e1.AddChild(e2) succeeds")
 	require.NoError(t, e1.AddChild(e3), "e1.AddChild(e3) succeeds")
@@ -83,8 +86,10 @@ func TestGetAttribute(t *testing.T) {
 	doc := helium.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
-	require.NoError(t, e.SetAttribute("id", "123"))
-	require.NoError(t, e.SetAttribute("class", "main"))
+	_, err = e.SetAttribute("id", "123")
+	require.NoError(t, err)
+	_, err = e.SetAttribute("class", "main")
+	require.NoError(t, err)
 
 	val, ok := e.GetAttribute("id")
 	require.True(t, ok)
@@ -102,7 +107,8 @@ func TestHasAttribute(t *testing.T) {
 	doc := helium.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
-	require.NoError(t, e.SetAttribute("id", "123"))
+	_, err = e.SetAttribute("id", "123")
+	require.NoError(t, err)
 
 	require.True(t, e.HasAttribute("id"))
 	require.False(t, e.HasAttribute("missing"))
@@ -114,7 +120,8 @@ func TestGetAttributeNS(t *testing.T) {
 	require.NoError(t, err)
 
 	ns := helium.NewNamespace("x", "http://example.com")
-	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
+	_, err = e.SetAttributeNS("attr", "val", ns)
+	require.NoError(t, err)
 
 	val, ok := e.GetAttributeNS("attr", "http://example.com")
 	require.True(t, ok)
@@ -131,10 +138,12 @@ func TestFindAttribute(t *testing.T) {
 	doc := helium.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
-	require.NoError(t, e.SetAttribute("id", "123"))
+	_, err = e.SetAttribute("id", "123")
+	require.NoError(t, err)
 
 	ns := helium.NewNamespace("x", "http://example.com")
-	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
+	_, err = e.SetAttributeNS("attr", "val", ns)
+	require.NoError(t, err)
 
 	attr, ok := e.FindAttribute(helium.QNamePredicate("id"))
 	require.True(t, ok)
@@ -161,7 +170,8 @@ func TestFindAttributeNil(t *testing.T) {
 	doc := helium.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
-	require.NoError(t, e.SetAttribute("id", "123"))
+	_, err = e.SetAttribute("id", "123")
+	require.NoError(t, err)
 
 	var pred helium.AttributePredicate
 	attr, ok := e.FindAttribute(pred)
@@ -175,7 +185,8 @@ func TestGetAttributeNodeNS(t *testing.T) {
 	require.NoError(t, err)
 
 	ns := helium.NewNamespace("x", "http://example.com")
-	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
+	_, err = e.SetAttributeNS("attr", "val", ns)
+	require.NoError(t, err)
 
 	attr := e.GetAttributeNodeNS("attr", "http://example.com")
 	require.NotNil(t, attr)
@@ -194,9 +205,12 @@ func TestRemoveAttribute(t *testing.T) {
 	doc := helium.NewDefaultDocument()
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
-	require.NoError(t, e.SetAttribute("a", "1"))
-	require.NoError(t, e.SetAttribute("b", "2"))
-	require.NoError(t, e.SetAttribute("c", "3"))
+	_, err = e.SetAttribute("a", "1")
+	require.NoError(t, err)
+	_, err = e.SetAttribute("b", "2")
+	require.NoError(t, err)
+	_, err = e.SetAttribute("c", "3")
+	require.NoError(t, err)
 
 	// Remove middle
 	ok := e.RemoveAttribute("b")
@@ -227,7 +241,8 @@ func TestRemoveAttributeNS(t *testing.T) {
 	require.NoError(t, err)
 
 	ns := helium.NewNamespace("x", "http://example.com")
-	require.NoError(t, e.SetAttributeNS("attr", "val", ns))
+	_, err = e.SetAttributeNS("attr", "val", ns)
+	require.NoError(t, err)
 
 	ok := e.RemoveAttributeNS("attr", "http://example.com")
 	require.True(t, ok)
@@ -242,9 +257,12 @@ func TestForEachAttribute(t *testing.T) {
 	e, err := doc.CreateElement("root")
 	require.NoError(t, err)
 
-	require.NoError(t, e.SetAttribute("a", "1"))
-	require.NoError(t, e.SetAttribute("b", "2"))
-	require.NoError(t, e.SetAttribute("c", "3"))
+	_, err = e.SetAttribute("a", "1")
+	require.NoError(t, err)
+	_, err = e.SetAttribute("b", "2")
+	require.NoError(t, err)
+	_, err = e.SetAttribute("c", "3")
+	require.NoError(t, err)
 
 	expected := e.Attributes()
 	var iterated []*helium.Attribute

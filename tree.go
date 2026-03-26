@@ -309,7 +309,7 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 				// new entity reference starts.
 				e.SetLiteralAttributeNS(attr.LocalName(), attr.Value(), ns)
 			} else {
-				if err := e.SetAttributeNS(attr.LocalName(), attr.Value(), ns); err != nil {
+				if _, err := e.SetAttributeNS(attr.LocalName(), attr.Value(), ns); err != nil {
 					return err
 				}
 			}
@@ -317,7 +317,7 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 			if ctx.replaceEntities {
 				e.SetLiteralAttribute(attr.Name(), attr.Value())
 			} else {
-				if err := e.SetAttribute(attr.Name(), attr.Value()); err != nil {
+				if _, err := e.SetAttribute(attr.Name(), attr.Value()); err != nil {
 					return err
 				}
 			}

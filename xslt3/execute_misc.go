@@ -227,7 +227,7 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *wherePopula
 				return dynamicError(errCodeXTRE0540,
 					"cannot add attribute to element after children have been added")
 			}
-			if err := elem.SetAttribute(attr.Name(), string(attr.Content())); err != nil {
+			if _, err := elem.SetAttribute(attr.Name(), string(attr.Content())); err != nil {
 				return err
 			}
 			out.noteOutput()

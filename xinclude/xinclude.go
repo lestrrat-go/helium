@@ -899,7 +899,7 @@ func computeAndSetBaseURI(elem *helium.Element, includedURI, targetBase string) 
 		return
 	}
 
-	_ = elem.SetAttribute(lexicon.QNameXMLBase, base)
+	_, _ = elem.SetAttribute(lexicon.QNameXMLBase, base)
 }
 
 // computeBaseForIncludedNode sets xml:base on a node that was included via
@@ -928,14 +928,14 @@ func computeBaseForIncludedNode(elem *helium.Element, srcEffectiveBase, targetEf
 		if newBase == "" {
 			return
 		}
-		_ = elem.SetAttribute(lexicon.QNameXMLBase, newBase)
+		_, _ = elem.SetAttribute(lexicon.QNameXMLBase, newBase)
 	} else {
 		// No xml:base — set one relative to the target's effective base.
 		newBase := relativeURI(srcEffectiveBase, targetEffectiveBase)
 		if newBase == "" {
 			return
 		}
-		_ = elem.SetAttribute(lexicon.QNameXMLBase, newBase)
+		_, _ = elem.SetAttribute(lexicon.QNameXMLBase, newBase)
 	}
 }
 

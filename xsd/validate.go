@@ -398,7 +398,7 @@ func (vc *validationContext) validateAttributes(elem *helium.Element, td *TypeDe
 		}
 		if !found {
 			// Insert the default/fixed value as an attribute on the element.
-			_ = elem.SetAttribute(au.Name.Local, defVal)
+			_, _ = elem.SetAttribute(au.Name.Local, defVal)
 			// Annotate the newly inserted attribute.
 			for _, a := range elem.Attributes() {
 				if a.LocalName() == au.Name.Local && a.URI() == au.Name.NS {

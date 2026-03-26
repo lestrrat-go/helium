@@ -30,15 +30,15 @@ func Example_helium_attribute_predicates() {
 	// same local name. This makes the difference between QName, local-name, and
 	// namespace-aware matching visible in the output.
 	ns := helium.NewNamespace("cfg", "http://example.com/cfg")
-	if err := item.SetAttribute("id", "42"); err != nil {
+	if _, err := item.SetAttribute("id", "42"); err != nil {
 		fmt.Printf("failed to set attribute: %s\n", err)
 		return
 	}
-	if err := item.SetAttributeNS("id", "cfg-42", ns); err != nil {
+	if _, err := item.SetAttributeNS("id", "cfg-42", ns); err != nil {
 		fmt.Printf("failed to set namespaced attribute: %s\n", err)
 		return
 	}
-	if err := item.SetAttribute("role", "admin"); err != nil {
+	if _, err := item.SetAttribute("role", "admin"); err != nil {
 		fmt.Printf("failed to set attribute: %s\n", err)
 		return
 	}

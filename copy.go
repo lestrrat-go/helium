@@ -79,11 +79,11 @@ func copyElement(src *Element, doc *Document) (*Element, error) {
 			if nsErr != nil {
 				return nil, nsErr
 			}
-			if err := elem.SetAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
+			if _, err := elem.SetAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
 				return nil, err
 			}
 		} else {
-			if err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
+			if _, err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
 				return nil, err
 			}
 		}

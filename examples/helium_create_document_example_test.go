@@ -32,7 +32,7 @@ func Example_helium_create_document() {
 		fmt.Printf("failed to create element: %s\n", err)
 		return
 	}
-	if err := book.SetAttribute("id", "b1"); err != nil {
+	if _, err := book.SetAttribute("id", "b1"); err != nil {
 		fmt.Printf("failed to set attribute: %s\n", err)
 		return
 	}

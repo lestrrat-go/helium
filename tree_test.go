@@ -203,7 +203,8 @@ func TestNodeGetBase(t *testing.T) {
 		require.NoError(t, doc.AddChild(e))
 
 		xmlNS := helium.NewNamespace("xml", helium.XMLNamespace)
-		require.NoError(t, e.SetAttributeNS("base", "http://example.com/", xmlNS))
+		_, err = e.SetAttributeNS("base", "http://example.com/", xmlNS)
+		require.NoError(t, err)
 
 		base := helium.NodeGetBase(doc, e)
 		require.Equal(t, "http://example.com/", base)
@@ -216,7 +217,8 @@ func TestNodeGetBase(t *testing.T) {
 		require.NoError(t, doc.AddChild(parent))
 
 		xmlNS := helium.NewNamespace("xml", helium.XMLNamespace)
-		require.NoError(t, parent.SetAttributeNS("base", "http://example.com/dir/", xmlNS))
+		_, err = parent.SetAttributeNS("base", "http://example.com/dir/", xmlNS)
+		require.NoError(t, err)
 
 		child, err := doc.CreateElement("child")
 		require.NoError(t, err)
@@ -233,12 +235,14 @@ func TestNodeGetBase(t *testing.T) {
 		require.NoError(t, doc.AddChild(parent))
 
 		xmlNS := helium.NewNamespace("xml", helium.XMLNamespace)
-		require.NoError(t, parent.SetAttributeNS("base", "http://example.com/a/b/", xmlNS))
+		_, err = parent.SetAttributeNS("base", "http://example.com/a/b/", xmlNS)
+		require.NoError(t, err)
 
 		child, err := doc.CreateElement("child")
 		require.NoError(t, err)
 		require.NoError(t, parent.AddChild(child))
-		require.NoError(t, child.SetAttributeNS("base", "c/d/", xmlNS))
+		_, err = child.SetAttributeNS("base", "c/d/", xmlNS)
+		require.NoError(t, err)
 
 		base := helium.NodeGetBase(doc, child)
 		require.Equal(t, "http://example.com/a/b/c/d/", base)
@@ -275,7 +279,8 @@ func TestDocumentURL(t *testing.T) {
 		require.NoError(t, doc.AddChild(root))
 
 		xmlNS := helium.NewNamespace("xml", helium.XMLNamespace)
-		require.NoError(t, root.SetAttributeNS("base", "sub/", xmlNS))
+		_, err = root.SetAttributeNS("base", "sub/", xmlNS)
+		require.NoError(t, err)
 
 		base := helium.NodeGetBase(doc, root)
 		require.Equal(t, "http://example.com/dir/sub/", base)
@@ -295,7 +300,8 @@ func TestCopyNode(t *testing.T) {
 		src := helium.NewDefaultDocument()
 		root, err := src.CreateElement("root")
 		require.NoError(t, err)
-		require.NoError(t, root.SetAttribute("id", "1"))
+		_, err = root.SetAttribute("id", "1")
+		require.NoError(t, err)
 		require.NoError(t, src.AddChild(root))
 
 		child, err := src.CreateElement("child")
