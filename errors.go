@@ -32,7 +32,7 @@ var (
 	errParserStopped      = errors.New("parser stopped")
 )
 
-type ErrUnimplemented struct {
+type errUnimplemented struct {
 	target string
 }
 
@@ -176,7 +176,7 @@ func (e ErrParseError) FormatError() string {
 	return b.String()
 }
 
-func (e ErrUnimplemented) Error() string {
+func (e errUnimplemented) Error() string {
 	return "unimplemented method: '" + e.target + "'"
 }
 

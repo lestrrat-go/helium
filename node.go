@@ -511,7 +511,7 @@ func (n *node) invalidateQName() {
 	n.qname = ""
 }
 
-func SetListDoc(n MutableNode, doc *Document) {
+func setListDoc(n MutableNode, doc *Document) {
 	if n == nil || n.Type() == NamespaceDeclNode {
 		return
 	}
@@ -538,12 +538,12 @@ func setTreeDoc(n MutableNode, doc *Document) {
 			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
 			prop.doc = doc
 			if child := prop.firstChild; child != nil {
-				SetListDoc(child.(MutableNode), doc)
+				setListDoc(child.(MutableNode), doc)
 			}
 		}
 	}
 	if child := n.FirstChild(); child != nil {
-		SetListDoc(child.(MutableNode), doc)
+		setListDoc(child.(MutableNode), doc)
 	}
 	n.SetOwnerDocument(doc)
 }
