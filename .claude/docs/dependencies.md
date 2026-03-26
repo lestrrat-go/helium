@@ -5,7 +5,7 @@ Arrows show "imports" direction. Indented items are transitive.
 ```
 cmd/helium     → internal/cli/heliumcmd
 internal/cli/heliumcmd → helium, c14n, relaxng, schematron, xsd, xinclude, xpath1, xpath3, catalog, internal/cliutil
-shim           → helium, stream, internal/encoding
+shim           → helium, stream, enum, internal/encoding
 xinclude       → helium, xpointer
                   → xpath1 (via xpointer)
                   → internal/encoding
@@ -19,7 +19,7 @@ c14n           → helium
 html           → helium, sax
 catalog        → helium, internal/catalog, internal/lexicon
 stream         → internal/encoding
-sax            → helium
+sax            → helium, enum
 helium (root)  → sax, enum, internal/catalog, internal/encoding, internal/bitset, internal/stack
 sink           → (none)
 enum           → (none)
