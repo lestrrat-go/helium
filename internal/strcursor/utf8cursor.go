@@ -67,33 +67,6 @@ func (c *UTF8Cursor) fillBuffer(minBytes int) error {
 	return nil
 }
 
-// nthRuneOffset returns the byte offset (from bufpos) of the start of the
-// n-th rune (0-indexed). It ensures sufficient data is buffered.
-func (c *UTF8Cursor) nthRuneOffset(n int) (int, error) {
-	off := 0
-	for i := 0; i < n; i++ {
-		if err := c.fillBuffer(off + 1); err != nil {
-			return off, err
-		}
-		b := c.buf[c.bufpos+off]
-		if b < 0x80 {
-			off++
-		} else {
-			if err := c.fillBuffer(off + utf8.UTFMax); err != nil {
-				// might still have enough for a shorter sequence
-				if c.bufpos+off >= c.buflen {
-					return off, err
-				}
-			}
-			_, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
-			if w == 0 {
-				return off, io.EOF
-			}
-			off += w
-		}
-	}
-	return off, nil
-}
 
 func (c *UTF8Cursor) Done() bool {
 	if c.bufpos < c.buflen {
@@ -291,7 +264,7 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 	// Check first character: must be NameStartChar (without ':').
 	b := c.buf[c.bufpos+off]
 	if b < 0x80 {
-		if !((b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || b == '_') {
+		if (b < 'A' || b > 'Z') && (b < 'a' || b > 'z') && b != '_' {
 			return nil, 0
 		}
 		off++
@@ -496,11 +469,7 @@ func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer) int {
 	off := 0
 	dst.Grow(c.buflen - c.bufpos)
 
-	for {
-		if c.bufpos+off >= c.buflen {
-			break
-		}
-
+	for c.bufpos+off < c.buflen {
 		b := c.buf[c.bufpos+off]
 		if b < 0x80 {
 			if b == '<' || b == '&' {

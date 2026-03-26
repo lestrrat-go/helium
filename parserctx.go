@@ -3055,27 +3055,6 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 	return true
 }
 
-// normalizeEOL performs XML §2.11 End-of-Line Handling:
-// \r\n → \n, then lone \r → \n. Returns the original slice unchanged when no
-// \r is present (zero allocation in the common case). When \r is present,
-// allocates a new slice so the caller's source buffer is not modified.
-func normalizeEOL(data []byte) []byte {
-	if bytes.IndexByte(data, '\r') < 0 {
-		return data
-	}
-	out := make([]byte, 0, len(data))
-	for i := 0; i < len(data); i++ {
-		if data[i] == '\r' {
-			out = append(out, '\n')
-			if i+1 < len(data) && data[i+1] == '\n' {
-				i++ // skip the \n in \r\n
-			}
-		} else {
-			out = append(out, data[i])
-		}
-	}
-	return out
-}
 
 func isChar(r rune) bool {
 	if r == utf8.RuneError {
