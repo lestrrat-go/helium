@@ -1,6 +1,7 @@
-// Package enum defines typed enumerations for XML DTD declarations.
-// These correspond to libxml2's C enumerations and are shared across
-// the sax, parser, and tree packages.
+// Package enum centralizes shared enumeration symbols used across packages.
+// It exists so packages such as helium and sax can refer to the same typed
+// constants for XML DTD declarations without redefining parallel enums.
+// These values correspond to libxml2's C enumerations.
 package enum
 
 // AttributeType enumerates the XML attribute value types declared in a DTD
