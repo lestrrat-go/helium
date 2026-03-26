@@ -1,4 +1,3 @@
-// Package xslt3 implements an XSLT 3.0 processor.
 package xslt3
 
 import (

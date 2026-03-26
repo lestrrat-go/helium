@@ -1,5 +1,3 @@
-// Package xpath1 implements XPath 1.0 expression parsing and evaluation
-// against helium XML document trees.
 package xpath1
 
 import (

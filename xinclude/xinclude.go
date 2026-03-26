@@ -1,5 +1,3 @@
-// Package xinclude implements XML Inclusion (XInclude) 1.0 processing
-// (libxml2: xinclude module / xmlXIncludeProcess).
 package xinclude
 
 import (

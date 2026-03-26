@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
-	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 )
@@ -31,7 +33,7 @@ type parserConfig struct {
 	charBufferSize int
 	options        parseOption
 	baseURI        string
-	catalog        icatalog.Resolver
+	catalog        CatalogResolver
 	maxDepth       int
 }
 
@@ -434,7 +436,7 @@ func (p Parser) MaxDepth(depth int) Parser {
 // Catalog sets an XML Catalog for resolving external entity identifiers
 // (public/system IDs) during parsing. When set, the parser consults the
 // catalog before attempting to load external DTDs and entities.
-func (p Parser) Catalog(c icatalog.Resolver) Parser {
+func (p Parser) Catalog(c CatalogResolver) Parser {
 	p = p.clone()
 	p.cfg.catalog = c
 	return p
@@ -529,6 +531,26 @@ func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error)
 	}
 
 	return pctx.doc, nil
+}
+
+// ParseFile reads and parses an XML file. The document's URL is set to the
+// absolute path of the file, and the file path is used as the base URI for
+// relative URI resolution during parsing.
+func (p Parser) ParseFile(ctx context.Context, path string) (*Document, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // path is caller-supplied
+	if err != nil {
+		return nil, fmt.Errorf("helium: failed to read %q: %w", path, err)
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("helium: failed to resolve path %q: %w", path, err)
+	}
+	doc, err := p.BaseURI(abs).Parse(ctx, data)
+	if err != nil {
+		return nil, err
+	}
+	doc.SetURL(abs)
+	return doc, nil
 }
 
 // ParseInNodeContext parses an XML fragment in the context of an existing

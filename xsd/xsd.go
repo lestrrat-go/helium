@@ -1,6 +1,3 @@
-// Package xsd implements XML Schema (XSD) validation.
-//
-// It supports a subset of the W3C XML Schema Definition Language 1.0.
 package xsd
 
 import (
@@ -102,9 +99,26 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 	return schema, compileErr
 }
 
+// ValidationError represents a single validation error with structured fields.
+type ValidationError struct {
+	Filename  string // source filename
+	Line      int    // line number in the source document
+	Element   string // element name (may include namespace in Clark notation)
+	Attribute string // attribute name (empty for element-level errors)
+	Message   string // human-readable error description
+}
+
+func (e *ValidationError) Error() string {
+	if e.Attribute != "" {
+		return validityErrorAttr(e.Filename, e.Line, e.Element, e.Attribute, e.Message)
+	}
+	return validityError(e.Filename, e.Line, e.Element, e.Message)
+}
+
 // ValidateError holds detailed validation failure output.
 type ValidateError struct {
-	Output string // libxml2-compatible validation output
+	Output string            // libxml2-compatible validation output
+	Errors []ValidationError // structured per-error details
 }
 
 func (e *ValidateError) Error() string {
@@ -172,9 +186,9 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 	if cfg == nil {
 		cfg = &validateConfig{}
 	}
-	output, valid := validateDocument(ctx, doc, v.schema, cfg)
+	output, valid, errors := validateDocument(ctx, doc, v.schema, cfg)
 	if valid {
 		return nil
 	}
-	return &ValidateError{Output: output}
+	return &ValidateError{Output: output, Errors: errors}
 }

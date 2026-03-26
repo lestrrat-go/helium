@@ -13,7 +13,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/enum"
-	icatalog "github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/pool"
@@ -99,7 +98,7 @@ type parserCtx struct {
 	loadsubset        LoadSubsetOption
 	charBufferSize    int
 	baseURI           string            // document base URI for resolving external references
-	catalog           icatalog.Resolver // XML catalog for entity resolution
+	catalog           CatalogResolver // XML catalog for entity resolution
 	elem              *Element          // current context element
 
 	nsTab       nsStack

@@ -8,8 +8,8 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 
 - **NewParser() → Parser** — create fluent builder for XML parsing (clone-on-write value type)
   - Flag methods: `RecoverOnError(bool)`, `SubstituteEntities(bool)`, `LoadExternalDTD(bool)`, `DefaultDTDAttributes(bool)`, `ValidateDTD(bool)`, `SuppressErrors(bool)`, `SuppressWarnings(bool)`, `PedanticErrors(bool)`, `StripBlanks(bool)`, `ProcessXInclude(bool)`, `AllowNetwork(bool)`, `CleanNamespaces(bool)`, `MergeCDATA(bool)`, `XIncludeNodes(bool)`, `CompactTextNodes(bool)`, `FixBaseURIs(bool)`, `RelaxLimits(bool)`, `IgnoreEncoding(bool)`, `BigLineNumbers(bool)`, `BlockXXE(bool)`, `ReuseDict(bool)`, `SkipIDs(bool)`, `LenientXMLDecl(bool)`
-  - Config methods: `SAXHandler(sax.SAX2Handler)`, `BaseURI(string)`, `CharBufferSize(int)`, `MaxDepth(int)`, `Catalog(icatalog.Resolver)`
-  - Terminal methods: `Parse(ctx, []byte) → (*Document, error)`, `ParseReader(ctx, io.Reader) → (*Document, error)`, `ParseInNodeContext(ctx, Node, []byte) → (Node, error)`, `NewPushParser(ctx) → *PushParser`
+  - Config methods: `SAXHandler(sax.SAX2Handler)`, `BaseURI(string)`, `CharBufferSize(int)`, `MaxDepth(int)`, `Catalog(CatalogResolver)`
+  - Terminal methods: `Parse(ctx, []byte) → (*Document, error)`, `ParseReader(ctx, io.Reader) → (*Document, error)`, `ParseFile(ctx, string) → (*Document, error)`, `ParseInNodeContext(ctx, Node, []byte) → (Node, error)`, `NewPushParser(ctx) → *PushParser`
 - **NewWriter() → Writer** — create fluent XML writer builder
   - Writer methods: `Format(bool)`, `IndentString(string)`, `SelfCloseEmptyElements(bool)`, `XMLDeclaration(bool)`, `IncludeDTD(bool)`, `EscapeNonASCII(bool)`, `AllowPrefixUndeclarations(bool)`
   - Terminal methods: `WriteDoc(io.Writer, *Document) → error`, `WriteNode(io.Writer, Node) → error`
@@ -19,12 +19,13 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 - `Node` interface — common for all node types; use ElementType enum to distinguish
 - Parse flags configured via fluent methods on Parser (internal bitset, not public)
 - `ErrorHandler` interface — async error delivery during parsing
+- `CatalogResolver` interface — public interface for custom catalog resolvers (`Resolve`, `ResolveURI`)
 - `Document.GetElementByID(id)` — O(1) via hash table, O(n) fallback
 - `Walk(doc, fn)`, `Children(node)`, `Descendants(node)` — tree traversal
 - `CopyNode(src, targetDoc)` — deep copy across documents
 - `NodeGetBase(doc, node)` — effective xml:base URI
 - `BuildURI(base, ref)` — resolve relative URI
-- Files: `parser.go`, `parserctx.go`, `document.go`, `element.go`, `attr.go`, `node.go`, `namespace.go`, `dump.go`, `copy.go`, `dtd.go`, `iter.go`, `base.go`, `errorhandler.go`
+- Files: `parser.go`, `parserctx.go`, `document.go`, `element.go`, `attr.go`, `node.go`, `namespace.go`, `dump.go`, `copy.go`, `dtd.go`, `iter.go`, `base.go`, `errorhandler.go`, `resolver.go`, `doc.go`
 
 ## c14n/
 
@@ -132,8 +133,10 @@ XML Schema (XSD) 1.0 compilation and validation.
 - **ValidateSimpleValue(value, *TypeDef) → error** — validate a lexical value against a compiled simple type definition
 - `Schema.LookupElement(local, ns)`, `Schema.LookupType(local, ns)`, `Schema.NamedTypes()`, `Schema.TargetNamespace()`
 - Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include, IDC (xs:unique/key/keyref)
-- `ValidateError.Output` — libxml2-compatible error string
-- Files: `xsd.go` (API), `schema.go` (data model), `compile.go` + `compile_imports.go` + `compile_helpers.go` (compile orchestration/imports/helpers), `read_types.go` + `read_particles.go` + `read_elements.go` + `read_decl_helpers.go` (schema readers), `link_refs.go` + `check_*.go` (reference resolution + constraints), `validate_context.go` + `validate.go` + `validate_elem.go` + `validate_idc.go` (validation flow/content/IDC), `simplevalue_*.go` + `validate_value_api.go` (simple-value engine/API), `errors.go`
+- `ValidateError.Output` — libxml2-compatible error string; `ValidateError.Errors` — structured `[]ValidationError` for programmatic access
+- `ValidationError{Filename, Line, Element, Attribute, Message}` — per-error structured type
+- Validator.ErrorHandler delivers per-error callbacks during validation via `helium.NewLeveledError`
+- Files: `xsd.go` (API), `doc.go`, `schema.go` (data model), `compile.go` + `compile_imports.go` + `compile_helpers.go` (compile orchestration/imports/helpers), `read_types.go` + `read_particles.go` + `read_elements.go` + `read_decl_helpers.go` (schema readers), `link_refs.go` + `check_*.go` (reference resolution + constraints), `validate_context.go` + `validate.go` + `validate_elem.go` + `validate_idc.go` (validation flow/content/IDC), `simplevalue_*.go` + `validate_value_api.go` (simple-value engine/API), `errors.go`
 - Imports: helium, xpath1/, internal/lexicon
 - Status: 225/226 golden tests passing
 
@@ -145,13 +148,14 @@ RELAX NG schema compilation and validation.
   - `SchemaFilename(name)`, `ErrorHandler(h)` — builder methods (clone-on-write)
   - `Compile(ctx, *Document) → (*Grammar, error)` / `CompileFile(ctx, path) → (*Grammar, error)` — terminal methods
 - **NewValidator(grammar) → Validator** — create fluent builder for validation
-  - `Filename(name)` — builder method
+  - `Filename(name)`, `ErrorHandler(h)` — builder methods
   - `Validate(ctx, *Document) → error` — terminal method
 - Pattern-based: element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref, data, value, list, mixed, notAllowed
 - Supports: include with override, externalRef, parentRef, anyName/nsName/ncName, data types
 - Group backtracking for greedy pattern over-consumption
-- `ValidateError.Output` — libxml2-compatible error string
-- Files: `relaxng.go` (API), `grammar.go` (data model), `parse.go` (compiler), `validate.go` (engine), `errors.go`
+- `ValidateError.Output` — libxml2-compatible error string; `ValidateError.Errors` — structured `[]ValidationError`
+- `ValidationError{Filename, Line, Element, Message}` — per-error structured type
+- Files: `relaxng.go` (API), `doc.go`, `grammar.go` (data model), `parse.go` (compiler), `validate.go` (engine), `errors.go`
 - Imports: helium
 - Status: 159/159 golden tests passing
 
