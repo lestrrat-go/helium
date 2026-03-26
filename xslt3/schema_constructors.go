@@ -45,7 +45,7 @@ func (ec *execContext) makeSchemaConstructor(td *xsd.TypeDef) func(context.Conte
 			return nil, err
 		}
 		if baseType == xpath3.TypeQName || baseType == xpath3.TypeNOTATION {
-			if err := xsd.ValidateSimpleValueWithNS(lexical, ec.stylesheet.namespaces, td); err != nil {
+			if err := td.Validate(lexical, ec.stylesheet.namespaces); err != nil {
 				return nil, &xpath3.XPathError{
 					Code:    "FORG0001",
 					Message: fmt.Sprintf("cannot cast %q to %s", lexical, typeName),
@@ -60,7 +60,7 @@ func (ec *execContext) makeSchemaConstructor(td *xsd.TypeDef) func(context.Conte
 				Value:    qv,
 			}), nil
 		}
-		if err := xsd.ValidateSimpleValue(lexical, td); err != nil {
+		if err := td.Validate(lexical, nil); err != nil {
 			return nil, &xpath3.XPathError{
 				Code:    "FORG0001",
 				Message: fmt.Sprintf("cannot cast %q to %s", lexical, typeName),

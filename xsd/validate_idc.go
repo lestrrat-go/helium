@@ -179,7 +179,7 @@ func (vc *validationContext) checkUniqueness(table *idcTable, idc *IDConstraint)
 			msg := fmt.Sprintf("Duplicate key-sequence %s in unique identity-constraint '%s'.",
 				formatKeyDisplay(entry.values), idcName)
 			if entry.elem != nil {
-				vc.out.WriteString(validityError(vc.filename, entry.elem.Line(), elemName, msg))
+				vc.reportValidityError(vc.filename, entry.elem.Line(), elemName, msg)
 			}
 			lastErr = fmt.Errorf("duplicate key-sequence")
 		}
@@ -206,7 +206,7 @@ func (vc *validationContext) checkKeyRef(keyrefTable, refTable *idcTable, idc *I
 			msg := fmt.Sprintf("No match found for key-sequence %s of keyref '%s'.",
 				formatKeyDisplay(entry.values), idcName)
 			if entry.elem != nil {
-				vc.out.WriteString(validityError(vc.filename, entry.elem.Line(), elemName, msg))
+				vc.reportValidityError(vc.filename, entry.elem.Line(), elemName, msg)
 			}
 			lastErr = fmt.Errorf("keyref not found")
 		}

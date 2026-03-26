@@ -11,6 +11,15 @@ import (
 	"github.com/lestrrat-go/helium/xsd"
 )
 
+// writerErrorHandler writes each error to an io.Writer.
+type writerErrorHandler struct {
+	w io.Writer
+}
+
+func (h *writerErrorHandler) Handle(_ context.Context, err error) {
+	_, _ = fmt.Fprint(h.w, err)
+}
+
 type xsdValidateConfig struct {
 	schemaFile string
 	timing     bool
@@ -163,12 +172,12 @@ func (c *xsdValidateCommand) processInput(ctx context.Context, cfg *xsdValidateC
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	err = xsd.NewValidator(schema).Validate(ctx, doc)
+	handler := &writerErrorHandler{w: c.stderr}
+	err = xsd.NewValidator(schema).ErrorHandler(handler).Validate(ctx, doc)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
 	}
 	if err != nil {
-		_, _ = fmt.Fprint(c.stderr, err)
 		return ExitValidation
 	}
 	return ExitOK
