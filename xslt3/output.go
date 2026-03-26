@@ -1446,7 +1446,7 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 		suppressSet: suppressSet,
 	}
 
-	err := serializeXMLNodeWithCharMap(sw, doc, charMap, cdataSet, enc, outDef.NormalizationForm, ictx)
+	err := serializeXMLNodeWithCharMap(&sw, doc, charMap, cdataSet, enc, outDef.NormalizationForm, ictx)
 	if err != nil {
 		return err
 	}

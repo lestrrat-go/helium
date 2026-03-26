@@ -38,15 +38,35 @@ func (c *Catalog) ResolveURI(uri string) string {
 	return c.cat.ResolveURI(uri)
 }
 
-// LoadOption configures the behavior of Load.
-type LoadOption func(*loadConfig)
-
-type loadConfig struct {
+// loaderConfig holds configuration for a Loader.
+type loaderConfig struct {
 	errorHandler helium.ErrorHandler
 }
 
-// WithErrorHandler sets the error handler that receives warnings
-// during catalog parsing (e.g. missing required attributes).
-func WithErrorHandler(h helium.ErrorHandler) LoadOption {
-	return func(c *loadConfig) { c.errorHandler = h }
+// Loader loads OASIS XML Catalog files. It is a value-style wrapper:
+// fluent methods return updated copies and the original is never mutated.
+// The terminal method is Load.
+type Loader struct {
+	cfg *loaderConfig
+}
+
+// NewLoader creates a new Loader with default settings.
+func NewLoader() Loader {
+	return Loader{cfg: &loaderConfig{}}
+}
+
+func (l Loader) clone() Loader {
+	if l.cfg == nil {
+		return Loader{cfg: &loaderConfig{}}
+	}
+	cp := *l.cfg
+	return Loader{cfg: &cp}
+}
+
+// ErrorHandler returns a copy of the Loader that delivers warnings
+// to the given error handler during catalog parsing.
+func (l Loader) ErrorHandler(h helium.ErrorHandler) Loader {
+	l = l.clone()
+	l.cfg.errorHandler = h
+	return l
 }

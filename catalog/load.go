@@ -12,25 +12,31 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
-// loader implements icatalog.Loader using helium's parser.
-type loader struct {
+// internalLoader implements icatalog.Loader using helium's parser.
+type internalLoader struct {
 	ctx          context.Context
 	errorHandler helium.ErrorHandler
 }
 
-func (l loader) Load(filename string) (*icatalog.Catalog, error) {
+func (l internalLoader) Load(filename string) (*icatalog.Catalog, error) {
 	return loadInternal(l.ctx, filename, l.errorHandler)
 }
 
 // Load parses an OASIS XML Catalog file and returns a Catalog.
-func Load(ctx context.Context, filename string, opts ...LoadOption) (*Catalog, error) {
+// It is a convenience wrapper around NewLoader().Load().
+func Load(ctx context.Context, filename string) (*Catalog, error) {
+	return NewLoader().Load(ctx, filename)
+}
+
+// Load parses an OASIS XML Catalog file and returns a Catalog.
+func (l Loader) Load(ctx context.Context, filename string) (*Catalog, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	var cfg loadConfig
-	for _, o := range opts {
-		o(&cfg)
+	cfg := l.cfg
+	if cfg == nil {
+		cfg = &loaderConfig{}
 	}
 
 	var eh helium.ErrorHandler
@@ -84,7 +90,7 @@ func loadFromBytes(ctx context.Context, data []byte, baseURI string, eh helium.E
 	cat := &icatalog.Catalog{
 		Prefer:  icatalog.PreferPublic, // default per OASIS spec
 		BaseURI: baseURI,
-		Loader:  loader{ctx: ctx, errorHandler: eh},
+		Loader:  internalLoader{ctx: ctx, errorHandler: eh},
 	}
 
 	if v := getAttr(root, lexicon.AttrPrefer); v != "" {

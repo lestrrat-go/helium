@@ -201,7 +201,7 @@ func TestAttributeWithContent(t *testing.T) {
 
 func TestSingleQuotes(t *testing.T) {
 	var buf bytes.Buffer
-	w := stream.NewWriter(&buf, stream.WithQuoteChar('\''))
+	w := stream.NewWriter(&buf).QuoteChar('\'')
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteAttribute("key", "it's"))
@@ -212,7 +212,7 @@ func TestSingleQuotes(t *testing.T) {
 
 func TestDoubleQuotesInSingleQuoteMode(t *testing.T) {
 	var buf bytes.Buffer
-	w := stream.NewWriter(&buf, stream.WithQuoteChar('\''))
+	w := stream.NewWriter(&buf).QuoteChar('\'')
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteAttribute("key", `say "hi"`))
 	require.NoError(t, w.EndElement())
@@ -489,7 +489,7 @@ func TestDTDNotation(t *testing.T) {
 
 func TestDTDIndentPublicSystem(t *testing.T) {
 	var buf bytes.Buffer
-	w := stream.NewWriter(&buf, stream.WithIndent("  "))
+	w := stream.NewWriter(&buf).Indent("  ")
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.WriteDTD("html", "-//W3C//DTD XHTML 1.0//EN", "xhtml1.dtd", ""))
 	require.NoError(t, w.StartElement("html"))
@@ -502,7 +502,7 @@ func TestDTDIndentPublicSystem(t *testing.T) {
 
 func TestDTDIndentSystemOnly(t *testing.T) {
 	var buf bytes.Buffer
-	w := stream.NewWriter(&buf, stream.WithIndent("  "))
+	w := stream.NewWriter(&buf).Indent("  ")
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.WriteDTD("root", "", "root.dtd", ""))
 	require.NoError(t, w.StartElement("root"))
@@ -515,7 +515,7 @@ func TestDTDIndentSystemOnly(t *testing.T) {
 
 func TestIndentation(t *testing.T) {
 	var buf bytes.Buffer
-	w := stream.NewWriter(&buf, stream.WithIndent("  "))
+	w := stream.NewWriter(&buf).Indent("  ")
 	require.NoError(t, w.StartDocument("", "", ""))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.StartElement("child"))
@@ -531,7 +531,7 @@ func TestIndentation(t *testing.T) {
 
 func TestIndentationDeepNesting(t *testing.T) {
 	var buf bytes.Buffer
-	w := stream.NewWriter(&buf, stream.WithIndent("\t"))
+	w := stream.NewWriter(&buf).Indent("\t")
 	require.NoError(t, w.StartElement("a"))
 	require.NoError(t, w.StartElement("b"))
 	require.NoError(t, w.StartElement("c"))
@@ -544,7 +544,7 @@ func TestIndentationDeepNesting(t *testing.T) {
 
 func TestIndentationMixedContent(t *testing.T) {
 	var buf bytes.Buffer
-	w := stream.NewWriter(&buf, stream.WithIndent("  "))
+	w := stream.NewWriter(&buf).Indent("  ")
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteString("text"))
 	require.NoError(t, w.StartElement("child"))
@@ -557,7 +557,7 @@ func TestIndentationMixedContent(t *testing.T) {
 func TestIndentCommentNewline(t *testing.T) {
 	t.Run("comment followed by element", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := stream.NewWriter(&buf, stream.WithIndent("  "))
+		w := stream.NewWriter(&buf).Indent("  ")
 		require.NoError(t, w.StartElement("root"))
 		require.NoError(t, w.WriteComment(" hello "))
 		require.NoError(t, w.StartElement("child"))
@@ -570,7 +570,7 @@ func TestIndentCommentNewline(t *testing.T) {
 
 	t.Run("comment as last child", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := stream.NewWriter(&buf, stream.WithIndent("  "))
+		w := stream.NewWriter(&buf).Indent("  ")
 		require.NoError(t, w.StartElement("root"))
 		require.NoError(t, w.WriteComment(" hello "))
 		require.NoError(t, w.EndElement())
@@ -581,7 +581,7 @@ func TestIndentCommentNewline(t *testing.T) {
 
 	t.Run("comment at document level", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := stream.NewWriter(&buf, stream.WithIndent("  "))
+		w := stream.NewWriter(&buf).Indent("  ")
 		require.NoError(t, w.StartDocument("", "", ""))
 		require.NoError(t, w.WriteComment(" hello "))
 		require.NoError(t, w.StartElement("root"))
@@ -606,7 +606,7 @@ func TestIndentCommentNewline(t *testing.T) {
 func TestIndentPINewline(t *testing.T) {
 	t.Run("PI followed by element", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := stream.NewWriter(&buf, stream.WithIndent("  "))
+		w := stream.NewWriter(&buf).Indent("  ")
 		require.NoError(t, w.StartElement("root"))
 		require.NoError(t, w.WritePI("app", "data"))
 		require.NoError(t, w.StartElement("child"))
@@ -618,7 +618,7 @@ func TestIndentPINewline(t *testing.T) {
 
 	t.Run("PI at document level", func(t *testing.T) {
 		var buf bytes.Buffer
-		w := stream.NewWriter(&buf, stream.WithIndent("  "))
+		w := stream.NewWriter(&buf).Indent("  ")
 		require.NoError(t, w.StartDocument("", "", ""))
 		require.NoError(t, w.WritePI("app", "data"))
 		require.NoError(t, w.StartElement("root"))
@@ -861,7 +861,7 @@ func TestCompleteDocument(t *testing.T) {
 
 func TestCompleteDocumentIndented(t *testing.T) {
 	var buf bytes.Buffer
-	w := stream.NewWriter(&buf, stream.WithIndent("  "))
+	w := stream.NewWriter(&buf).Indent("  ")
 	require.NoError(t, w.StartDocument("1.0", "UTF-8", ""))
 	require.NoError(t, w.StartElement("root"))
 	require.NoError(t, w.WriteElement("name", "John"))

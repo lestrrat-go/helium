@@ -10,10 +10,10 @@ import (
 func Example_stream_indent() {
 	var buf bytes.Buffer
 
-	// WithIndent enables pretty-printing with the specified indentation string.
+	// Indent enables pretty-printing with the specified indentation string.
 	// Each nested level is indented by one copy of this string.
 	// Here we use two spaces per level.
-	w := stream.NewWriter(&buf, stream.WithIndent("  "))
+	w := stream.NewWriter(&buf).Indent("  ")
 
 	if err := w.StartDocument("1.0", "", ""); err != nil {
 		fmt.Printf("error: %s\n", err)
