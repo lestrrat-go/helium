@@ -62,6 +62,18 @@ testdata/libxml2-compat/
 | `relaxng_test.go` | relaxng | RELAX NG golden tests |
 | `schematron_test.go` | schematron | Schematron golden tests |
 
+## `examples/`
+
+- `examples/` holds executable Go examples in external package `examples_test`.
+- Treat files here as first-class user documentation. Regression coverage is secondary.
+- Optimize every example for user clarity, narrow scope, and copy/paste utility.
+- Keep each example focused on one concept or one end-to-end workflow. Split broad coverage into multiple files.
+- Write comments for users, not maintainers. Explain visible behavior, required context, and why API calls matter.
+- Prefer `func Example_*()` + deterministic `// Output:` blocks when behavior is stable.
+- Keep shared setup/helpers in `*_helpers_test.go` so example bodies stay easy to read.
+- CLI examples call importable entrypoints (e.g. `internal/cli/heliumcmd.Execute`) directly. Do NOT spawn subprocesses unless behavior requires it.
+- Do NOT use `examples/` for scratch programs, golden fixtures, or temporary experiments.
+
 ## Test Helpers
 
 ### SAX Event Normalization

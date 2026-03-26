@@ -42,6 +42,7 @@ Read the linked doc BEFORE working in that area. No exceptions.
 | Working with `context.Context`, package `Context` payloads, carrier/accessor patterns | `.claude/docs/context.md` |
 | Feature status, test counts, known gaps, ParseOption support | `.claude/docs/libxml2-parity.md` |
 | Writing/running tests, golden files, test data, helpers | `.claude/docs/testing.md` |
+| Writing/editing `examples/`, example scope, example comments | `.claude/docs/testing.md` |
 | Error types, format strings, ErrorHandler, ValidateError | `.claude/docs/error-formatting.md` |
 | Parse pipeline, encoding, entities, SAX→DOM, push parser | `.claude/docs/parser-internals.md` |
 | DOM node hierarchy, struct fields, namespace/attr storage | `.claude/docs/node-types.md` |
