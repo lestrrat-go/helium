@@ -144,31 +144,32 @@ func (n *Element) addProperty(attr *Attribute) {
 		if p.Name() == attr.Name() {
 			// Replace existing attribute in-place: splice new attr
 			// into the same position in the linked list.
-			attr.SetPrevSibling(p.PrevSibling())
-			attr.SetNextSibling(p.NextSibling())
-			attr.SetParent(n)
-			if prev := p.PrevSibling(); prev != nil {
-				prev.SetNextSibling(attr)
+			pdn := p.baseDocNode()
+			attr.prev = pdn.prev
+			attr.next = pdn.next
+			attr.parent = n
+			if prev := pdn.prev; prev != nil {
+				prev.baseDocNode().next = attr
 			}
-			if next := p.NextSibling(); next != nil {
-				next.SetPrevSibling(attr)
+			if next := pdn.next; next != nil {
+				next.baseDocNode().prev = attr
 			}
 			if n.properties == p {
 				n.properties = attr
 			}
 			// Detach old attribute
-			p.SetParent(nil)
-			p.SetPrevSibling(nil)
-			p.SetNextSibling(nil)
+			pdn.parent = nil
+			pdn.prev = nil
+			pdn.next = nil
 			return
 		}
 
 		last = p
 	}
 
-	last.SetNextSibling(attr)
-	attr.SetPrevSibling(last)
-	attr.SetParent(n)
+	last.next = attr
+	attr.prev = last
+	attr.parent = n
 }
 
 // SetLiteralAttributeNS creates or replaces an attribute with a literal text
@@ -324,18 +325,19 @@ func (n *Element) RemoveAttributeNS(localName, nsURI string) bool {
 
 // spliceOutAttribute removes an attribute from the element's property linked list.
 func (n *Element) spliceOutAttribute(p *Attribute) {
-	if prev := p.PrevSibling(); prev != nil {
-		prev.SetNextSibling(p.NextSibling())
+	pdn := p.baseDocNode()
+	if prev := pdn.prev; prev != nil {
+		prev.baseDocNode().next = pdn.next
 	}
-	if next := p.NextSibling(); next != nil {
-		next.SetPrevSibling(p.PrevSibling())
+	if next := pdn.next; next != nil {
+		next.baseDocNode().prev = pdn.prev
 	}
 	if n.properties == p {
 		n.properties = p.NextAttribute()
 	}
-	p.SetParent(nil)
-	p.SetPrevSibling(nil)
-	p.SetNextSibling(nil)
+	pdn.parent = nil
+	pdn.prev = nil
+	pdn.next = nil
 }
 
 func (n Element) Attributes() []*Attribute {

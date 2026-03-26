@@ -453,7 +453,7 @@ func (ec *execContext) stripWhitespaceFromNode(root helium.Node) {
 		for child != nil {
 			next := child.NextSibling()
 			if ec.shouldStripWhitespace(child) {
-				helium.UnlinkNode(child)
+				helium.UnlinkNode(child.(helium.MutableNode))
 			} else if child.FirstChild() != nil {
 				stack = append(stack, child)
 			}

@@ -550,7 +550,7 @@ func (ec *execContext) addNodeUntracked(node helium.Node) error {
 	// excluded — they are managed by resolveConditionalScope directly.
 	if node.Type() == helium.TextNode {
 		if n := len(out.conditionalScopes); n > 0 {
-			out.conditionalScopes[n-1].untrackedNodes = append(out.conditionalScopes[n-1].untrackedNodes, node)
+			out.conditionalScopes[n-1].untrackedNodes = append(out.conditionalScopes[n-1].untrackedNodes, node.(helium.MutableNode))
 		}
 	}
 	return nil
@@ -702,7 +702,7 @@ func (ec *execContext) resolveConditionalScope(scope conditionalScope) error {
 	return nil
 }
 
-func (ec *execContext) spliceConditionalSequence(placeholder helium.Node, seq xpath3.Sequence, prevWasAtomic bool) error {
+func (ec *execContext) spliceConditionalSequence(placeholder helium.MutableNode, seq xpath3.Sequence, prevWasAtomic bool) error {
 	if placeholder == nil {
 		return ec.outputSequence(seq)
 	}
@@ -711,7 +711,7 @@ func (ec *execContext) spliceConditionalSequence(placeholder helium.Node, seq xp
 	out := ec.currentOutput()
 	savedCurrent := out.current
 	if parent != nil {
-		out.current = parent
+		out.current = parent.(helium.MutableNode)
 		defer func() {
 			out.current = savedCurrent
 		}()
@@ -811,7 +811,7 @@ func (ec *execContext) spliceConditionalSequence(placeholder helium.Node, seq xp
 	return nil
 }
 
-func spliceReplace(target helium.Node, nodes []helium.Node) {
+func spliceReplace(target helium.MutableNode, nodes []helium.Node) {
 	if len(nodes) == 0 {
 		helium.UnlinkNode(target)
 		return
@@ -820,26 +820,26 @@ func spliceReplace(target helium.Node, nodes []helium.Node) {
 	afterTarget := target.NextSibling()
 	_ = target.Replace(nodes[0])
 
-	prev := nodes[0]
+	prev := nodes[0].(helium.MutableNode)
 	for i := 1; i < len(nodes); i++ {
-		cur := nodes[i]
+		cur := nodes[i].(helium.MutableNode)
 		cur.SetParent(prev.Parent())
 		cur.SetPrevSibling(prev)
 		prev.SetNextSibling(cur)
 		prev = cur
 	}
 
-	last := nodes[len(nodes)-1]
+	last := nodes[len(nodes)-1].(helium.MutableNode)
 	last.SetNextSibling(afterTarget)
 	if afterTarget != nil {
-		afterTarget.SetPrevSibling(last)
+		afterTarget.(helium.MutableNode).SetPrevSibling(last)
 	}
 	// Update parent's LastChild if the target was the last child.
 	// Replace only updates LastChild for nodes[0]; when additional
 	// nodes were spliced after it, the parent's LastChild must point
 	// to the true last node.
 	if afterTarget == nil && len(nodes) > 1 {
-		if parent := last.Parent(); parent != nil {
+		if parent, ok := last.Parent().(helium.MutableNode); ok && parent != nil {
 			helium.SetLastChild(parent, last)
 		}
 	}

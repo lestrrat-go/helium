@@ -24,7 +24,7 @@ import (
 // outputFrame represents the current output target during transformation.
 type outputFrame struct {
 	doc               *helium.Document // result document being built
-	current           helium.Node      // current insertion point
+	current           helium.MutableNode // current insertion point
 	captureItems      bool             // when true, xsl:sequence adds to pendingItems instead of DOM
 	separateTextNodes bool             // when true, text nodes are captured as separate string items (prevents DOM merging)
 	sequenceMode      bool             // when true, all nodes (text, element, attr, comment, PI) are captured as separate items
@@ -51,14 +51,14 @@ type conditionalAction struct {
 	ctx           context.Context
 	kind          conditionalKind
 	content       xpath3.Sequence
-	placeholder   helium.Node
+	placeholder   helium.MutableNode
 	prevWasAtomic bool // whether the output preceding this action was an atomic value
 }
 
 type conditionalScope struct {
 	hasOutput      bool
 	actions        []conditionalAction
-	untrackedNodes []helium.Node // nodes added via addNodeUntracked; removed when on-empty fires
+	untrackedNodes []helium.MutableNode // nodes added via addNodeUntracked; removed when on-empty fires
 }
 
 func (out *outputFrame) noteOutput() {
@@ -2557,7 +2557,7 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 	var children []helium.Node
 	for child := head.FirstChild(); child != nil; {
 		next := child.NextSibling()
-		helium.UnlinkNode(child)
+		helium.UnlinkNode(child.(helium.MutableNode))
 		children = append(children, child)
 		child = next
 	}

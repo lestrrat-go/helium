@@ -21,9 +21,3 @@ func NewNamespaceNodeWrapper(ns *Namespace, owner Node) *NamespaceNodeWrapper {
 func (n *NamespaceNodeWrapper) Content() []byte {
 	return []byte(n.ns.URI())
 }
-
-func (n *NamespaceNodeWrapper) AddChild(Node) error   { return nil }
-func (n *NamespaceNodeWrapper) AppendText([]byte) error { return nil }
-func (n *NamespaceNodeWrapper) AddSibling(Node) error  { return nil }
-func (n *NamespaceNodeWrapper) Replace(Node) error     { return nil }
-func (n *NamespaceNodeWrapper) SetTreeDoc(*Document)   {}

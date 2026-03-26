@@ -542,8 +542,9 @@ func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) 
 
 	for cur := first; cur != nil; {
 		next := cur.NextSibling()
-		cur.SetPrevSibling(nil)
-		cur.SetNextSibling(nil)
+		mn := cur.(helium.MutableNode)
+		mn.SetPrevSibling(nil)
+		mn.SetNextSibling(nil)
 		if err := doc.AddChild(cur); err != nil {
 			return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
 		}

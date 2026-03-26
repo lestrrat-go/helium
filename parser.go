@@ -629,8 +629,8 @@ found:
 	if child := doc.FirstChild(); child != nil {
 		if grandchild := child.FirstChild(); grandchild != nil {
 			for e := grandchild; e != nil; e = e.NextSibling() {
-				e.SetTreeDoc(doc)
-				e.SetParent(nil)
+				e.(MutableNode).SetTreeDoc(doc)
+				e.baseDocNode().parent = nil
 			}
 			return grandchild, nil
 		}

@@ -16,7 +16,7 @@ func Example_helium_unlink_node() {
 	}
 
 	root := doc.DocumentElement()
-	a := root.FirstChild()
+	a := root.FirstChild().(helium.MutableNode)
 	helium.UnlinkNode(a)
 
 	var buf bytes.Buffer

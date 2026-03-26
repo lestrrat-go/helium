@@ -5618,8 +5618,8 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	if child := newctx.doc.FirstChild(); child != nil {
 		if grandchild := child.FirstChild(); grandchild != nil {
 			for e := grandchild; e != nil; e = e.NextSibling() {
-				e.SetTreeDoc(pctx.doc)
-				e.SetParent(nil)
+				e.(MutableNode).SetTreeDoc(pctx.doc)
+				e.baseDocNode().parent = nil
 				if uri != "" {
 					// Track the entity base URI on each top-level node
 					// from the external entity so that base-uri() can
@@ -5719,8 +5719,8 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	if child := newctx.doc.FirstChild(); child != nil {
 		if grandchild := child.FirstChild(); grandchild != nil {
 			for e := grandchild; e != nil; e = e.NextSibling() {
-				e.SetTreeDoc(pctx.doc)
-				e.SetParent(nil)
+				e.(MutableNode).SetTreeDoc(pctx.doc)
+				e.baseDocNode().parent = nil
 			}
 			return grandchild, nil
 		}
@@ -5850,10 +5850,11 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 				// Detach from the old sibling chain before adding
 				// to the entity, otherwise addChild/addSibling will
 				// follow stale NextSibling links and loop.
-				n.SetNextSibling(nil)
-				n.SetPrevSibling(nil)
-				n.SetParent(nil)
-				n.SetTreeDoc(pctx.doc)
+				ndn := n.baseDocNode()
+				ndn.next = nil
+				ndn.prev = nil
+				ndn.parent = nil
+				n.(MutableNode).SetTreeDoc(pctx.doc)
 				_ = ent.AddChild(n)
 				n = next
 			}

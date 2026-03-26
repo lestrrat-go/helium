@@ -338,7 +338,7 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 		return true
 	})
 
-	var parent Node
+	var parent MutableNode
 	if e := ctx.elem; e != nil {
 		parent = e
 	}

@@ -1642,7 +1642,7 @@ func (ec *execContext) stripSchemaWhitespace(doc *helium.Document, annotations x
 			next := child.NextSibling()
 			if isElementOnly && (child.Type() == helium.TextNode || child.Type() == helium.CDATASectionNode) {
 				if strings.TrimSpace(string(child.Content())) == "" {
-					helium.UnlinkNode(child)
+					helium.UnlinkNode(child.(helium.MutableNode))
 				}
 			} else if child.Type() == helium.ElementNode {
 				stack = append(stack, child)
