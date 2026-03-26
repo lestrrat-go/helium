@@ -631,16 +631,34 @@ source: [examples/schematron_validate_example_test.go](https://github.com/lestrr
 # `helium` CLI
 
 The command-line interface is exposed as `helium`.
-Currently implemented subcommands: `lint`, `xpath`, `xsd validate`, `relaxng validate`, `schematron validate`.
+Currently implemented subcommands: `lint`, `xpath`, `xslt`, `xsd validate`, `relaxng validate`, `schematron validate`.
 Use `helium lint` in place of the old `heliumlint` command.
 
 | Command | Purpose |
 |---------|---------|
 | `helium lint` | Parse and lint XML documents |
 | `helium xpath` | Evaluate XPath expressions against XML input |
+| `helium xslt` | Transform XML with XSLT 3.0 stylesheets |
 | `helium relaxng validate` | Validate XML documents against a RELAX NG schema |
 | `helium schematron validate` | Validate XML documents against a Schematron schema |
 | `helium xsd validate` | Validate XML documents against an XML Schema |
+
+## `helium xslt`
+
+```
+helium xslt [options] STYLESHEET [XMLfiles ...]
+```
+
+Applies an XSLT 3.0 stylesheet to one or more XML documents, similar to `xsltproc`.
+
+| Flag | Description |
+|------|-------------|
+| `--output FILE` / `-o FILE` | Write output to FILE |
+| `--param NAME VALUE` | Set stylesheet parameter to XPath expression |
+| `--stringparam NAME VALUE` | Set stylesheet parameter to string value |
+| `--noout` | Run transformation without producing output |
+| `--timing` | Print compile/parse/transform timing to stderr |
+| `--version` | Display version |
 
 # Performance
 
@@ -666,7 +684,6 @@ go test -bench='BenchmarkHeliumParse|BenchmarkStdlibXMLDecode' -benchmem ./bench
 # Include libxml2 (requires cgo and libxml2-dev):
 go test -tags cgo,libxml2bench -bench=. -benchmem ./bench/
 ```
-
 # Current status
 
 * Core functionality is implemented: XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RelaxNG, Schematron, XSD, and `encoding/xml` compatibility (`shim` package).

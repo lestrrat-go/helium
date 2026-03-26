@@ -106,6 +106,8 @@ func Execute(ctx context.Context, args []string) int {
 		return newXPathCommandWithIO("helium xpath", stdin, stdout, stderr, stdinTTY).runContext(ctx, args[1:])
 	case "xsd":
 		return runXSD(ctx, stderr, stdin, stdinTTY, args[1:])
+	case "xslt":
+		return newXSLTCommandWithIO("helium xslt", stdin, stdout, stderr, stdinTTY).runContext(ctx, args[1:])
 	default:
 		_, _ = fmt.Fprintf(stderr, "helium: unknown subcommand %q\n", args[0])
 		showUsage(stderr)
@@ -170,9 +172,7 @@ Available commands:
   schematron Schematron operations
   xpath   Evaluate XPath expressions
   xsd     XML Schema operations
-
-Planned commands:
-  xslt`)
+  xslt    Transform XML with XSLT 3.0 stylesheets`)
 }
 
 func showXSDUsage(w io.Writer) {
