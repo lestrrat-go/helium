@@ -106,12 +106,13 @@ func (i ElementType) String() string {
 	return _ElementType_name[_ElementType_index[i]:_ElementType_index[i+1]]
 }
 
+// NamespaceContainer is an interface for nodes that carry namespace declarations.
 type NamespaceContainer interface {
 	Namespaces() []*Namespace
 }
 
-// Nemaspacer is an interface for things that has a namespace
-// prefix and uri
+// Namespacer is an interface for things that have a namespace
+// prefix and URI.
 type Namespacer interface {
 	Namespace() *Namespace
 	Namespaces() []*Namespace

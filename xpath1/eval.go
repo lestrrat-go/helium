@@ -32,10 +32,6 @@ type evalContext struct {
 	docOrder    *ixpath.DocOrderCache
 }
 
-func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
-	return newEvalContextWithConfig(ctx, node, getEvalConfig(ctx))
-}
-
 func newEvalContextWithConfig(ctx context.Context, node helium.Node, cfg *evalConfig) *evalContext {
 	opCount := 0
 	ectx := &evalContext{

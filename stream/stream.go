@@ -100,6 +100,11 @@ func (w Writer) QuoteChar(q byte) Writer {
 	return w
 }
 
+// Error returns the sticky error, if any. Once an error occurs, all
+// subsequent write operations become no-ops. The error is also returned
+// by [Writer.Flush].
+func (w *Writer) Error() error { return w.err }
+
 type escapeMode int
 
 const (

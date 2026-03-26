@@ -516,7 +516,7 @@ func (c *command) evalXPath(ctx context.Context, cfg *config, doc *helium.Docume
 		return ExitXPath
 	}
 
-	res, err := expr.Evaluate(ctx, doc)
+	res, err := xpath1.NewEvaluator().Evaluate(ctx, expr, doc)
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitXPath
