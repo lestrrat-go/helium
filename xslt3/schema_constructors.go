@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/lestrrat-go/helium/internal/sequence"
@@ -120,7 +121,7 @@ func resolveQNameFromMap(s string, ns map[string]string) (xpath3.QNameValue, err
 		prefix = s[:idx]
 		local = s[idx+1:]
 	}
-	if !isValidNCName(local) || (prefix != "" && !isValidNCName(prefix)) {
+	if !xmlchar.IsValidNCName(local) || (prefix != "" && !xmlchar.IsValidNCName(prefix)) {
 		return xpath3.QNameValue{}, &xpath3.XPathError{
 			Code:    "FORG0001",
 			Message: fmt.Sprintf("invalid QName: %q", s),

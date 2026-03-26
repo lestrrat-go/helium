@@ -5,6 +5,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -100,7 +101,7 @@ func (c *compiler) compileFunction(elem *helium.Element) error {
 	} else if idx := strings.IndexByte(name, ':'); idx >= 0 {
 		prefix := name[:idx]
 		local := name[idx+1:]
-		if !isValidNCName(prefix) || !isValidNCName(local) {
+		if !xmlchar.IsValidNCName(prefix) || !xmlchar.IsValidNCName(local) {
 			return staticError(errCodeXTSE0020, "xsl:function name %q is not a valid QName", name)
 		}
 		uri := c.nsBindings[prefix]

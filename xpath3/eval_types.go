@@ -7,6 +7,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -1039,7 +1040,7 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 		local = s[idx+1:]
 	}
 
-	if !isValidNCName(local) || (prefix != "" && !isValidNCName(prefix)) {
+	if !xmlchar.IsValidNCName(local) || (prefix != "" && !xmlchar.IsValidNCName(prefix)) {
 		return AtomicValue{}, &XPathError{
 			Code:    errCodeFORG0001,
 			Message: fmt.Sprintf("invalid QName: %q", s),

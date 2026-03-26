@@ -5,6 +5,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 // lexer tokenizes an XPath 3.1 expression string.
@@ -288,7 +290,7 @@ func (l *lexer) tokenize() error {
 			} else if l.pos < len(l.input) && l.input[l.pos] == ':' && l.pos+1 < len(l.input) {
 				// Check for QName (prefix:local) — e.g., $err:code
 				r2, _ := utf8.DecodeRuneInString(l.input[l.pos+1:])
-				if isNCNameStart(r2) {
+				if xmlchar.IsNCNameStartChar(r2) {
 					l.pos++ // consume ':'
 					local := l.scanNCName()
 					name = name + ":" + local
@@ -305,7 +307,7 @@ func (l *lexer) tokenize() error {
 			if err := l.scanNumber(); err != nil {
 				return err
 			}
-		case isNCNameStart(r):
+		case xmlchar.IsNCNameStartChar(r):
 			l.scanNameOrKeyword()
 		default:
 			return fmt.Errorf("%w: %q at position %d", ErrUnexpectedChar, string(r), l.pos)
@@ -365,10 +367,10 @@ func (l *lexer) scanNCName() string {
 	for l.pos < len(l.input) {
 		r, size := utf8.DecodeRuneInString(l.input[l.pos:])
 		if l.pos == start {
-			if !isNCNameStart(r) {
+			if !xmlchar.IsNCNameStartChar(r) {
 				return ""
 			}
-		} else if !isNCNameChar(r) {
+		} else if !xmlchar.IsNCNameChar(r) {
 			break
 		}
 		l.pos += size
@@ -426,7 +428,7 @@ func (l *lexer) scanNumber() error {
 	// character (letter, underscore) is a lexical error.
 	if l.pos < len(l.input) {
 		r, _ := utf8.DecodeRuneInString(l.input[l.pos:])
-		if isNCNameStart(r) {
+		if xmlchar.IsNCNameStartChar(r) {
 			return fmt.Errorf("%w: numeric literal immediately followed by name at position %d", ErrUnexpectedToken, start)
 		}
 	}
@@ -557,47 +559,3 @@ func (l *lexer) PrettyTokens() string {
 	return b.String()
 }
 
-// isNCNameStart returns true if r is a valid start of an NCName per the XML spec.
-// NCName ::= Name - (Char* ':' Char*), so NameStartChar minus ':'.
-// NameStartChar ::= ":" | [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6] |
-//
-//	[#xF8-#x2FF] | [#x370-#x37D] | [#x37F-#x1FFF] | [#x200C-#x200D] |
-//	[#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] |
-//	[#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
-func isNCNameStart(r rune) bool {
-	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || r == '_' ||
-		(r >= 0xC0 && r <= 0xD6) || (r >= 0xD8 && r <= 0xF6) ||
-		(r >= 0xF8 && r <= 0x2FF) || (r >= 0x370 && r <= 0x37D) ||
-		(r >= 0x37F && r <= 0x1FFF) || (r >= 0x200C && r <= 0x200D) ||
-		(r >= 0x2070 && r <= 0x218F) || (r >= 0x2C00 && r <= 0x2FEF) ||
-		(r >= 0x3001 && r <= 0xD7FF) || (r >= 0xF900 && r <= 0xFDCF) ||
-		(r >= 0xFDF0 && r <= 0xFFFD) || (r >= 0x10000 && r <= 0xEFFFF)
-}
-
-// isNCNameChar returns true if r is a valid NCName continuation character per the XML spec.
-// NameChar ::= NameStartChar | "-" | "." | [0-9] | #xB7 | [#x0300-#x036F] | [#x203F-#x2040]
-func isNCNameChar(r rune) bool {
-	return isNCNameStart(r) ||
-		(r >= '0' && r <= '9') || r == '-' || r == '.' ||
-		r == 0xB7 || (r >= 0x0300 && r <= 0x036F) || (r >= 0x203F && r <= 0x2040)
-}
-
-// isValidNCName checks whether s is a valid XML NCName (non-empty, starts with
-// a valid NCNameStart character, and all subsequent characters are NCNameChar).
-func isValidNCName(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i, r := range s {
-		if i == 0 {
-			if !isNCNameStart(r) {
-				return false
-			}
-		} else {
-			if !isNCNameChar(r) {
-				return false
-			}
-		}
-	}
-	return true
-}

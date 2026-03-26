@@ -9,6 +9,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -1239,7 +1240,7 @@ func (ec *execContext) execPI(ctx context.Context, inst *piInst) error {
 	}
 
 	// XTDE0890: name must be a valid NCName and PITarget
-	if !isValidNCName(name) {
+	if !xmlchar.IsValidNCName(name) {
 		return dynamicError(errCodeXTDE0890,
 			"xsl:processing-instruction name %q is not a valid NCName", name)
 	}
@@ -1292,7 +1293,7 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *namespaceInst) e
 		return dynamicError(errCodeXTDE0920,
 			"cannot create namespace node with prefix %q", name)
 	}
-	if name != "" && !isValidNCName(name) {
+	if name != "" && !xmlchar.IsValidNCName(name) {
 		return dynamicError(errCodeXTDE0920,
 			"xsl:namespace name %q is not a valid NCName", name)
 	}
