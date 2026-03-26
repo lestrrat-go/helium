@@ -1,4 +1,3 @@
-// Package relaxng implements RELAX NG (XML syntax) schema validation.
 package relaxng
 
 import (
@@ -147,9 +146,25 @@ func (v Validator) ErrorHandler(h helium.ErrorHandler) Validator {
 	return v
 }
 
+// ValidationError represents a single validation error with structured fields.
+type ValidationError struct {
+	Filename string // source filename
+	Line     int    // line number in the source document
+	Element  string // element name
+	Message  string // human-readable error description
+}
+
+func (e *ValidationError) Error() string {
+	if e.Filename == "" && e.Line == 0 && e.Element == "" {
+		return bareValidityError(e.Message)
+	}
+	return validityError(e.Filename, e.Line, e.Element, e.Message)
+}
+
 // ValidateError holds detailed validation failure output.
 type ValidateError struct {
-	Output string // libxml2-compatible validation output
+	Output string            // libxml2-compatible validation output
+	Errors []ValidationError // structured per-error details
 }
 
 func (e *ValidateError) Error() string {
@@ -167,9 +182,9 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 	if cfg == nil {
 		cfg = &validateConfig{}
 	}
-	output, valid := validateDocument(ctx, doc, v.grammar, cfg)
+	output, valid, validationErrors := validateDocument(ctx, doc, v.grammar, cfg)
 	if valid {
 		return nil
 	}
-	return &ValidateError{Output: output}
+	return &ValidateError{Output: output, Errors: validationErrors}
 }
