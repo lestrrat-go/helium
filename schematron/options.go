@@ -1,10 +1,6 @@
 package schematron
 
-import (
-	"fmt"
-
-	helium "github.com/lestrrat-go/helium"
-)
+import helium "github.com/lestrrat-go/helium"
 
 type compileConfig struct {
 	filename     string
@@ -29,7 +25,7 @@ type ValidationError struct {
 	Message  string
 }
 
-// Error implements the error interface.
+// Error implements the error interface, producing libxml2-compatible output.
 func (e *ValidationError) Error() string {
-	return fmt.Sprintf("%s:%d: element %s: Schematron error : %s", e.Filename, e.Line, e.Element, e.Message)
+	return schematronError(e.Filename, e.Line, e.Element, e.Path, e.Message)
 }

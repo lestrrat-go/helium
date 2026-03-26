@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -97,13 +98,17 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 	return schema, compileErr
 }
 
-// ValidateError holds detailed validation failure output.
+// ValidateError holds structured validation errors.
 type ValidateError struct {
-	Output string // libxml2-compatible validation output
+	Errors []ValidationError
 }
 
 func (e *ValidateError) Error() string {
-	return e.Output
+	var sb strings.Builder
+	for i := range e.Errors {
+		sb.WriteString(e.Errors[i].Error())
+	}
+	return sb.String()
 }
 
 // Validator validates documents against a compiled Schematron schema.
@@ -134,10 +139,8 @@ func (v Validator) Filename(name string) Validator {
 	return v
 }
 
-// Quiet suppresses all per-error output in the returned string.
-// Only the final "validates" / "fails to validate" line is emitted.
-// This corresponds to libxml2's XML_SCHEMATRON_OUT_QUIET flag.
-// If an ErrorHandler is also set, errors are still delivered to the handler.
+// Quiet suppresses per-error details on the returned *ValidateError.
+// Errors are still delivered to the ErrorHandler if one is set.
 func (v Validator) Quiet() Validator {
 	v = v.clone()
 	v.cfg.quiet = true
@@ -145,9 +148,6 @@ func (v Validator) Quiet() Validator {
 }
 
 // ErrorHandler sets a handler that receives each validation error.
-// When set, per-error messages are routed to the handler instead of
-// being accumulated in the returned string. This corresponds to
-// libxml2's XML_SCHEMATRON_OUT_ERROR flag.
 // Each error delivered to the handler is a *ValidationError that can
 // be extracted via errors.As.
 func (v Validator) ErrorHandler(h helium.ErrorHandler) Validator {
@@ -172,10 +172,10 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 	if cfg == nil {
 		cfg = &validateConfig{}
 	}
-	output, valid := validateDocument(ctx, doc, v.schema, cfg)
+	errs, valid := validateDocument(ctx, doc, v.schema, cfg)
 	v.closeHandler()
 	if valid {
 		return nil
 	}
-	return &ValidateError{Output: output}
+	return &ValidateError{Errors: errs}
 }
