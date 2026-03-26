@@ -434,10 +434,16 @@ func compareResults(op TokenType, left, right *Result) bool {
 // compareNodeSet handles comparisons where the left operand is a node-set.
 func compareNodeSet(op TokenType, leftNodes []helium.Node, right *Result) bool {
 	if right.Type == NodeSetResult {
+		// Pre-compute string values for the right-hand node-set to
+		// avoid recomputing them for every left-hand node.
+		rightVals := make([]string, len(right.NodeSet))
+		for i, rn := range right.NodeSet {
+			rightVals[i] = ixpath.StringValue(rn)
+		}
 		for _, ln := range leftNodes {
 			lv := ixpath.StringValue(ln)
-			for _, rn := range right.NodeSet {
-				if compareStrings(op, lv, ixpath.StringValue(rn)) {
+			for _, rv := range rightVals {
+				if compareStrings(op, lv, rv) {
 					return true
 				}
 			}
