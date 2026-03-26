@@ -5,6 +5,11 @@ package backed by helium's parser.
 
 Import path: `github.com/lestrrat-go/helium/shim`
 
+It exposes the same core API surface as `encoding/xml`, including
+`Marshal`, `Unmarshal`, `NewEncoder`, `NewDecoder`, `Token`,
+`EncodeToken`, and the familiar struct tags such as `xml:"name,attr"`,
+`,chardata`, `,innerxml`, and `,omitempty`.
+
 <!-- INCLUDE(examples/shim_marshal_example_test.go) -->
 ```go
 package examples_test

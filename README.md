@@ -131,17 +131,6 @@ go test -tags cgo,libxml2bench -bench=. -benchmem ./bench/
 * XSLT support is intentionally scoped to Basic XSLT 3.0. Backwards compatibility modes for XSLT 1.0/2.0 are not part of the target feature set.
 * Some edge cases and parity gaps are still being iterated on; contributions and issue reports are welcome.
 
-# encoding/xml Compatibility
-
-The `shim` package provides a drop-in replacement for Go's standard
-`encoding/xml` package, backed by helium's parser. It exposes the same types and
-API surface: `Marshal`, `Unmarshal`, `NewEncoder`, `NewDecoder`, `Token`,
-`EncodeToken`, and the familiar struct tags such as `xml:"name,attr"`,
-`,chardata`, `,innerxml`, and `,omitempty`.
-
-See [`shim/README.md`](shim/README.md) for example usage and package-specific
-notes, including differences from the standard library.
-
 # Contributing
 
 ## Issues
