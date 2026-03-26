@@ -90,22 +90,8 @@ Use `helium lint` in place of the old `heliumlint` command.
 | `helium schematron validate` | Validate XML documents against a Schematron schema |
 | `helium xsd validate` | Validate XML documents against an XML Schema |
 
-## `helium xslt`
-
-```text
-helium xslt [options] STYLESHEET [XMLfiles ...]
-```
-
-Applies an XSLT 3.0 stylesheet to one or more XML documents, similar to `xsltproc`.
-
-| Flag | Description |
-|------|-------------|
-| `--output FILE` / `-o FILE` | Write output to FILE |
-| `--param NAME VALUE` | Set stylesheet parameter to XPath expression |
-| `--stringparam NAME VALUE` | Set stylesheet parameter to string value |
-| `--noout` | Run transformation without producing output |
-| `--timing` | Print compile/parse/transform timing to stderr |
-| `--version` | Display version |
+See [`cmd/helium/README.md`](cmd/helium/README.md) for command-specific
+documentation.
 
 # Performance
 

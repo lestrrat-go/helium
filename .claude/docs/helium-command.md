@@ -2,6 +2,8 @@
 
 Unified CLI entrypoint. Wrapper file: `cmd/helium/main.go`. Implementation package: `internal/cli/heliumcmd`.
 
+User-facing command docs live in `cmd/helium/README.md`.
+
 ## Entry API
 
 - `heliumcmd.Execute(ctx, args)` is package entrypoint
@@ -135,4 +137,3 @@ Primary file: `internal/cli/heliumcmd/xslt.go`
 - Each XML input parsed with `helium.NewParser()`, transformed with `ss.Transform(doc).WriteTo(ctx, out)`
 - Flags: `--output FILE` / `-o FILE`, `--param NAME VAL` (XPath), `--stringparam NAME VAL`, `--noout`, `--timing`, `--version`
 - Parameters passed via `inv.GlobalParameters()`
-
