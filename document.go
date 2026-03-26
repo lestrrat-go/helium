@@ -213,7 +213,7 @@ func (d *Document) ExtSubset() *DTD {
 	return d.extSubset
 }
 
-func (d *Document) Replace(_ Node) error {
+func (d *Document) Replace(_ ...Node) error {
 	return ErrInvalidOperation
 }
 

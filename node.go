@@ -32,7 +32,7 @@ type MutableNode interface {
 	AddSibling(Node) error
 	// AppendText appends text content to this node (libxml2: xmlNodeAddContent).
 	AppendText([]byte) error
-	Replace(Node) error
+	Replace(...Node) error
 	SetLine(int)
 	SetNextSibling(Node)
 	SetOwnerDocument(doc *Document)
@@ -148,13 +148,6 @@ func setFirstChild(n MutableNode, cur Node) {
 
 func setLastChild(n MutableNode, cur Node) {
 	n.baseDocNode().lastChild = cur
-}
-
-// SetLastChild updates the last-child pointer of a parent node.
-// This is needed when manually splicing nodes into a sibling list
-// without going through AddChild/AddSibling.
-func SetLastChild(n MutableNode, cur Node) {
-	setLastChild(n, cur)
 }
 
 func (n *docnode) SetOwnerDocument(doc *Document) {
@@ -388,20 +381,20 @@ func UnlinkNode(n MutableNode) {
 	ndn.next = nil
 }
 
-func replaceNode(n MutableNode, cur Node) error {
+func replaceNode(n MutableNode, nodes ...Node) error {
+	if len(nodes) == 0 {
+		return nil
+	}
+	cur := nodes[0]
 	cdn := cur.baseDocNode()
 	ndn := n.baseDocNode()
+	afterN := ndn.next
 
-	if next := ndn.next; next != nil {
-		cdn.next = next        // cur.next = n.next
-		next.baseDocNode().prev = cur // n.next.prev = cur
+	// Patch first replacement into n's position
+	if ndn.prev != nil {
+		cdn.prev = ndn.prev
+		ndn.prev.baseDocNode().next = cur
 	}
-
-	if prev := ndn.prev; prev != nil {
-		cdn.prev = prev        // cur.prev = n.prev
-		prev.baseDocNode().next = cur // n.prev.next = cur
-	}
-
 	if parent := ndn.parent; parent != nil {
 		pdn := parent.baseDocNode()
 		if pdn.firstChild == n {
@@ -412,6 +405,30 @@ func replaceNode(n MutableNode, cur Node) error {
 		}
 		cdn.parent = parent
 	}
+
+	// Determine the true last replacement node
+	last := cur.(MutableNode)
+	for i := 1; i < len(nodes); i++ {
+		c := nodes[i].(MutableNode)
+		c.SetParent(last.Parent())
+		c.SetPrevSibling(last)
+		last.SetNextSibling(c)
+		last = c
+	}
+
+	// Link last replacement to whatever followed n
+	last.SetNextSibling(afterN)
+	if afterN != nil {
+		afterN.(MutableNode).SetPrevSibling(last)
+	}
+
+	// Update parent's lastChild if n was the last child and we added more nodes
+	if afterN == nil && len(nodes) > 1 {
+		if parent := cdn.parent; parent != nil {
+			setLastChild(parent.(MutableNode), last)
+		}
+	}
+
 	return nil
 }
 

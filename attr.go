@@ -30,8 +30,8 @@ func (n *AttributeDecl) AddSibling(cur Node) error {
 	return addSibling(n, cur)
 }
 
-func (n *AttributeDecl) Replace(cur Node) error {
-	return replaceNode(n, cur)
+func (n *AttributeDecl) Replace(nodes ...Node) error {
+	return replaceNode(n, nodes...)
 }
 
 func (n *AttributeDecl) SetTreeDoc(doc *Document) {
@@ -78,8 +78,8 @@ func (n *Attribute) AddSibling(cur Node) error {
 	return addSibling(n, cur)
 }
 
-func (n *Attribute) Replace(cur Node) error {
-	return replaceNode(n, cur)
+func (n *Attribute) Replace(nodes ...Node) error {
+	return replaceNode(n, nodes...)
 }
 
 func (n *Attribute) SetTreeDoc(doc *Document) {

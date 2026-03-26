@@ -24,8 +24,8 @@ func (e *EntityRef) AddSibling(cur Node) error {
 	return addSibling(e, cur)
 }
 
-func (e *EntityRef) Replace(cur Node) error {
-	return replaceNode(e, cur)
+func (e *EntityRef) Replace(nodes ...Node) error {
+	return replaceNode(e, nodes...)
 }
 
 func (n *EntityRef) SetTreeDoc(doc *Document) {

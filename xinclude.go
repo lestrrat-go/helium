@@ -26,8 +26,8 @@ func (n *XIncludeMarker) AddSibling(cur Node) error {
 	return addSibling(n, cur)
 }
 
-func (n *XIncludeMarker) Replace(cur Node) error {
-	return replaceNode(n, cur)
+func (n *XIncludeMarker) Replace(nodes ...Node) error {
+	return replaceNode(n, nodes...)
 }
 
 func (n *XIncludeMarker) SetTreeDoc(doc *Document) {
