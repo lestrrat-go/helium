@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/lestrrat-go/helium/actions/workflows/ci.yml/badge.svg)](https://github.com/lestrrat-go/helium/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/lestrrat-go/helium.svg)](https://pkg.go.dev/github.com/lestrrat-go/helium)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lestrrat-go/helium)
 
 ** WARNING: THIS SOFTWARE SHOULD BE CONSIDERED ALPHA. ALL API STILL SUBJECT TO CHANGE **
 
