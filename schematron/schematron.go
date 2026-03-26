@@ -2,13 +2,18 @@ package schematron
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 )
+
+// ErrValidationFailed is returned by [Validator.Validate] when the document
+// does not conform to the schema. Individual validation errors are delivered
+// to the configured [helium.ErrorHandler].
+var ErrValidationFailed = errors.New("schematron: validation failed")
 
 // Compiler compiles Schematron documents into Schema values.
 // It uses clone-on-write semantics: each builder method returns
@@ -98,19 +103,6 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 	return schema, compileErr
 }
 
-// ValidateError holds structured validation errors.
-type ValidateError struct {
-	Errors []ValidationError
-}
-
-func (e *ValidateError) Error() string {
-	var sb strings.Builder
-	for i := range e.Errors {
-		sb.WriteString(e.Errors[i].Error())
-	}
-	return sb.String()
-}
-
 // Validator validates documents against a compiled Schematron schema.
 // It uses clone-on-write semantics: each builder method returns
 // a new Validator sharing the underlying config until mutation.
@@ -139,8 +131,8 @@ func (v Validator) Filename(name string) Validator {
 	return v
 }
 
-// Quiet suppresses per-error details on the returned *ValidateError.
-// Errors are still delivered to the ErrorHandler if one is set.
+// Quiet suppresses per-error delivery to the ErrorHandler.
+// When both Quiet and ErrorHandler are set, errors are still delivered.
 func (v Validator) Quiet() Validator {
 	v = v.clone()
 	v.cfg.quiet = true
@@ -165,17 +157,24 @@ func (v Validator) closeHandler() {
 }
 
 // Validate validates a document against the compiled schema.
-// It returns nil if the document is valid, or a *ValidateError with details.
+// It returns nil if the document is valid, or [ErrValidationFailed].
+// Individual validation errors are delivered to the configured [helium.ErrorHandler].
 // (libxml2: xmlSchematronValidateDoc)
 func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 	cfg := v.cfg
 	if cfg == nil {
 		cfg = &validateConfig{}
 	}
-	errs, valid := validateDocument(ctx, doc, v.schema, cfg)
+
+	handler := cfg.errorHandler
+	if handler == nil {
+		handler = helium.NilErrorHandler{}
+	}
+
+	valid := validateDocument(ctx, doc, v.schema, cfg, handler)
 	v.closeHandler()
 	if valid {
 		return nil
 	}
-	return &ValidateError{Errors: errs}
+	return ErrValidationFailed
 }

@@ -163,12 +163,12 @@ func (c *relaxNGValidateCommand) processInput(ctx context.Context, cfg *relaxNGV
 	if cfg.timing {
 		t0 = time.Now()
 	}
-	err = relaxng.NewValidator(grammar).Validate(ctx, doc)
+	handler := &writerErrorHandler{w: c.stderr}
+	err = relaxng.NewValidator(grammar).Filename(input.name).ErrorHandler(handler).Validate(ctx, doc)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Validating took %s\n", time.Since(t0))
 	}
 	if err != nil {
-		_, _ = fmt.Fprint(c.stderr, err)
 		_, _ = fmt.Fprintf(c.stderr, "%s fails to validate\n", input.name)
 		return ExitValidation
 	}

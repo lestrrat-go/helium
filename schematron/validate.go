@@ -10,9 +10,8 @@ import (
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
-func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig) ([]ValidationError, bool) {
+func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig, handler helium.ErrorHandler) bool {
 	filename := cfg.filename
-	var errs []ValidationError
 	valid := true
 
 	ev := xpath1.NewEvaluator().Namespaces(schema.namespaces)
@@ -67,22 +66,17 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 						valid = false
 						msg, xpathErr := formatMessage(ctx, ruleEv, t.message, node)
 						if xpathErr != "" {
-							if cfg.errorHandler != nil {
-								cfg.errorHandler.Handle(ctx, helium.NewLeveledError(xpathErr+"\n", helium.ErrorLevelError))
-							}
-						}
-						ve := ValidationError{
-							Filename: filename,
-							Line:     node.Line(),
-							Element:  node.Name(),
-							Path:     getNodePath(node),
-							Message:  msg,
+							handler.Handle(ctx, helium.NewLeveledError(xpathErr+"\n", helium.ErrorLevelError))
 						}
 						if !cfg.quiet {
-							errs = append(errs, ve)
-						}
-						if cfg.errorHandler != nil {
-							cfg.errorHandler.Handle(ctx, &ve)
+							ve := ValidationError{
+								Filename: filename,
+								Line:     node.Line(),
+								Element:  node.Name(),
+								Path:     getNodePath(node),
+								Message:  msg,
+							}
+							handler.Handle(ctx, &ve)
 						}
 					}
 				}
@@ -90,7 +84,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		}
 	}
 
-	return errs, valid
+	return valid
 }
 
 // formatMessage interpolates message parts against a context node.

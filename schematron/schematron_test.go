@@ -214,19 +214,19 @@ func TestWithQuiet(t *testing.T) {
 		doc, err := p.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
 		require.NoError(t, err)
 
-		// Without quiet: ValidateError contains structured errors
-		err = schematron.NewValidator(schema).Filename("test.xml").Validate(t.Context(), doc)
-		require.Error(t, err)
-		var ve *schematron.ValidateError
-		require.ErrorAs(t, err, &ve)
-		require.NotEmpty(t, ve.Errors)
-		require.Contains(t, err.Error(), "schematron error")
+		// Without quiet: sentinel error returned, handler receives errors
+		var collected []*schematron.ValidationError
+		handler := validationErrorCollector{errors: &collected}
+		err = schematron.NewValidator(schema).Filename("test.xml").ErrorHandler(handler).Validate(t.Context(), doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.NotEmpty(t, collected)
 
-		// With quiet: ValidateError has no errors (suppressed)
-		quietErr := schematron.NewValidator(schema).Filename("test.xml").Quiet().Validate(t.Context(), doc)
-		require.Error(t, quietErr)
-		require.ErrorAs(t, quietErr, &ve)
-		require.Empty(t, ve.Errors)
+		// With quiet + handler: handler still receives errors
+		var quietCollected []*schematron.ValidationError
+		quietHandler := validationErrorCollector{errors: &quietCollected}
+		quietErr := schematron.NewValidator(schema).Filename("test.xml").Quiet().ErrorHandler(quietHandler).Validate(t.Context(), doc)
+		require.ErrorIs(t, quietErr, schematron.ErrValidationFailed)
+		require.Empty(t, quietCollected)
 	})
 
 	t.Run("passing document", func(t *testing.T) {
@@ -247,16 +247,19 @@ func TestWithQuiet(t *testing.T) {
 		require.NoError(t, err)
 
 		// Without quiet: report fires
-		err = schematron.NewValidator(rSchema).Filename("test.xml").Validate(t.Context(), doc)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "CCC is present")
+		var collected []*schematron.ValidationError
+		handler := validationErrorCollector{errors: &collected}
+		err = schematron.NewValidator(rSchema).Filename("test.xml").ErrorHandler(handler).Validate(t.Context(), doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.NotEmpty(t, collected)
+		require.Contains(t, collected[0].Message, "CCC is present")
 
-		// With quiet: report suppressed
-		quietErr := schematron.NewValidator(rSchema).Filename("test.xml").Quiet().Validate(t.Context(), doc)
-		require.Error(t, quietErr)
-		var ve *schematron.ValidateError
-		require.ErrorAs(t, quietErr, &ve)
-		require.Empty(t, ve.Errors)
+		// With quiet: report suppressed (no errors delivered to handler)
+		var quietCollected []*schematron.ValidationError
+		quietHandler := validationErrorCollector{errors: &quietCollected}
+		quietErr := schematron.NewValidator(rSchema).Filename("test.xml").Quiet().ErrorHandler(quietHandler).Validate(t.Context(), doc)
+		require.ErrorIs(t, quietErr, schematron.ErrValidationFailed)
+		require.Empty(t, quietCollected)
 	})
 }
 
@@ -288,7 +291,7 @@ func TestWithErrorHandler(t *testing.T) {
 			ErrorHandler(handler).
 			Validate(t.Context(), doc)
 
-		require.Error(t, err)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
 
 		// Handler should have received both errors
 		require.Len(t, collected, 2)
@@ -315,8 +318,7 @@ func TestWithErrorHandler(t *testing.T) {
 		require.Empty(t, collected)
 	})
 
-	t.Run("quiet with error handler delivers errors", func(t *testing.T) {
-		// When both quiet and error handler are set, errors go to the handler
+	t.Run("quiet suppresses handler delivery", func(t *testing.T) {
 		var collected []*schematron.ValidationError
 		handler := validationErrorCollector{errors: &collected}
 
@@ -329,12 +331,8 @@ func TestWithErrorHandler(t *testing.T) {
 			ErrorHandler(handler).
 			Validate(t.Context(), doc)
 
-		require.Error(t, err)
-		// Quiet suppresses Errors on ValidateError but handler still receives them
-		var ve *schematron.ValidateError
-		require.ErrorAs(t, err, &ve)
-		require.Empty(t, ve.Errors)
-		require.Len(t, collected, 2)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.Empty(t, collected)
 	})
 }
 
