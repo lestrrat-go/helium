@@ -90,6 +90,26 @@ var (
 	esc_fffd_ref = []byte("&#xFFFD;") // U+FFFD as a numeric character reference
 )
 
+const upperHex = "0123456789ABCDEF"
+
+// hexCharRef writes a hex character reference (e.g. "&#xA0;") into buf
+// for runes < 0x100. Returns the slice of buf that was written.
+func hexCharRef(buf *[8]byte, r rune) []byte {
+	buf[0] = '&'
+	buf[1] = '#'
+	buf[2] = 'x'
+	n := 3
+	if r >= 0x10 {
+		buf[n] = upperHex[(r>>4)&0x0F]
+		n++
+	}
+	buf[n] = upperHex[r&0x0F]
+	n++
+	buf[n] = ';'
+	n++
+	return buf[:n]
+}
+
 // Decide whether the given rune is in the XML Character Range, per
 // the Char production of http://www.xml.com/axml/testaxml.htm,
 // Section 2.2 Characters.
@@ -113,6 +133,7 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII bool) error {
 		}()
 	}
 	var esc []byte
+	var hbuf [8]byte
 	last := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
@@ -135,7 +156,7 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII bool) error {
 		default:
 			if escapeNonASCII && !(0x20 <= r && r < 0x80) { // nolint:staticcheck
 				if r < 0x100 {
-					esc = []byte(fmt.Sprintf("&#x%X;", r))
+					esc = hexCharRef(&hbuf, r)
 					break
 				}
 			}
@@ -178,6 +199,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 		}()
 	}
 	var esc []byte
+	var hbuf [8]byte
 	last := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
@@ -199,7 +221,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline bool, escapeNonASCII bool) 
 		default:
 			if escapeNonASCII && !(r == '\t' || (0x20 <= r && r < 0x80)) { // nolint:staticcheck
 				if r < 0x100 {
-					esc = []byte(fmt.Sprintf("&#x%X;", r))
+					esc = hexCharRef(&hbuf, r)
 					break
 				}
 			}
