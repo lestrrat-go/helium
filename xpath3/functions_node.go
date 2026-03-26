@@ -953,7 +953,7 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 		}
 	}
 
-	data, err := unparsedtext.ReadURI(unparsedTextConfig(ctx), resolved)
+	data, err := unparsedtext.ReadURI(ctx, unparsedTextConfig(ctx), resolved)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot retrieve resource: %v", err)}
 	}

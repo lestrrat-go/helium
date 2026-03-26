@@ -56,7 +56,7 @@ func fnUnparsedText(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 	}
 
-	text, err := unparsedtext.LoadText(unparsedTextConfig(ctx), href, encoding)
+	text, err := unparsedtext.LoadText(ctx, unparsedTextConfig(ctx), href, encoding)
 	if err != nil {
 		return nil, wrapUnparsedTextError(err)
 	}
@@ -79,7 +79,7 @@ func fnUnparsedTextAvailable(ctx context.Context, args []Sequence) (Sequence, er
 		}
 	}
 
-	available := unparsedtext.IsAvailable(unparsedTextConfig(ctx), href, encoding)
+	available := unparsedtext.IsAvailable(ctx, unparsedTextConfig(ctx), href, encoding)
 	return SingleBoolean(available), nil
 }
 
@@ -99,7 +99,7 @@ func fnUnparsedTextLines(ctx context.Context, args []Sequence) (Sequence, error)
 		}
 	}
 
-	lines, err := unparsedtext.LoadTextLines(unparsedTextConfig(ctx), href, encoding)
+	lines, err := unparsedtext.LoadTextLines(ctx, unparsedTextConfig(ctx), href, encoding)
 	if err != nil {
 		return nil, wrapUnparsedTextError(err)
 	}
