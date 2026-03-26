@@ -17,9 +17,19 @@ type Expression struct {
 	prefixPlan prefixValidationPlan
 }
 
+func (e *Expression) requireCompiledProgram() error {
+	if e == nil || e.program == nil {
+		return fmt.Errorf("xpath3: expression has no compiled program")
+	}
+	return nil
+}
+
 // Validate runs static namespace prefix validation using the given bindings.
 // This catches undeclared namespace prefixes in function calls, type names, etc.
 func (e *Expression) Validate(namespaces map[string]string) error {
+	if err := e.requireCompiledProgram(); err != nil {
+		return err
+	}
 	return e.prefixPlan.Validate(namespaces, false, nil)
 }
 
@@ -30,8 +40,8 @@ func (e *Expression) String() string {
 
 // DumpVM writes a textual dump of compiled VM instructions.
 func (e *Expression) DumpVM(w io.Writer) error {
-	if e == nil || e.program == nil {
-		return fmt.Errorf("xpath3: expression has no compiled program")
+	if err := e.requireCompiledProgram(); err != nil {
+		return err
 	}
 	return e.program.dumpTo(w)
 }
@@ -144,8 +154,8 @@ func (r *Result) IsString() (string, bool) {
 }
 
 func (e *Expression) evaluate(ec *evalContext) (Sequence, error) {
-	if e.program == nil {
-		return nil, fmt.Errorf("xpath3: expression has no compiled program")
+	if err := e.requireCompiledProgram(); err != nil {
+		return nil, err
 	}
 	return e.program.execute(ec)
 }

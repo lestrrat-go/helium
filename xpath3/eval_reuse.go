@@ -43,6 +43,10 @@ func (s *EvalState) SetSize(size int) { s.ec.size = size }
 // on the same EvalState. Callers must extract all needed values from
 // the Result before calling EvaluateReuse again.
 func (e *Expression) EvaluateReuse(state *EvalState, node helium.Node) (Result, error) {
+	if err := e.requireCompiledProgram(); err != nil {
+		return Result{}, err
+	}
+
 	ec := &state.ec
 	ec.node = node
 	if node != nil {

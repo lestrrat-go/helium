@@ -123,6 +123,12 @@ func TestEvaluator(t *testing.T) {
 		require.Equal(t, "from-zero", s)
 	})
 
+	t.Run("nil expression returns error", func(t *testing.T) {
+		_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Evaluate(t.Context(), nil, doc)
+		require.EqualError(t, err, "xpath3: expression has no compiled program")
+	})
+
 	t.Run("MustCompile", func(t *testing.T) {
 		expr := compiler.MustCompile("1 + 2")
 		result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
