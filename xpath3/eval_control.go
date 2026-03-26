@@ -145,8 +145,9 @@ func (f tupleConsumerFunc) ConsumeTuple(scope *variableScope) error {
 func evalFLWOR(evalFn exprEvaluator, ec *evalContext, e FLWORExpr) (Sequence, error) {
 	var result ItemSlice
 	consumer := tupleConsumerFunc(func(scope *variableScope) error {
-		retCtx := ec.withScope(scope)
-		r, err := evalFn(retCtx, e.Return)
+		oldScope := ec.pushScope(scope)
+		r, err := evalFn(ec, e.Return)
+		ec.restoreScope(oldScope)
 		if err != nil {
 			return err
 		}
@@ -173,8 +174,9 @@ func iterateFLWORClauses(evalFn exprEvaluator, ec *evalContext, clauses []FLWORC
 
 	switch c := clauses[i].(type) {
 	case ForClause:
-		subCtx := ec.withScope(scope)
-		domain, err := evalFn(subCtx, c.Expr)
+		oldScope := ec.pushScope(scope)
+		domain, err := evalFn(ec, c.Expr)
+		ec.restoreScope(oldScope)
 		if err != nil {
 			return err
 		}
@@ -182,7 +184,7 @@ func iterateFLWORClauses(evalFn exprEvaluator, ec *evalContext, clauses []FLWORC
 		for item := range seqItems(domain) {
 			inner := scopeWithBinding(scope, c.Var, ItemSlice{item})
 			if c.PosVar != "" {
-				inner = scopeWithBinding(inner, c.PosVar, ItemSlice{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(int64(pos + 1))}})
+				inner = scopeWithBinding(inner, c.PosVar, ItemSlice{AtomicValue{TypeName: TypeInteger, Value: int64(pos + 1)}})
 			}
 			if err := iterateFLWORClauses(evalFn, ec, clauses, i+1, inner, consumer); err != nil {
 				return err
@@ -192,8 +194,9 @@ func iterateFLWORClauses(evalFn exprEvaluator, ec *evalContext, clauses []FLWORC
 		return nil
 
 	case LetClause:
-		subCtx := ec.withScope(scope)
-		val, err := evalFn(subCtx, c.Expr)
+		oldScope := ec.pushScope(scope)
+		val, err := evalFn(ec, c.Expr)
+		ec.restoreScope(oldScope)
 		if err != nil {
 			return err
 		}
@@ -228,8 +231,9 @@ func evalQuantifiedBindings(evalFn exprEvaluator, ec *evalContext, e QuantifiedE
 		return nil, err
 	}
 	for item := range seqItems(domain) {
-		subCtx := ec.withScope(scopeWithBinding(ec.vars, binding.Var, ItemSlice{item}))
-		result, err := evalQuantifiedBindings(evalFn, subCtx, e, idx+1)
+		oldScope := ec.pushScope(scopeWithBinding(ec.vars, binding.Var, ItemSlice{item}))
+		result, err := evalQuantifiedBindings(evalFn, ec, e, idx+1)
+		ec.restoreScope(oldScope)
 		if err != nil {
 			return nil, err
 		}

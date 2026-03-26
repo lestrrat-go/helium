@@ -220,6 +220,19 @@ func (ec *evalContext) withScope(scope *variableScope) *evalContext {
 	return &cp
 }
 
+// pushScope sets ec.vars to scope in place and returns the previous scope.
+// The caller must call restoreScope when done to avoid corrupting state.
+func (ec *evalContext) pushScope(scope *variableScope) *variableScope {
+	old := ec.vars
+	ec.vars = scope
+	return old
+}
+
+// restoreScope restores ec.vars to a previous scope saved by pushScope.
+func (ec *evalContext) restoreScope(old *variableScope) {
+	ec.vars = old
+}
+
 func (ec *evalContext) countOps(n int) error {
 	// Check context cancellation on every op count call
 	if err := ec.goCtx.Err(); err != nil {
