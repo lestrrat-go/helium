@@ -331,11 +331,14 @@ func coerceArgToInteger(seq Sequence) (int64, error) {
 	if !isSubtypeOf(a.TypeName, TypeInteger) {
 		return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("expected xs:integer, got %s", a.TypeName)}
 	}
-	n, ok := a.Value.(*big.Int)
-	if !ok {
-		return 0, fmt.Errorf("xpath3: internal error: expected *big.Int for %s", a.TypeName)
+	switch v := a.Value.(type) {
+	case int64:
+		return v, nil
+	case *big.Int:
+		return v.Int64(), nil
+	default:
+		return 0, fmt.Errorf("xpath3: internal error: expected integer value for %s, got %T", a.TypeName, a.Value)
 	}
-	return n.Int64(), nil
 }
 
 // coerceArgToDoubleRequired applies XPath 3.1 function coercion rules for xs:double params.

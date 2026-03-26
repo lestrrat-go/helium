@@ -13,14 +13,17 @@ var (
 )
 
 func checkedArrayIndex(a AtomicValue) (int, error) {
-	n, ok := a.Value.(*big.Int)
-	if !ok {
+	switch v := a.Value.(type) {
+	case int64:
+		return int(v), nil
+	case *big.Int:
+		if v.Cmp(minArrayIndex) < 0 || v.Cmp(maxArrayIndex) > 0 {
+			return 0, &XPathError{Code: errCodeFOAY0001, Message: "array index out of range"}
+		}
+		return int(v.Int64()), nil
+	default:
 		return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", a.TypeName)}
 	}
-	if n.Cmp(minArrayIndex) < 0 || n.Cmp(maxArrayIndex) > 0 {
-		return 0, &XPathError{Code: errCodeFOAY0001, Message: "array index out of range"}
-	}
-	return int(n.Int64()), nil
 }
 
 func evalLookupExpr(evalFn exprEvaluator, ec *evalContext, e LookupExpr) (Sequence, error) {

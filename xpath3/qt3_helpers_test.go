@@ -527,6 +527,8 @@ func qt3EBV(seq xpath3.Sequence) (bool, error) {
 		case *xpath3.FloatValue:
 			f := v.Float64()
 			return f != 0 && !math.IsNaN(f), nil
+		case int64:
+			return v != 0, nil
 		case *big.Int:
 			return v.Sign() != 0, nil
 		case *big.Rat:

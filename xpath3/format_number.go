@@ -82,7 +82,11 @@ func formatNumber(a AtomicValue, picture string, df icu.DecimalFormat) (string, 
 
 	var precise *big.Rat
 	if isIntegerDerived(a.TypeName) {
-		precise = new(big.Rat).SetInt(a.BigInt())
+		if v, ok := a.Value.(int64); ok {
+			precise = new(big.Rat).SetInt64(v)
+		} else {
+			precise = new(big.Rat).SetInt(a.BigInt())
+		}
 	} else if a.TypeName == TypeDecimal {
 		precise = new(big.Rat).Set(a.BigRat())
 	} else if (a.TypeName == TypeDouble || a.TypeName == TypeFloat) && !isNaN && !isPosInf && !isNegInf {

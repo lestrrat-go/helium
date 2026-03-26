@@ -168,6 +168,19 @@ func evalRangeExpr(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (Sequence
 	if err != nil {
 		return nil, err
 	}
+	// Fast path: both bounds fit in int64
+	sv, sok := saInt.Int64Val()
+	ev, eok := eaInt.Int64Val()
+	if sok && eok {
+		if sv > ev {
+			return nil, nil
+		}
+		count := ev - sv + 1
+		if count > int64(ec.maxNodes) {
+			return nil, ErrNodeSetLimit
+		}
+		return NewRangeSequence(sv, ev), nil
+	}
 	start := saInt.BigInt()
 	end := eaInt.BigInt()
 	if start.Cmp(end) > 0 {
@@ -177,10 +190,6 @@ func evalRangeExpr(evalFn exprEvaluator, ec *evalContext, e RangeExpr) (Sequence
 	count.Add(count, big.NewInt(1))
 	if !count.IsInt64() || count.Int64() > int64(ec.maxNodes) {
 		return nil, ErrNodeSetLimit
-	}
-	// Use lazy RangeSequence when both bounds fit in int64
-	if start.IsInt64() && end.IsInt64() {
-		return NewRangeSequence(start.Int64(), end.Int64()), nil
 	}
 	// Fallback for big integer ranges (rare)
 	n := count.Int64()
