@@ -45,7 +45,7 @@ func (c *compiler) compileContext() context.Context {
 	return c.ctx
 }
 
-func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compilerCfg) (*Grammar, error) {
+func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compileConfig) (*Grammar, error) {
 	var eh helium.ErrorHandler = helium.NilErrorHandler{}
 	if cfg.errorHandler != nil {
 		eh = cfg.errorHandler

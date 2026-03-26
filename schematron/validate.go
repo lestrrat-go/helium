@@ -67,7 +67,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 						valid = false
 						if cfg.errorHandler != nil {
 							msg := formatMessage(ruleCtx, t.message, node, &out)
-							cfg.errorHandler.HandleError(ValidationError{
+							cfg.errorHandler.Handle(ctx, &ValidationError{
 								Filename: filename,
 								Line:     node.Line(),
 								Element:  node.Name(),

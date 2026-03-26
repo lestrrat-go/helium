@@ -1,6 +1,7 @@
 package relaxng
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -11,8 +12,10 @@ import (
 
 // validator holds state during document validation.
 type validator struct {
+	ctx           context.Context
 	grammar       *Grammar
 	filename      string
+	errorHandler  helium.ErrorHandler
 	errors        strings.Builder
 	valid         bool
 	suppressDepth int // when > 0, errors are suppressed (inside choice branches)
@@ -21,15 +24,17 @@ type validator struct {
 
 const maxValidationDepth = 500
 
-func validateDocument(doc *helium.Document, grammar *Grammar, cfg *validatorCfg) (string, bool) {
+func validateDocument(ctx context.Context, doc *helium.Document, grammar *Grammar, cfg *validateConfig) (string, bool) {
 	if grammar == nil || grammar.start == nil {
 		return cfg.filename + " fails to validate\n", false
 	}
 
 	v := &validator{
-		grammar:  grammar,
-		filename: cfg.filename,
-		valid:    true,
+		ctx:          ctx,
+		grammar:      grammar,
+		filename:     cfg.filename,
+		errorHandler: cfg.errorHandler,
+		valid:        true,
 	}
 
 	root := findDocElement(doc)
@@ -1863,7 +1868,11 @@ func (v *validator) addError(elem *helium.Element, msg string) {
 		return
 	}
 	line := elem.Line()
-	v.errors.WriteString(validityError(v.filename, line, elem.LocalName(), msg))
+	errStr := validityError(v.filename, line, elem.LocalName(), msg)
+	v.errors.WriteString(errStr)
+	if v.errorHandler != nil {
+		v.errorHandler.Handle(v.ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
+	}
 	v.valid = false
 }
 
@@ -1873,7 +1882,11 @@ func (v *validator) addErrorOnNode(elem *helium.Element, msg string) {
 		return
 	}
 	line := elem.Line()
-	v.errors.WriteString(validityError(v.filename, line, elem.LocalName(), msg))
+	errStr := validityError(v.filename, line, elem.LocalName(), msg)
+	v.errors.WriteString(errStr)
+	if v.errorHandler != nil {
+		v.errorHandler.Handle(v.ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
+	}
 	v.valid = false
 }
 
@@ -1882,7 +1895,11 @@ func (v *validator) addBareError(msg string) {
 	if v.suppressDepth > 0 {
 		return
 	}
-	v.errors.WriteString(bareValidityError(msg))
+	errStr := bareValidityError(msg)
+	v.errors.WriteString(errStr)
+	if v.errorHandler != nil {
+		v.errorHandler.Handle(v.ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
+	}
 	v.valid = false
 }
 
