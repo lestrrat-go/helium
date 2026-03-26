@@ -13,17 +13,17 @@ import (
 
 // Compiler compiles RELAX NG documents into Grammars.
 type Compiler struct {
-	cfg *compilerCfg
+	cfg *compileConfig
 }
 
 // NewCompiler creates a new Compiler with default settings.
 func NewCompiler() Compiler {
-	return Compiler{cfg: &compilerCfg{}}
+	return Compiler{cfg: &compileConfig{}}
 }
 
 func (c Compiler) clone() Compiler {
 	if c.cfg == nil {
-		return Compiler{cfg: &compilerCfg{}}
+		return Compiler{cfg: &compileConfig{}}
 	}
 	cp := *c.cfg
 	return Compiler{cfg: &cp}
@@ -59,7 +59,7 @@ func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Grammar, 
 	}
 	cfg := c.cfg
 	if cfg == nil {
-		cfg = &compilerCfg{}
+		cfg = &compileConfig{}
 	}
 	grammar, err := compileSchema(ctx, doc, "", cfg)
 	c.closeHandler()
@@ -73,7 +73,7 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Grammar, error
 	}
 	cfg := c.cfg
 	if cfg == nil {
-		cfg = &compilerCfg{}
+		cfg = &compileConfig{}
 	}
 
 	data, err := os.ReadFile(path)
@@ -108,18 +108,18 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Grammar, error
 
 // Validator validates documents against a compiled Grammar.
 type Validator struct {
-	cfg     *validatorCfg
+	cfg     *validateConfig
 	grammar *Grammar
 }
 
 // NewValidator creates a new Validator for the given grammar.
 func NewValidator(grammar *Grammar) Validator {
-	return Validator{cfg: &validatorCfg{}, grammar: grammar}
+	return Validator{cfg: &validateConfig{}, grammar: grammar}
 }
 
 func (v Validator) clone() Validator {
 	if v.cfg == nil {
-		return Validator{cfg: &validatorCfg{}, grammar: v.grammar}
+		return Validator{cfg: &validateConfig{}, grammar: v.grammar}
 	}
 	cp := *v.cfg
 	return Validator{cfg: &cp, grammar: v.grammar}
@@ -157,7 +157,7 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 	}
 	cfg := v.cfg
 	if cfg == nil {
-		cfg = &validatorCfg{}
+		cfg = &validateConfig{}
 	}
 	output, valid := validateDocument(ctx, doc, v.grammar, cfg)
 	if valid {
