@@ -31,8 +31,8 @@ type processorCfg struct {
 	noMarkers   bool
 	noBaseFixup bool
 	resolver    Resolver
-	baseURI     string
-	warnHandler func(msg string)
+	baseURI      string
+	errorHandler helium.ErrorHandler
 }
 
 // Processor configures XInclude processing. It is a value-style wrapper:
@@ -82,11 +82,12 @@ func (p Processor) BaseURI(uri string) Processor {
 	return p
 }
 
-// WarningHandler sets a callback for non-fatal warnings such as
+// ErrorHandler sets a handler for non-fatal warnings such as
 // entity definition mismatches during XInclude entity merging.
-func (p Processor) WarningHandler(fn func(msg string)) Processor {
+// Errors delivered to the handler have ErrorLevelWarning.
+func (p Processor) ErrorHandler(h helium.ErrorHandler) Processor {
 	p = p.clone()
-	p.cfg.warnHandler = fn
+	p.cfg.errorHandler = h
 	return p
 }
 
@@ -107,9 +108,10 @@ type processor struct {
 	baseURI     string
 	expanding   map[string]bool          // circular inclusion detection (set during recursive expansion)
 	docCache    map[string]docCacheEntry // cached raw bytes for XML documents
-	txtCache    map[string]txtCacheEntry // cached text inclusions
-	warnHandler func(msg string)
-	depth       int
+	txtCache     map[string]txtCacheEntry // cached text inclusions
+	errorHandler helium.ErrorHandler
+	ctx          context.Context
+	depth        int
 	count       int
 }
 
@@ -141,9 +143,10 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		noMarkers:   cfg.noMarkers,
 		noBaseFixup: cfg.noBaseFixup,
 		resolver:    cfg.resolver,
-		baseURI:     cfg.baseURI,
-		warnHandler: cfg.warnHandler,
-		expanding:   make(map[string]bool),
+		baseURI:      cfg.baseURI,
+		errorHandler: cfg.errorHandler,
+		ctx:          ctx,
+		expanding:    make(map[string]bool),
 		docCache:    make(map[string]docCacheEntry),
 		txtCache:    make(map[string]txtCacheEntry),
 	}
@@ -499,24 +502,24 @@ func (p *processor) mergeEntities(src, dst *helium.Document) {
 				return
 			}
 			// Check for definition mismatch (first-definition-wins, warn on conflict)
-			if p.warnHandler == nil {
+			if p.errorHandler == nil {
 				return
 			}
+			mismatch := false
 			if existing.EntityType() != srcEnt.EntityType() {
-				p.warnHandler(fmt.Sprintf("xi:include: entity '%s' definition mismatch", name))
-				return
+				mismatch = true
+			} else if srcEnt.SystemID() != "" && existing.SystemID() != "" && existing.SystemID() != srcEnt.SystemID() {
+				mismatch = true
+			} else if srcEnt.ExternalID() != "" && existing.ExternalID() != "" && existing.ExternalID() != srcEnt.ExternalID() {
+				mismatch = true
+			} else if len(srcEnt.Content()) > 0 && len(existing.Content()) > 0 && string(existing.Content()) != string(srcEnt.Content()) {
+				mismatch = true
 			}
-			if srcEnt.SystemID() != "" && existing.SystemID() != "" && existing.SystemID() != srcEnt.SystemID() {
-				p.warnHandler(fmt.Sprintf("xi:include: entity '%s' definition mismatch", name))
-				return
-			}
-			if srcEnt.ExternalID() != "" && existing.ExternalID() != "" && existing.ExternalID() != srcEnt.ExternalID() {
-				p.warnHandler(fmt.Sprintf("xi:include: entity '%s' definition mismatch", name))
-				return
-			}
-			if len(srcEnt.Content()) > 0 && len(existing.Content()) > 0 && string(existing.Content()) != string(srcEnt.Content()) {
-				p.warnHandler(fmt.Sprintf("xi:include: entity '%s' definition mismatch", name))
-				return
+			if mismatch {
+				p.errorHandler.Handle(p.ctx, helium.NewLeveledError(
+					fmt.Sprintf("xi:include: entity '%s' definition mismatch", name),
+					helium.ErrorLevelWarning,
+				))
 			}
 		})
 	}
