@@ -116,6 +116,9 @@ type processor struct {
 // Process performs XInclude processing on the document.
 // Returns the number of substitutions made, or an error.
 func (proc Processor) Process(ctx context.Context, doc *helium.Document) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	count, err := proc.ProcessTree(ctx, doc)
 	if count > 0 {
 		doc.SetProperties(doc.Properties() | helium.DocXInclude)
@@ -127,6 +130,9 @@ func (proc Processor) Process(ctx context.Context, doc *helium.Document) (int, e
 // When called with a *Document, it processes the entire document.
 // Returns the number of substitutions made, or an error.
 func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	cfg := proc.cfg
 	if cfg == nil {
 		cfg = &processorCfg{}
