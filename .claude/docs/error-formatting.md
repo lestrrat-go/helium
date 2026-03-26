@@ -133,20 +133,35 @@ All validation packages share the same pattern:
 1. Errors written to `strings.Builder` (`out` or `v.errors`)
 2. Each error formatted by package-specific functions above
 3. Final status appended: `"filename validates\n"` or `"filename fails to validate\n"`
-4. Wrapped in `*ValidateError{Output: string}`
+4. Wrapped in `*ValidateError{Output: string, Errors: []ValidationError}`
 5. `ValidateError.Error()` returns the full formatted string
+6. `ValidateError.Errors` contains structured per-error details
 
 ### ValidateError (used by xsd, relaxng, schematron)
 
 ```
 type ValidateError struct {
-    Output string  // full libxml2-compatible formatted output
+    Output string             // full libxml2-compatible formatted output
+    Errors []ValidationError  // structured per-error details (xsd, relaxng)
 }
 func (e *ValidateError) Error() string { return e.Output }
 ```
 
+### ValidationError (structured per-error)
+
+- **xsd**: `ValidationError{Filename, Line, Element, Attribute, Message}`
+- **relaxng**: `ValidationError{Filename, Line, Element, Message}`
+- **schematron**: `ValidationError{Filename, Line, Element, Path, Message}` (in `options.go`)
+
+### ErrorHandler during validation
+
+All three validators call ErrorHandler during validation:
+- **xsd**: calls with `helium.NewLeveledError(errStr, helium.ErrorLevelError)` for structural/content errors
+- **relaxng**: calls with `helium.NewLeveledError(errStr, helium.ErrorLevelError)`
+- **schematron**: calls with `*ValidationError` directly
+
 ## Compilation vs Validation Errors
 
 - **Compilation errors** — reported via `ErrorHandler.Handle(ctx, err)` during `Compile()`
-- **Validation errors** — accumulated in `strings.Builder`, returned as `ValidateError`
+- **Validation errors** — accumulated in `strings.Builder` and `[]ValidationError`, reported via `ErrorHandler.Handle(ctx, err)` and returned as `ValidateError`
 - Both types partitioned in tests via `partitionCompileErrors()` (split by `ErrorLevelFatal`)
