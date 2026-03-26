@@ -19,7 +19,7 @@ func NewRangeSequence(start, end int64) Sequence {
 	}
 	n := int(end - start + 1)
 	return sequence.NewRange(n, func(i int) Item {
-		return AtomicValue{TypeName: TypeInteger, Value: big.NewInt(start + int64(i))}
+		return AtomicValue{TypeName: TypeInteger, Value: start + int64(i)}
 	})
 }
 
@@ -33,14 +33,23 @@ func SingleAtomic(v AtomicValue) Sequence {
 	return ItemSlice{v}
 }
 
+// Pre-allocated singleton sequences for common boolean values.
+var (
+	seqTrue  Sequence = ItemSlice{AtomicValue{TypeName: TypeBoolean, Value: true}}
+	seqFalse Sequence = ItemSlice{AtomicValue{TypeName: TypeBoolean, Value: false}}
+)
+
 // SingleBoolean creates a Sequence containing a single xs:boolean.
 func SingleBoolean(b bool) Sequence {
-	return ItemSlice{AtomicValue{TypeName: TypeBoolean, Value: b}}
+	if b {
+		return seqTrue
+	}
+	return seqFalse
 }
 
 // SingleInteger creates a Sequence containing a single xs:integer from int64.
 func SingleInteger(n int64) Sequence {
-	return ItemSlice{AtomicValue{TypeName: TypeInteger, Value: big.NewInt(n)}}
+	return ItemSlice{AtomicValue{TypeName: TypeInteger, Value: n}}
 }
 
 // SingleIntegerBig creates a Sequence containing a single xs:integer from *big.Int.
@@ -209,6 +218,8 @@ func ebvAtomic(v AtomicValue) (bool, error) {
 	}
 	if v.IsNumeric() {
 		switch val := v.Value.(type) {
+		case int64:
+			return val != 0, nil
 		case *big.Int:
 			return val.Sign() != 0, nil
 		case *big.Rat:

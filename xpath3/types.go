@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"maps"
 	"math"
 	"math/big"
 	"strings"
@@ -262,17 +261,37 @@ func (a AtomicValue) StringVal() string {
 
 // IntegerVal returns the backing int64 value. Panics if the value exceeds int64 range.
 func (a AtomicValue) IntegerVal() int64 {
+	if v, ok := a.Value.(int64); ok {
+		return v
+	}
 	return a.Value.(*big.Int).Int64()
 }
 
+// Int64Val returns the int64 value if it fits, or (0, false) otherwise.
+func (a AtomicValue) Int64Val() (int64, bool) {
+	switch v := a.Value.(type) {
+	case int64:
+		return v, true
+	case *big.Int:
+		if v.IsInt64() {
+			return v.Int64(), true
+		}
+		return 0, false
+	}
+	return 0, false
+}
+
 // BigInt returns the backing *big.Int value.
+// If the value is stored as int64, it promotes to *big.Int.
 // If the value is stored as a string, it attempts to parse it.
 func (a AtomicValue) BigInt() *big.Int {
-	if n, ok := a.Value.(*big.Int); ok {
-		return n
-	}
-	if s, ok := a.Value.(string); ok {
-		n, ok := new(big.Int).SetString(s, 10)
+	switch v := a.Value.(type) {
+	case *big.Int:
+		return v
+	case int64:
+		return big.NewInt(v)
+	case string:
+		n, ok := new(big.Int).SetString(v, 10)
 		if ok {
 			return n
 		}
@@ -353,7 +372,7 @@ func (a AtomicValue) IsNumeric() bool {
 	}
 	// User-defined schema types: check the underlying Go value.
 	switch a.Value.(type) {
-	case *big.Int, *big.Rat, float64, float32, *FloatValue:
+	case int64, *big.Int, *big.Rat, float64, float32, *FloatValue:
 		return true
 	}
 	return false
@@ -362,12 +381,14 @@ func (a AtomicValue) IsNumeric() bool {
 // ToFloat64 converts any numeric atomic value to float64.
 func (a AtomicValue) ToFloat64() float64 {
 	if isIntegerDerived(a.TypeName) {
-		n, ok := a.Value.(*big.Int)
-		if !ok {
-			return 0
+		switch v := a.Value.(type) {
+		case int64:
+			return float64(v)
+		case *big.Int:
+			f, _ := new(big.Float).SetInt(v).Float64()
+			return f
 		}
-		f, _ := new(big.Float).SetInt(n).Float64()
-		return f
+		return 0
 	}
 	switch a.TypeName {
 	case TypeDouble, TypeFloat:
@@ -501,6 +522,13 @@ func normalizeMapKey(key AtomicValue) mapKey {
 	// Normalize all numeric types to a common representation using exact
 	// rational arithmetic so that precision is not lost across types.
 	if key.IsNumeric() {
+		// Fast path: integer keys stored as int64 — use directly as map key
+		// to avoid big.Rat/RatString overhead. This is safe because int64
+		// has Go map equality and any numeric type that equals this integer
+		// will also be detected as an exact integer below.
+		if v, ok := key.Value.(int64); ok {
+			return mapKey{typeName: "numeric", value: v}
+		}
 		f := key.ToFloat64()
 		if math.IsNaN(f) {
 			return mapKey{typeName: "numeric", value: "NaN"}
@@ -511,17 +539,31 @@ func normalizeMapKey(key AtomicValue) mapKey {
 		if math.IsInf(f, -1) {
 			return mapKey{typeName: "numeric", value: "-Inf"}
 		}
-		// Convert to big.Rat for exact comparison across numeric types
-		var r *big.Rat
+		// For non-int64 numerics: check if the value is an exact integer
+		// that fits in int64, so it matches the int64 fast path above.
 		switch key.TypeName {
-		case TypeDecimal:
-			r = new(big.Rat).Set(key.BigRat())
 		case TypeInteger:
-			r = new(big.Rat).SetInt(key.BigInt())
+			bi := key.BigInt()
+			if bi.IsInt64() {
+				return mapKey{typeName: "numeric", value: bi.Int64()}
+			}
+			return mapKey{typeName: "numeric", value: new(big.Rat).SetInt(bi).RatString()}
+		case TypeDecimal:
+			r := key.BigRat()
+			if r.IsInt() {
+				num := r.Num()
+				if num.IsInt64() {
+					return mapKey{typeName: "numeric", value: num.Int64()}
+				}
+			}
+			return mapKey{typeName: "numeric", value: new(big.Rat).Set(r).RatString()}
 		default: // float, double
-			r = new(big.Rat).SetFloat64(f)
+			// Check if float is an exact integer in int64 range
+			if f == math.Trunc(f) && !math.IsInf(f, 0) && f >= math.MinInt64 && f <= math.MaxInt64 {
+				return mapKey{typeName: "numeric", value: int64(f)}
+			}
+			return mapKey{typeName: "numeric", value: new(big.Rat).SetFloat64(f).RatString()}
 		}
-		return mapKey{typeName: "numeric", value: r.RatString()}
 	}
 
 	// Normalize duration types: xs:duration, xs:yearMonthDuration, xs:dayTimeDuration
@@ -548,8 +590,23 @@ func normalizeMapKey(key AtomicValue) mapKey {
 	}
 }
 
+// newSingleEntryMap creates a MapItem with exactly one entry without cloning the value.
+// Used by map:entry where the value is already owned by the caller.
+func newSingleEntryMap(key AtomicValue, value Sequence) MapItem {
+	return MapItem{
+		entries: []mapEntry{{key: key, value: value}},
+	}
+}
+
 // NewMap creates a MapItem from a slice of MapEntry.
 func NewMap(entries []MapEntry) MapItem {
+	// Fast path for single-entry maps (e.g., map:entry results):
+	// skip the index map allocation entirely.
+	if len(entries) == 1 {
+		return MapItem{
+			entries: []mapEntry{{key: entries[0].Key, value: cloneSequence(entries[0].Value)}},
+		}
+	}
 	m := MapItem{
 		entries: make([]mapEntry, len(entries)),
 		index:   make(map[mapKey]int, len(entries)),
@@ -563,6 +620,13 @@ func NewMap(entries []MapEntry) MapItem {
 
 // Get returns the value associated with key, or (nil, false) if not found.
 func (m MapItem) Get(key AtomicValue) (Sequence, bool) {
+	if m.index == nil {
+		// Single-entry fast path: compare directly
+		if len(m.entries) == 1 && normalizeMapKey(m.entries[0].key) == normalizeMapKey(key) {
+			return cloneSequence(m.entries[0].value), true
+		}
+		return nil, false
+	}
 	idx, ok := m.index[normalizeMapKey(key)]
 	if !ok {
 		return nil, false
@@ -575,8 +639,11 @@ func (m MapItem) Put(key AtomicValue, value Sequence) MapItem {
 	nk := normalizeMapKey(key)
 	newEntries := make([]mapEntry, len(m.entries))
 	copy(newEntries, m.entries)
-	newIndex := make(map[mapKey]int, len(m.index)+1)
-	maps.Copy(newIndex, m.index)
+	newIndex := make(map[mapKey]int, len(m.entries)+1)
+	// Rebuild index from entries when it was nil (single-entry maps)
+	for i, e := range newEntries {
+		newIndex[normalizeMapKey(e.key)] = i
+	}
 
 	if idx, ok := newIndex[nk]; ok {
 		newEntries[idx] = mapEntry{key: key, value: cloneSequence(value)}
@@ -589,6 +656,9 @@ func (m MapItem) Put(key AtomicValue, value Sequence) MapItem {
 
 // Contains returns true if the map contains the given key.
 func (m MapItem) Contains(key AtomicValue) bool {
+	if m.index == nil {
+		return len(m.entries) == 1 && normalizeMapKey(m.entries[0].key) == normalizeMapKey(key)
+	}
 	_, ok := m.index[normalizeMapKey(key)]
 	return ok
 }
@@ -620,6 +690,13 @@ func (m MapItem) ForEach(fn func(AtomicValue, Sequence) error) error {
 // Remove returns a new map with the given key removed.
 func (m MapItem) Remove(key AtomicValue) MapItem {
 	nk := normalizeMapKey(key)
+	// Handle single-entry maps without index
+	if m.index == nil {
+		if len(m.entries) == 1 && normalizeMapKey(m.entries[0].key) == nk {
+			return MapItem{}
+		}
+		return m
+	}
 	idx, ok := m.index[nk]
 	if !ok {
 		return m
