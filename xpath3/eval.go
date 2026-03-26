@@ -218,12 +218,6 @@ func (ec *evalContext) withVar(name string, val Sequence) *evalContext {
 	return &cp
 }
 
-func (ec *evalContext) withScope(scope *variableScope) *evalContext {
-	cp := *ec
-	cp.vars = scope
-	return &cp
-}
-
 // fnContext returns a context.Context carrying this evalContext for built-in
 // function calls. The result is cached and reused as long as ec.goCtx has not
 // changed, avoiding a context.WithValue allocation per function call.
