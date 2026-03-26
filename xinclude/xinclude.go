@@ -703,36 +703,12 @@ func (p *processor) replaceWithNodes(target *helium.Element, nodes []helium.Node
 	spliceReplace(target, nodes)
 }
 
-// spliceReplace replaces target node with the given slice of nodes.
-// Uses target.Replace() for the first node (which handles firstChild/lastChild
-// updates via the exported API), then chains remaining nodes as siblings.
 func spliceReplace(target helium.MutableNode, nodes []helium.Node) {
 	if len(nodes) == 0 {
 		helium.UnlinkNode(target)
 		return
 	}
-
-	afterTarget := target.NextSibling()
-
-	// Replace target with the first node (handles parent firstChild/lastChild)
-	_ = target.Replace(nodes[0])
-
-	// Chain remaining nodes after the first
-	prev := nodes[0].(helium.MutableNode)
-	for i := 1; i < len(nodes); i++ {
-		cur := nodes[i].(helium.MutableNode)
-		cur.SetParent(prev.Parent())
-		cur.SetPrevSibling(prev)
-		prev.SetNextSibling(cur)
-		prev = cur
-	}
-
-	// Link last node to whatever followed target
-	last := nodes[len(nodes)-1].(helium.MutableNode)
-	last.SetNextSibling(afterTarget)
-	if afterTarget != nil {
-		afterTarget.(helium.MutableNode).SetPrevSibling(last)
-	}
+	_ = target.Replace(nodes...)
 }
 
 func isXINamespace(ns string) bool {

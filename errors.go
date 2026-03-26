@@ -32,10 +32,6 @@ var (
 	errParserStopped      = errors.New("parser stopped")
 )
 
-type ErrUnimplemented struct {
-	target string
-}
-
 type ErrDTDDupToken struct {
 	Name string
 }
@@ -174,10 +170,6 @@ func (e ErrParseError) FormatError() string {
 	}
 
 	return b.String()
-}
-
-func (e ErrUnimplemented) Error() string {
-	return "unimplemented method: '" + e.target + "'"
 }
 
 func (e ErrDTDDupToken) Error() string {

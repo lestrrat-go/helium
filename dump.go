@@ -984,8 +984,8 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		return nil
 	case TextNode:
 		c := n.Content()
-		if n.Name() == XMLTextNoEnc {
-			// XMLTextNoEnc is a libxml2 marker (set on the node's name, not
+		if n.Name() == xmlTextNoEnc {
+			// xmlTextNoEnc is a libxml2 marker (set on the node's name, not
 			// its content) indicating the text should be emitted without
 			// XML-escaping.  This is used during entity expansion
 			// serialization where the replacement text is already encoded.

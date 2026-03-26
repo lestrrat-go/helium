@@ -816,33 +816,7 @@ func spliceReplace(target helium.MutableNode, nodes []helium.Node) {
 		helium.UnlinkNode(target)
 		return
 	}
-
-	afterTarget := target.NextSibling()
-	_ = target.Replace(nodes[0])
-
-	prev := nodes[0].(helium.MutableNode)
-	for i := 1; i < len(nodes); i++ {
-		cur := nodes[i].(helium.MutableNode)
-		cur.SetParent(prev.Parent())
-		cur.SetPrevSibling(prev)
-		prev.SetNextSibling(cur)
-		prev = cur
-	}
-
-	last := nodes[len(nodes)-1].(helium.MutableNode)
-	last.SetNextSibling(afterTarget)
-	if afterTarget != nil {
-		afterTarget.(helium.MutableNode).SetPrevSibling(last)
-	}
-	// Update parent's LastChild if the target was the last child.
-	// Replace only updates LastChild for nodes[0]; when additional
-	// nodes were spliced after it, the parent's LastChild must point
-	// to the true last node.
-	if afterTarget == nil && len(nodes) > 1 {
-		if parent, ok := last.Parent().(helium.MutableNode); ok && parent != nil {
-			helium.SetLastChild(parent, last)
-		}
-	}
+	_ = target.Replace(nodes...)
 }
 
 // collectPackageNamespaces recursively collects all namespace bindings from

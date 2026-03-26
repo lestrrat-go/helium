@@ -8,7 +8,7 @@ const (
 	XMLNamespace = lexicon.NamespaceXML
 	XMLNsPrefix  = lexicon.PrefixXMLNS
 	XMLPrefix    = lexicon.PrefixXML
-	XMLTextNoEnc = "textnoenc"
+	xmlTextNoEnc = "textnoenc"
 )
 
 // ClarkName returns the Clark notation "{uri}local" for a namespace URI and

@@ -32,8 +32,8 @@ func (p *ProcessingInstruction) AddSibling(cur Node) error {
 	return addSibling(p, cur)
 }
 
-func (p *ProcessingInstruction) Replace(cur Node) error {
-	return replaceNode(p, cur)
+func (p *ProcessingInstruction) Replace(nodes ...Node) error {
+	return replaceNode(p, nodes...)
 }
 
 func (p *ProcessingInstruction) SetTreeDoc(doc *Document) {
