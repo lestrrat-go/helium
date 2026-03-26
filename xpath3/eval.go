@@ -56,6 +56,10 @@ type evalContext struct {
 	schemaDeclarations SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
 	allowXML11Chars    bool                   // when true, codepoints-to-string allows XML 1.1 restricted characters (0x01-0x1F)
 	traceWriter        io.Writer              // destination for fn:trace output (nil = os.Stderr)
+
+	// Cached function-call context to avoid context.WithValue per call.
+	cachedFnCtx    context.Context
+	cachedFnCtxFor context.Context // the goCtx it was built from
 }
 
 type variableScope struct {
@@ -218,6 +222,18 @@ func (ec *evalContext) withScope(scope *variableScope) *evalContext {
 	cp := *ec
 	cp.vars = scope
 	return &cp
+}
+
+// fnContext returns a context.Context carrying this evalContext for built-in
+// function calls. The result is cached and reused as long as ec.goCtx has not
+// changed, avoiding a context.WithValue allocation per function call.
+func (ec *evalContext) fnContext() context.Context {
+	if ec.cachedFnCtx != nil && ec.cachedFnCtxFor == ec.goCtx {
+		return ec.cachedFnCtx
+	}
+	ec.cachedFnCtx = context.WithValue(ec.goCtx, fnContextKey{}, ec)
+	ec.cachedFnCtxFor = ec.goCtx
+	return ec.cachedFnCtx
 }
 
 // pushScope sets ec.vars to scope in place and returns the previous scope.
