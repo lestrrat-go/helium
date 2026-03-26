@@ -289,9 +289,13 @@ func (ec *execContext) matchAtomicPattern(p *pattern, item xpath3.Item) bool {
 		if _, isVar := alt.expr.(xpath3.VariableExpr); isVar {
 			continue
 		}
-		compiled, compErr := xpath3.NewCompiler().CompileExpr(alt.expr)
-		if compErr != nil {
-			continue
+		compiled := alt.compiled
+		if compiled == nil {
+			var compErr error
+			compiled, compErr = xpath3.NewCompiler().CompileExpr(alt.expr)
+			if compErr != nil {
+				continue
+			}
 		}
 		// Evaluate the pattern as a boolean predicate with the item as context
 		result, err := ec.xpathEvaluator().ContextItem(item).Evaluate(ec.xpathContext(), compiled, nil)
