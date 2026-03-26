@@ -6,6 +6,7 @@ import (
 
 type compileConfig struct {
 	filename     string
+	baseDir      string
 	errorHandler helium.ErrorHandler
 }
 
