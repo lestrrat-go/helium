@@ -86,10 +86,7 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *performSortIns
 	idx := 0
 	for item := range sequence.Items(seq) {
 		if idx > 0 {
-			sep, err := ec.resultDoc.CreateText([]byte(" "))
-			if err != nil {
-				return err
-			}
+			sep := ec.resultDoc.CreateText([]byte(" "))
 			if err := ec.addNode(sep); err != nil {
 				return err
 			}
@@ -102,10 +99,7 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *performSortIns
 		if err != nil {
 			continue
 		}
-		text, err := ec.resultDoc.CreateText([]byte(s))
-		if err != nil {
-			return err
-		}
+		text := ec.resultDoc.CreateText([]byte(s))
 		if err := ec.addNode(text); err != nil {
 			return err
 		}

@@ -9,15 +9,13 @@ import (
 
 func mustCreateElement(t *testing.T, doc *helium.Document, name string) *helium.Element {
 	t.Helper()
-	e, err := doc.CreateElement(name)
-	require.NoError(t, err)
+	e := doc.CreateElement(name)
 	return e
 }
 
 func mustCreateText(t *testing.T, doc *helium.Document, text []byte) *helium.Text {
 	t.Helper()
-	n, err := doc.CreateText(text)
-	require.NoError(t, err)
+	n := doc.CreateText(text)
 	return n
 }
 
@@ -84,9 +82,8 @@ func TestElementContent(t *testing.T) {
 
 func TestGetAttribute(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	e, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	_, err = e.SetAttribute("id", "123")
+	e := doc.CreateElement("root")
+	_, err := e.SetAttribute("id", "123")
 	require.NoError(t, err)
 	_, err = e.SetAttribute("class", "main")
 	require.NoError(t, err)
@@ -105,9 +102,8 @@ func TestGetAttribute(t *testing.T) {
 
 func TestHasAttribute(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	e, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	_, err = e.SetAttribute("id", "123")
+	e := doc.CreateElement("root")
+	_, err := e.SetAttribute("id", "123")
 	require.NoError(t, err)
 
 	require.True(t, e.HasAttribute("id"))
@@ -116,11 +112,10 @@ func TestHasAttribute(t *testing.T) {
 
 func TestGetAttributeNS(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	e, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	e := doc.CreateElement("root")
 
 	ns := helium.NewNamespace("x", "http://example.com")
-	_, err = e.SetAttributeNS("attr", "val", ns)
+	_, err := e.SetAttributeNS("attr", "val", ns)
 	require.NoError(t, err)
 
 	val, ok := e.GetAttributeNS("attr", "http://example.com")
@@ -136,9 +131,8 @@ func TestGetAttributeNS(t *testing.T) {
 
 func TestFindAttribute(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	e, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	_, err = e.SetAttribute("id", "123")
+	e := doc.CreateElement("root")
+	_, err := e.SetAttribute("id", "123")
 	require.NoError(t, err)
 
 	ns := helium.NewNamespace("x", "http://example.com")
@@ -168,9 +162,8 @@ func TestFindAttribute(t *testing.T) {
 
 func TestFindAttributeNil(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	e, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	_, err = e.SetAttribute("id", "123")
+	e := doc.CreateElement("root")
+	_, err := e.SetAttribute("id", "123")
 	require.NoError(t, err)
 
 	var pred helium.AttributePredicate
@@ -181,11 +174,10 @@ func TestFindAttributeNil(t *testing.T) {
 
 func TestGetAttributeNodeNS(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	e, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	e := doc.CreateElement("root")
 
 	ns := helium.NewNamespace("x", "http://example.com")
-	_, err = e.SetAttributeNS("attr", "val", ns)
+	_, err := e.SetAttributeNS("attr", "val", ns)
 	require.NoError(t, err)
 
 	attr := e.GetAttributeNodeNS("attr", "http://example.com")
@@ -203,9 +195,8 @@ func TestGetAttributeNodeNS(t *testing.T) {
 
 func TestRemoveAttribute(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	e, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	_, err = e.SetAttribute("a", "1")
+	e := doc.CreateElement("root")
+	_, err := e.SetAttribute("a", "1")
 	require.NoError(t, err)
 	_, err = e.SetAttribute("b", "2")
 	require.NoError(t, err)
@@ -237,11 +228,10 @@ func TestRemoveAttribute(t *testing.T) {
 
 func TestRemoveAttributeNS(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	e, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	e := doc.CreateElement("root")
 
 	ns := helium.NewNamespace("x", "http://example.com")
-	_, err = e.SetAttributeNS("attr", "val", ns)
+	_, err := e.SetAttributeNS("attr", "val", ns)
 	require.NoError(t, err)
 
 	ok := e.RemoveAttributeNS("attr", "http://example.com")
@@ -254,10 +244,9 @@ func TestRemoveAttributeNS(t *testing.T) {
 
 func TestForEachAttribute(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	e, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	e := doc.CreateElement("root")
 
-	_, err = e.SetAttribute("a", "1")
+	_, err := e.SetAttribute("a", "1")
 	require.NoError(t, err)
 	_, err = e.SetAttribute("b", "2")
 	require.NoError(t, err)

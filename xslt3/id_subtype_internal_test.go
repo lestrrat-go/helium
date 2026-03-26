@@ -22,8 +22,7 @@ func TestAnnotateAttrRegistersIDSubtype(t *testing.T) {
 	require.NoError(t, err)
 
 	doc := helium.NewDefaultDocument()
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
 	_, err = root.SetAttribute("id", "alpha")
 	require.NoError(t, err)

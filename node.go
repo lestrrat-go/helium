@@ -178,7 +178,7 @@ func appendText(n Node, b []byte) error {
 	}
 	// Use slab allocator when the node belongs to a document.
 	if doc := n.OwnerDocument(); doc != nil {
-		t, _ := doc.CreateText(b)
+		t := doc.CreateText(b)
 		return n.AddChild(t)
 	}
 	t := newText(b)

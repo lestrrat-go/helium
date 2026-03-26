@@ -11,8 +11,7 @@ import (
 func TestDocumentElement(t *testing.T) {
 	t.Run("with element", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		e, err := doc.CreateElement("root")
-		require.NoError(t, err)
+		e := doc.CreateElement("root")
 		require.NoError(t, doc.AddChild(e))
 
 		got := doc.DocumentElement()
@@ -27,12 +26,10 @@ func TestDocumentElement(t *testing.T) {
 
 	t.Run("PI before element", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		pi, err := doc.CreatePI("target", "data")
-		require.NoError(t, err)
+		pi := doc.CreatePI("target", "data")
 		require.NoError(t, doc.AddChild(pi))
 
-		e, err := doc.CreateElement("root")
-		require.NoError(t, err)
+		e := doc.CreateElement("root")
 		require.NoError(t, doc.AddChild(e))
 
 		got := doc.DocumentElement()
@@ -43,14 +40,10 @@ func TestDocumentElement(t *testing.T) {
 func TestUnlinkNode(t *testing.T) {
 	t.Run("unlink middle child", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		parent, err := doc.CreateElement("parent")
-		require.NoError(t, err)
-		a, err := doc.CreateElement("a")
-		require.NoError(t, err)
-		b, err := doc.CreateElement("b")
-		require.NoError(t, err)
-		c, err := doc.CreateElement("c")
-		require.NoError(t, err)
+		parent := doc.CreateElement("parent")
+		a := doc.CreateElement("a")
+		b := doc.CreateElement("b")
+		c := doc.CreateElement("c")
 		require.NoError(t, parent.AddChild(a))
 		require.NoError(t, parent.AddChild(b))
 		require.NoError(t, parent.AddChild(c))
@@ -66,12 +59,9 @@ func TestUnlinkNode(t *testing.T) {
 
 	t.Run("unlink first child", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		parent, err := doc.CreateElement("parent")
-		require.NoError(t, err)
-		a, err := doc.CreateElement("a")
-		require.NoError(t, err)
-		b, err := doc.CreateElement("b")
-		require.NoError(t, err)
+		parent := doc.CreateElement("parent")
+		a := doc.CreateElement("a")
+		b := doc.CreateElement("b")
 		require.NoError(t, parent.AddChild(a))
 		require.NoError(t, parent.AddChild(b))
 
@@ -84,12 +74,9 @@ func TestUnlinkNode(t *testing.T) {
 
 	t.Run("unlink last child", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		parent, err := doc.CreateElement("parent")
-		require.NoError(t, err)
-		a, err := doc.CreateElement("a")
-		require.NoError(t, err)
-		b, err := doc.CreateElement("b")
-		require.NoError(t, err)
+		parent := doc.CreateElement("parent")
+		a := doc.CreateElement("a")
+		b := doc.CreateElement("b")
 		require.NoError(t, parent.AddChild(a))
 		require.NoError(t, parent.AddChild(b))
 
@@ -102,10 +89,8 @@ func TestUnlinkNode(t *testing.T) {
 
 	t.Run("unlink only child", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		parent, err := doc.CreateElement("parent")
-		require.NoError(t, err)
-		a, err := doc.CreateElement("a")
-		require.NoError(t, err)
+		parent := doc.CreateElement("parent")
+		a := doc.CreateElement("a")
 		require.NoError(t, parent.AddChild(a))
 
 		helium.UnlinkNode(a)
@@ -123,8 +108,7 @@ func TestUnlinkNode(t *testing.T) {
 func TestLookupNSByHref(t *testing.T) {
 	t.Run("found on element", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		e, err := doc.CreateElement("root")
-		require.NoError(t, err)
+		e := doc.CreateElement("root")
 		require.NoError(t, e.DeclareNamespace("x", "http://example.com"))
 
 		ns := helium.LookupNSByHref(e, "http://example.com")
@@ -134,12 +118,10 @@ func TestLookupNSByHref(t *testing.T) {
 
 	t.Run("found on ancestor", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		parent, err := doc.CreateElement("parent")
-		require.NoError(t, err)
+		parent := doc.CreateElement("parent")
 		require.NoError(t, parent.DeclareNamespace("x", "http://example.com"))
 
-		child, err := doc.CreateElement("child")
-		require.NoError(t, err)
+		child := doc.CreateElement("child")
 		require.NoError(t, parent.AddChild(child))
 
 		ns := helium.LookupNSByHref(child, "http://example.com")
@@ -149,8 +131,7 @@ func TestLookupNSByHref(t *testing.T) {
 
 	t.Run("xml namespace", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		e, err := doc.CreateElement("root")
-		require.NoError(t, err)
+		e := doc.CreateElement("root")
 
 		ns := helium.LookupNSByHref(e, helium.XMLNamespace)
 		require.NotNil(t, ns)
@@ -159,8 +140,7 @@ func TestLookupNSByHref(t *testing.T) {
 
 	t.Run("not found", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		e, err := doc.CreateElement("root")
-		require.NoError(t, err)
+		e := doc.CreateElement("root")
 
 		ns := helium.LookupNSByHref(e, "http://not.found.com")
 		require.Nil(t, ns)
@@ -169,8 +149,7 @@ func TestLookupNSByHref(t *testing.T) {
 
 func TestLookupNSByPrefix(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	e, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	e := doc.CreateElement("root")
 	require.NoError(t, e.DeclareNamespace("x", "http://example.com"))
 
 	ns := helium.LookupNSByPrefix(e, "x")
@@ -188,8 +167,7 @@ func TestLookupNSByPrefix(t *testing.T) {
 func TestNodeGetBase(t *testing.T) {
 	t.Run("no base", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		e, err := doc.CreateElement("root")
-		require.NoError(t, err)
+		e := doc.CreateElement("root")
 		require.NoError(t, doc.AddChild(e))
 
 		base := helium.NodeGetBase(doc, e)
@@ -198,12 +176,11 @@ func TestNodeGetBase(t *testing.T) {
 
 	t.Run("direct xml:base", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		e, err := doc.CreateElement("root")
-		require.NoError(t, err)
+		e := doc.CreateElement("root")
 		require.NoError(t, doc.AddChild(e))
 
 		xmlNS := helium.NewNamespace("xml", helium.XMLNamespace)
-		_, err = e.SetAttributeNS("base", "http://example.com/", xmlNS)
+		_, err := e.SetAttributeNS("base", "http://example.com/", xmlNS)
 		require.NoError(t, err)
 
 		base := helium.NodeGetBase(doc, e)
@@ -212,16 +189,14 @@ func TestNodeGetBase(t *testing.T) {
 
 	t.Run("inherited xml:base", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		parent, err := doc.CreateElement("parent")
-		require.NoError(t, err)
+		parent := doc.CreateElement("parent")
 		require.NoError(t, doc.AddChild(parent))
 
 		xmlNS := helium.NewNamespace("xml", helium.XMLNamespace)
-		_, err = parent.SetAttributeNS("base", "http://example.com/dir/", xmlNS)
+		_, err := parent.SetAttributeNS("base", "http://example.com/dir/", xmlNS)
 		require.NoError(t, err)
 
-		child, err := doc.CreateElement("child")
-		require.NoError(t, err)
+		child := doc.CreateElement("child")
 		require.NoError(t, parent.AddChild(child))
 
 		base := helium.NodeGetBase(doc, child)
@@ -230,16 +205,14 @@ func TestNodeGetBase(t *testing.T) {
 
 	t.Run("relative resolution", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		parent, err := doc.CreateElement("parent")
-		require.NoError(t, err)
+		parent := doc.CreateElement("parent")
 		require.NoError(t, doc.AddChild(parent))
 
 		xmlNS := helium.NewNamespace("xml", helium.XMLNamespace)
-		_, err = parent.SetAttributeNS("base", "http://example.com/a/b/", xmlNS)
+		_, err := parent.SetAttributeNS("base", "http://example.com/a/b/", xmlNS)
 		require.NoError(t, err)
 
-		child, err := doc.CreateElement("child")
-		require.NoError(t, err)
+		child := doc.CreateElement("child")
 		require.NoError(t, parent.AddChild(child))
 		_, err = child.SetAttributeNS("base", "c/d/", xmlNS)
 		require.NoError(t, err)
@@ -262,8 +235,7 @@ func TestDocumentURL(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		doc.SetURL("http://example.com/dir/doc.xml")
 
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
+		root := doc.CreateElement("root")
 		require.NoError(t, doc.AddChild(root))
 
 		base := helium.NodeGetBase(doc, root)
@@ -274,12 +246,11 @@ func TestDocumentURL(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		doc.SetURL("http://example.com/dir/doc.xml")
 
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
+		root := doc.CreateElement("root")
 		require.NoError(t, doc.AddChild(root))
 
 		xmlNS := helium.NewNamespace("xml", helium.XMLNamespace)
-		_, err = root.SetAttributeNS("base", "sub/", xmlNS)
+		_, err := root.SetAttributeNS("base", "sub/", xmlNS)
 		require.NoError(t, err)
 
 		base := helium.NodeGetBase(doc, root)
@@ -298,14 +269,12 @@ func TestDocumentURL(t *testing.T) {
 func TestCopyNode(t *testing.T) {
 	t.Run("element with children and attrs", func(t *testing.T) {
 		src := helium.NewDefaultDocument()
-		root, err := src.CreateElement("root")
-		require.NoError(t, err)
-		_, err = root.SetAttribute("id", "1")
+		root := src.CreateElement("root")
+		_, err := root.SetAttribute("id", "1")
 		require.NoError(t, err)
 		require.NoError(t, src.AddChild(root))
 
-		child, err := src.CreateElement("child")
-		require.NoError(t, err)
+		child := src.CreateElement("child")
 		require.NoError(t, root.AddChild(child))
 		require.NoError(t, child.AppendText([]byte("hello")))
 
@@ -325,8 +294,7 @@ func TestCopyNode(t *testing.T) {
 
 	t.Run("text node", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		txt, err := doc.CreateText([]byte("hello"))
-		require.NoError(t, err)
+		txt := doc.CreateText([]byte("hello"))
 
 		dst := helium.NewDefaultDocument()
 		copied, err := helium.CopyNode(txt, dst)
@@ -337,8 +305,7 @@ func TestCopyNode(t *testing.T) {
 
 	t.Run("comment node", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		c, err := doc.CreateComment([]byte("a comment"))
-		require.NoError(t, err)
+		c := doc.CreateComment([]byte("a comment"))
 
 		dst := helium.NewDefaultDocument()
 		copied, err := helium.CopyNode(c, dst)
@@ -349,8 +316,7 @@ func TestCopyNode(t *testing.T) {
 
 	t.Run("CDATA node", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		cd, err := doc.CreateCDATASection([]byte("cdata content"))
-		require.NoError(t, err)
+		cd := doc.CreateCDATASection([]byte("cdata content"))
 
 		dst := helium.NewDefaultDocument()
 		copied, err := helium.CopyNode(cd, dst)
@@ -361,8 +327,7 @@ func TestCopyNode(t *testing.T) {
 
 	t.Run("PI node", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		pi, err := doc.CreatePI("target", "data")
-		require.NoError(t, err)
+		pi := doc.CreatePI("target", "data")
 
 		dst := helium.NewDefaultDocument()
 		copied, err := helium.CopyNode(pi, dst)
@@ -372,8 +337,7 @@ func TestCopyNode(t *testing.T) {
 
 	t.Run("element with namespaces", func(t *testing.T) {
 		src := helium.NewDefaultDocument()
-		root, err := src.CreateElement("root")
-		require.NoError(t, err)
+		root := src.CreateElement("root")
 		require.NoError(t, root.DeclareNamespace("x", "http://example.com"))
 		require.NoError(t, root.SetActiveNamespace("x", "http://example.com"))
 		require.NoError(t, src.AddChild(root))
@@ -411,8 +375,7 @@ func TestCopyNode(t *testing.T) {
 func TestCopyDoc(t *testing.T) {
 	t.Run("document with children", func(t *testing.T) {
 		src := helium.NewDefaultDocument()
-		root, err := src.CreateElement("root")
-		require.NoError(t, err)
+		root := src.CreateElement("root")
 		require.NoError(t, src.AddChild(root))
 		require.NoError(t, root.AppendText([]byte("hello")))
 
@@ -432,8 +395,7 @@ func TestCopyDoc(t *testing.T) {
 		_, err := src.CreateInternalSubset("root", "", "root.dtd")
 		require.NoError(t, err)
 
-		root, err := src.CreateElement("root")
-		require.NoError(t, err)
+		root := src.CreateElement("root")
 		require.NoError(t, src.AddChild(root))
 
 		dst, err := helium.CopyDoc(src)
@@ -452,8 +414,7 @@ func TestCopyDoc(t *testing.T) {
 		_, err = dtd.AddEntity("baz", enum.InternalGeneralEntity, "", "", "qux")
 		require.NoError(t, err)
 
-		root, err := src.CreateElement("root")
-		require.NoError(t, err)
+		root := src.CreateElement("root")
 		require.NoError(t, src.AddChild(root))
 
 		dst, err := helium.CopyDoc(src)
@@ -538,8 +499,7 @@ func TestCopyDoc(t *testing.T) {
 		_, err = dtd.AddNotation("gif", "image/gif", "")
 		require.NoError(t, err)
 
-		root, err := src.CreateElement("root")
-		require.NoError(t, err)
+		root := src.CreateElement("root")
 		require.NoError(t, src.AddChild(root))
 
 		dst, err := helium.CopyDoc(src)
@@ -561,8 +521,7 @@ func TestCopyDoc(t *testing.T) {
 		_, err = dtd.AddEntity("pe", enum.InternalParameterEntity, "", "", "param-content")
 		require.NoError(t, err)
 
-		root, err := src.CreateElement("root")
-		require.NoError(t, err)
+		root := src.CreateElement("root")
 		require.NoError(t, src.AddChild(root))
 
 		dst, err := helium.CopyDoc(src)

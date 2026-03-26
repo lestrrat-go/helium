@@ -63,14 +63,12 @@ func TestGetElementByID(t *testing.T) {
 		// Documents built without parsing have no ID table,
 		// so GetElementByID falls back to O(n) tree walk.
 		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
+		root := doc.CreateElement("root")
 		require.NoError(t, doc.AddChild(root))
 
-		child, err := doc.CreateElement("child")
-		require.NoError(t, err)
+		child := doc.CreateElement("child")
 		ns := helium.NewNamespace("xml", helium.XMLNamespace)
-		_, err = child.SetAttributeNS("id", "myid", ns)
+		_, err := child.SetAttributeNS("id", "myid", ns)
 		require.NoError(t, err)
 		require.NoError(t, root.AddChild(child))
 

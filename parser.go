@@ -606,10 +606,7 @@ found:
 	}
 
 	// Create pseudoroot element, push to node stack.
-	newRoot, err := doc.CreateElement("pseudoroot")
-	if err != nil {
-		return nil, err
-	}
+	newRoot := doc.CreateElement("pseudoroot")
 	newctx.pushNodeEntry(nodeEntry{local: "pseudoroot", qname: "pseudoroot"})
 	newctx.elem = newRoot
 	if err := doc.AddChild(newRoot); err != nil {

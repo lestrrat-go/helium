@@ -20,13 +20,13 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 	case ElementNode:
 		return copyElement(src.(*Element), targetDoc)
 	case TextNode:
-		return targetDoc.CreateText(slices.Clone(src.Content()))
+		return targetDoc.CreateText(slices.Clone(src.Content())), nil
 	case CommentNode:
-		return targetDoc.CreateComment(slices.Clone(src.Content()))
+		return targetDoc.CreateComment(slices.Clone(src.Content())), nil
 	case CDATASectionNode:
-		return targetDoc.CreateCDATASection(slices.Clone(src.Content()))
+		return targetDoc.CreateCDATASection(slices.Clone(src.Content())), nil
 	case ProcessingInstructionNode:
-		return targetDoc.CreatePI(src.Name(), string(src.Content()))
+		return targetDoc.CreatePI(src.Name(), string(src.Content())), nil
 	case EntityRefNode:
 		return targetDoc.CreateCharRef(src.Name())
 	case NamespaceNode:
@@ -39,10 +39,7 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 }
 
 func copyElement(src *Element, doc *Document) (*Element, error) {
-	elem, err := doc.CreateElement(src.LocalName())
-	if err != nil {
-		return nil, err
-	}
+	elem := doc.CreateElement(src.LocalName())
 
 	// Track which namespace prefixes have been declared on this element
 	declaredPrefixes := make(map[string]bool)
@@ -186,10 +183,10 @@ func copyDTD(src *DTD, dst *Document) error {
 			dstDTD.notations[nota.name] = cp
 			_ = dstDTD.AddChild(cp)
 		case CommentNode:
-			cm, _ := dst.CreateComment(slices.Clone(c.Content()))
+			cm := dst.CreateComment(slices.Clone(c.Content()))
 			_ = dstDTD.AddChild(cm)
 		case ProcessingInstructionNode:
-			pi, _ := dst.CreatePI(c.Name(), string(c.Content()))
+			pi := dst.CreatePI(c.Name(), string(c.Content()))
 			_ = dstDTD.AddChild(pi)
 		}
 	}

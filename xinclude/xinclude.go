@@ -599,10 +599,7 @@ func (p *processor) includeText(inc *helium.Element, uri string) error {
 	}
 
 	doc := inc.OwnerDocument()
-	text, err := doc.CreateText(data)
-	if err != nil {
-		return fmt.Errorf("xi:include: error creating text node: %w", err)
-	}
+	text := doc.CreateText(data)
 
 	p.replaceWithNodes(inc, []helium.Node{text})
 	p.count++

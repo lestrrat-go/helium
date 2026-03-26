@@ -624,10 +624,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 			// (comments, attributes, PIs) per XSLT 3.0 §20.1.
 			emitDOE := isDOE && ec.temporaryOutputDepth == 0 && !out.captureItems && !out.sequenceMode
 			if emitDOE {
-				pi, piErr := ec.resultDoc.CreatePI("disable-output-escaping", "")
-				if piErr != nil {
-					return piErr
-				}
+				pi := ec.resultDoc.CreatePI("disable-output-escaping", "")
 				if err := ec.addNode(pi); err != nil {
 					return err
 				}
@@ -667,10 +664,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 				return err
 			}
 			if emitDOE {
-				piEnd, piErr := ec.resultDoc.CreatePI("enable-output-escaping", "")
-				if piErr != nil {
-					return piErr
-				}
+				piEnd := ec.resultDoc.CreatePI("enable-output-escaping", "")
 				if err := ec.addNode(piEnd); err != nil {
 					return err
 				}
@@ -687,18 +681,12 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 				// Insert space separator between consecutive atomic values
 				// (XSLT 3.0 §11.3: adjacent atomic values are separated by spaces)
 				if out.prevWasAtomic {
-					sep, tErr := ec.resultDoc.CreateText([]byte(" "))
-					if tErr != nil {
-						return tErr
-					}
+					sep := ec.resultDoc.CreateText([]byte(" "))
 					if err := ec.addNode(sep); err != nil {
 						return err
 					}
 				}
-				text, err := ec.resultDoc.CreateText([]byte(s))
-				if err != nil {
-					return err
-				}
+				text := ec.resultDoc.CreateText([]byte(s))
 				if err := ec.addNode(text); err != nil {
 					return err
 				}

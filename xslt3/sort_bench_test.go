@@ -24,24 +24,15 @@ func newBenchSortEnv(b *testing.B, n int, sortKeys []*sortKey) *benchSortEnv {
 	b.Helper()
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root, err := doc.CreateElement("root")
-	if err != nil {
-		b.Fatal(err)
-	}
+	root := doc.CreateElement("root")
 	if err := doc.AddChild(root); err != nil {
 		b.Fatal(err)
 	}
 
 	nodes := make([]helium.Node, n)
 	for i := range n {
-		elem, err := doc.CreateElement("item")
-		if err != nil {
-			b.Fatal(err)
-		}
-		text, err := doc.CreateText([]byte(strconv.Itoa(n - i)))
-		if err != nil {
-			b.Fatal(err)
-		}
+		elem := doc.CreateElement("item")
+		text := doc.CreateText([]byte(strconv.Itoa(n - i)))
 		if err := elem.AddChild(text); err != nil {
 			b.Fatal(err)
 		}

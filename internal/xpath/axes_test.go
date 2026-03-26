@@ -21,15 +21,13 @@ func buildDeepChain(t *testing.T, depth int) (*helium.Document, *helium.Element,
 	t.Helper()
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
 
 	parent := root
 	// go.mod requires Go 1.25, so integer range is part of the supported toolchain.
 	for range depth {
-		child, childErr := doc.CreateElement("level")
-		require.NoError(t, childErr)
+		child := doc.CreateElement("level")
 		require.NoError(t, parent.AddChild(child))
 		parent = child
 	}
@@ -52,27 +50,23 @@ func TestTraverseAxisPreceding_DeepChain(t *testing.T) {
 	depth := deepChainDepth(t)
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
 
-	left, err := doc.CreateElement("left")
-	require.NoError(t, err)
+	left := doc.CreateElement("left")
 	require.NoError(t, root.AddChild(left))
 
 	parent := left
 	var leaf helium.Node = left
 	// go.mod requires Go 1.25, so integer range is part of the supported toolchain.
 	for range depth {
-		child, childErr := doc.CreateElement("level")
-		require.NoError(t, childErr)
+		child := doc.CreateElement("level")
 		require.NoError(t, parent.AddChild(child))
 		parent = child
 		leaf = child
 	}
 
-	right, err := doc.CreateElement("right")
-	require.NoError(t, err)
+	right := doc.CreateElement("right")
 	require.NoError(t, root.AddChild(right))
 
 	nodes, err := ixpath.TraverseAxis(ixpath.AxisPreceding, right, ixpath.DefaultMaxNodeSetLength)

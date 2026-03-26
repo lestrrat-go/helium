@@ -1023,10 +1023,7 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 }
 
 func createAnalyzeStringElement(doc *helium.Document, localName string) (*helium.Element, error) {
-	elem, err := doc.CreateElement(localName)
-	if err != nil {
-		return nil, err
-	}
+	elem := doc.CreateElement(localName)
 	if err := elem.SetActiveNamespace("fn", NSFn); err != nil {
 		return nil, err
 	}

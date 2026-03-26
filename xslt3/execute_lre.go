@@ -18,10 +18,7 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *liter
 	// Create the element in the current output frame's document to avoid
 	// cross-document node identity issues with type annotations.
 	doc := ec.currentOutput().doc
-	elem, err := doc.CreateElement(elemName)
-	if err != nil {
-		return err
-	}
+	elem := doc.CreateElement(elemName)
 
 	// Declare namespaces (skip if parent already has the same declaration).
 	// Declare the default namespace first for deterministic serialization order.

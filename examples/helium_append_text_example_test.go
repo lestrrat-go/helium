@@ -9,11 +9,7 @@ import (
 func Example_helium_append_text() {
 	doc := helium.NewDefaultDocument()
 
-	root, err := doc.CreateElement("msg")
-	if err != nil {
-		fmt.Printf("failed to create element: %s\n", err)
-		return
-	}
+	root := doc.CreateElement("msg")
 	if err := doc.SetDocumentElement(root); err != nil {
 		fmt.Printf("failed to set root: %s\n", err)
 		return

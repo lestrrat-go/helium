@@ -141,10 +141,7 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif context.Context, target, data 
 	}
 	ctx := t.pctx(ctxif)
 	doc := ctx.doc
-	pi, err := doc.CreatePI(target, data)
-	if err != nil {
-		return err
-	}
+	pi := doc.CreatePI(target, data)
 
 	// Track external entity base URI for base-uri() resolution.
 	if ctx.currentEntityURI != "" {
@@ -260,10 +257,7 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 
-	e, err := doc.CreateElement(localname)
-	if err != nil {
-		return err
-	}
+	e := doc.CreateElement(localname)
 
 	e.SetLine(ctx.LineNumber())
 
@@ -426,10 +420,7 @@ func (t *TreeBuilder) CDataBlock(ctxif context.Context, data []byte) error {
 	}
 
 	doc := ctx.doc
-	cdata, err := doc.CreateCDATASection(data)
-	if err != nil {
-		return err
-	}
+	cdata := doc.CreateCDATASection(data)
 
 	return parent.AddChild(cdata)
 }
@@ -449,10 +440,7 @@ func (t *TreeBuilder) Comment(ctxif context.Context, data []byte) error {
 		return errors.New("comment placed in wrong location")
 	}
 
-	e, err := doc.CreateComment(data)
-	if err != nil {
-		return err
-	}
+	e := doc.CreateComment(data)
 
 	// Mirror xmlSAX2AppendChild parent selection (SAX2.c:899-907).
 	switch ctx.inSubset {

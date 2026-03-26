@@ -447,10 +447,7 @@ func (ec *execContext) snapshotAttributeNode(node helium.Node) (helium.Node, err
 // shallowCopyElement copies an element's name, namespace declarations, and
 // attributes but none of its children.
 func shallowCopyElement(src *helium.Element, doc *helium.Document) (*helium.Element, error) {
-	elem, err := doc.CreateElement(src.LocalName())
-	if err != nil {
-		return nil, err
-	}
+	elem := doc.CreateElement(src.LocalName())
 
 	declaredPrefixes := make(map[string]bool)
 

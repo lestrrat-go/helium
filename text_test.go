@@ -9,8 +9,7 @@ import (
 
 func TestTextAppendText(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	n, err := doc.CreateText([]byte("Hello "))
-	require.NoError(t, err)
+	n := doc.CreateText([]byte("Hello "))
 	require.NoError(t, n.AppendText([]byte("World!")), "AppendText succeeds")
 
 	require.Equal(t, []byte("Hello World!"), n.Content(), "Content matches")
@@ -18,10 +17,8 @@ func TestTextAppendText(t *testing.T) {
 
 func TestTextAddChild(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	n1, err := doc.CreateText([]byte("Hello "))
-	require.NoError(t, err)
-	n2, err := doc.CreateText([]byte("World!"))
-	require.NoError(t, err)
+	n1 := doc.CreateText([]byte("Hello "))
+	n2 := doc.CreateText([]byte("World!"))
 
 	require.NoError(t, n1.AddChild(n2), "AddChild succeeds")
 
@@ -30,8 +27,7 @@ func TestTextAddChild(t *testing.T) {
 
 func TestTextAddChildInvalidNode(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	n1, err := doc.CreateText([]byte("Hello "))
-	require.NoError(t, err)
+	n1 := doc.CreateText([]byte("Hello "))
 	n2 := &helium.ProcessingInstruction{}
 
 	require.Equal(t, helium.ErrInvalidOperation, n1.AddChild(n2), "AddChild fails")

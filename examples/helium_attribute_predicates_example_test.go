@@ -20,11 +20,7 @@ func Example_helium_attribute_predicates() {
 	// Build a single element with both plain and namespaced attributes so the
 	// example can show how each predicate chooses a match.
 	doc := helium.NewDefaultDocument()
-	item, err := doc.CreateElement("item")
-	if err != nil {
-		fmt.Printf("failed to create element: %s\n", err)
-		return
-	}
+	item := doc.CreateElement("item")
 
 	// The plain "id" attribute and the namespaced "cfg:id" attribute share the
 	// same local name. This makes the difference between QName, local-name, and

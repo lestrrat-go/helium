@@ -104,20 +104,14 @@ func (ec *execContext) onNoMatchTextOnlyCopy(ctx context.Context, node helium.No
 		if ec.shouldStripWhitespace(node) {
 			return nil
 		}
-		text, err := ec.resultDoc.CreateText(node.Content())
-		if err != nil {
-			return err
-		}
+		text := ec.resultDoc.CreateText(node.Content())
 		return ec.addNode(text)
 	case helium.AttributeNode:
 		attr, ok := node.(*helium.Attribute)
 		if !ok {
 			return nil
 		}
-		text, err := ec.resultDoc.CreateText([]byte(attr.Value()))
-		if err != nil {
-			return err
-		}
+		text := ec.resultDoc.CreateText([]byte(attr.Value()))
 		return ec.addNode(text)
 	default:
 		return nil
@@ -161,10 +155,7 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 		return nil
 	case helium.ElementNode:
 		srcElem := node.(*helium.Element)
-		newElem, err := ec.resultDoc.CreateElement(srcElem.LocalName())
-		if err != nil {
-			return err
-		}
+		newElem := ec.resultDoc.CreateElement(srcElem.LocalName())
 		for _, ns := range srcElem.Namespaces() {
 			_ = newElem.DeclareNamespace(ns.Prefix(), ns.URI())
 		}
@@ -208,22 +199,13 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 		}
 		return nil
 	case helium.TextNode, helium.CDATASectionNode:
-		text, err := ec.resultDoc.CreateText(node.Content())
-		if err != nil {
-			return err
-		}
+		text := ec.resultDoc.CreateText(node.Content())
 		return ec.addNode(text)
 	case helium.CommentNode:
-		comment, err := ec.resultDoc.CreateComment(node.Content())
-		if err != nil {
-			return err
-		}
+		comment := ec.resultDoc.CreateComment(node.Content())
 		return ec.addNode(comment)
 	case helium.ProcessingInstructionNode:
-		pi, err := ec.resultDoc.CreatePI(node.Name(), string(node.Content()))
-		if err != nil {
-			return err
-		}
+		pi := ec.resultDoc.CreatePI(node.Name(), string(node.Content()))
 		return ec.addNode(pi)
 	case helium.AttributeNode:
 		attr := node.(*helium.Attribute)

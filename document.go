@@ -354,11 +354,11 @@ func (d *Document) allocAttribute(name string, ns *Namespace) *Attribute {
 	return attr
 }
 
-func (d *Document) CreatePI(target, data string) (*ProcessingInstruction, error) {
+func (d *Document) CreatePI(target, data string) *ProcessingInstruction {
 	return &ProcessingInstruction{
 		target: target,
 		data:   data,
-	}, nil
+	}
 }
 
 func (d *Document) CreateDTD() (*DTD, error) {
@@ -435,7 +435,7 @@ var (
 	attrChunkPool = pool.New(func() *[slabSize]Attribute { return new([slabSize]Attribute) }, nil)
 )
 
-func (d *Document) CreateElement(name string) (*Element, error) {
+func (d *Document) CreateElement(name string) *Element {
 	var e *Element
 	if d != nil {
 		e = d.allocElement()
@@ -445,7 +445,7 @@ func (d *Document) CreateElement(name string) (*Element, error) {
 	e.name = name
 	e.etype = ElementNode
 	e.doc = d
-	return e, nil
+	return e
 }
 
 func (d *Document) allocElement() *Element {
@@ -460,7 +460,7 @@ func (d *Document) allocElement() *Element {
 	return e
 }
 
-func (d *Document) CreateText(value []byte) (*Text, error) {
+func (d *Document) CreateText(value []byte) *Text {
 	var e *Text
 	if d != nil {
 		e = d.allocText()
@@ -472,7 +472,7 @@ func (d *Document) CreateText(value []byte) (*Text, error) {
 	copy(e.content, value)
 	e.name = textNodeName
 	e.doc = d
-	return e, nil
+	return e
 }
 
 func (d *Document) allocText() *Text {
@@ -487,17 +487,17 @@ func (d *Document) allocText() *Text {
 	return t
 }
 
-func (d *Document) CreateComment(value []byte) (*Comment, error) {
+func (d *Document) CreateComment(value []byte) *Comment {
 	e := newComment(value)
 	e.doc = d
-	return e, nil
+	return e
 }
 
 // CreateCDATASection mirrors xmlNewCDataBlock in libxml2's tree.c.
-func (d *Document) CreateCDATASection(value []byte) (*CDATASection, error) {
+func (d *Document) CreateCDATASection(value []byte) *CDATASection {
 	e := newCDATASection(value)
 	e.doc = d
-	return e, nil
+	return e
 }
 
 func (d *Document) CreateElementContent(name string, etype ElementContentType) (*ElementContent, error) {
@@ -609,11 +609,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 
 	// Fast path: no entity references — create a single text node directly.
 	if strings.IndexByte(value, '&') < 0 {
-		t, terr := d.CreateText([]byte(value))
-		if terr != nil {
-			return nil, terr
-		}
-		return t, nil
+		return d.CreateText([]byte(value)), nil
 	}
 
 	rdr := strings.NewReader(value)
@@ -706,11 +702,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 					if pdebug.Enabled {
 						pdebug.Printf("Flushing content so far... '%s'", buf.Bytes())
 					}
-					var node Node
-					node, err = d.CreateText(buf.Bytes())
-					if err != nil {
-						return
-					}
+					node := Node(d.CreateText(buf.Bytes()))
 					buf.Reset()
 
 					if last == nil {
@@ -775,11 +767,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 	}
 
 	if buf.Len() > 0 {
-		var n Node
-		n, err = d.CreateText(buf.Bytes())
-		if err != nil {
-			return
-		}
+		n := Node(d.CreateText(buf.Bytes()))
 
 		if last == nil {
 			ret = n

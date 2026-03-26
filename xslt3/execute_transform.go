@@ -372,11 +372,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 						if aErr == nil {
 							s, sErr := xpath3.AtomicToString(av)
 							if sErr == nil {
-								text, tErr := ec.resultDoc.CreateText([]byte(s))
-								if tErr != nil {
-									ec.tunnelParams = savedTunnel
-									return nil, tErr
-								}
+								text := ec.resultDoc.CreateText([]byte(s))
 								if err := ec.addNode(text); err != nil {
 									ec.tunnelParams = savedTunnel
 									return nil, err
@@ -413,7 +409,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 			outDef = ss.outputs[""] // fallback to default
 		}
 		if err := SerializeItems(&buf, items, doc, outDef); err == nil {
-			text, _ := doc.CreateText([]byte(buf.String()))
+			text := doc.CreateText([]byte(buf.String()))
 			if text != nil {
 				_ = doc.AddChild(text)
 			}

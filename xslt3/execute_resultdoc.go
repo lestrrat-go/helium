@@ -479,10 +479,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		// for serialization with item-separator.
 		if buildTreeNo && isItemSerializationMethod(effectiveMethod) {
 			tmpDoc := helium.NewDefaultDocument()
-			tmpRoot, tmpErr := tmpDoc.CreateElement("_tmp")
-			if tmpErr != nil {
-				return tmpErr
-			}
+			tmpRoot := tmpDoc.CreateElement("_tmp")
 			if err := tmpDoc.AddChild(tmpRoot); err != nil {
 				return err
 			}

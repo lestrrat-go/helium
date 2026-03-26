@@ -845,10 +845,7 @@ func executeTransformWithSelection(ctx context.Context, source *helium.Document,
 					if aErr == nil {
 						s, sErr := xpath3.AtomicToString(av)
 						if sErr == nil {
-							text, tErr := ec.resultDoc.CreateText([]byte(s))
-							if tErr != nil {
-								return nil, nil, tErr
-							}
+							text := ec.resultDoc.CreateText([]byte(s))
 							if err := ec.addNode(text); err != nil {
 								return nil, nil, err
 							}
