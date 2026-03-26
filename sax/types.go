@@ -40,13 +40,17 @@ type Entity interface {
 	MarkChecked()
 }
 
-// Enumeration is a placeholder for libxml2's xmlEnumeration structure,
-// not yet fully modeled in Go (libxml2: xmlEnumeration).
-type Enumeration = any
+// Enumeration represents a list of allowed attribute values in an
+// ATTLIST declaration (libxml2: xmlEnumeration). The helium root
+// package provides the concrete []string implementation; this
+// interface allows the SAX layer to pass it without a circular import.
+type Enumeration interface{}
 
-// ElementContent is a placeholder for libxml2's xmlElementContent structure,
-// not yet fully modeled in Go (libxml2: xmlElementContent).
-type ElementContent = any
+// ElementContent represents a content model from an ELEMENT declaration
+// (libxml2: xmlElementContent). The helium root package provides the
+// concrete implementation; this interface allows the SAX layer to pass
+// it without a circular import.
+type ElementContent interface{}
 
 type Namespace interface {
 	Prefix() string
