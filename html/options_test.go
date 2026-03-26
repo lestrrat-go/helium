@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/html"
 
 	"github.com/stretchr/testify/require"
@@ -61,6 +62,43 @@ func TestOptionsNoDefaultDTD(t *testing.T) {
 	var noDTD bytes.Buffer
 	require.NoError(t, html.NewWriter().NoDefaultDTD().WriteDoc(&noDTD, doc))
 	require.False(t, strings.Contains(noDTD.String(), "<!DOCTYPE"), "WithNoDefaultDTD should suppress DOCTYPE")
+}
+
+func TestWriteNodeDocumentPreservesWriterOptions(t *testing.T) {
+	doc := helium.NewHTMLDocument()
+
+	root, err := doc.CreateElement("HTML")
+	require.NoError(t, err)
+
+	body, err := doc.CreateElement("Body")
+	require.NoError(t, err)
+
+	link, err := doc.CreateElement("A")
+	require.NoError(t, err)
+	link.SetLiteralAttribute("HREF", "caf\u00e9")
+
+	text, err := doc.CreateText([]byte("\u0080"))
+	require.NoError(t, err)
+	require.NoError(t, link.AddChild(text))
+	require.NoError(t, body.AddChild(link))
+	require.NoError(t, root.AddChild(body))
+	require.NoError(t, doc.SetDocumentElement(root))
+
+	writer := html.NewWriter().
+		NoDefaultDTD().
+		NoFormat().
+		PreserveCase().
+		NoEscapeURIAttributes().
+		EscapeControlChars()
+
+	var want bytes.Buffer
+	require.NoError(t, writer.WriteDoc(&want, doc))
+
+	var got bytes.Buffer
+	require.NoError(t, writer.WriteNode(&got, doc))
+
+	require.Equal(t, want.String(), got.String())
+	require.Equal(t, "<HTML><Body><A HREF=\"caf\u00e9\">&#x80;</A></Body></HTML>", got.String())
 }
 
 func TestWriteLegacyCompatSuppressed(t *testing.T) {
