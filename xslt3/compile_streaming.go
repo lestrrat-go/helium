@@ -5,6 +5,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -608,7 +609,7 @@ func containsVarRef(s, name string) bool {
 				if s[i:i+len(ref)] == ref {
 					// Check that the next char is not a name char
 					end := i + len(ref)
-					if end >= len(s) || !isNameChar(rune(s[end])) {
+					if end >= len(s) || !xmlchar.IsNCNameChar(rune(s[end])) {
 						return true
 					}
 				}

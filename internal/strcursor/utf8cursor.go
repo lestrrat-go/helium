@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"io"
 	"unicode/utf8"
+
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 // UTF8Cursor is a high-performance cursor for UTF-8 encoded input.
@@ -271,7 +273,7 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 	} else {
 		_ = c.fillBuffer(utf8.UTFMax)
 		r, w := utf8.DecodeRune(c.buf[c.bufpos:c.buflen])
-		if r == utf8.RuneError || !isNCNameStartChar(r) {
+		if r == utf8.RuneError || !xmlchar.IsNCNameStartChar(r) {
 			return nil, 0
 		}
 		off += w
@@ -298,7 +300,7 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 		} else {
 			_ = c.fillBuffer(off + utf8.UTFMax)
 			r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
-			if r == utf8.RuneError || !isNCNameChar(r) {
+			if r == utf8.RuneError || !xmlchar.IsNCNameChar(r) {
 				break
 			}
 			off += w
@@ -315,23 +317,6 @@ func isASCIINameChar(b byte) bool {
 		(b >= '0' && b <= '9') || b == '_' || b == '-' || b == '.'
 }
 
-// isNCNameStartChar checks NameStartChar production (without ':').
-func isNCNameStartChar(r rune) bool {
-	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || r == '_' ||
-		(r >= 0xC0 && r <= 0xD6) || (r >= 0xD8 && r <= 0xF6) ||
-		(r >= 0xF8 && r <= 0x2FF) || (r >= 0x370 && r <= 0x37D) ||
-		(r >= 0x37F && r <= 0x1FFF) || (r >= 0x200C && r <= 0x200D) ||
-		(r >= 0x2070 && r <= 0x218F) || (r >= 0x2C00 && r <= 0x2FEF) ||
-		(r >= 0x3001 && r <= 0xD7FF) || (r >= 0xF900 && r <= 0xFDCF) ||
-		(r >= 0xFDF0 && r <= 0xFFFD) || (r >= 0x10000 && r <= 0xEFFFF)
-}
-
-// isNCNameChar checks NameChar production (without ':').
-func isNCNameChar(r rune) bool {
-	return isNCNameStartChar(r) ||
-		(r >= '0' && r <= '9') || r == '-' || r == '.' ||
-		r == 0xB7 || (r >= 0x0300 && r <= 0x036F) || (r >= 0x203F && r <= 0x2040)
-}
 
 // ScanSimpleAttrValue scans a simple attribute value (no entities, no special
 // whitespace) between the current position and the given quote character.

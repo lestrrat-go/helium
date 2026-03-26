@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 func init() {
@@ -169,10 +170,10 @@ func parseLexicalQName(qname string) (string, string, error) {
 			return "", "", &XPathError{Code: errCodeFOCA0002, Message: "invalid QName: " + qname}
 		}
 	}
-	if prefix != "" && !isValidNCName(prefix) {
+	if prefix != "" && !xmlchar.IsValidNCName(prefix) {
 		return "", "", &XPathError{Code: errCodeFOCA0002, Message: "invalid prefix in QName: " + prefix}
 	}
-	if !isValidNCName(local) {
+	if !xmlchar.IsValidNCName(local) {
 		return "", "", &XPathError{Code: errCodeFOCA0002, Message: "invalid local name in QName: " + local}
 	}
 	return prefix, local, nil

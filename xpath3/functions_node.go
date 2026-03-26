@@ -10,6 +10,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/unparsedtext"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -1095,7 +1096,7 @@ func idLookupTokens(seq Sequence) ([]string, error) {
 			return nil, err
 		}
 		for _, token := range strings.Fields(s) {
-			if isValidNCName(token) {
+			if xmlchar.IsValidNCName(token) {
 				tokens = append(tokens, token)
 			}
 		}

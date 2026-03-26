@@ -349,6 +349,16 @@ Generic bitset operations for bitmask types.
 - **Set[T](*T, T)** / **IsSet[T](T, T) → bool**
 - Files: `bitset.go`
 
+## internal/xmlchar/
+
+XML 1.0 NCName character classification. Single source of truth for NCNameStartChar, NCNameChar, and IsValidNCName.
+
+- **IsNCNameStartChar(rune) → bool** — XML 1.0 NCName start character production
+- **IsNCNameChar(rune) → bool** — XML 1.0 NCName continuation character production
+- **IsValidNCName(string) → bool** — validates a complete NCName string
+- Files: `xmlchar.go`
+- Imports: none
+
 ## internal/stack/
 
 Generic stack with capacity shrinking.
