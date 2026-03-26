@@ -18,6 +18,7 @@ Unified CLI entrypoint. Wrapper file: `cmd/helium/main.go`. Implementation packa
 | `helium xsd validate` | Validate XML against XSD schema |
 | `helium relaxng validate` | Validate XML against RELAX NG schema |
 | `helium schematron validate` | Validate XML against Schematron schema |
+| `helium xslt` | Transform XML with XSLT 3.0 stylesheet |
 
 ## Exit Codes
 
@@ -29,6 +30,7 @@ Unified CLI entrypoint. Wrapper file: `cmd/helium/main.go`. Implementation packa
 | 4 | `ExitReadFile` | File/stdin read error |
 | 5 | `ExitSchemaComp` | Schema compilation error |
 | 10 | `ExitXPath` | XPath compile/evaluation error |
+| 11 | `ExitXSLT` | XSLT compile/transform error |
 
 Multiple XML inputs → highest exit code wins.
 
@@ -39,6 +41,7 @@ Multiple XML inputs → highest exit code wins.
 - `helium xsd validate` → first positional arg schema path, XML from file args or stdin when none
 - `helium relaxng validate` → first positional arg schema path, XML from file args or stdin when none
 - `helium schematron validate` → first positional arg schema path, XML from file args or stdin when none
+- `helium xslt` → first positional arg stylesheet path, XML from file args or stdin when none
 - TTY + missing required XML input → usage + `ExitErr`
 
 ## `helium lint`
@@ -121,4 +124,15 @@ Primary file: `internal/cli/heliumcmd/schematron_validate.go`
 - Schema compiled once with `schematron.NewCompiler().SchemaFilename(path).CompileFile(ctx, path)`
 - Each XML input parsed with `helium.NewParser()` + validated with `schematron.NewValidator(schema).Filename(name).Validate(ctx, doc)`
 - Validation passes `.Filename(input.name)` so error output names the current XML source
+
+## `helium xslt`
+
+Primary file: `internal/cli/heliumcmd/xslt.go`
+
+- Usage: `helium xslt [options] STYLESHEET [XMLfiles ...]`
+- Stylesheet path mandatory positional arg
+- Stylesheet parsed with `helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true)`, compiled once with `xslt3.NewCompiler().Compile()`
+- Each XML input parsed with `helium.NewParser()`, transformed with `ss.Transform(doc).WriteTo(ctx, out)`
+- Flags: `--output FILE` / `-o FILE`, `--param NAME VAL` (XPath), `--stringparam NAME VAL`, `--noout`, `--timing`, `--version`
+- Parameters passed via `inv.GlobalParameters()`
 

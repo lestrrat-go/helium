@@ -360,15 +360,16 @@ Platform-specific TTY handling for CLI commands.
 Importable implementation behind `helium` CLI. Used by `cmd/helium` wrapper and executable examples.
 
 - Entry points: `Execute(ctx, args)`, context mutators `WithIO(ctx, stdin, stdout, stderr)`, `WithStdinTTY(ctx, bool)`
-- Subcommands: `lint`, `xpath`, `xsd validate`, `relaxng validate`, `schematron validate`
+- Subcommands: `lint`, `xpath`, `xsd validate`, `relaxng validate`, `schematron validate`, `xslt`
 - Context behavior: when stdio carriers are absent, defaults to `os.Stdin`, `os.Stdout`, `os.Stderr`, and TTY detection from `os.Stdin`
 - Lint behavior: parse args, detect stdin/TTY, process XML, run XInclude/XSD/XPath/C14N, emit xmllint-style exit codes
 - XPath behavior: mandatory positional expr, default engine `3`, `--engine 1|3`, XML from file args or stdin, type-aware result output for xpath1/xpath3
 - RELAX NG behavior: compile grammar from mandatory positional schema path, parse XML input(s), validate via `relaxng.NewValidator().Validate`, return schema/validation exit codes
 - Schematron behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `schematron.NewValidator(schema).Validate`, return schema/validation exit codes
 - XSD behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `xsd.NewValidator(schema).Validate`, return schema/validation exit codes
-- Files: `cli.go`, `exitcode.go`, `lint.go`, `xpath.go`, `relaxng_validate.go`, `schematron_validate.go`, `xsd_validate.go`
-- Imports: helium, c14n/, relaxng/, schematron/, xsd/, xinclude/, xpath1/, xpath3/, catalog/, internal/cliutil/
+- XSLT behavior: compile stylesheet from mandatory positional path, parse XML input(s), transform via `ss.Transform(doc).WriteTo`, supports `--param`/`--stringparam`/`--output`/`--noout`
+- Files: `cli.go`, `exitcode.go`, `lint.go`, `xpath.go`, `relaxng_validate.go`, `schematron_validate.go`, `xsd_validate.go`, `xslt.go`
+- Imports: helium, c14n/, relaxng/, schematron/, xsd/, xslt3/, xinclude/, xpath1/, xpath3/, catalog/, internal/cliutil/
 
 ## cmd/helium/
 
