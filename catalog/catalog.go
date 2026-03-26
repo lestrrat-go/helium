@@ -1,9 +1,3 @@
-// Package catalog implements OASIS XML Catalog resolution for public/system
-// identifiers and URIs. It is used by the helium parser to transparently
-// resolve external DTDs and entities via catalog files.
-//
-// The primary entry point for users is through the parser's SetCatalog method.
-// This package is public so it can be used by other helium subsystems if needed.
 package catalog
 
 import (

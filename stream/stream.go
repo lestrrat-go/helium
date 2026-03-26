@@ -1,7 +1,3 @@
-// Package stream implements a streaming XML writer.
-// It produces well-formed XML incrementally via method calls,
-// writing directly to an io.Writer without building an in-memory
-// DOM tree.
 package stream
 
 import (
