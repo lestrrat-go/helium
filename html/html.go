@@ -82,7 +82,7 @@ func (p Parser) parseConfig() parseConfig {
 // (libxml2: htmlParseDoc)
 func (p Parser) Parse(ctx context.Context, data []byte) (*helium.Document, error) {
 	tb := newTreeBuilder()
-	hp := newParser(data, tb, p.parseConfig())
+	hp := newParser(ctx, data, tb, p.parseConfig())
 	if err := hp.parse(); err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (p Parser) ParseFile(ctx context.Context, filename string) (*helium.Documen
 // without building a DOM tree.
 // (libxml2: htmlSAXParseDoc)
 func (p Parser) ParseWithSAX(ctx context.Context, data []byte, handler SAXHandler) error {
-	hp := newParser(data, handler, p.parseConfig())
+	hp := newParser(ctx, data, handler, p.parseConfig())
 	return hp.parse()
 }
 
