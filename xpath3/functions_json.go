@@ -575,10 +575,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, root 
 		}
 	}
 
-	elem, err := doc.CreateElement(name)
-	if err != nil {
-		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
-	}
+	elem := doc.CreateElement(name)
 	if root {
 		if err := elem.DeclareNamespace("", NSFn); err != nil {
 			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}

@@ -92,30 +92,18 @@ func (ec *execContext) execValueOf(ctx context.Context, inst *valueOfInst) error
 	doeEffective := inst.DisableOutputEscaping && ec.temporaryOutputDepth == 0
 	if doeEffective {
 		// Insert DOE marker PI so the serializer writes this text raw.
-		pi, err := ec.resultDoc.CreatePI("disable-output-escaping", "")
-		if err != nil {
-			return err
-		}
+		pi := ec.resultDoc.CreatePI("disable-output-escaping", "")
 		if err := ec.addNode(pi); err != nil {
 			return err
 		}
-		text, err := ec.resultDoc.CreateText([]byte(value))
-		if err != nil {
-			return err
-		}
+		text := ec.resultDoc.CreateText([]byte(value))
 		if err := ec.addNode(text); err != nil {
 			return err
 		}
-		piEnd, err := ec.resultDoc.CreatePI("enable-output-escaping", "")
-		if err != nil {
-			return err
-		}
+		piEnd := ec.resultDoc.CreatePI("enable-output-escaping", "")
 		return ec.addNode(piEnd)
 	}
-	text, err := ec.resultDoc.CreateText([]byte(value))
-	if err != nil {
-		return err
-	}
+	text := ec.resultDoc.CreateText([]byte(value))
 	return ec.addNode(text)
 }
 
@@ -183,12 +171,8 @@ func mergeAdjacentTextNodes(seq xpath3.Sequence) xpath3.Sequence {
 		if j > i+1 {
 			// Create a merged text node
 			doc := ni.Node.OwnerDocument()
-			text, err := doc.CreateText([]byte(merged))
-			if err == nil {
-				result = append(result, xpath3.NodeItem{Node: text})
-			} else {
-				result = append(result, seq.Get(i))
-			}
+			text := doc.CreateText([]byte(merged))
+			result = append(result, xpath3.NodeItem{Node: text})
 			i = j - 1
 		} else {
 			result = append(result, seq.Get(i))
@@ -217,10 +201,7 @@ func (ec *execContext) execText(inst *textInst) error {
 		if value == "" {
 			out := ec.currentOutput()
 			if out.sequenceMode {
-				text, tErr := ec.resultDoc.CreateText(nil)
-				if tErr != nil {
-					return tErr
-				}
+				text := ec.resultDoc.CreateText(nil)
 				return ec.addNode(text)
 			}
 			if !out.wherePopulated {
@@ -238,10 +219,7 @@ func (ec *execContext) execText(inst *textInst) error {
 	if value == "" && inst.TVT == nil {
 		out := ec.currentOutput()
 		if out.sequenceMode {
-			text, err := ec.resultDoc.CreateText(nil)
-			if err != nil {
-				return err
-			}
+			text := ec.resultDoc.CreateText(nil)
 			return ec.addNode(text)
 		}
 		// Inside xsl:where-populated, zero-length text nodes are removed
@@ -256,30 +234,18 @@ func (ec *execContext) execText(inst *textInst) error {
 	// to a temporary tree (variable/parameter body) or sequence mode.
 	textDOEEffective := inst.DisableOutputEscaping && ec.temporaryOutputDepth == 0
 	if textDOEEffective {
-		pi, err := ec.resultDoc.CreatePI("disable-output-escaping", "")
-		if err != nil {
-			return err
-		}
+		pi := ec.resultDoc.CreatePI("disable-output-escaping", "")
 		if err := ec.addNode(pi); err != nil {
 			return err
 		}
-		text, err := ec.resultDoc.CreateText([]byte(value))
-		if err != nil {
-			return err
-		}
+		text := ec.resultDoc.CreateText([]byte(value))
 		if err := ec.addNode(text); err != nil {
 			return err
 		}
-		piEnd, err := ec.resultDoc.CreatePI("enable-output-escaping", "")
-		if err != nil {
-			return err
-		}
+		piEnd := ec.resultDoc.CreatePI("enable-output-escaping", "")
 		return ec.addNode(piEnd)
 	}
-	text, err := ec.resultDoc.CreateText([]byte(value))
-	if err != nil {
-		return err
-	}
+	text := ec.resultDoc.CreateText([]byte(value))
 	return ec.addNode(text)
 }
 
@@ -307,10 +273,7 @@ func (ec *execContext) execLiteralText(inst *literalTextInst) error {
 		// break adjacency.
 		out := ec.currentOutput()
 		if out.sequenceMode {
-			text, tErr := ec.resultDoc.CreateText(nil)
-			if tErr != nil {
-				return tErr
-			}
+			text := ec.resultDoc.CreateText(nil)
 			return ec.addNode(text)
 		}
 		if !out.wherePopulated {
@@ -318,10 +281,7 @@ func (ec *execContext) execLiteralText(inst *literalTextInst) error {
 		}
 		return nil
 	}
-	text, err := ec.resultDoc.CreateText([]byte(value))
-	if err != nil {
-		return err
-	}
+	text := ec.resultDoc.CreateText([]byte(value))
 	return ec.addNode(text)
 }
 
@@ -439,10 +399,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *xslSequenceIns
 						sepStr = *out.itemSeparator
 					}
 					if sepStr != "" {
-						sep, tErr := ec.resultDoc.CreateText([]byte(sepStr))
-						if tErr != nil {
-							return tErr
-						}
+						sep := ec.resultDoc.CreateText([]byte(sepStr))
 						if err := ec.addNodeUntracked(sep); err != nil {
 							return err
 						}
@@ -462,19 +419,13 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *xslSequenceIns
 					sepStr = *out.itemSeparator
 				}
 				if sepStr != "" {
-					sep, tErr := ec.resultDoc.CreateText([]byte(sepStr))
-					if tErr != nil {
-						return tErr
-					}
+					sep := ec.resultDoc.CreateText([]byte(sepStr))
 					if err := ec.addNode(sep); err != nil {
 						return err
 					}
 				}
 			}
-			text, tErr := ec.resultDoc.CreateText([]byte(s))
-			if tErr != nil {
-				return tErr
-			}
+			text := ec.resultDoc.CreateText([]byte(s))
 			ec.markAtomicTextNode(text)
 			if err := ec.addNode(text); err != nil {
 				return err
@@ -587,19 +538,13 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 					sepStr = *out.itemSeparator
 				}
 				if sepStr != "" {
-					sep, tErr := ec.resultDoc.CreateText([]byte(sepStr))
-					if tErr != nil {
-						return tErr
-					}
+					sep := ec.resultDoc.CreateText([]byte(sepStr))
 					if err := ec.addNode(sep); err != nil {
 						return err
 					}
 				}
 			}
-			text, tErr := ec.resultDoc.CreateText([]byte(s))
-			if tErr != nil {
-				return tErr
-			}
+			text := ec.resultDoc.CreateText([]byte(s))
 			ec.markAtomicTextNode(text)
 			if err := ec.addNode(text); err != nil {
 				return err

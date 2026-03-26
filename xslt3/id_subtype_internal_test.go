@@ -22,10 +22,10 @@ func TestAnnotateAttrRegistersIDSubtype(t *testing.T) {
 	require.NoError(t, err)
 
 	doc := helium.NewDefaultDocument()
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
-	require.NoError(t, root.SetAttribute("id", "alpha"))
+	_, err = root.SetAttribute("id", "alpha")
+	require.NoError(t, err)
 
 	ec := &execContext{
 		schemaRegistry:  &schemaRegistry{schemas: []*xsd.Schema{schema}},

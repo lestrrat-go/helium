@@ -92,18 +92,12 @@ func (ec *execContext) execCopy(ctx context.Context, inst *copyInst) error {
 				}
 				out := ec.currentOutput()
 				if out.prevWasAtomic {
-					sep, tErr := ec.resultDoc.CreateText([]byte(" "))
-					if tErr != nil {
-						return tErr
-					}
+					sep := ec.resultDoc.CreateText([]byte(" "))
 					if err := ec.addNode(sep); err != nil {
 						return err
 					}
 				}
-				text, err := ec.resultDoc.CreateText([]byte(s))
-				if err != nil {
-					return err
-				}
+				text := ec.resultDoc.CreateText([]byte(s))
 				if err := ec.addNode(text); err != nil {
 					return err
 				}
@@ -123,18 +117,12 @@ func (ec *execContext) execCopy(ctx context.Context, inst *copyInst) error {
 			}
 			out := ec.currentOutput()
 			if out.prevWasAtomic {
-				sep, tErr := ec.resultDoc.CreateText([]byte(" "))
-				if tErr != nil {
-					return tErr
-				}
+				sep := ec.resultDoc.CreateText([]byte(" "))
 				if err := ec.addNode(sep); err != nil {
 					return err
 				}
 			}
-			text, tErr := ec.resultDoc.CreateText([]byte(s))
-			if tErr != nil {
-				return tErr
-			}
+			text := ec.resultDoc.CreateText([]byte(s))
 			if err := ec.addNode(text); err != nil {
 				return err
 			}
@@ -273,10 +261,7 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 	case helium.ElementNode:
 		srcElem := node.(*helium.Element)
 		// Use LocalName to avoid prefix doubling with SetActiveNamespace
-		elem, err := ec.resultDoc.CreateElement(srcElem.LocalName())
-		if err != nil {
-			return err
-		}
+		elem := ec.resultDoc.CreateElement(srcElem.LocalName())
 
 		if opts.copyNamespaces {
 			// copy-namespaces="yes": copy all in-scope namespace declarations
@@ -351,25 +336,16 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 		return nil
 
 	case helium.TextNode, helium.CDATASectionNode:
-		text, err := ec.resultDoc.CreateText(node.Content())
-		if err != nil {
-			return err
-		}
+		text := ec.resultDoc.CreateText(node.Content())
 		return ec.addNode(text)
 
 	case helium.CommentNode:
-		comment, err := ec.resultDoc.CreateComment(node.Content())
-		if err != nil {
-			return err
-		}
+		comment := ec.resultDoc.CreateComment(node.Content())
 		return ec.addNode(comment)
 
 	case helium.ProcessingInstructionNode:
 		pi := node.(*helium.ProcessingInstruction)
-		newPI, err := ec.resultDoc.CreatePI(pi.Name(), string(pi.Content()))
-		if err != nil {
-			return err
-		}
+		newPI := ec.resultDoc.CreatePI(pi.Name(), string(pi.Content()))
 		return ec.addNode(newPI)
 
 	case helium.DocumentNode:
@@ -651,18 +627,12 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 				return err
 			}
 			if prevWasAtomic {
-				sep, tErr := ec.resultDoc.CreateText([]byte(" "))
-				if tErr != nil {
-					return tErr
-				}
+				sep := ec.resultDoc.CreateText([]byte(" "))
 				if err := ec.addNode(sep); err != nil {
 					return err
 				}
 			}
-			text, err := ec.resultDoc.CreateText([]byte(s))
-			if err != nil {
-				return err
-			}
+			text := ec.resultDoc.CreateText([]byte(s))
 			if err := ec.addNode(text); err != nil {
 				return err
 			}
@@ -1027,10 +997,7 @@ func propagateAncestorNamespaces(src, dst *helium.Element) {
 // declarations (copy-namespaces="no").  Only the namespaces required for
 // well-formedness (element name and attribute names) are preserved.
 func (ec *execContext) copyElementNoNamespaces(src *helium.Element) error {
-	elem, err := ec.resultDoc.CreateElement(src.LocalName())
-	if err != nil {
-		return err
-	}
+	elem := ec.resultDoc.CreateElement(src.LocalName())
 
 	// Declare only the element's own namespace (required for well-formedness).
 	if src.URI() != "" {

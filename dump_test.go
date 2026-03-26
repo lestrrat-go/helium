@@ -83,8 +83,7 @@ func TestDOMToXMLString(t *testing.T) {
 	doc := helium.NewDefaultDocument()
 	//	defer doc.Free()
 
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err, `CreateElement("root") succeeds`)
+	root := doc.CreateElement("root")
 
 	require.NoError(t, doc.SetDocumentElement(root))
 	require.NoError(t, root.AppendText([]byte(`Hello, World!`)))
@@ -97,8 +96,7 @@ func TestDOMToXMLString(t *testing.T) {
 
 func TestDumpNsSkipsXmlPrefix(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	// Add explicit xml: namespace declaration to the element
@@ -114,13 +112,12 @@ func TestDumpNsSkipsXmlPrefix(t *testing.T) {
 
 func TestDumpNsPropagatesWriteError(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.SetDocumentElement(root))
 	require.NoError(t, root.DeclareNamespace("p", "urn:test"))
 
 	writer := helium.NewWriter().XMLDeclaration(false)
-	err = writer.WriteDoc(&namespaceFailWriter{failOn: "xmlns"}, doc)
+	err := writer.WriteDoc(&namespaceFailWriter{failOn: "xmlns"}, doc)
 	require.ErrorIs(t, err, errNamespaceWrite)
 }
 

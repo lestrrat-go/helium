@@ -599,10 +599,7 @@ func (ec *execContext) addNode(node helium.Node) error {
 	if out.itemSeparator != nil && out.prevHadOutput && !isText && nodeType != helium.AttributeNode {
 		sepStr := *out.itemSeparator
 		if sepStr != "" {
-			sep, tErr := ec.resultDoc.CreateText([]byte(sepStr))
-			if tErr != nil {
-				return tErr
-			}
+			sep := ec.resultDoc.CreateText([]byte(sepStr))
 			if err := out.current.AddChild(sep); err != nil {
 				return err
 			}
@@ -768,26 +765,17 @@ func (ec *execContext) spliceConditionalSequence(placeholder helium.Node, seq xp
 				// on-non-empty select="''" properly contributes to the
 				// inter-atomic space chain.
 				if prevAtomic {
-					sep, sErr := ec.resultDoc.CreateText([]byte(" "))
-					if sErr != nil {
-						return sErr
-					}
+					sep := ec.resultDoc.CreateText([]byte(" "))
 					nodes = append(nodes, sep)
 				}
 				prevAtomic = true
 				continue
 			}
 			if prevAtomic {
-				sep, err := ec.resultDoc.CreateText([]byte(" "))
-				if err != nil {
-					return err
-				}
+				sep := ec.resultDoc.CreateText([]byte(" "))
 				nodes = append(nodes, sep)
 			}
-			text, err := ec.resultDoc.CreateText([]byte(s))
-			if err != nil {
-				return err
-			}
+			text := ec.resultDoc.CreateText([]byte(s))
 			nodes = append(nodes, text)
 			ec.markAtomicTextNode(text)
 			prevAtomic = true

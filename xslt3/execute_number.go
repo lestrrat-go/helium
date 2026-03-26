@@ -163,10 +163,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 	}
 
 	formatted := formatBigNumberList(bigNums, format, groupSep, groupSize, lang, ordinal)
-	text, err := ec.resultDoc.CreateText([]byte(formatted))
-	if err != nil {
-		return err
-	}
+	text := ec.resultDoc.CreateText([]byte(formatted))
 	return ec.addNode(text)
 }
 

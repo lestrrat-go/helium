@@ -19,11 +19,11 @@ func Example_helium_set_attribute() {
 
 	// SetAttribute adds or replaces an attribute on the element.
 	// Attributes appear in the order they are set.
-	if err := item.SetAttribute("id", "42"); err != nil {
+	if _, err := item.SetAttribute("id", "42"); err != nil {
 		fmt.Printf("failed to set attribute: %s\n", err)
 		return
 	}
-	if err := item.SetAttribute("class", "active"); err != nil {
+	if _, err := item.SetAttribute("class", "active"); err != nil {
 		fmt.Printf("failed to set attribute: %s\n", err)
 		return
 	}

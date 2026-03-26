@@ -453,7 +453,7 @@ func wrapNodeInHTMLDoc(node helium.Node) *helium.Document {
 			_ = doc.AddChild(copiedElem)
 		} else {
 			// Wrap in an <html> element
-			htmlElem, _ := doc.CreateElement("html")
+			htmlElem := doc.CreateElement("html")
 			_ = doc.AddChild(htmlElem)
 			_ = htmlElem.AddChild(copiedElem)
 		}
@@ -2545,10 +2545,7 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 		}
 	}
 	// Create and insert the meta element.
-	meta, err := doc.CreateElement("meta")
-	if err != nil {
-		return
-	}
+	meta := doc.CreateElement("meta")
 	// If the head element is in a namespace, put the meta element in the same namespace.
 	if headURI := string(head.URI()); headURI != "" {
 		_ = meta.SetActiveNamespace(string(head.Prefix()), headURI)

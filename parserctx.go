@@ -5605,10 +5605,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 	}
 
 	// Create a dummy root node and parse the content
-	newRoot, err := newctx.doc.CreateElement("pseudoroot")
-	if err != nil {
-		return nil, pctx.error(ctx, err)
-	}
+	newRoot := newctx.doc.CreateElement("pseudoroot")
 	newctx.pushNodeEntry(nodeEntry{local: "pseudoroot", qname: "pseudoroot"})
 	newctx.elem = newRoot
 	if err := newctx.doc.AddChild(newRoot); err != nil {
@@ -5632,7 +5629,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 					if !pctx.options.IsSet(parseNoBaseFix) {
 						if elem, ok := e.(*Element); ok {
 							if _, exists := elem.GetAttributeNS("base", XMLNamespace); !exists {
-								_ = elem.SetAttributeNS("base", uri, newNamespace("xml", XMLNamespace))
+								_, _ = elem.SetAttributeNS("base", uri, newNamespace("xml", XMLNamespace))
 							}
 						}
 					}
@@ -5702,10 +5699,7 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	defer func() { pctx.sizeentcopy = newctx.sizeentcopy }()
 
 	// create a dummy node
-	newRoot, err := newctx.doc.CreateElement("pseudoroot")
-	if err != nil {
-		return nil, pctx.error(ctx, err)
-	}
+	newRoot := newctx.doc.CreateElement("pseudoroot")
 	newctx.pushNodeEntry(nodeEntry{local: "pseudoroot", qname: "pseudoroot"})
 	newctx.elem = newRoot // Set the current element context
 	if err := newctx.doc.AddChild(newRoot); err != nil {

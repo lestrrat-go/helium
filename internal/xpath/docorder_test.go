@@ -16,18 +16,17 @@ import (
 func buildDoc(t *testing.T) (*helium.Document, *helium.Element, *helium.Element) {
 	t.Helper()
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
 
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 
-	child, err := doc.CreateElement("child")
-	require.NoError(t, err)
+	child := doc.CreateElement("child")
 	require.NoError(t, root.AddChild(child))
 
 	ns := helium.NewNamespace("ns", "urn:ns")
-	require.NoError(t, child.SetAttributeNS("attr", "v", ns))
+	_, err := child.SetAttributeNS("attr", "v", ns)
+	require.NoError(t, err)
 
 	return doc, root, child
 }

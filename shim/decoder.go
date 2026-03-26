@@ -694,10 +694,7 @@ func (d *Decoder) DecodeElement(v any, start *StartElement) error {
 func (d *Decoder) buildElementFromTokens(start stdxml.StartElement) (*helium.Element, error) {
 	doc := helium.NewDefaultDocument()
 
-	root, err := doc.CreateElement(start.Name.Local)
-	if err != nil {
-		return nil, err
-	}
+	root := doc.CreateElement(start.Name.Local)
 
 	// Set namespace if present
 	if start.Name.Space != "" {
@@ -744,10 +741,7 @@ func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element, 
 
 		switch v := tok.(type) {
 		case StartElement:
-			child, cErr := doc.CreateElement(v.Name.Local)
-			if cErr != nil {
-				return cErr
-			}
+			child := doc.CreateElement(v.Name.Local)
 			if v.Name.Space != "" {
 				if err := child.SetActiveNamespace("", v.Name.Space); err != nil {
 					return err
@@ -771,26 +765,17 @@ func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element, 
 			}
 			return nil
 		case CharData:
-			text, tErr := doc.CreateText([]byte(v))
-			if tErr != nil {
-				return tErr
-			}
+			text := doc.CreateText([]byte(v))
 			if err := parent.AddChild(text); err != nil {
 				return err
 			}
 		case Comment:
-			comment, cErr := doc.CreateComment([]byte(v))
-			if cErr != nil {
-				return cErr
-			}
+			comment := doc.CreateComment([]byte(v))
 			if err := parent.AddChild(comment); err != nil {
 				return err
 			}
 		case ProcInst:
-			pi, pErr := doc.CreatePI(v.Target, string(v.Inst))
-			if pErr != nil {
-				return pErr
-			}
+			pi := doc.CreatePI(v.Target, string(v.Inst))
 			if err := parent.AddChild(pi); err != nil {
 				return err
 			}
@@ -832,11 +817,11 @@ func setElementAttrs(doc *helium.Document, elem *helium.Element, attrs []stdxml.
 			if err != nil {
 				return err
 			}
-			if err := elem.SetAttributeNS(attr.Name.Local, attr.Value, ns); err != nil {
+			if _, err := elem.SetAttributeNS(attr.Name.Local, attr.Value, ns); err != nil {
 				return err
 			}
 		} else {
-			if err := elem.SetAttribute(attr.Name.Local, attr.Value); err != nil {
+			if _, err := elem.SetAttribute(attr.Name.Local, attr.Value); err != nil {
 				return err
 			}
 		}

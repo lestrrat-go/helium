@@ -11,11 +11,7 @@ func Example_helium_create_namespaced() {
 	// (version="1.0", no encoding, no standalone).
 	doc := helium.NewDefaultDocument()
 
-	root, err := doc.CreateElement("feed")
-	if err != nil {
-		fmt.Printf("failed to create element: %s\n", err)
-		return
-	}
+	root := doc.CreateElement("feed")
 	if err := doc.SetDocumentElement(root); err != nil {
 		fmt.Printf("failed to set root: %s\n", err)
 		return
@@ -31,21 +27,13 @@ func Example_helium_create_namespaced() {
 	}
 
 	// Child elements inherit the default namespace from their parent.
-	entry, err := doc.CreateElement("entry")
-	if err != nil {
-		fmt.Printf("failed to create element: %s\n", err)
-		return
-	}
+	entry := doc.CreateElement("entry")
 	if err := root.AddChild(entry); err != nil {
 		fmt.Printf("failed to add child: %s\n", err)
 		return
 	}
 
-	title, err := doc.CreateElement("title")
-	if err != nil {
-		fmt.Printf("failed to create element: %s\n", err)
-		return
-	}
+	title := doc.CreateElement("title")
 	if err := title.AppendText([]byte("Example")); err != nil {
 		fmt.Printf("failed to add content: %s\n", err)
 		return

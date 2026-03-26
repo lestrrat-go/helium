@@ -510,10 +510,7 @@ func (ec *execContext) evaluateGlobalParam(p *param) (xpath3.Sequence, error) {
 func (ec *execContext) evaluateBody(ctx context.Context, body []instruction) (xpath3.Sequence, error) {
 	// Create a temporary document to capture output
 	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot, err := tmpDoc.CreateElement("_tmp")
-	if err != nil {
-		return nil, err
-	}
+	tmpRoot := tmpDoc.CreateElement("_tmp")
 	if err := tmpDoc.AddChild(tmpRoot); err != nil {
 		return nil, err
 	}
@@ -566,10 +563,7 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []instruction) (xp
 // order between xsl:text and xsl:sequence output.
 func (ec *execContext) evaluateBodyForAttr(ctx context.Context, body []instruction) (xpath3.Sequence, error) {
 	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot, err := tmpDoc.CreateElement("_tmp")
-	if err != nil {
-		return nil, err
-	}
+	tmpRoot := tmpDoc.CreateElement("_tmp")
 	if err := tmpDoc.AddChild(tmpRoot); err != nil {
 		return nil, err
 	}
@@ -604,10 +598,7 @@ func (ec *execContext) evaluateBodyForAttr(ctx context.Context, body []instructi
 // so that each text value is a distinct item for separator insertion.
 func (ec *execContext) evaluateBodySeparateText(ctx context.Context, body []instruction) (xpath3.Sequence, error) {
 	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot, err := tmpDoc.CreateElement("_tmp")
-	if err != nil {
-		return nil, err
-	}
+	tmpRoot := tmpDoc.CreateElement("_tmp")
 	if err := tmpDoc.AddChild(tmpRoot); err != nil {
 		return nil, err
 	}
@@ -721,10 +712,7 @@ func (ec *execContext) evaluateBodyAsDocument(ctx context.Context, body []instru
 			if sb.Len() == 0 {
 				return nil
 			}
-			text, err := tmpDoc.CreateText([]byte(sb.String()))
-			if err != nil {
-				return err
-			}
+			text := tmpDoc.CreateText([]byte(sb.String()))
 			sb.Reset()
 			return tmpDoc.AddChild(text)
 		}
@@ -791,10 +779,7 @@ func (ec *execContext) evaluateBodyAsSequence(ctx context.Context, body []instru
 	if baseURI := ec.effectiveStaticBaseURI(); baseURI != "" {
 		tmpDoc.SetURL(baseURI)
 	}
-	tmpRoot, err := tmpDoc.CreateElement("_tmp")
-	if err != nil {
-		return nil, err
-	}
+	tmpRoot := tmpDoc.CreateElement("_tmp")
 	if err := tmpDoc.AddChild(tmpRoot); err != nil {
 		return nil, err
 	}

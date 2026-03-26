@@ -31,10 +31,7 @@ func (t *treeBuilder) EndDocument() error {
 }
 
 func (t *treeBuilder) StartElement(name string, attrs []Attribute) error {
-	elem, err := t.doc.CreateElement(name)
-	if err != nil {
-		return err
-	}
+	elem := t.doc.CreateElement(name)
 
 	// Use SetLiteralAttribute because the HTML parser has already resolved
 	// entities in attribute values. SetAttribute would re-parse them as XML
@@ -84,10 +81,7 @@ func (t *treeBuilder) CDataBlock(value []byte) error {
 }
 
 func (t *treeBuilder) Comment(value []byte) error {
-	comment, err := t.doc.CreateComment(value)
-	if err != nil {
-		return err
-	}
+	comment := t.doc.CreateComment(value)
 	return t.cur.AddChild(comment)
 }
 
@@ -97,10 +91,7 @@ func (t *treeBuilder) InternalSubset(name, externalID, systemID string) error {
 }
 
 func (t *treeBuilder) ProcessingInstruction(target, data string) error {
-	pi, err := t.doc.CreatePI(target, data)
-	if err != nil {
-		return err
-	}
+	pi := t.doc.CreatePI(target, data)
 	return t.cur.AddChild(pi)
 }
 

@@ -10,20 +10,16 @@ import (
 
 func TestStringValue_Element(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
 
-	txt1, err := doc.CreateText([]byte("hello "))
-	require.NoError(t, err)
+	txt1 := doc.CreateText([]byte("hello "))
 	require.NoError(t, root.AddChild(txt1))
 
-	child, err := doc.CreateElement("child")
-	require.NoError(t, err)
+	child := doc.CreateElement("child")
 	require.NoError(t, root.AddChild(child))
 
-	txt2, err := doc.CreateText([]byte("world"))
-	require.NoError(t, err)
+	txt2 := doc.CreateText([]byte("world"))
 	require.NoError(t, child.AddChild(txt2))
 
 	// Element string-value is concatenation of all text descendants.
@@ -32,12 +28,10 @@ func TestStringValue_Element(t *testing.T) {
 
 func TestStringValue_Document(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
 
-	txt, err := doc.CreateText([]byte("doc text"))
-	require.NoError(t, err)
+	txt := doc.CreateText([]byte("doc text"))
 	require.NoError(t, root.AddChild(txt))
 
 	require.Equal(t, "doc text", ixpath.StringValue(doc))
@@ -45,16 +39,13 @@ func TestStringValue_Document(t *testing.T) {
 
 func TestStringValue_ElementWithCDATA(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
 
-	txt, err := doc.CreateText([]byte("before "))
-	require.NoError(t, err)
+	txt := doc.CreateText([]byte("before "))
 	require.NoError(t, root.AddChild(txt))
 
-	cdata, err := doc.CreateCDATASection([]byte("cdata content"))
-	require.NoError(t, err)
+	cdata := doc.CreateCDATASection([]byte("cdata content"))
 	require.NoError(t, root.AddChild(cdata))
 
 	// CDATA sections are included in text descendant concatenation.
@@ -64,40 +55,31 @@ func TestStringValue_ElementWithCDATA(t *testing.T) {
 func TestStringValue_MixedContent(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 
-	comment, err := doc.CreateComment([]byte("ignored document comment"))
-	require.NoError(t, err)
+	comment := doc.CreateComment([]byte("ignored document comment"))
 	require.NoError(t, doc.AddChild(comment))
 
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
 
-	text1, err := doc.CreateText([]byte("alpha"))
-	require.NoError(t, err)
+	text1 := doc.CreateText([]byte("alpha"))
 	require.NoError(t, root.AddChild(text1))
 
-	comment, err = doc.CreateComment([]byte("ignored element comment"))
-	require.NoError(t, err)
+	comment = doc.CreateComment([]byte("ignored element comment"))
 	require.NoError(t, root.AddChild(comment))
 
-	child, err := doc.CreateElement("child")
-	require.NoError(t, err)
+	child := doc.CreateElement("child")
 	require.NoError(t, root.AddChild(child))
 
-	text2, err := doc.CreateText([]byte("beta"))
-	require.NoError(t, err)
+	text2 := doc.CreateText([]byte("beta"))
 	require.NoError(t, child.AddChild(text2))
 
-	pi, err := doc.CreatePI("target", "ignored processing instruction")
-	require.NoError(t, err)
+	pi := doc.CreatePI("target", "ignored processing instruction")
 	require.NoError(t, child.AddChild(pi))
 
-	cdata, err := doc.CreateCDATASection([]byte("gamma"))
-	require.NoError(t, err)
+	cdata := doc.CreateCDATASection([]byte("gamma"))
 	require.NoError(t, child.AddChild(cdata))
 
-	text3, err := doc.CreateText([]byte("delta"))
-	require.NoError(t, err)
+	text3 := doc.CreateText([]byte("delta"))
 	require.NoError(t, root.AddChild(text3))
 
 	require.Equal(t, "alphabetagammadelta", ixpath.StringValue(root))
@@ -106,10 +88,10 @@ func TestStringValue_MixedContent(t *testing.T) {
 
 func TestStringValue_Attribute(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
-	require.NoError(t, root.SetAttribute("key", "value"))
+	_, err := root.SetAttribute("key", "value")
+	require.NoError(t, err)
 
 	attrs := root.Attributes()
 	require.Len(t, attrs, 1)
@@ -118,22 +100,19 @@ func TestStringValue_Attribute(t *testing.T) {
 
 func TestStringValue_Comment(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	comment, err := doc.CreateComment([]byte("a comment"))
-	require.NoError(t, err)
+	comment := doc.CreateComment([]byte("a comment"))
 	require.Equal(t, "a comment", ixpath.StringValue(comment))
 }
 
 func TestStringValue_PI(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	pi, err := doc.CreatePI("target", "data here")
-	require.NoError(t, err)
+	pi := doc.CreatePI("target", "data here")
 	require.Equal(t, "data here", ixpath.StringValue(pi))
 }
 
 func TestStringValue_Namespace(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
 
 	ns := helium.NewNamespace("ns", "urn:example")
@@ -143,8 +122,7 @@ func TestStringValue_Namespace(t *testing.T) {
 
 func TestLocalNameOf(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
 
 	// Element local name
@@ -153,26 +131,24 @@ func TestLocalNameOf(t *testing.T) {
 	// Namespaced attribute local name
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 	ns := helium.NewNamespace("ns", "urn:ns")
-	require.NoError(t, root.SetAttributeNS("myattr", "v", ns))
+	_, err := root.SetAttributeNS("myattr", "v", ns)
+	require.NoError(t, err)
 	attrs := root.Attributes()
 	require.NotEmpty(t, attrs)
 	require.Equal(t, "myattr", ixpath.LocalNameOf(attrs[len(attrs)-1]))
 
 	// Comment — Name() is empty
-	comment, err := doc.CreateComment([]byte("x"))
-	require.NoError(t, err)
+	comment := doc.CreateComment([]byte("x"))
 	require.Equal(t, "", ixpath.LocalNameOf(comment))
 
 	// PI — Name() returns the target
-	pi, err := doc.CreatePI("mytarget", "data")
-	require.NoError(t, err)
+	pi := doc.CreatePI("mytarget", "data")
 	require.Equal(t, "mytarget", ixpath.LocalNameOf(pi))
 }
 
 func TestNodeNamespaceURI(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
 
 	// Non-namespaced element
@@ -181,21 +157,20 @@ func TestNodeNamespaceURI(t *testing.T) {
 	// Namespaced attribute
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 	ns := helium.NewNamespace("ns", "urn:ns")
-	require.NoError(t, root.SetAttributeNS("a", "v", ns))
+	_, err := root.SetAttributeNS("a", "v", ns)
+	require.NoError(t, err)
 	attrs := root.Attributes()
 	require.NotEmpty(t, attrs)
 	require.Equal(t, "urn:ns", ixpath.NodeNamespaceURI(attrs[len(attrs)-1]))
 
 	// Comment has no namespace
-	comment, err := doc.CreateComment([]byte("x"))
-	require.NoError(t, err)
+	comment := doc.CreateComment([]byte("x"))
 	require.Equal(t, "", ixpath.NodeNamespaceURI(comment))
 }
 
 func TestNodePrefix(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
 	require.NoError(t, doc.AddChild(root))
 
 	// Non-prefixed element
@@ -204,13 +179,13 @@ func TestNodePrefix(t *testing.T) {
 	// Namespaced attribute has prefix
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 	ns := helium.NewNamespace("ns", "urn:ns")
-	require.NoError(t, root.SetAttributeNS("a", "v", ns))
+	_, err := root.SetAttributeNS("a", "v", ns)
+	require.NoError(t, err)
 	attrs := root.Attributes()
 	require.NotEmpty(t, attrs)
 	require.Equal(t, "ns", ixpath.NodePrefix(attrs[len(attrs)-1]))
 
 	// Comment has no prefix
-	comment, err := doc.CreateComment([]byte("x"))
-	require.NoError(t, err)
+	comment := doc.CreateComment([]byte("x"))
 	require.Equal(t, "", ixpath.NodePrefix(comment))
 }

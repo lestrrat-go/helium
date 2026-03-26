@@ -108,8 +108,7 @@ func TestCompileValueOfNoSelect(t *testing.T) {
 func TestXpathResultToNameNamespace(t *testing.T) {
 	t.Run("namespaced element", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		e, err := doc.CreateElement("item")
-		require.NoError(t, err)
+		e := doc.CreateElement("item")
 		require.NoError(t, e.DeclareNamespace("ns", "http://example.com"))
 		require.NoError(t, e.SetActiveNamespace("ns", "http://example.com"))
 
@@ -122,8 +121,7 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 
 	t.Run("non-namespaced element", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		e, err := doc.CreateElement("item")
-		require.NoError(t, err)
+		e := doc.CreateElement("item")
 		require.NoError(t, doc.AddChild(e))
 
 		r := &xpath1.Result{
@@ -135,11 +133,11 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 
 	t.Run("namespaced attribute", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		e, err := doc.CreateElement("root")
-		require.NoError(t, err)
+		e := doc.CreateElement("root")
 		require.NoError(t, doc.AddChild(e))
 		ns := helium.NewNamespace("foo", "http://example.com/foo")
-		require.NoError(t, e.SetAttributeNS("bar", "val", ns))
+		_, err := e.SetAttributeNS("bar", "val", ns)
+		require.NoError(t, err)
 
 		// Find the attribute.
 		var attr *helium.Attribute
@@ -160,10 +158,10 @@ func TestXpathResultToNameNamespace(t *testing.T) {
 
 	t.Run("non-namespaced attribute", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
-		e, err := doc.CreateElement("root")
-		require.NoError(t, err)
+		e := doc.CreateElement("root")
 		require.NoError(t, doc.AddChild(e))
-		require.NoError(t, e.SetAttribute("baz", "val"))
+		_, err := e.SetAttribute("baz", "val")
+		require.NoError(t, err)
 
 		var attr *helium.Attribute
 		for _, a := range e.Attributes() {

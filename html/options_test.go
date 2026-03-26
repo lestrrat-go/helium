@@ -67,18 +67,14 @@ func TestOptionsNoDefaultDTD(t *testing.T) {
 func TestWriteNodeDocumentPreservesWriterOptions(t *testing.T) {
 	doc := helium.NewHTMLDocument()
 
-	root, err := doc.CreateElement("HTML")
-	require.NoError(t, err)
+	root := doc.CreateElement("HTML")
 
-	body, err := doc.CreateElement("Body")
-	require.NoError(t, err)
+	body := doc.CreateElement("Body")
 
-	link, err := doc.CreateElement("A")
-	require.NoError(t, err)
+	link := doc.CreateElement("A")
 	link.SetLiteralAttribute("HREF", "caf\u00e9")
 
-	text, err := doc.CreateText([]byte("\u0080"))
-	require.NoError(t, err)
+	text := doc.CreateText([]byte("\u0080"))
 	require.NoError(t, link.AddChild(text))
 	require.NoError(t, body.AddChild(link))
 	require.NoError(t, root.AddChild(body))

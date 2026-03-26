@@ -9,27 +9,23 @@ import (
 
 func TestWalkSeesSiblingReplacementDuringTraversal(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	a, err := doc.CreateElement("a")
-	require.NoError(t, err)
-	c, err := doc.CreateElement("c")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
+	a := doc.CreateElement("a")
+	c := doc.CreateElement("c")
 
 	require.NoError(t, doc.AddChild(root))
 	require.NoError(t, root.AddChild(a))
 	require.NoError(t, root.AddChild(c))
 
 	var visited []string
-	err = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
 
 		visited = append(visited, n.Name())
 		if n == a {
-			b, err := doc.CreateElement("b")
-			require.NoError(t, err)
+			b := doc.CreateElement("b")
 			require.NoError(t, c.Replace(b))
 		}
 		return nil
@@ -40,19 +36,16 @@ func TestWalkSeesSiblingReplacementDuringTraversal(t *testing.T) {
 
 func TestWalkSkipsSiblingRemovedDuringTraversal(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	a, err := doc.CreateElement("a")
-	require.NoError(t, err)
-	c, err := doc.CreateElement("c")
-	require.NoError(t, err)
+	root := doc.CreateElement("root")
+	a := doc.CreateElement("a")
+	c := doc.CreateElement("c")
 
 	require.NoError(t, doc.AddChild(root))
 	require.NoError(t, root.AddChild(a))
 	require.NoError(t, root.AddChild(c))
 
 	var visited []string
-	err = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+	err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
 		}

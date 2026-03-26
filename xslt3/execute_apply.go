@@ -214,10 +214,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 		if err != nil {
 			return err
 		}
-		text, err := ec.resultDoc.CreateText([]byte(s))
-		if err != nil {
-			return err
-		}
+		text := ec.resultDoc.CreateText([]byte(s))
 		if err := ec.addNode(text); err != nil {
 			return err
 		}
@@ -274,10 +271,7 @@ func (ec *execContext) applyTemplatesToSequence(ctx context.Context, seq xpath3.
 		if err != nil {
 			return err
 		}
-		text, err := ec.resultDoc.CreateText([]byte(s))
-		if err != nil {
-			return err
-		}
+		text := ec.resultDoc.CreateText([]byte(s))
 		if err := ec.addNode(text); err != nil {
 			return err
 		}
@@ -613,10 +607,7 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 		if err != nil {
 			return err
 		}
-		text, err := ec.resultDoc.CreateText([]byte(s))
-		if err != nil {
-			return err
-		}
+		text := ec.resultDoc.CreateText([]byte(s))
 		return ec.addNode(text)
 	}
 
@@ -736,10 +727,7 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *applyImportsI
 		if err != nil {
 			return err
 		}
-		text, err := ec.resultDoc.CreateText([]byte(s))
-		if err != nil {
-			return err
-		}
+		text := ec.resultDoc.CreateText([]byte(s))
 		return ec.addNode(text)
 	}
 

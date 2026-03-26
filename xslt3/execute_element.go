@@ -34,10 +34,7 @@ func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error
 		localName = name[idx+1:]
 	}
 
-	elem, err := ec.resultDoc.CreateElement(localName)
-	if err != nil {
-		return err
-	}
+	elem := ec.resultDoc.CreateElement(localName)
 
 	hasNS := false
 	if inst.Namespace != nil {
@@ -755,9 +752,9 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			// Create a standalone attribute node by attaching it to a
 			// temporary element, then capturing it as a node item.
 			tmpDoc := helium.NewDefaultDocument()
-			tmpElem, err := tmpDoc.CreateElement("_tmp")
-			if err == nil {
-				_ = tmpElem.SetAttribute(name, value)
+			tmpElem := tmpDoc.CreateElement("_tmp")
+			{
+				_, _ = tmpElem.SetAttribute(name, value)
 				for _, attr := range tmpElem.Attributes() {
 					out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: attr})
 					out.noteOutput()
@@ -1169,10 +1166,7 @@ func (ec *execContext) execComment(ctx context.Context, inst *commentInst) error
 	// doesn't end with "-" (add a trailing space if so).
 	value = sanitizeComment(value)
 
-	comment, err := ec.resultDoc.CreateComment([]byte(value))
-	if err != nil {
-		return err
-	}
+	comment := ec.resultDoc.CreateComment([]byte(value))
 	return ec.addNode(comment)
 }
 
@@ -1245,10 +1239,7 @@ func (ec *execContext) execPI(ctx context.Context, inst *piInst) error {
 	// premature termination of the processing instruction.
 	value = strings.ReplaceAll(value, "?>", "? >")
 
-	pi, err := ec.resultDoc.CreatePI(name, value)
-	if err != nil {
-		return err
-	}
+	pi := ec.resultDoc.CreatePI(name, value)
 	return ec.addNode(pi)
 }
 
