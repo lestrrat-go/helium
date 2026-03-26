@@ -277,9 +277,17 @@ type Expression struct {
 	ast    Expr
 }
 
+// Compiler compiles XPath 1.0 expression strings into reusable Expression
+// values, mirroring the xpath3.Compiler API.
+type Compiler struct{}
+
+// NewCompiler returns a new Compiler.
+func NewCompiler() Compiler {
+	return Compiler{}
+}
+
 // Compile parses an XPath expression string into a reusable Expression.
-// (libxml2: xmlXPathCompile / xmlXPathCtxtCompile)
-func Compile(expr string) (*Expression, error) {
+func (Compiler) Compile(expr string) (*Expression, error) {
 	ast, err := Parse(expr)
 	if err != nil {
 		return nil, err
@@ -288,12 +296,25 @@ func Compile(expr string) (*Expression, error) {
 }
 
 // MustCompile is like Compile but panics on error.
-func MustCompile(expr string) *Expression {
-	e, err := Compile(expr)
+func (c Compiler) MustCompile(expr string) *Expression {
+	e, err := c.Compile(expr)
 	if err != nil {
 		panic("xpath: Compile(" + expr + "): " + err.Error())
 	}
 	return e
+}
+
+// Compile parses an XPath expression string into a reusable Expression.
+// It is a convenience wrapper around NewCompiler().Compile().
+// (libxml2: xmlXPathCompile / xmlXPathCtxtCompile)
+func Compile(expr string) (*Expression, error) {
+	return NewCompiler().Compile(expr)
+}
+
+// MustCompile is like Compile but panics on error.
+// It is a convenience wrapper around NewCompiler().MustCompile().
+func MustCompile(expr string) *Expression {
+	return NewCompiler().MustCompile(expr)
 }
 
 // Evaluate evaluates the compiled expression against the given context node.
