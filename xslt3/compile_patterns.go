@@ -21,7 +21,8 @@ type pattern struct {
 
 // patternAlt is one alternative in a union pattern (separated by |).
 type patternAlt struct {
-	expr         xpath3.Expr // the parsed XPath AST
+	expr         xpath3.Expr       // the parsed XPath AST
+	compiled     *xpath3.Expression // cached compiled expression for runtime matching
 	priority     float64
 	neverMatches bool // true for syntactically valid but semantically empty patterns (e.g., child::document-node())
 }
@@ -90,8 +91,13 @@ func compilePattern(s string, nsBindings map[string]string, xpathDefaultNS strin
 		if err := checkPatternForbiddenFunctions(ast); err != nil {
 			return nil, err
 		}
+		compiledExpr, compErr := xpath3.NewCompiler().CompileExpr(ast)
+		if compErr != nil {
+			return nil, staticError(errCodeXTSE0500, "pattern compile failed %q: %v", alt, compErr)
+		}
 		pa := &patternAlt{
 			expr:         ast,
+			compiled:     compiledExpr,
 			priority:     computeDefaultPriority(ast),
 			neverMatches: isNeverMatchingPattern(alt),
 		}
@@ -1649,9 +1655,13 @@ func evaluatePredicateWithPosition(ec *execContext, pred xpath3.Expr, node heliu
 // appears in the result sequence. It tries the candidate node as context first,
 // then walks up the ancestor chain trying each ancestor as context.
 func matchByEvaluation(ctx *execContext, alt *patternAlt, node helium.Node) bool {
-	compiled, compErr := xpath3.NewCompiler().CompileExpr(alt.expr)
-	if compErr != nil {
-		return false
+	compiled := alt.compiled
+	if compiled == nil {
+		var compErr error
+		compiled, compErr = xpath3.NewCompiler().CompileExpr(alt.expr)
+		if compErr != nil {
+			return false
+		}
 	}
 
 	// Try evaluating with the node itself as context first.

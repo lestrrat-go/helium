@@ -245,8 +245,8 @@ func evalIntersectExceptExpr(evalFn exprEvaluator, ec *evalContext, e IntersectE
 	for _, n := range rightNodes {
 		rightSet[makeNodeIdentityKey(n)] = struct{}{}
 	}
-	seen := make(map[nodeIdentityKey]struct{})
-	var result []helium.Node
+	seen := make(map[nodeIdentityKey]struct{}, len(leftNodes))
+	result := make([]helium.Node, 0, len(leftNodes))
 	for _, n := range leftNodes {
 		key := makeNodeIdentityKey(n)
 		if _, dup := seen[key]; dup {
@@ -307,8 +307,8 @@ func evalFilterExpr(evalFn exprEvaluator, ec *evalContext, e FilterExpr) (Sequen
 // applySequencePredicate filters a sequence by a predicate expression.
 // Each item becomes the context item; numeric predicates select by position.
 func applySequencePredicate(evalFn exprEvaluator, ec *evalContext, seq Sequence, pred Expr) (Sequence, error) {
-	var result ItemSlice
 	size := seqLen(seq)
+	result := make(ItemSlice, 0, size)
 	i := 0
 	for item := range seqItems(seq) {
 		var frame evalContextFrame
@@ -358,7 +358,7 @@ func evalPathExpr(evalFn exprEvaluator, ec *evalContext, e PathExpr) (Sequence, 
 	if !ok {
 		return nil, ErrPathNotNodeSet
 	}
-	var result []helium.Node
+	result := make([]helium.Node, 0, len(baseNodes))
 	for _, n := range baseNodes {
 		frame := ec.pushNodeContext(n, 1, 1)
 		subResult, err := evalLocationPath(evalFn, ec, e.Path)
@@ -400,7 +400,7 @@ func evalVMPathExpr(evalFn exprEvaluator, ec *evalContext, e vmPathExpr) (Sequen
 	if !ok {
 		return nil, ErrPathNotNodeSet
 	}
-	var result []helium.Node
+	result := make([]helium.Node, 0, len(baseNodes))
 	for _, n := range baseNodes {
 		frame := ec.pushNodeContext(n, 1, 1)
 		subResult, err := evalVMLocationPath(evalFn, ec, *e.Path)
@@ -455,8 +455,8 @@ func evalPathStepExpr(evalFn exprEvaluator, ec *evalContext, e PathStepExpr) (Se
 	if !ok {
 		return nil, ErrPathNotNodeSet
 	}
-	var allNodes []helium.Node
-	var allItems ItemSlice
+	allNodes := make([]helium.Node, 0, len(baseNodes))
+	allItems := make(ItemSlice, 0, len(baseNodes))
 	hasNodes := false
 	hasNonNodes := false
 

@@ -206,7 +206,7 @@ func nodeItemFor(ec *evalContext, n helium.Node) NodeItem {
 }
 
 func evalStepWithPredicates(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
-	var allFiltered []helium.Node
+	allFiltered := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
 		matched, traversed, err := appendAxisNodeMatches(nil, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
@@ -227,7 +227,7 @@ func evalStepWithPredicates(evalFn exprEvaluator, ec *evalContext, nodes []heliu
 }
 
 func evalStepNoPredicates(ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
-	var next []helium.Node
+	next := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
 		var traversed int
 		var err error
@@ -243,7 +243,7 @@ func evalStepNoPredicates(ec *evalContext, nodes []helium.Node, step Step) ([]he
 }
 
 func evalVMStepWithPredicates(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, step vmLocationStep) ([]helium.Node, error) {
-	var allFiltered []helium.Node
+	allFiltered := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
 		matched, traversed, err := appendAxisNodeMatches(nil, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
@@ -284,7 +284,7 @@ func applyVMPositionPredicate(nodes []helium.Node, pred vmPositionPredicateExpr)
 }
 
 func applyVMAttributeExistsPredicate(ec *evalContext, nodes []helium.Node, pred vmAttributeExistsPredicateExpr) []helium.Node {
-	var result []helium.Node
+	result := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
 		if nodeHasMatchingAttribute(ec, n, pred.NodeTest) {
 			result = append(result, n)
@@ -295,7 +295,7 @@ func applyVMAttributeExistsPredicate(ec *evalContext, nodes []helium.Node, pred 
 
 func applyVMAttributeEqualsStringPredicate(evalFn exprEvaluator, ec *evalContext, nodes []helium.Node, pred vmAttributeEqualsStringPredicateExpr) ([]helium.Node, error) {
 	size := len(nodes)
-	var result []helium.Node
+	result := make([]helium.Node, 0, size)
 	for i, n := range nodes {
 		match, ok := vmAttributeEqualsStringPredicateMatches(ec, n, pred)
 		if !ok {
@@ -363,7 +363,7 @@ func nodeHasMatchingAttribute(ec *evalContext, node helium.Node, test NodeTest) 
 }
 
 func evalVMStepNoPredicates(ec *evalContext, nodes []helium.Node, step vmLocationStep) ([]helium.Node, error) {
-	var next []helium.Node
+	next := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
 		var traversed int
 		var err error
