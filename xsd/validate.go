@@ -305,12 +305,17 @@ func (vc *validationContext) validateAttributes(elem *helium.Element, td *TypeDe
 		allowed[au.Name] = au
 	}
 
+	// Build set of present instance attributes (excluding special attrs)
+	// for O(1) lookups in the required-check and default-insertion loops.
+	present := make(map[QName]struct{}, len(elem.Attributes()))
+
 	// Check for unknown attributes and fixed value constraints.
 	for _, a := range elem.Attributes() {
 		if isSpecialAttr(a) {
 			continue
 		}
 		aqn := QName{Local: attrLocalName(a), NS: a.URI()}
+		present[aqn] = struct{}{}
 		if au, ok := allowed[aqn]; ok {
 			if au.Fixed != nil && a.Value() != *au.Fixed {
 				ad := attrDisplayName(a)
@@ -352,15 +357,7 @@ func (vc *validationContext) validateAttributes(elem *helium.Element, td *TypeDe
 		if !au.Required {
 			continue
 		}
-		found := false
-		for _, a := range elem.Attributes() {
-			aqn := QName{Local: attrLocalName(a), NS: a.URI()}
-			if aqn == au.Name {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if _, ok := present[au.Name]; !ok {
 			msg := fmt.Sprintf("The attribute '%s' is required but missing.", au.Name.Local)
 			vc.reportValidityError(vc.filename, elem.Line(), elemDisplayName(elem), msg)
 			hasErr = true
@@ -380,24 +377,16 @@ func (vc *validationContext) validateAttributes(elem *helium.Element, td *TypeDe
 		} else {
 			continue
 		}
-		// Check if the attribute is already present.
-		found := false
-		for _, a := range elem.Attributes() {
-			aqn := QName{Local: attrLocalName(a), NS: a.URI()}
-			if aqn == au.Name {
-				found = true
-				break
-			}
+		if _, ok := present[au.Name]; ok {
+			continue
 		}
-		if !found {
-			// Insert the default/fixed value as an attribute on the element.
-			_, _ = elem.SetAttribute(au.Name.Local, defVal)
-			// Annotate the newly inserted attribute.
-			for _, a := range elem.Attributes() {
-				if a.LocalName() == au.Name.Local && a.URI() == au.Name.NS {
-					vc.annotateAttrUse(a, au)
-					break
-				}
+		// Insert the default/fixed value as an attribute on the element.
+		_, _ = elem.SetAttribute(au.Name.Local, defVal)
+		// Annotate the newly inserted attribute.
+		for _, a := range elem.Attributes() {
+			if a.LocalName() == au.Name.Local && a.URI() == au.Name.NS {
+				vc.annotateAttrUse(a, au)
+				break
 			}
 		}
 	}
