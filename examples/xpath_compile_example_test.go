@@ -30,8 +30,9 @@ func Example_xpath_compile() {
 	// Evaluate the compiled expression against each top-level child.
 	// "count(child::*)" counts the direct child elements of the context node.
 	// <a> has 2 children (x, y) and <b> has 1 child (z).
+	ev := xpath1.NewEvaluator()
 	for child := doc.FirstChild().FirstChild(); child != nil; child = child.NextSibling() {
-		r, err := expr.Evaluate(context.Background(), child)
+		r, err := ev.Evaluate(context.Background(), expr, child)
 		if err != nil {
 			fmt.Printf("eval error: %s\n", err)
 			return

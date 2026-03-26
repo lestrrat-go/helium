@@ -15,22 +15,26 @@ func Example_xpath_context_options() {
 		return
 	}
 
-	ctx := context.Background()
-
-	// Context options are how you inject external values into XPath evaluation.
+	// Evaluator options are how you inject external values into XPath evaluation.
 	// Here we bind a variable and a custom function before running the queries.
-	ctx = xpath1.WithVariables(ctx, map[string]any{
-		"minPrice": float64(40),
-	})
-	ctx = xpath1.WithFunction(ctx, "discount", xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
-		return &xpath1.Result{
-			Type:   xpath1.NumberResult,
-			Number: args[0].Number * 0.9,
-		}, nil
-	}))
+	ev := xpath1.NewEvaluator().
+		Variables(map[string]any{
+			"minPrice": float64(40),
+		}).
+		Function("discount", xpath1.FunctionFunc(func(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
+			return &xpath1.Result{
+				Type:   xpath1.NumberResult,
+				Number: args[0].Number * 0.9,
+			}, nil
+		}))
 
 	// The first expression reads the caller-supplied variable.
-	r, err := xpath1.Evaluate(ctx, doc, `count(/catalog/book[number(@price) >= $minPrice])`)
+	expr1, err := xpath1.Compile(`count(/catalog/book[number(@price) >= $minPrice])`)
+	if err != nil {
+		fmt.Printf("compile error: %s\n", err)
+		return
+	}
+	r, err := ev.Evaluate(context.Background(), expr1, doc)
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return
@@ -38,7 +42,12 @@ func Example_xpath_context_options() {
 	fmt.Printf("eligible: %.0f\n", r.Number)
 
 	// The second expression calls the custom XPath function registered above.
-	r, err = xpath1.Evaluate(ctx, doc, `discount(number(/catalog/book[1]/@price))`)
+	expr2, err := xpath1.Compile(`discount(number(/catalog/book[1]/@price))`)
+	if err != nil {
+		fmt.Printf("compile error: %s\n", err)
+		return
+	}
+	r, err = ev.Evaluate(context.Background(), expr2, doc)
 	if err != nil {
 		fmt.Printf("xpath error: %s\n", err)
 		return

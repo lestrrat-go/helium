@@ -15,11 +15,11 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	var out strings.Builder
 	valid := true
 
-	xctx := xpath1.WithNamespaces(ctx, schema.namespaces)
+	ev := xpath1.NewEvaluator().Namespaces(schema.namespaces)
 
 	for _, pat := range schema.patterns {
 		for _, r := range pat.rules {
-			result, err := r.contextExpr.Evaluate(xctx, doc)
+			result, err := ev.Evaluate(ctx, r.contextExpr, doc)
 			if err != nil {
 				continue
 			}
@@ -36,18 +36,18 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 				// Variables are accumulated so that each let can
 				// reference previously registered variables, matching
 				// libxml2's xmlSchematronRegisterVariables behavior.
-				ruleCtx := xctx
+				ruleEv := ev
 				for _, lb := range r.lets {
-					letResult, err := lb.expr.Evaluate(ruleCtx, node)
+					letResult, err := ruleEv.Evaluate(ctx, lb.expr, node)
 					if err == nil {
-						ruleCtx = xpath1.WithAdditionalVariables(ruleCtx, map[string]any{
+						ruleEv = ruleEv.AdditionalVariables(map[string]any{
 							lb.name: xpathResultToValue(letResult),
 						})
 					}
 				}
 
 				for _, t := range r.tests {
-					testResult, err := t.compiled.Evaluate(ruleCtx, node)
+					testResult, err := ruleEv.Evaluate(ctx, t.compiled, node)
 					if err != nil {
 						continue
 					}
@@ -66,7 +66,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 					if fire {
 						valid = false
 						if cfg.errorHandler != nil {
-							msg := formatMessage(ruleCtx, t.message, node, &out)
+							msg := formatMessage(ctx, ruleEv, t.message, node, &out)
 							cfg.errorHandler.Handle(ctx, &ValidationError{
 								Filename: filename,
 								Line:     node.Line(),
@@ -75,7 +75,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 								Message:  msg,
 							})
 						} else if !cfg.quiet {
-							msg := formatMessage(ruleCtx, t.message, node, &out)
+							msg := formatMessage(ctx, ruleEv, t.message, node, &out)
 							nodePath := getNodePath(node)
 							out.WriteString(schematronError(filename, node.Line(), node.Name(), nodePath, msg))
 						}
@@ -101,7 +101,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 // after each segment (text, name, value-of), if the accumulated buffer
 // ends with whitespace, all trailing whitespace is replaced with a
 // single space. Internal whitespace within segments is preserved.
-func formatMessage(xctx context.Context, parts []messagePart, node helium.Node, out *strings.Builder) string {
+func formatMessage(ctx context.Context, ev xpath1.Evaluator, parts []messagePart, node helium.Node, out *strings.Builder) string {
 	var buf []byte
 	for _, part := range parts {
 		switch p := part.(type) {
@@ -109,7 +109,7 @@ func formatMessage(xctx context.Context, parts []messagePart, node helium.Node, 
 			buf = append(buf, p.text...)
 		case namePart:
 			if p.expr != nil {
-				result, err := p.expr.Evaluate(xctx, node)
+				result, err := ev.Evaluate(ctx, p.expr, node)
 				if err == nil {
 					buf = append(buf, xpathResultToName(result)...)
 				}
@@ -119,7 +119,7 @@ func formatMessage(xctx context.Context, parts []messagePart, node helium.Node, 
 				// Compile-time error -- should not happen (caught during compilation).
 				return string(buf)
 			}
-			result, err := p.expr.Evaluate(xctx, node)
+			result, err := ev.Evaluate(ctx, p.expr, node)
 			if err != nil {
 				// Runtime XPath error -- emit error line and stop processing.
 				fmt.Fprintf(out, "XPath error : %s\n", formatXPathError(err))
