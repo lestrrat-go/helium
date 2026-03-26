@@ -2,8 +2,8 @@ package examples_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
@@ -47,10 +47,9 @@ func Example_xsd_validate_errors() {
 		return
 	}
 
-	// Validate returns an error when the document is invalid.
-	// The error message contains "fails to validate" along with details.
+	// Validate returns ErrValidationFailed when the document is invalid.
 	if err := xsd.NewValidator(schema).Validate(context.Background(), doc); err != nil {
-		fmt.Println(strings.Contains(err.Error(), "fails to validate"))
+		fmt.Println(errors.Is(err, xsd.ErrValidationFailed))
 	}
 	// Output:
 	// true

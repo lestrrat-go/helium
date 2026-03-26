@@ -228,14 +228,14 @@ func (ec *execContext) validateAndNormalizeElementContent(elem *helium.Element, 
 				td, schema := def.TD, def.Schema
 				switch td.ContentType {
 				case xsd.ContentTypeElementOnly, xsd.ContentTypeMixed, xsd.ContentTypeEmpty:
-					if err := xsd.ValidateElementAgainstType(elem, td, schema); err != nil {
+					if err := td.ValidateElement(elem, schema); err != nil {
 						lastErr = err
 						continue
 					}
 					return nil
 				case xsd.ContentTypeSimple:
 					content := strings.TrimSpace(elementTextContent(elem))
-					if err := xsd.ValidateSimpleValue(content, td); err != nil {
+					if err := td.Validate(content, nil); err != nil {
 						lastErr = err
 						continue
 					}

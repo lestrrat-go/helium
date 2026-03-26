@@ -76,19 +76,18 @@ func collapseSpaces(s string) string {
 }
 
 // validateValue validates a text value against a simple type definition.
-// It writes any errors to out and returns an error if the value is invalid.
-func validateValue(value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, out *strings.Builder) error {
+func validateValue(value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
 	// Apply whitespace normalization per the type's whiteSpace facet.
 	trimmed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
 
 	// Check if this is a list type.
 	if resolveVariety(td) == TypeVarietyList {
-		return validateListValue(trimmed, td, elemName, filename, line, out)
+		return validateListValue(trimmed, td, elemName, filename, line, vc)
 	}
 
 	// Check if this is a union type.
 	if resolveVariety(td) == TypeVarietyUnion {
-		return validateUnionValue(value, valueNS, td, elemName, filename, line, out)
+		return validateUnionValue(value, valueNS, td, elemName, filename, line, vc)
 	}
 
 	// Find the builtin base type by walking the BaseType chain.
@@ -98,12 +97,12 @@ func validateValue(value string, valueNS map[string]string, td *TypeDef, elemNam
 	if err := validateBuiltinValue(trimmed, builtinLocal); err != nil {
 		typeName := typeDisplayName(td)
 		msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", trimmed, typeName)
-		out.WriteString(validityError(filename, line, elemName, msg))
+		vc.reportValidityError(filename, line, elemName, msg)
 		return err
 	}
 
 	// Validate facets along the type chain.
-	return validateFacets(trimmed, valueNS, td, builtinLocal, elemName, filename, line, out)
+	return validateFacets(trimmed, valueNS, td, builtinLocal, elemName, filename, line, vc)
 }
 
 // resolveUnionMembers walks up the base type chain to find the union's member types.
@@ -120,27 +119,32 @@ func resolveUnionMembers(td *TypeDef) []*TypeDef {
 
 // validateUnionValue validates a value against a union type by trying each member type.
 // If all member types fail, a union-level error is reported.
-func validateUnionValue(value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, out *strings.Builder) error {
+func validateUnionValue(value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
 	members := resolveUnionMembers(td)
 
 	// First, check restriction facets on the union type itself (e.g., enumeration).
 	// If the type has facets and the value doesn't match them, that's the error.
+	// Suppress the per-facet error; report a union-level error instead.
 	trimmed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
 	if td.Facets != nil {
-		var facetBuf strings.Builder
-		if err := checkFacets(trimmed, valueNS, td.Facets, "", elemName, filename, line, &facetBuf); err != nil {
-			// Report union-level error instead of facet-specific error.
+		vc.suppressDepth++
+		err := checkFacets(trimmed, valueNS, td.Facets, "", elemName, filename, line, vc)
+		vc.suppressDepth--
+		if err != nil {
 			typeName := unionTypeDisplayName(td)
 			msg := fmt.Sprintf("'%s' is not a valid value of the %s.", trimmed, typeName)
-			out.WriteString(validityError(filename, line, elemName, msg))
+			vc.reportValidityError(filename, line, elemName, msg)
 			return err
 		}
 	}
 
 	// Try each member type. If any accepts the value, it's valid.
+	// Suppress per-member errors; only report union-level on total failure.
 	for _, member := range members {
-		var buf strings.Builder
-		if err := validateValue(value, valueNS, member, elemName, filename, line, &buf); err == nil {
+		vc.suppressDepth++
+		err := validateValue(value, valueNS, member, elemName, filename, line, vc)
+		vc.suppressDepth--
+		if err == nil {
 			return nil
 		}
 	}
@@ -149,7 +153,7 @@ func validateUnionValue(value string, valueNS map[string]string, td *TypeDef, el
 	// Use raw value (not trimmed) for the error message to match libxml2 behavior.
 	typeName := unionTypeDisplayName(td)
 	msg := fmt.Sprintf("'%s' is not a valid value of the %s.", value, typeName)
-	out.WriteString(validityError(filename, line, elemName, msg))
+	vc.reportValidityError(filename, line, elemName, msg)
 	return fmt.Errorf("union validation failed")
 }
 
@@ -177,7 +181,7 @@ func resolveVariety(td *TypeDef) TypeVariety {
 }
 
 // validateListValue validates a space-separated list value against a list type.
-func validateListValue(value string, td *TypeDef, elemName, filename string, line int, out *strings.Builder) error {
+func validateListValue(value string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
 	// Split value into items by whitespace.
 	var items []string
 	if value != "" {
@@ -192,17 +196,17 @@ func validateListValue(value string, td *TypeDef, elemName, filename string, lin
 		if cur.Facets != nil {
 			if cur.Facets.Length != nil && itemCount != *cur.Facets.Length {
 				msg := fmt.Sprintf("[facet 'length'] The value has a length of '%d'; this differs from the allowed length of '%d'.", itemCount, *cur.Facets.Length)
-				out.WriteString(validityError(filename, line, elemName, msg))
+				vc.reportValidityError(filename, line, elemName, msg)
 				facetErr = fmt.Errorf("length")
 			}
 			if cur.Facets.MinLength != nil && itemCount < *cur.Facets.MinLength {
 				msg := fmt.Sprintf("[facet 'minLength'] The value has a length of '%d'; this underruns the allowed minimum length of '%d'.", itemCount, *cur.Facets.MinLength)
-				out.WriteString(validityError(filename, line, elemName, msg))
+				vc.reportValidityError(filename, line, elemName, msg)
 				facetErr = fmt.Errorf("minLength")
 			}
 			if cur.Facets.MaxLength != nil && itemCount > *cur.Facets.MaxLength {
 				msg := fmt.Sprintf("[facet 'maxLength'] The value has a length of '%d'; this exceeds the allowed maximum length of '%d'.", itemCount, *cur.Facets.MaxLength)
-				out.WriteString(validityError(filename, line, elemName, msg))
+				vc.reportValidityError(filename, line, elemName, msg)
 				facetErr = fmt.Errorf("maxLength")
 			}
 		}
@@ -212,7 +216,7 @@ func validateListValue(value string, td *TypeDef, elemName, filename string, lin
 	if facetErr != nil {
 		typeName := typeQualifiedName(td)
 		msg := fmt.Sprintf("'%s' is not a valid value of the list type '%s'.", value, typeName)
-		out.WriteString(validityError(filename, line, elemName, msg))
+		vc.reportValidityError(filename, line, elemName, msg)
 		return facetErr
 	}
 
@@ -220,7 +224,7 @@ func validateListValue(value string, td *TypeDef, elemName, filename string, lin
 	itemType := resolveItemType(td)
 	if itemType != nil {
 		for _, item := range items {
-			if err := validateValue(item, nil, itemType, elemName, filename, line, out); err != nil {
+			if err := validateValue(item, nil, itemType, elemName, filename, line, vc); err != nil {
 				return err
 			}
 		}
@@ -284,13 +288,13 @@ func typeDisplayName(td *TypeDef) string {
 }
 
 // validateFacets checks all applicable facets for a type and its ancestors.
-func validateFacets(value string, valueNS map[string]string, td *TypeDef, builtinLocal, elemName, filename string, line int, out *strings.Builder) error {
+func validateFacets(value string, valueNS map[string]string, td *TypeDef, builtinLocal, elemName, filename string, line int, vc *validationContext) error {
 	// Collect all facets along the type chain (most derived first).
 	var anyErr error
 	cur := td
 	for cur != nil {
 		if cur.Facets != nil {
-			if err := checkFacets(value, valueNS, cur.Facets, builtinLocal, elemName, filename, line, out); err != nil {
+			if err := checkFacets(value, valueNS, cur.Facets, builtinLocal, elemName, filename, line, vc); err != nil {
 				anyErr = err
 			}
 		}

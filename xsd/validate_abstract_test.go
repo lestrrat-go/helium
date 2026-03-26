@@ -31,9 +31,10 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
-		err = xsd.NewValidator(schema).Validate(t.Context(), doc)
+		var errs string
+		err = validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "The type definition is abstract.")
+		require.Contains(t, errs, "The type definition is abstract.")
 	})
 
 	t.Run("concrete derived type via xsi:type accepted", func(t *testing.T) {
@@ -102,9 +103,10 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
-		err = xsd.NewValidator(schema).Validate(t.Context(), doc)
+		var errs string
+		err = validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "is not validly derived from")
+		require.Contains(t, errs, "is not validly derived from")
 	})
 
 	t.Run("non-existent xsi:type rejected", func(t *testing.T) {
@@ -130,9 +132,10 @@ func TestAbstractTypeValidation(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
 		require.NoError(t, err)
 
-		err = xsd.NewValidator(schema).Validate(t.Context(), doc)
+		var errs string
+		err = validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "does not resolve to a type definition")
+		require.Contains(t, errs, "does not resolve to a type definition")
 	})
 
 	t.Run("same xsi:type as declared accepted", func(t *testing.T) {

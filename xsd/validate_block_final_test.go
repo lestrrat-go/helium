@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -20,13 +21,25 @@ func compileWithErrors(t *testing.T, schemaXML string) (*xsd.Schema, string) {
 	return schema, errs
 }
 
-func compileAndValidate(t *testing.T, schemaXML, instanceXML string) error {
+func compileAndValidate(t *testing.T, schemaXML, instanceXML string, out *string) error {
 	t.Helper()
 	schema, errs := compileWithErrors(t, schemaXML)
 	require.Empty(t, errs, "unexpected compile errors")
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
 	require.NoError(t, err)
-	return xsd.NewValidator(schema).Filename("test.xml").Validate(t.Context(), doc) //nolint:wrapcheck // test helper: caller uses require.NoError
+	v := xsd.NewValidator(schema).Filename("test.xml")
+	if out != nil {
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		v = v.ErrorHandler(collector)
+		err = v.Validate(t.Context(), doc)
+		var b strings.Builder
+		for _, e := range collector.Errors() {
+			b.WriteString(e.Error())
+		}
+		*out = b.String()
+		return err
+	}
+	return v.Validate(t.Context(), doc)
 }
 
 func TestBlockDefault(t *testing.T) {
@@ -59,7 +72,7 @@ func TestBlockDefault(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		instanceXML := `<root><member><value>hi</value><extra>more</extra></member></root>`
-		err := compileAndValidate(t, schemaXML, instanceXML)
+		err := compileAndValidate(t, schemaXML, instanceXML, nil)
 		require.Error(t, err)
 	})
 
@@ -85,9 +98,10 @@ func TestBlockDefault(t *testing.T) {
 </xs:schema>`
 		instanceXML := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:type="derivedType"><value>hi</value><extra>more</extra></root>`
-		err := compileAndValidate(t, schemaXML, instanceXML)
+		var errs string
+		err := compileAndValidate(t, schemaXML, instanceXML, &errs)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "blocked by the element declaration")
+		require.Contains(t, errs, "blocked by the element declaration")
 	})
 }
 
@@ -113,9 +127,10 @@ func TestBlockOnElement(t *testing.T) {
 </xs:schema>`
 		instanceXML := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:type="derivedType"><value>hi</value><extra>more</extra></root>`
-		err := compileAndValidate(t, schemaXML, instanceXML)
+		var errs string
+		err := compileAndValidate(t, schemaXML, instanceXML, &errs)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "blocked by the element declaration")
+		require.Contains(t, errs, "blocked by the element declaration")
 	})
 
 	t.Run("block=substitution blocks substitution group members", func(t *testing.T) {
@@ -132,7 +147,7 @@ func TestBlockOnElement(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		instanceXML := `<root><member>hello</member></root>`
-		err := compileAndValidate(t, schemaXML, instanceXML)
+		err := compileAndValidate(t, schemaXML, instanceXML, nil)
 		require.Error(t, err)
 	})
 
@@ -151,7 +166,7 @@ func TestBlockOnElement(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		instanceXML := `<root><member>hello</member></root>`
-		err := compileAndValidate(t, schemaXML, instanceXML)
+		err := compileAndValidate(t, schemaXML, instanceXML, nil)
 		require.NoError(t, err)
 	})
 }
@@ -327,7 +342,7 @@ func TestExplicitEmptyOverridesDefault(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		instanceXML := `<root><member>hello</member></root>`
-		err := compileAndValidate(t, schemaXML, instanceXML)
+		err := compileAndValidate(t, schemaXML, instanceXML, nil)
 		require.NoError(t, err)
 	})
 

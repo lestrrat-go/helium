@@ -141,7 +141,7 @@ func (vc *validationContext) matchChoice(parent *helium.Element, mg *ModelGroup,
 	if reps < minReps {
 		names := particleNames(mg.Particles, vc.schema)
 		msg := formatExpected("Missing child element(s).", names)
-		vc.addValidityError(vc.filename, parent.Line(), elemDisplayName(parent), msg)
+		vc.reportValidityError(vc.filename, parent.Line(), elemDisplayName(parent), msg)
 		return pos - startPos, fmt.Errorf("missing")
 	}
 
@@ -178,7 +178,7 @@ func (vc *validationContext) matchAll(parent *helium.Element, mg *ModelGroup, ch
 			if len(expected) > 0 {
 				msg = formatExpected("This element is not expected.", expected)
 			}
-			vc.addValidityError(vc.filename, child.elem.Line(), child.displayName, msg)
+			vc.reportValidityError(vc.filename, child.elem.Line(), child.displayName, msg)
 			return consumed, fmt.Errorf("unexpected element")
 		}
 		if seen[idx] {
@@ -188,7 +188,7 @@ func (vc *validationContext) matchAll(parent *helium.Element, mg *ModelGroup, ch
 			if len(expected) > 0 {
 				msg = formatExpected("This element is not expected.", expected)
 			}
-			vc.addValidityError(vc.filename, child.elem.Line(), child.displayName, msg)
+			vc.reportValidityError(vc.filename, child.elem.Line(), child.displayName, msg)
 			return consumed, fmt.Errorf("duplicate")
 		}
 		seen[idx] = true
@@ -211,7 +211,7 @@ func (vc *validationContext) matchAll(parent *helium.Element, mg *ModelGroup, ch
 	if hasRequired {
 		unseen := unseenParticleNames(mg.Particles, seen, vc.schema)
 		msg := formatExpected("Missing child element(s).", unseen)
-		vc.addValidityError(vc.filename, parent.Line(), elemDisplayName(parent), msg)
+		vc.reportValidityError(vc.filename, parent.Line(), elemDisplayName(parent), msg)
 		return consumed, fmt.Errorf("missing")
 	}
 
@@ -240,7 +240,7 @@ func (vc *validationContext) matchAll(parent *helium.Element, mg *ModelGroup, ch
 		}
 		if td != nil && td.Abstract {
 			msg := "The type definition is abstract."
-			vc.addValidityError(vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
+			vc.reportValidityError(vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
 			contentErr = fmt.Errorf("abstract type")
 			continue
 		}
@@ -284,7 +284,7 @@ func (vc *validationContext) validateContentModelTop(parent *helium.Element, mg 
 	// Check for unconsumed children.
 	if consumed < len(children) {
 		ce := children[consumed]
-		vc.addValidityError(vc.filename, ce.elem.Line(), ce.displayName, "This element is not expected.")
+		vc.reportValidityError(vc.filename, ce.elem.Line(), ce.displayName, "This element is not expected.")
 		return fmt.Errorf("unexpected element")
 	}
 
@@ -328,7 +328,7 @@ func (vc *validationContext) matchElementParticle(parent *helium.Element, p *Par
 			// There IS a child but it doesn't match — "This element is not expected."
 			child := children[pos+count]
 			msg := formatExpected("This element is not expected.", expectedNames)
-			vc.addValidityError(vc.filename, child.elem.Line(), child.displayName, msg)
+			vc.reportValidityError(vc.filename, child.elem.Line(), child.displayName, msg)
 		} else {
 			// No more children at all — "Missing child element(s)."
 			// When the sequence contains wildcards, suppress "Expected is" since the
@@ -339,7 +339,7 @@ func (vc *validationContext) matchElementParticle(parent *helium.Element, p *Par
 			} else {
 				msg = formatExpected("Missing child element(s).", expectedNames)
 			}
-			vc.addValidityError(vc.filename, parent.Line(), elemDisplayName(parent), msg)
+			vc.reportValidityError(vc.filename, parent.Line(), elemDisplayName(parent), msg)
 		}
 		return count, fmt.Errorf("missing")
 	}
@@ -361,13 +361,13 @@ func (vc *validationContext) matchElementParticle(parent *helium.Element, p *Par
 		// Check block flags against xsi:type derivation.
 		if td != actualDecl.Type && actualDecl.Type != nil && isDerivationBlocked(td, actualDecl.Type, actualDecl.Block) {
 			msg := "The xsi:type definition is blocked by the element declaration."
-			vc.addValidityError(vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
+			vc.reportValidityError(vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
 			contentErr = fmt.Errorf("blocked xsi:type")
 			continue
 		}
 		if td != nil && td.Abstract {
 			msg := "The type definition is abstract."
-			vc.addValidityError(vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
+			vc.reportValidityError(vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
 			contentErr = fmt.Errorf("abstract type")
 			continue
 		}
@@ -517,9 +517,9 @@ func (vc *validationContext) matchWildcardParticle(parent *helium.Element, p *Pa
 	if count < p.MinOccurs {
 		msg := fmt.Sprintf("This element is not expected. Expected is ( %s ).", wildcardExpected(wc))
 		if pos < len(children) {
-			vc.addValidityError(vc.filename, children[pos].elem.Line(), children[pos].displayName, msg)
+			vc.reportValidityError(vc.filename, children[pos].elem.Line(), children[pos].displayName, msg)
 		} else {
-			vc.addValidityError(vc.filename, parent.Line(), elemDisplayName(parent), msg)
+			vc.reportValidityError(vc.filename, parent.Line(), elemDisplayName(parent), msg)
 		}
 		return count, fmt.Errorf("wildcard not matched")
 	}
@@ -533,7 +533,7 @@ func (vc *validationContext) matchWildcardParticle(parent *helium.Element, p *Pa
 			if edecl == nil {
 				if wc.ProcessContents == ProcessStrict {
 					msg := "No matching global declaration available, but demanded by the strict wildcard."
-					vc.addValidityError(vc.filename, child.elem.Line(), child.displayName, msg)
+					vc.reportValidityError(vc.filename, child.elem.Line(), child.displayName, msg)
 					contentErr = fmt.Errorf("strict wildcard: no global element decl")
 				}
 				continue
@@ -546,7 +546,7 @@ func (vc *validationContext) matchWildcardParticle(parent *helium.Element, p *Pa
 			}
 			if td != nil && td.Abstract {
 				msg := "The type definition is abstract."
-				vc.addValidityError(vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
+				vc.reportValidityError(vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
 				contentErr = fmt.Errorf("abstract type")
 				continue
 			}

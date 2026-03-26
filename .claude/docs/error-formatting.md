@@ -128,16 +128,20 @@ Unwraps to `Cause` via `Unwrap()`.
 
 ## Error Accumulation Pattern
 
-All validation packages share the same pattern:
+### XSD
 
-1. Errors written to `strings.Builder` (`out` or `v.errors`)
-2. Each error formatted by package-specific functions above
-3. Final status appended: `"filename validates\n"` or `"filename fails to validate\n"`
-4. Wrapped in `*ValidateError{Output: string, Errors: []ValidationError}`
-5. `ValidateError.Error()` returns the full formatted string
-6. `ValidateError.Errors` contains structured per-error details
+All validation errors flow through `ErrorHandler.Handle()`. No `strings.Builder` accumulation.
 
-### ValidateError (used by xsd, relaxng, schematron)
+- `Validate()` installs a sync `validationErrors` collector internally
+- If caller set an external `ErrorHandler`, errors fan out to both via `multiHandler`
+- On failure, `ValidateError.Output` is built from the collector's errors + status line
+- `reportValidityError` / `reportValidityErrorAttr` on `validationContext` check `suppressDepth > 0` to suppress errors during union member trials
+
+### RelaxNG / Schematron
+
+Errors written to `strings.Builder` AND sent to `ErrorHandler.Handle()` if configured.
+
+### ValidateError (relaxng, schematron only)
 
 ```
 type ValidateError struct {
@@ -147,21 +151,25 @@ type ValidateError struct {
 func (e *ValidateError) Error() string { return e.Output }
 ```
 
-### ValidationError (structured per-error)
+XSD uses `ErrValidationFailed` sentinel instead. Individual errors go to ErrorHandler.
 
-- **xsd**: `ValidationError{Filename, Line, Element, Attribute, Message}`
-- **relaxng**: `ValidationError{Filename, Line, Element, Message}`
-- **schematron**: `ValidationError{Filename, Line, Element, Path, Message}` (in `options.go`)
+### XSD Validation Error Helpers (`xsd/validate_context.go`)
 
-### ErrorHandler during validation
+- `reportValidityError(file, line, elemName, msg)` — sends to ErrorHandler (suppressed when `suppressDepth > 0`)
+- `reportValidityErrorAttr(file, line, elemName, attrName, msg)` — sends to ErrorHandler (suppressed when `suppressDepth > 0`)
 
-All three validators call ErrorHandler during validation:
-- **xsd**: calls with `helium.NewLeveledError(errStr, helium.ErrorLevelError)` for structural/content errors
-- **relaxng**: calls with `helium.NewLeveledError(errStr, helium.ErrorLevelError)`
-- **schematron**: calls with `*ValidationError` directly
+### XSD Internal Types (`xsd/xsd.go`)
+
+- `validationErrors` — synchronous `ErrorHandler` that appends `err.Error()` to `[]string` (preserves ordering)
+- `multiHandler` — fans out `Handle` calls to multiple `ErrorHandler`s
+
+### TypeDef Validation Methods (`xsd/typedef_validate.go`)
+
+- `(*TypeDef).Validate(value string, nsMap map[string]string) error` — validates a lexical value against a simple type; uses `NilErrorHandler` (pass/fail only)
+- `(*TypeDef).ValidateElement(elem *helium.Element, schema *Schema) error` — validates an element's content against the type; uses internal `validationErrors` collector for error messages
 
 ## Compilation vs Validation Errors
 
 - **Compilation errors** — reported via `ErrorHandler.Handle(ctx, err)` during `Compile()`
-- **Validation errors** — accumulated in `strings.Builder` and `[]ValidationError`, reported via `ErrorHandler.Handle(ctx, err)` and returned as `ValidateError`
+- **Validation errors** — reported via `ErrorHandler.Handle(ctx, err)` during `Validate()`; `ValidateError.Output` built from internal sync collector
 - Both types partitioned in tests via `partitionCompileErrors()` (split by `ErrorLevelFatal`)

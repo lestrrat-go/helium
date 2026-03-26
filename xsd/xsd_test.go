@@ -27,6 +27,25 @@ func partitionCompileErrors(errs []error) (warnings, errors string) {
 	return w.String(), e.String()
 }
 
+// validateWithOutput validates a document and optionally collects error strings.
+// When out is non-nil, an ErrorHandler is installed and the collected errors
+// are assigned to *out.
+func validateWithOutput(t *testing.T, v xsd.Validator, doc *helium.Document, out *string) error {
+	t.Helper()
+	if out != nil {
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		v = v.ErrorHandler(collector)
+		err := v.Validate(t.Context(), doc)
+		var b strings.Builder
+		for _, e := range collector.Errors() {
+			b.WriteString(e.Error())
+		}
+		*out = b.String()
+		return err
+	}
+	return v.Validate(t.Context(), doc)
+}
+
 const testdataBase = "../testdata/libxml2-compat/schemas"
 
 // testCase represents a single golden-file test: one (schema, instance) pair.
@@ -205,13 +224,14 @@ func TestGoldenFiles(t *testing.T) {
 				doc, err := helium.NewParser().Parse(t.Context(), xmlData)
 				require.NoError(t, err, "XML parse failed for %s", tc.xmlPath)
 
-				// Validate. Prepend any compile warnings to the output.
+				// Validate. Collect validation errors via ErrorHandler.
 				filename := "./test/schemas/" + tc.xmlBase
-				err = xsd.NewValidator(schema).Filename(filename).Validate(t.Context(), doc)
+				var valErrs string
+				err = validateWithOutput(t, xsd.NewValidator(schema).Filename(filename), doc, &valErrs)
 				if err != nil {
-					got = compileWarnings + err.Error()
+					got = compileWarnings + valErrs + filename + " fails to validate\n"
 				} else {
-					got = compileWarnings + filename + " validates\n"
+					got = compileWarnings + valErrs + filename + " validates\n"
 				}
 			}
 
@@ -272,9 +292,10 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		err = xsd.NewValidator(schema).Validate(t.Context(), doc)
+		var errs string
+		err = validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "not nillable")
+		require.Contains(t, errs, "not nillable")
 	})
 
 	t.Run("nilled element with text content fails", func(t *testing.T) {
@@ -284,9 +305,10 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		err = xsd.NewValidator(schema).Validate(t.Context(), doc)
+		var errs string
+		err = validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "nilled")
+		require.Contains(t, errs, "nilled")
 	})
 
 	t.Run("nilled element with child element fails", func(t *testing.T) {
@@ -296,9 +318,10 @@ func TestXsiNil(t *testing.T) {
 </root>`))
 		require.NoError(t, err)
 
-		err = xsd.NewValidator(schema).Validate(t.Context(), doc)
+		var errs string
+		err = validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "nilled")
+		require.Contains(t, errs, "nilled")
 	})
 
 	t.Run("nilled complex element with attributes validates", func(t *testing.T) {
@@ -359,7 +382,7 @@ func extractBaseName(name string) string {
 }
 
 func TestDefaultFixedValidation(t *testing.T) {
-	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string) error {
+	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string, out *string) error {
 		t.Helper()
 		xsdDoc, err := helium.NewParser().Parse(t.Context(), []byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
@@ -372,7 +395,19 @@ func TestDefaultFixedValidation(t *testing.T) {
 
 		xmlDoc, err := helium.NewParser().Parse(t.Context(), []byte(xmlStr))
 		require.NoError(t, err, "XML parse failed")
-		return xsd.NewValidator(schema).Filename("test.xml").Validate(t.Context(), xmlDoc)
+		v := xsd.NewValidator(schema).Filename("test.xml")
+		if out != nil {
+			valCollector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+			v = v.ErrorHandler(valCollector)
+			err = v.Validate(t.Context(), xmlDoc)
+			var b strings.Builder
+			for _, e := range valCollector.Errors() {
+				b.WriteString(e.Error())
+			}
+			*out = b.String()
+			return err
+		}
+		return v.Validate(t.Context(), xmlDoc)
 	}
 
 	t.Run("element_fixed_correct_value", func(t *testing.T) {
@@ -380,7 +415,7 @@ func TestDefaultFixedValidation(t *testing.T) {
   <xs:element name="root" type="xs:string" fixed="hello"/>
 </xs:schema>`
 		xmlStr := `<root>hello</root>`
-		err := compileAndValidate(t, xsdStr, xmlStr)
+		err := compileAndValidate(t, xsdStr, xmlStr, nil)
 		require.NoError(t, err)
 	})
 
@@ -389,9 +424,10 @@ func TestDefaultFixedValidation(t *testing.T) {
   <xs:element name="root" type="xs:string" fixed="hello"/>
 </xs:schema>`
 		xmlStr := `<root>wrong</root>`
-		err := compileAndValidate(t, xsdStr, xmlStr)
+		var errs string
+		err := compileAndValidate(t, xsdStr, xmlStr, &errs)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "fixed value constraint")
+		require.Contains(t, errs, "fixed value constraint")
 	})
 
 	t.Run("element_fixed_empty", func(t *testing.T) {
@@ -399,7 +435,7 @@ func TestDefaultFixedValidation(t *testing.T) {
   <xs:element name="root" type="xs:string" fixed="hello"/>
 </xs:schema>`
 		xmlStr := `<root/>`
-		err := compileAndValidate(t, xsdStr, xmlStr)
+		err := compileAndValidate(t, xsdStr, xmlStr, nil)
 		require.NoError(t, err)
 	})
 
@@ -408,7 +444,7 @@ func TestDefaultFixedValidation(t *testing.T) {
   <xs:element name="root" type="xs:integer" default="42"/>
 </xs:schema>`
 		xmlStr := `<root/>`
-		err := compileAndValidate(t, xsdStr, xmlStr)
+		err := compileAndValidate(t, xsdStr, xmlStr, nil)
 		require.NoError(t, err)
 	})
 
@@ -421,7 +457,7 @@ func TestDefaultFixedValidation(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		xmlStr := `<root color="red"/>`
-		err := compileAndValidate(t, xsdStr, xmlStr)
+		err := compileAndValidate(t, xsdStr, xmlStr, nil)
 		require.NoError(t, err)
 	})
 
@@ -434,14 +470,15 @@ func TestDefaultFixedValidation(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		xmlStr := `<root color="blue"/>`
-		err := compileAndValidate(t, xsdStr, xmlStr)
+		var errs string
+		err := compileAndValidate(t, xsdStr, xmlStr, &errs)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "fixed value constraint")
+		require.Contains(t, errs, "fixed value constraint")
 	})
 }
 
 func TestMultipleAttributeErrors(t *testing.T) {
-	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string) error {
+	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string, out *string) error {
 		t.Helper()
 		xsdDoc, err := helium.NewParser().Parse(t.Context(), []byte(xsdStr))
 		require.NoError(t, err, "XSD parse failed")
@@ -454,7 +491,19 @@ func TestMultipleAttributeErrors(t *testing.T) {
 
 		xmlDoc, err := helium.NewParser().Parse(t.Context(), []byte(xmlStr))
 		require.NoError(t, err, "XML parse failed")
-		return xsd.NewValidator(schema).Filename("test.xml").Validate(t.Context(), xmlDoc)
+		v := xsd.NewValidator(schema).Filename("test.xml")
+		if out != nil {
+			valCollector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+			v = v.ErrorHandler(valCollector)
+			err = v.Validate(t.Context(), xmlDoc)
+			var b strings.Builder
+			for _, e := range valCollector.Errors() {
+				b.WriteString(e.Error())
+			}
+			*out = b.String()
+			return err
+		}
+		return v.Validate(t.Context(), xmlDoc)
 	}
 
 	t.Run("multiple unknown attributes", func(t *testing.T) {
@@ -466,10 +515,11 @@ func TestMultipleAttributeErrors(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		xmlStr := `<root id="1" foo="x" bar="y"/>`
-		err := compileAndValidate(t, xsdStr, xmlStr)
+		var errs string
+		err := compileAndValidate(t, xsdStr, xmlStr, &errs)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "'foo' is not allowed")
-		require.Contains(t, err.Error(), "'bar' is not allowed")
+		require.Contains(t, errs, "'foo' is not allowed")
+		require.Contains(t, errs, "'bar' is not allowed")
 	})
 
 	t.Run("multiple missing required attributes", func(t *testing.T) {
@@ -482,10 +532,11 @@ func TestMultipleAttributeErrors(t *testing.T) {
   </xs:element>
 </xs:schema>`
 		xmlStr := `<root/>`
-		err := compileAndValidate(t, xsdStr, xmlStr)
+		var errs string
+		err := compileAndValidate(t, xsdStr, xmlStr, &errs)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "'a' is required but missing")
-		require.Contains(t, err.Error(), "'b' is required but missing")
+		require.Contains(t, errs, "'a' is required but missing")
+		require.Contains(t, errs, "'b' is required but missing")
 	})
 
 	t.Run("no declarations multiple attrs", func(t *testing.T) {
@@ -493,10 +544,11 @@ func TestMultipleAttributeErrors(t *testing.T) {
   <xs:element name="root" type="xs:string"/>
 </xs:schema>`
 		xmlStr := `<root x="1" y="2">text</root>`
-		err := compileAndValidate(t, xsdStr, xmlStr)
+		var errs string
+		err := compileAndValidate(t, xsdStr, xmlStr, &errs)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "'x' is not allowed")
-		require.Contains(t, err.Error(), "'y' is not allowed")
+		require.Contains(t, errs, "'x' is not allowed")
+		require.Contains(t, errs, "'y' is not allowed")
 	})
 }
 

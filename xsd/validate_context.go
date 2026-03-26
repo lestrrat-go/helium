@@ -2,63 +2,59 @@ package xsd
 
 import (
 	"context"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 )
 
 type validationContext struct {
-	ctx      context.Context
-	schema   *Schema
-	cfg      *validateConfig
-	filename string
-	out      *strings.Builder
-	errors   []ValidationError
+	ctx           context.Context
+	schema        *Schema
+	cfg           *validateConfig
+	filename      string
+	errorHandler  helium.ErrorHandler
+	suppressDepth int
 }
 
-func newValidationContext(ctx context.Context, schema *Schema, cfg *validateConfig, filename string, out *strings.Builder) *validationContext {
+func newValidationContext(ctx context.Context, schema *Schema, cfg *validateConfig, filename string, handler helium.ErrorHandler) *validationContext {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if handler == nil {
+		handler = helium.NilErrorHandler{}
+	}
 	return &validationContext{
-		ctx:      ctx,
-		schema:   schema,
-		cfg:      cfg,
-		filename: filename,
-		out:      out,
+		ctx:          ctx,
+		schema:       schema,
+		cfg:          cfg,
+		filename:     filename,
+		errorHandler: handler,
 	}
 }
 
-// addValidityError writes a formatted validity error to the output buffer,
-// delivers it to the ErrorHandler (if set), and appends a structured error.
-func (vc *validationContext) addValidityError(file string, line int, elemName, msg string) {
+// validationErrors is a synchronous ErrorHandler that accumulates error
+// strings in order. Used internally by ValidateElement and tests.
+type validationErrors struct {
+	errors []string
+}
+
+func (ve *validationErrors) Handle(_ context.Context, err error) {
+	ve.errors = append(ve.errors, err.Error())
+}
+
+// reportValidityError formats a validation error and sends it to the ErrorHandler.
+func (vc *validationContext) reportValidityError(file string, line int, elemName, msg string) {
+	if vc.suppressDepth > 0 {
+		return
+	}
 	errStr := validityError(file, line, elemName, msg)
-	vc.out.WriteString(errStr)
-	vc.errors = append(vc.errors, ValidationError{
-		Filename: file,
-		Line:     line,
-		Element:  elemName,
-		Message:  msg,
-	})
-	if vc.cfg != nil && vc.cfg.errorHandler != nil {
-		vc.cfg.errorHandler.Handle(vc.ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
-	}
+	vc.errorHandler.Handle(vc.ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
 }
 
-// addValidityErrorAttr writes a formatted attribute validity error to the
-// output buffer, delivers it to the ErrorHandler (if set), and appends a
-// structured error.
-func (vc *validationContext) addValidityErrorAttr(file string, line int, elemName, attrName, msg string) {
-	errStr := validityErrorAttr(file, line, elemName, attrName, msg)
-	vc.out.WriteString(errStr)
-	vc.errors = append(vc.errors, ValidationError{
-		Filename:  file,
-		Line:      line,
-		Element:   elemName,
-		Attribute: attrName,
-		Message:   msg,
-	})
-	if vc.cfg != nil && vc.cfg.errorHandler != nil {
-		vc.cfg.errorHandler.Handle(vc.ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
+// reportValidityErrorAttr formats an attribute validation error and sends it to the ErrorHandler.
+func (vc *validationContext) reportValidityErrorAttr(file string, line int, elemName, attrName, msg string) {
+	if vc.suppressDepth > 0 {
+		return
 	}
+	errStr := validityErrorAttr(file, line, elemName, attrName, msg)
+	vc.errorHandler.Handle(vc.ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
 }

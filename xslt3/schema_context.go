@@ -118,7 +118,7 @@ func (r *schemaRegistry) CastToSchemaType(value, typeName string) (string, error
 			// Complex types can't be cast from string.
 			return value, nil
 		}
-		if err := xsd.ValidateSimpleValue(value, td); err != nil {
+		if err := td.Validate(value, nil); err != nil {
 			return "", fmt.Errorf("value %q is not valid for type %s: %w", value, typeName, err)
 		}
 		return schemaNormalizeLexical(value, td), nil
@@ -137,7 +137,7 @@ func (r *schemaRegistry) CastToSchemaType(value, typeName string) (string, error
 				if td.ContentType != xsd.ContentTypeSimple {
 					return value, nil
 				}
-				if err := xsd.ValidateSimpleValue(value, td); err != nil {
+				if err := td.Validate(value, nil); err != nil {
 					return "", fmt.Errorf("value %q is not valid for type %s: %w", value, typeName, err)
 				}
 				return schemaNormalizeLexical(value, td), nil
@@ -273,7 +273,7 @@ func (r *schemaRegistry) ValidateCast(value, typeName string) error {
 	if td.ContentType != xsd.ContentTypeSimple {
 		return nil // complex types don't constrain string values
 	}
-	return xsd.ValidateSimpleValue(value, td)
+	return td.Validate(value, nil)
 }
 
 // ValidateCastWithNS validates a value against a schema type using namespace
@@ -286,7 +286,7 @@ func (r *schemaRegistry) ValidateCastWithNS(value, typeName string, nsMap map[st
 	if td.ContentType != xsd.ContentTypeSimple {
 		return nil
 	}
-	return xsd.ValidateSimpleValueWithNS(value, nsMap, td)
+	return td.Validate(value, nsMap)
 }
 
 // ListItemType implements xpath3.SchemaDeclarations.
@@ -534,7 +534,7 @@ func (r *schemaRegistry) ValidateAttribute(localName, nsURI, value string) (stri
 		typeName := xsdTypeNameFromDef(td)
 		// Validate using the XSD type definition (supports pattern facets,
 		// enumerations, and other constraints that CastFromString doesn't handle).
-		if valErr := xsd.ValidateSimpleValue(value, td); valErr != nil {
+		if valErr := td.Validate(value, nil); valErr != nil {
 			return typeName, false, valErr
 		}
 		return typeName, true, nil

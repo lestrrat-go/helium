@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,11 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 )
+
+// ErrValidationFailed is returned by Validate when the document does not
+// conform to the schema. Individual validation errors are delivered to the
+// ErrorHandler configured on the Validator.
+var ErrValidationFailed = errors.New("xsd: validation failed")
 
 // Compiler compiles XSD documents into Schema values.
 // It uses clone-on-write semantics: each builder method returns
@@ -99,32 +105,6 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 	return schema, compileErr
 }
 
-// ValidationError represents a single validation error with structured fields.
-type ValidationError struct {
-	Filename  string // source filename
-	Line      int    // line number in the source document
-	Element   string // element name (may include namespace in Clark notation)
-	Attribute string // attribute name (empty for element-level errors)
-	Message   string // human-readable error description
-}
-
-func (e *ValidationError) Error() string {
-	if e.Attribute != "" {
-		return validityErrorAttr(e.Filename, e.Line, e.Element, e.Attribute, e.Message)
-	}
-	return validityError(e.Filename, e.Line, e.Element, e.Message)
-}
-
-// ValidateError holds detailed validation failure output.
-type ValidateError struct {
-	Output string            // libxml2-compatible validation output
-	Errors []ValidationError // structured per-error details
-}
-
-func (e *ValidateError) Error() string {
-	return e.Output
-}
-
 // Validator validates documents against a compiled XSD schema.
 // It uses clone-on-write semantics: each builder method returns
 // a new Validator sharing the underlying config until mutation.
@@ -178,17 +158,34 @@ func (v Validator) NilledElements(ne *NilledElements) Validator {
 	return v
 }
 
+func (v Validator) closeHandler() {
+	if v.cfg != nil && v.cfg.errorHandler != nil {
+		if cl, ok := v.cfg.errorHandler.(io.Closer); ok {
+			_ = cl.Close()
+		}
+	}
+}
+
 // Validate validates a document against the compiled schema.
-// It returns nil if the document is valid, or a *ValidateError with details.
+// Individual validation errors are delivered to the ErrorHandler if one
+// is configured. Returns ErrValidationFailed when the document is invalid.
 // (libxml2: xmlSchemaValidateDoc)
 func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 	cfg := v.cfg
 	if cfg == nil {
 		cfg = &validateConfig{}
 	}
-	output, valid, errors := validateDocument(ctx, doc, v.schema, cfg)
+
+	handler := cfg.errorHandler
+	if handler == nil {
+		handler = helium.NilErrorHandler{}
+	}
+
+	valid := validateDocument(ctx, doc, v.schema, cfg, handler)
+	v.closeHandler()
+
 	if valid {
 		return nil
 	}
-	return &ValidateError{Output: output, Errors: errors}
+	return ErrValidationFailed
 }

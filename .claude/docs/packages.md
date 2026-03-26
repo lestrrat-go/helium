@@ -130,13 +130,12 @@ XML Schema (XSD) 1.0 compilation and validation.
 - **NewValidator(schema) → Validator** — create fluent builder for validation
   - `Filename(name)`, `ErrorHandler(h)`, `Annotations(*TypeAnnotations)`, `NilledElements(*NilledElements)` — builder methods
   - `Validate(ctx, *Document) → error` — terminal method
-- **ValidateSimpleValue(value, *TypeDef) → error** — validate a lexical value against a compiled simple type definition
+- **(*TypeDef).Validate(value, nsMap) → error** — validate a lexical value against a simple type; nsMap (prefix→URI) may be nil
+- **(*TypeDef).ValidateElement(elem, schema) → error** — validate an element's content against a type
 - `Schema.LookupElement(local, ns)`, `Schema.LookupType(local, ns)`, `Schema.NamedTypes()`, `Schema.TargetNamespace()`
 - Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include, IDC (xs:unique/key/keyref)
-- `ValidateError.Output` — libxml2-compatible error string; `ValidateError.Errors` — structured `[]ValidationError` for programmatic access
-- `ValidationError{Filename, Line, Element, Attribute, Message}` — per-error structured type
-- Validator.ErrorHandler delivers per-error callbacks during validation via `helium.NewLeveledError`
-- Files: `xsd.go` (API), `doc.go`, `schema.go` (data model), `compile.go` + `compile_imports.go` + `compile_helpers.go` (compile orchestration/imports/helpers), `read_types.go` + `read_particles.go` + `read_elements.go` + `read_decl_helpers.go` (schema readers), `link_refs.go` + `check_*.go` (reference resolution + constraints), `validate_context.go` + `validate.go` + `validate_elem.go` + `validate_idc.go` (validation flow/content/IDC), `simplevalue_*.go` + `validate_value_api.go` (simple-value engine/API), `errors.go`
+- `ErrValidationFailed` — sentinel error returned by `Validate()` on failure; individual errors delivered via `ErrorHandler`
+- Files: `xsd.go` (API), `schema.go` (data model), `compile.go` + `compile_imports.go` + `compile_helpers.go` (compile orchestration/imports/helpers), `read_types.go` + `read_particles.go` + `read_elements.go` + `read_decl_helpers.go` (schema readers), `link_refs.go` + `check_*.go` (reference resolution + constraints), `validate_context.go` + `validate.go` + `validate_elem.go` + `validate_idc.go` (validation flow/content/IDC), `simplevalue_*.go` + `typedef_validate.go` (simple-value engine/TypeDef API), `errors.go`
 - Imports: helium, xpath1/, internal/lexicon
 - Status: 225/226 golden tests passing
 
