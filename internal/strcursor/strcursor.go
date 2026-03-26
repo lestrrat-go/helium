@@ -9,26 +9,38 @@ import (
 	"errors"
 	"io"
 	"unicode/utf8"
+	"unsafe"
 )
 
-// Cursor is the interface satisfied by both RuneCursor and ByteCursor.
+// Cursor is the byte-oriented interface for reading XML input.
+// All offsets and counts are in bytes, not runes.
 type Cursor interface {
 	io.Reader
 
+	// Advance consumes n bytes from the input, updating line/column tracking.
 	Advance(int) error
+	// AdvanceFast consumes n bytes, updating only line numbers (not the line buffer).
+	AdvanceFast(int) error
 	Column() int
 	Consume([]byte) bool
 	ConsumeString(string) bool
-	Cur() rune
 	Done() bool
 	HasPrefix([]byte) bool
 	HasPrefixString(string) bool
 	Line() string
 	LineNumber() int
-	Peek() rune
-	PeekN(int) rune
-	// PeekString returns the first n runes/bytes as a string without consuming.
+	// Peek returns the byte at the current position, or 0 if at EOF.
+	Peek() byte
+	// PeekAt returns the byte at offset bytes from the current position (0-indexed).
+	PeekAt(int) byte
+	// PeekRune decodes and returns the rune at the current position.
+	// Use for non-ASCII content (byte >= 0x80). Returns utf8.RuneError on error.
+	PeekRune() rune
+	// PeekString returns n bytes from the current position as a string.
 	PeekString(int) string
+	// ScanCharDataInto scans XML character data into dst with EOL normalization.
+	// Returns the number of bytes consumed. Does not advance — call AdvanceFast after.
+	ScanCharDataInto(dst *bytes.Buffer) int
 	Unused() io.Reader
 }
 
@@ -92,7 +104,7 @@ type RuneCursor struct {
 	rawPos int // consumed position in raw
 
 	in     io.Reader
-	line   bytes.Buffer
+	line   []byte
 	lineno int
 	column int
 	nread  int
@@ -115,6 +127,7 @@ func NewRuneCursor(r io.Reader, bufsize ...int) *RuneCursor {
 		rawLen:   0,
 		rawPos:   0,
 		in:       r,
+		line:     make([]byte, 0, 256),
 		lineno:   1,
 		column:   1,
 	}
@@ -333,15 +346,15 @@ func (c *RuneCursor) Cur() rune {
 	c.nread += c.ring[c.head].width
 	if r == '\n' {
 		c.lineno++
-		c.line.Reset()
+		c.line = c.line[:0]
 		c.column = 1
 	} else {
 		c.column++
 	}
 	if r < utf8.RuneSelf {
-		c.line.WriteByte(byte(r))
+		c.line = append(c.line, byte(r))
 	} else {
-		c.line.WriteRune(r)
+		c.line = utf8.AppendRune(c.line, r)
 	}
 	c.head = (c.head + 1) & c.ringMask
 	c.count--
@@ -362,21 +375,113 @@ func (c *RuneCursor) Advance(n int) error {
 		c.nread += e.width
 		if e.val == '\n' {
 			c.lineno++
-			c.line.Reset()
+			c.line = c.line[:0]
 			c.column = 1
 		} else {
 			c.column++
 		}
 		if e.val < utf8.RuneSelf {
-			c.line.WriteByte(byte(e.val))
+			c.line = append(c.line, byte(e.val))
 		} else {
-			c.line.WriteRune(e.val)
+			c.line = utf8.AppendRune(c.line, e.val)
 		}
 		head = (head + 1) & mask
 	}
 	c.head = head
 	c.count -= n
 	return nil
+}
+
+// AdvanceFast advances by n runes, updating only line numbers and byte counts.
+// It skips the per-character line buffer tracking that Advance does, making it
+// faster for bulk character data consumption where the line context is not
+// needed for error reporting.
+func (c *RuneCursor) AdvanceFast(n int) error {
+	if c.count < n {
+		if err := c.ensure(n); err != nil {
+			return err
+		}
+	}
+	mask := c.ringMask
+	head := c.head
+	ring := c.ring
+	totalBytes := 0
+	lastNewline := -1
+	for i := 0; i < n; i++ {
+		e := ring[head]
+		totalBytes += e.width
+		if e.val == '\n' {
+			c.lineno++
+			lastNewline = i
+		}
+		head = (head + 1) & mask
+	}
+	c.nread += totalBytes
+	if lastNewline >= 0 {
+		c.column = n - lastNewline
+		c.line = c.line[:0]
+	} else {
+		c.column += n
+	}
+	c.head = head
+	c.count -= n
+	return nil
+}
+
+// ScanCharDataInto scans contiguous XML character data from the ring buffer
+// and writes it into dst with XML §2.11 EOL normalization applied inline
+// (\r\n → \n, lone \r → \n). It stops at '<', '&', ']]>', or any non-XML-char.
+// Returns the rune count consumed. The caller should call AdvanceFast(nRunes).
+func (c *RuneCursor) ScanCharDataInto(dst *bytes.Buffer) int {
+	if c.count == 0 {
+		if err := c.ensure(1); err != nil {
+			return 0
+		}
+	}
+
+	mask := c.ringMask
+	ring := c.ring
+	head := c.head
+	count := c.count
+	nRunes := 0
+
+	// Pre-grow to avoid repeated buffer growth.
+	dst.Grow(count)
+
+	for nRunes < count {
+		e := ring[(head+nRunes)&mask]
+		r := e.val
+		if r == '<' || r == '&' || r == utf8.RuneError {
+			break
+		}
+		u := uint32(r)
+		if u < 0x20 && u != 0x9 && u != 0xa && u != 0xd {
+			break
+		}
+		if r == ']' && nRunes+2 < count {
+			if ring[(head+nRunes+1)&mask].val == ']' && ring[(head+nRunes+2)&mask].val == '>' {
+				break
+			}
+		}
+		// XML §2.11 EOL normalization: \r\n → \n, lone \r → \n.
+		if r == '\r' {
+			dst.WriteByte('\n')
+			// Skip the following \n if present (\r\n pair).
+			if nRunes+1 < count && ring[(head+nRunes+1)&mask].val == '\n' {
+				nRunes++ // consume the \n too
+			}
+			nRunes++
+			continue
+		}
+		if e.width == 1 {
+			dst.WriteByte(byte(r))
+		} else {
+			dst.WriteRune(r)
+		}
+		nRunes++
+	}
+
+	return nRunes
 }
 
 func (c *RuneCursor) hasPrefix(s string, n int, consume bool) bool {
@@ -423,7 +528,7 @@ func (c *RuneCursor) ConsumeString(s string) bool {
 }
 
 func (c *RuneCursor) Line() string {
-	return c.line.String()
+	return unsafe.String(unsafe.SliceData(c.line), len(c.line))
 }
 
 func (c *RuneCursor) LineNumber() int {
@@ -487,7 +592,7 @@ type ByteCursor struct {
 	bufpos int
 	column int
 	in     io.Reader
-	line   bytes.Buffer
+	line   []byte
 	lineno int
 }
 
@@ -503,6 +608,7 @@ func NewByteCursor(r io.Reader, nn ...int) *ByteCursor {
 		bufpos: n, // force fill on first read
 		column: 1,
 		in:     r,
+		line:   make([]byte, 0, 256),
 		lineno: 1,
 	}
 }
@@ -549,29 +655,52 @@ func (c *ByteCursor) Done() bool {
 	return c.fillBuffer(1) != nil
 }
 
-func (c *ByteCursor) Peek() rune {
-	return c.PeekN(1)
+// Peek returns the byte at the current position, or 0 if at EOF.
+func (c *ByteCursor) Peek() byte {
+	if c.bufpos >= c.buflen {
+		if c.fillBuffer(1) != nil {
+			return 0
+		}
+	}
+	return c.buf[c.bufpos]
 }
 
-func (c *ByteCursor) PeekN(n int) rune {
-	if err := c.fillBuffer(n); err != nil {
+// PeekAt returns the byte at offset bytes from the current position (0-indexed).
+func (c *ByteCursor) PeekAt(offset int) byte {
+	pos := c.bufpos + offset
+	if pos >= c.buflen {
+		if c.fillBuffer(offset+1) != nil {
+			return 0
+		}
+		pos = c.bufpos + offset
+		if pos >= c.buflen {
+			return 0
+		}
+	}
+	return c.buf[pos]
+}
+
+// PeekRune decodes and returns the rune at the current position.
+// For ByteCursor, each byte is treated as a single character.
+func (c *ByteCursor) PeekRune() rune {
+	b := c.Peek()
+	if b == 0 {
 		return utf8.RuneError
 	}
-	return rune(c.buf[c.bufpos+n-1])
+	return rune(b)
 }
 
 // PeekString returns the first n bytes as a string without consuming them.
 func (c *ByteCursor) PeekString(n int) string {
-	if err := c.fillBuffer(n); err != nil {
+	if c.buflen-c.bufpos < n {
+		if c.fillBuffer(n) != nil {
+			return ""
+		}
+	}
+	if c.bufpos+n > c.buflen {
 		return ""
 	}
 	return string(c.buf[c.bufpos : c.bufpos+n])
-}
-
-func (c *ByteCursor) Cur() rune {
-	b := c.Peek()
-	_ = c.Advance(1)
-	return b
 }
 
 func (c *ByteCursor) Advance(n int) error {
@@ -581,14 +710,49 @@ func (c *ByteCursor) Advance(n int) error {
 	if i := bytes.IndexByte(c.buf[c.bufpos:c.bufpos+n], '\n'); i > -1 {
 		c.lineno++
 		c.column = n - i + 1
-		c.line.Reset()
-		c.line.Write(c.buf[c.bufpos+i : c.bufpos+n])
+		c.line = append(c.line[:0], c.buf[c.bufpos+i:c.bufpos+n]...)
 	} else {
 		c.column += n
-		c.line.Write(c.buf[c.bufpos : c.bufpos+n])
+		c.line = append(c.line, c.buf[c.bufpos:c.bufpos+n]...)
 	}
 	c.bufpos += n
 	return nil
+}
+
+// AdvanceFast advances by n bytes, skipping line buffer tracking.
+func (c *ByteCursor) AdvanceFast(n int) error {
+	return c.Advance(n)
+}
+
+// ScanCharDataInto scans XML character data into dst with EOL normalization.
+func (c *ByteCursor) ScanCharDataInto(dst *bytes.Buffer) int {
+	if c.fillBuffer(1) != nil {
+		return 0
+	}
+	i := 0
+	for c.bufpos+i < c.buflen {
+		b := c.buf[c.bufpos+i]
+		if b == '<' || b == '&' {
+			break
+		}
+		if b < 0x20 && b != 0x9 && b != 0xa && b != 0xd {
+			break
+		}
+		if b == ']' && c.bufpos+i+2 < c.buflen && c.buf[c.bufpos+i+1] == ']' && c.buf[c.bufpos+i+2] == '>' {
+			break
+		}
+		if b == '\r' {
+			dst.WriteByte('\n')
+			if c.bufpos+i+1 < c.buflen && c.buf[c.bufpos+i+1] == '\n' {
+				i++ // skip the \n in \r\n
+			}
+			i++
+			continue
+		}
+		dst.WriteByte(b)
+		i++
+	}
+	return i
 }
 
 func (c *ByteCursor) hasPrefix(s []byte, consume bool) bool {
@@ -622,7 +786,7 @@ func (c *ByteCursor) ConsumeString(s string) bool {
 }
 
 func (c *ByteCursor) Line() string {
-	return c.line.String()
+	return unsafe.String(unsafe.SliceData(c.line), len(c.line))
 }
 
 func (c *ByteCursor) LineNumber() int {
