@@ -132,9 +132,7 @@ Unwraps to `Cause` via `Unwrap()`.
 
 All validation errors flow through `ErrorHandler.Handle()`. No `strings.Builder` accumulation.
 
-- `Validate()` installs a sync `validationErrors` collector internally
-- If caller set an external `ErrorHandler`, errors fan out to both via `multiHandler`
-- On failure, `ValidateError.Output` is built from the collector's errors + status line
+- `Validate()` returns `ErrValidationFailed` on failure; individual errors go to `ErrorHandler`
 - `reportValidityError` / `reportValidityErrorAttr` on `validationContext` check `suppressDepth > 0` to suppress errors during union member trials
 
 ### RelaxNG / Schematron
@@ -158,10 +156,9 @@ XSD uses `ErrValidationFailed` sentinel instead. Individual errors go to ErrorHa
 - `reportValidityError(file, line, elemName, msg)` — sends to ErrorHandler (suppressed when `suppressDepth > 0`)
 - `reportValidityErrorAttr(file, line, elemName, attrName, msg)` — sends to ErrorHandler (suppressed when `suppressDepth > 0`)
 
-### XSD Internal Types (`xsd/xsd.go`)
+### XSD Internal Types (`xsd/validate_context.go`)
 
-- `validationErrors` — synchronous `ErrorHandler` that appends `err.Error()` to `[]string` (preserves ordering)
-- `multiHandler` — fans out `Handle` calls to multiple `ErrorHandler`s
+- `validationErrors` — synchronous `ErrorHandler` that appends `err.Error()` to `[]string`; used by `ValidateElement`
 
 ### TypeDef Validation Methods (`xsd/typedef_validate.go`)
 
@@ -171,5 +168,5 @@ XSD uses `ErrValidationFailed` sentinel instead. Individual errors go to ErrorHa
 ## Compilation vs Validation Errors
 
 - **Compilation errors** — reported via `ErrorHandler.Handle(ctx, err)` during `Compile()`
-- **Validation errors** — reported via `ErrorHandler.Handle(ctx, err)` during `Validate()`; `ValidateError.Output` built from internal sync collector
+- **Validation errors** — reported via `ErrorHandler.Handle(ctx, err)` during `Validate()`
 - Both types partitioned in tests via `partitionCompileErrors()` (split by `ErrorLevelFatal`)

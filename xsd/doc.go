@@ -16,9 +16,9 @@
 //	    Filename("input.xml").
 //	    Validate(ctx, doc)
 //
-// On failure, the returned error is a [*ValidateError] containing both a
-// libxml2-compatible output string and a structured [ValidationError] slice
-// for programmatic access to individual errors.
+// On failure, the returned error is [ErrValidationFailed]. Individual
+// validation errors are delivered to the [helium.ErrorHandler] configured
+// via [Validator.ErrorHandler].
 //
 // # Error Handling
 //

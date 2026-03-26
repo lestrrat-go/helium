@@ -189,9 +189,6 @@ func xpathResultToString(r *xpath1.Result) string {
 	case xpath1.StringResult:
 		return r.String
 	case xpath1.NumberResult:
-		if r.Number == math.Trunc(r.Number) && !math.IsInf(r.Number, 0) && !math.IsNaN(r.Number) {
-			return fmt.Sprintf("%g", r.Number)
-		}
 		return fmt.Sprintf("%g", r.Number)
 	case xpath1.BooleanResult:
 		if r.Bool {
