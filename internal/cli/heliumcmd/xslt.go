@@ -126,7 +126,7 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 			return ExitErr
 		}
-		defer f.Close()
+		defer f.Close() //nolint:errcheck
 		out = f
 	}
 
