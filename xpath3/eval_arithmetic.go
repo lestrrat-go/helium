@@ -69,8 +69,13 @@ func evalArithmetic(evalFn exprEvaluator, ec *evalContext, e BinaryExpr) (Sequen
 	la = promoteSchemaNumeric(la)
 	ra = promoteSchemaNumeric(ra)
 
-	// Tier 1: both integer → big.Int arithmetic
+	// Tier 1: both integer → try int64 fast path, fall back to big.Int
 	if isIntegerDerived(la.TypeName) && isIntegerDerived(ra.TypeName) {
+		lv, lok := la.Int64Val()
+		rv, rok := ra.Int64Val()
+		if lok && rok {
+			return integerArithInt64(e.Op, lv, rv)
+		}
 		return integerArith(e.Op, la.BigInt(), ra.BigInt())
 	}
 	// Tier 2: either decimal (or integer promoted) → big.Rat arithmetic
@@ -98,6 +103,8 @@ func PromoteSchemaType(a AtomicValue) AtomicValue {
 		return AtomicValue{TypeName: a.BaseType, Value: a.Value}
 	}
 	switch v := a.Value.(type) {
+	case int64:
+		return AtomicValue{TypeName: TypeInteger, Value: v}
 	case *big.Int:
 		return AtomicValue{TypeName: TypeInteger, Value: v}
 	case *big.Rat:
@@ -121,6 +128,79 @@ func PromoteSchemaType(a AtomicValue) AtomicValue {
 		return AtomicValue{TypeName: TypeQName, Value: v}
 	}
 	return a
+}
+
+// integerArithInt64 performs integer arithmetic using int64 values.
+// Falls back to big.Int on overflow.
+func integerArithInt64(op TokenType, a, b int64) (Sequence, error) {
+	switch op { //nolint:exhaustive
+	case TokenPlus:
+		r, ok := addInt64(a, b)
+		if ok {
+			return SingleInteger(r), nil
+		}
+		return integerArith(op, big.NewInt(a), big.NewInt(b))
+	case TokenMinus:
+		r, ok := subInt64(a, b)
+		if ok {
+			return SingleInteger(r), nil
+		}
+		return integerArith(op, big.NewInt(a), big.NewInt(b))
+	case TokenStar:
+		r, ok := mulInt64(a, b)
+		if ok {
+			return SingleInteger(r), nil
+		}
+		return integerArith(op, big.NewInt(a), big.NewInt(b))
+	case TokenDiv:
+		if b == 0 {
+			return nil, &XPathError{Code: errCodeFOAR0001, Message: "division by zero"}
+		}
+		r := new(big.Rat).SetFrac64(a, b)
+		return SingleDecimal(r), nil
+	case TokenIdiv:
+		if b == 0 {
+			return nil, &XPathError{Code: errCodeFOAR0001, Message: "integer division by zero"}
+		}
+		return SingleInteger(a / b), nil
+	case TokenMod:
+		if b == 0 {
+			return nil, &XPathError{Code: errCodeFOAR0001, Message: "modulo by zero"}
+		}
+		return SingleInteger(a % b), nil
+	default:
+		return nil, &XPathError{Code: errCodeXPTY0004, Message: "unsupported integer arithmetic operator"}
+	}
+}
+
+// addInt64 returns a+b and true if no overflow, or (0, false) on overflow.
+func addInt64(a, b int64) (int64, bool) {
+	r := a + b
+	if (b > 0 && r < a) || (b < 0 && r > a) {
+		return 0, false
+	}
+	return r, true
+}
+
+// subInt64 returns a-b and true if no overflow, or (0, false) on overflow.
+func subInt64(a, b int64) (int64, bool) {
+	r := a - b
+	if (b > 0 && r > a) || (b < 0 && r < a) {
+		return 0, false
+	}
+	return r, true
+}
+
+// mulInt64 returns a*b and true if no overflow, or (0, false) on overflow.
+func mulInt64(a, b int64) (int64, bool) {
+	if a == 0 || b == 0 {
+		return 0, true
+	}
+	r := a * b
+	if r/a != b {
+		return 0, false
+	}
+	return r, true
 }
 
 func integerArith(op TokenType, a, b *big.Int) (Sequence, error) {
@@ -275,6 +355,12 @@ func evalUnaryExpr(evalFn exprEvaluator, ec *evalContext, e UnaryExpr) (Sequence
 		return SingleAtomic(a), nil
 	}
 	if isIntegerDerived(a.TypeName) {
+		if v, ok := a.Value.(int64); ok {
+			if v != math.MinInt64 {
+				return SingleInteger(-v), nil
+			}
+			// MinInt64 overflows on negation; fall through to big.Int
+		}
 		return SingleIntegerBig(new(big.Int).Neg(a.BigInt())), nil
 	}
 	if a.TypeName == TypeDecimal {
@@ -303,6 +389,9 @@ func needsDecimalArith(lt, rt string) bool {
 // toRat converts an AtomicValue (integer or decimal) to *big.Rat.
 func toRat(a AtomicValue) *big.Rat {
 	if isIntegerDerived(a.TypeName) {
+		if v, ok := a.Value.(int64); ok {
+			return new(big.Rat).SetInt64(v)
+		}
 		return new(big.Rat).SetInt(a.BigInt())
 	}
 	return a.BigRat()

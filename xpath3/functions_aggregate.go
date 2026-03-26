@@ -143,8 +143,13 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 			widest = a.TypeName
 		}
 		if isIntegerDerived(a.TypeName) {
-			sumRat.Add(sumRat, new(big.Rat).SetInt(a.BigInt()))
-			sumFloat += a.ToFloat64()
+			if v, ok := a.Value.(int64); ok {
+				sumRat.Add(sumRat, new(big.Rat).SetInt64(v))
+				sumFloat += float64(v)
+			} else {
+				sumRat.Add(sumRat, new(big.Rat).SetInt(a.BigInt()))
+				sumFloat += a.ToFloat64()
+			}
 		} else if a.TypeName == TypeDecimal {
 			sumRat.Add(sumRat, a.BigRat())
 			f, _ := a.BigRat().Float64()
@@ -238,13 +243,13 @@ func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
 		return f, nil
 	}
 	if isIntegerDerived(a.TypeName) && a.TypeName != TypeInteger {
-		return AtomicValue{TypeName: TypeInteger, Value: a.BigInt()}, nil
+		return AtomicValue{TypeName: TypeInteger, Value: a.Value}, nil
 	}
 	// User-defined schema types: promote based on the underlying Go value.
 	if !IsKnownXSDType(a.TypeName) && a.TypeName != "" {
 		switch a.Value.(type) {
-		case *big.Int:
-			return AtomicValue{TypeName: TypeInteger, Value: a.BigInt()}, nil
+		case int64, *big.Int:
+			return AtomicValue{TypeName: TypeInteger, Value: a.Value}, nil
 		case *big.Rat:
 			return AtomicValue{TypeName: TypeDecimal, Value: a.BigRat()}, nil
 		case float64, *FloatValue:
@@ -268,6 +273,9 @@ func promoteResult(best AtomicValue, widest string) AtomicValue {
 		return AtomicValue{TypeName: TypeFloat, Value: NewFloat(best.ToFloat64())}
 	case TypeDecimal:
 		if isIntegerDerived(best.TypeName) {
+			if v, ok := best.Value.(int64); ok {
+				return AtomicValue{TypeName: TypeDecimal, Value: new(big.Rat).SetInt64(v)}
+			}
 			return AtomicValue{TypeName: TypeDecimal, Value: new(big.Rat).SetInt(best.BigInt())}
 		}
 	}
@@ -467,9 +475,15 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 			widest = a.TypeName
 		}
 		if isIntegerDerived(a.TypeName) {
-			sumInt.Add(sumInt, a.BigInt())
-			sumRat.Add(sumRat, new(big.Rat).SetInt(a.BigInt()))
-			sumFloat += a.ToFloat64()
+			if v, ok := a.Value.(int64); ok {
+				sumInt.Add(sumInt, big.NewInt(v))
+				sumRat.Add(sumRat, new(big.Rat).SetInt64(v))
+				sumFloat += float64(v)
+			} else {
+				sumInt.Add(sumInt, a.BigInt())
+				sumRat.Add(sumRat, new(big.Rat).SetInt(a.BigInt()))
+				sumFloat += a.ToFloat64()
+			}
 		} else if a.TypeName == TypeDecimal {
 			allInt = false
 			sumRat.Add(sumRat, a.BigRat())

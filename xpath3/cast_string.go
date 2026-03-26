@@ -41,11 +41,14 @@ func atomicToString(v AtomicValue) (string, error) {
 		TypeUnsignedLong, TypeUnsignedInt, TypeUnsignedShort, TypeUnsignedByte,
 		TypeNonNegativeInteger, TypeNonPositiveInteger,
 		TypePositiveInteger, TypeNegativeInteger:
-		n, ok := v.Value.(*big.Int)
-		if !ok {
-			return "", fmt.Errorf("xpath3: internal error: expected *big.Int value for %s", v.TypeName)
+		switch n := v.Value.(type) {
+		case int64:
+			return strconv.FormatInt(n, 10), nil
+		case *big.Int:
+			return n.String(), nil
+		default:
+			return "", fmt.Errorf("xpath3: internal error: expected integer value for %s, got %T", v.TypeName, v.Value)
 		}
-		return n.String(), nil
 	case TypeDecimal:
 		r, ok := v.Value.(*big.Rat)
 		if !ok {
@@ -125,6 +128,8 @@ func atomicToString(v AtomicValue) (string, error) {
 	switch val := v.Value.(type) {
 	case string:
 		return val, nil
+	case int64:
+		return strconv.FormatInt(val, 10), nil
 	case *big.Int:
 		return val.String(), nil
 	case *big.Rat:

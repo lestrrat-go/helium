@@ -32,9 +32,14 @@ func fnFormatInteger(ctx context.Context, args []Sequence) (Sequence, error) {
 	if !isSubtypeOf(valAtom.TypeName, TypeInteger) {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("format-integer: expected xs:integer, got %s", valAtom.TypeName)}
 	}
-	n, ok := valAtom.Value.(*big.Int)
-	if !ok {
-		return nil, fmt.Errorf("xpath3: internal error: expected *big.Int for %s", valAtom.TypeName)
+	var n *big.Int
+	switch v := valAtom.Value.(type) {
+	case int64:
+		n = big.NewInt(v)
+	case *big.Int:
+		n = v
+	default:
+		return nil, fmt.Errorf("xpath3: internal error: expected integer value for %s, got %T", valAtom.TypeName, valAtom.Value)
 	}
 
 	picAtom, err := AtomizeItem(picSeq.Get(0))

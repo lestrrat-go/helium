@@ -32,8 +32,7 @@ func evalFunctionCall(evalFn exprEvaluator, ec *evalContext, e FunctionCall) (Se
 		return nil, err
 	}
 
-	fctx := withFnContext(ec.goCtx, ec)
-	return fn.Call(fctx, args)
+	return fn.Call(ec.fnContext(), args)
 }
 
 func evalDynamicFunctionCall(evalFn exprEvaluator, ec *evalContext, e DynamicFunctionCall) (Sequence, error) {
@@ -110,7 +109,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, ec *evalContext, e DynamicFun
 		if v.Arity >= 0 && len(args) != v.Arity {
 			return nil, fmt.Errorf("%w: expected %d arguments, got %d", ErrArityMismatch, v.Arity, len(args))
 		}
-		return v.Invoke(withDynamicCall(withFnContext(ec.goCtx, ec)), args)
+		return v.Invoke(withDynamicCall(ec.fnContext()), args)
 	case MapItem:
 		// Maps are functions: $map($key) → value
 		if len(args) != 1 || seqLen(args[0]) != 1 {

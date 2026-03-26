@@ -72,11 +72,11 @@ func extractArrayIndex(seq Sequence) (int, error) {
 	if !isIntegerDerived(av.TypeName) {
 		return 0, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("array index must be xs:integer, got %s", av.TypeName)}
 	}
-	bi := av.BigInt()
-	if !bi.IsInt64() {
+	iv, ok := av.Int64Val()
+	if !ok {
 		return 0, &XPathError{Code: errCodeFOAY0001, Message: "array index out of range"}
 	}
-	return int(bi.Int64()), nil
+	return int(iv), nil
 }
 
 func fnArrayPut(_ context.Context, args []Sequence) (Sequence, error) {

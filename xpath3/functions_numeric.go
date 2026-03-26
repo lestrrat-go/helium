@@ -48,6 +48,14 @@ func fnAbs(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if isIntegerDerived(a.TypeName) {
+		if v, ok := a.Value.(int64); ok {
+			if v >= 0 {
+				return SingleInteger(v), nil
+			}
+			if v != math.MinInt64 {
+				return SingleInteger(-v), nil
+			}
+		}
 		return SingleIntegerBig(new(big.Int).Abs(a.BigInt())), nil
 	}
 	if a.TypeName == TypeDecimal {
@@ -65,6 +73,9 @@ func fnCeiling(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if isIntegerDerived(a.TypeName) {
+		if v, ok := a.Value.(int64); ok {
+			return SingleInteger(v), nil
+		}
 		return SingleIntegerBig(new(big.Int).Set(a.BigInt())), nil
 	}
 	if a.TypeName == TypeDecimal {
@@ -86,6 +97,9 @@ func fnFloor(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if isIntegerDerived(a.TypeName) {
+		if v, ok := a.Value.(int64); ok {
+			return SingleInteger(v), nil
+		}
 		return SingleIntegerBig(new(big.Int).Set(a.BigInt())), nil
 	}
 	if a.TypeName == TypeDecimal {
@@ -116,10 +130,13 @@ func fnRound(_ context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		precision = int(pa.BigInt().Int64())
+		precision = int(pa.IntegerVal())
 	}
 	if isIntegerDerived(a.TypeName) {
 		if precision >= 0 {
+			if v, ok := a.Value.(int64); ok {
+				return SingleInteger(v), nil
+			}
 			return SingleIntegerBig(new(big.Int).Set(a.BigInt())), nil
 		}
 		return SingleIntegerBig(roundIntegerHalfUp(a.BigInt(), -precision)), nil
@@ -163,10 +180,13 @@ func fnRoundHalfToEven(_ context.Context, args []Sequence) (Sequence, error) {
 		if err != nil {
 			return nil, err
 		}
-		precision = int(pa.BigInt().Int64())
+		precision = int(pa.IntegerVal())
 	}
 	if isIntegerDerived(a.TypeName) {
 		if precision >= 0 {
+			if v, ok := a.Value.(int64); ok {
+				return SingleInteger(v), nil
+			}
 			return SingleIntegerBig(new(big.Int).Set(a.BigInt())), nil
 		}
 		// Negative precision: round to 10^(-precision)

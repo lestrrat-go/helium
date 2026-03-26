@@ -17,6 +17,9 @@ func castToDouble(v AtomicValue) (AtomicValue, error) {
 		// Promote float to double precision (preserving the float32-precision value)
 		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(v.DoubleVal())}, nil
 	case TypeInteger:
+		if iv, ok := v.Value.(int64); ok {
+			return AtomicValue{TypeName: TypeDouble, Value: NewDouble(float64(iv))}, nil
+		}
 		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
 		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
 	case TypeDecimal:
@@ -104,9 +107,9 @@ func castToInteger(v AtomicValue) (AtomicValue, error) {
 		return AtomicValue{TypeName: TypeInteger, Value: q}, nil
 	case TypeBoolean:
 		if v.BooleanVal() {
-			return AtomicValue{TypeName: TypeInteger, Value: big.NewInt(1)}, nil
+			return AtomicValue{TypeName: TypeInteger, Value: int64(1)}, nil
 		}
-		return AtomicValue{TypeName: TypeInteger, Value: big.NewInt(0)}, nil
+		return AtomicValue{TypeName: TypeInteger, Value: int64(0)}, nil
 	case TypeString, TypeUntypedAtomic:
 		return CastFromString(v.StringVal(), TypeInteger)
 	default:
@@ -120,6 +123,9 @@ func castToInteger(v AtomicValue) (AtomicValue, error) {
 func castToDecimal(v AtomicValue) (AtomicValue, error) {
 	switch v.TypeName {
 	case TypeInteger:
+		if iv, ok := v.Value.(int64); ok {
+			return AtomicValue{TypeName: TypeDecimal, Value: new(big.Rat).SetInt64(iv)}, nil
+		}
 		r := new(big.Rat).SetInt(v.BigInt())
 		return AtomicValue{TypeName: TypeDecimal, Value: r}, nil
 	case TypeDouble, TypeFloat:
@@ -149,6 +155,9 @@ func castToBoolean(v AtomicValue) (AtomicValue, error) {
 	case TypeBoolean:
 		return v, nil
 	case TypeInteger:
+		if iv, ok := v.Value.(int64); ok {
+			return AtomicValue{TypeName: TypeBoolean, Value: iv != 0}, nil
+		}
 		return AtomicValue{TypeName: TypeBoolean, Value: v.BigInt().Sign() != 0}, nil
 	case TypeDouble, TypeFloat:
 		f := v.DoubleVal()

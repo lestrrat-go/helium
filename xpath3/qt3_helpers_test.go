@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -164,15 +165,13 @@ func qt3SingleRune(s string) rune {
 
 func qt3RunTests(t *testing.T, tests []qt3Test) {
 	t.Helper()
-	// Collect resource mappings
-	resourceMap := make(map[string]string)
+	// Register resource mappings into the shared server
 	for _, tc := range tests {
-		for uri, path := range tc.ResourceMap {
-			resourceMap[uri] = path
+		if len(tc.ResourceMap) > 0 {
+			qt3RegisterResources(tc.ResourceMap)
 		}
 	}
-	// Always start an HTTP server so unparsed-text can resolve relative URIs
-	httpClient := qt3NewTestServer(t, resourceMap)
+	httpClient := qt3GetSharedClient()
 	for _, tc := range tests {
 		t.Run(tc.Name, func(t *testing.T) {
 			t.Parallel()
@@ -527,6 +526,8 @@ func qt3EBV(seq xpath3.Sequence) (bool, error) {
 		case *xpath3.FloatValue:
 			f := v.Float64()
 			return f != 0 && !math.IsNaN(f), nil
+		case int64:
+			return v != 0, nil
 		case *big.Int:
 			return v.Sign() != 0, nil
 		case *big.Rat:
@@ -869,57 +870,61 @@ func qt3FormatSeq(seq xpath3.Sequence) string {
 	return strings.Join(parts, ", ")
 }
 
-// qt3Handler returns an http.Handler that serves QT3 test resource files.
-// It maps:
-//   - /fots/* → testdata/qt3ts/testdata/fn/* (for unparsed-text etc.)
-//   - Resource URIs → local files via resourceMap
-func qt3Handler(resourceMap map[string]string) http.Handler {
+// qt3SharedServer is a package-level shared HTTP test server.
+// All qt3RunTests calls share this single server instead of creating 356 separate ones.
+var qt3SharedServer struct {
+	once     sync.Once
+	srv      *httptest.Server
+	client   *http.Client
+	pathMap  sync.Map // map[string]string: URL path → local file path
+	fotsDir  string
+}
+
+func qt3InitSharedServer() {
+	qt3SharedServer.once.Do(func() {
+		qt3SharedServer.fotsDir = qt3TestDataDir()
+		qt3SharedServer.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Check resource map first
+			if filePath, ok := qt3SharedServer.pathMap.Load(r.URL.Path); ok {
+				http.ServeFile(w, r, filePath.(string))
+				return
+			}
+			// Fallback: /fots/ prefix for unparsed-text resources
+			if strings.HasPrefix(r.URL.Path, "/fots/") {
+				http.StripPrefix("/fots/", http.FileServer(http.Dir(qt3SharedServer.fotsDir))).ServeHTTP(w, r)
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		qt3SharedServer.client = &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(_ context.Context, network, _ string) (net.Conn, error) {
+					return net.Dial(network, qt3SharedServer.srv.Listener.Addr().String())
+				},
+			},
+		}
+	})
+}
+
+// qt3RegisterResources registers resource URI→file mappings into the shared server.
+func qt3RegisterResources(resourceMap map[string]string) {
 	dataDir := qt3TestDataDir()
-	fotsDir := dataDir
-	// Build a path-based lookup from the resource map.
-	// resourceMap keys are full URIs (e.g., "http://www.w3.org/qt3/json/data004-json").
-	// We extract the URL path and map it to a local file.
-	pathMap := make(map[string]string)
 	for uri, relPath := range resourceMap {
-		// Extract the path portion from the URI
 		idx := strings.Index(uri, "://")
 		if idx >= 0 {
 			rest := uri[idx+3:]
 			slashIdx := strings.Index(rest, "/")
 			if slashIdx >= 0 {
-				pathMap[rest[slashIdx:]] = filepath.Join(dataDir, relPath)
+				qt3SharedServer.pathMap.Store(rest[slashIdx:], filepath.Join(dataDir, relPath))
 			}
 		}
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check resource map first
-		if filePath, ok := pathMap[r.URL.Path]; ok {
-			http.ServeFile(w, r, filePath)
-			return
-		}
-		// Fallback: /fots/ prefix for unparsed-text resources
-		if strings.HasPrefix(r.URL.Path, "/fots/") {
-			http.StripPrefix("/fots/", http.FileServer(http.Dir(fotsDir))).ServeHTTP(w, r)
-			return
-		}
-		http.NotFound(w, r)
-	})
 }
 
-// qt3NewTestServer creates an httptest.Server with the QT3 handler and
-// returns an HTTP client whose transport routes all requests (regardless
-// of hostname) to that server.
-func qt3NewTestServer(t *testing.T, resourceMap map[string]string) *http.Client {
-	t.Helper()
-	srv := httptest.NewServer(qt3Handler(resourceMap))
-	t.Cleanup(srv.Close)
-	return &http.Client{
-		Transport: &http.Transport{
-			DialContext: func(_ context.Context, network, _ string) (net.Conn, error) {
-				return net.Dial(network, srv.Listener.Addr().String())
-			},
-		},
-	}
+// qt3GetSharedClient returns the HTTP client for the shared test server.
+func qt3GetSharedClient() *http.Client {
+	qt3InitSharedServer()
+	return qt3SharedServer.client
 }
 
 func qt3FormatItem(item xpath3.Item) string {

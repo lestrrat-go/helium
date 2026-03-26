@@ -24,8 +24,10 @@ func fnForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	var result ItemSlice
+	callArgs := make([]Sequence, 1)
 	for item := range seqItems(seq) {
-		r, err := fi.Invoke(ctx, []Sequence{ItemSlice{item}})
+		callArgs[0] = ItemSlice{item}
+		r, err := fi.Invoke(ctx, callArgs)
 		if err != nil {
 			return nil, err
 		}
@@ -45,8 +47,10 @@ func fnFilter(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: fmt.Sprintf("fn:filter callback must have arity 1, got %d", fi.Arity)}
 	}
 	var result ItemSlice
+	callArgs := make([]Sequence, 1)
 	for item := range seqItems(seq) {
-		r, err := fi.Invoke(ctx, []Sequence{ItemSlice{item}})
+		callArgs[0] = ItemSlice{item}
+		r, err := fi.Invoke(ctx, callArgs)
 		if err != nil {
 			return nil, err
 		}
@@ -72,8 +76,11 @@ func fnFoldLeft(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
+	callArgs := make([]Sequence, 2)
 	for item := range seqItems(seq) {
-		acc, err = fi.Invoke(ctx, []Sequence{acc, ItemSlice{item}})
+		callArgs[0] = acc
+		callArgs[1] = ItemSlice{item}
+		acc, err = fi.Invoke(ctx, callArgs)
 		if err != nil {
 			return nil, err
 		}
@@ -89,8 +96,11 @@ func fnFoldRight(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	items := seqMaterialize(seq)
+	callArgs := make([]Sequence, 2)
 	for i := len(items) - 1; i >= 0; i-- {
-		acc, err = fi.Invoke(ctx, []Sequence{ItemSlice{items[i]}, acc})
+		callArgs[0] = ItemSlice{items[i]}
+		callArgs[1] = acc
+		acc, err = fi.Invoke(ctx, callArgs)
 		if err != nil {
 			return nil, err
 		}
@@ -114,8 +124,11 @@ func fnForEachPair(ctx context.Context, args []Sequence) (Sequence, error) {
 		size = seqLen(seq2)
 	}
 	var result ItemSlice
+	callArgs := make([]Sequence, 2)
 	for i := 0; i < size; i++ {
-		r, err := fi.Invoke(ctx, []Sequence{ItemSlice{seq1.Get(i)}, ItemSlice{seq2.Get(i)}})
+		callArgs[0] = ItemSlice{seq1.Get(i)}
+		callArgs[1] = ItemSlice{seq2.Get(i)}
+		r, err := fi.Invoke(ctx, callArgs)
 		if err != nil {
 			return nil, err
 		}
@@ -169,11 +182,11 @@ func fnFunctionLookup(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	arityBig := arityArg.BigInt()
-	if !arityBig.IsInt64() {
+	arityVal, ok := arityArg.Int64Val()
+	if !ok {
 		return nil, nil
 	}
-	arity := int(arityBig.Int64())
+	arity := int(arityVal)
 	if arity < 0 {
 		return nil, nil
 	}
@@ -325,11 +338,11 @@ func extractFunctionItem(seq Sequence) (FunctionItem, error) {
 				if !isIntegerDerived(key.TypeName) {
 					return nil, &XPathError{Code: errCodeXPTY0004, Message: "array lookup requires xs:integer index"}
 				}
-				bi := key.BigInt()
-				if !bi.IsInt64() {
+				iv, ok := key.Int64Val()
+				if !ok {
 					return nil, &XPathError{Code: errCodeFOAY0001, Message: "array index out of range"}
 				}
-				idx := int(bi.Int64())
+				idx := int(iv)
 				return v.Get(idx)
 			},
 		}, nil
