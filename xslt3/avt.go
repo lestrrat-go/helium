@@ -5,8 +5,9 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/internal/xpathstream"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // avt is a compiled Attribute Value template. It consists of alternating
@@ -27,7 +28,7 @@ func (a *avt) hasFunction(name string) bool {
 		return false
 	}
 	for _, p := range a.parts {
-		if p.expr != nil && xpath3.ExprUsesFunction(p.expr, name) {
+		if p.expr != nil && xpathstream.ExprUsesFunction(p.expr, name) {
 			return true
 		}
 	}

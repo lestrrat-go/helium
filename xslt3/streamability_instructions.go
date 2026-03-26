@@ -3,6 +3,7 @@ package xslt3
 import (
 	"strings"
 
+	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -39,7 +40,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst instruction) error {
 					ast := seq.Select.AST()
 					// A branch returns streaming nodes if it selects
 					// downward without grounding or atomizing the result.
-					if xpath3.ExprHasDownwardStep(seq.Select) &&
+					if xpathstream.ExprHasDownwardStep(seq.Select) &&
 						!exprEndsWithGrounding(ast) &&
 						!exprProducesAtomicResult(ast) {
 						hasStreamingReturn = true
@@ -245,7 +246,7 @@ func bodyUsesCurrentGroupOutsideFEG(body []instruction) bool {
 			if expr == nil {
 				continue
 			}
-			if xpath3.ExprUsesFunction(expr, "current-group") {
+			if xpathstream.ExprUsesFunction(expr, "current-group") {
 				return true
 			}
 		}
@@ -367,7 +368,7 @@ func checkForEachStreamable(_ *Stylesheet, inst instruction, inResultDoc bool) e
 		// Check if select expression is crawling AND body consumes context.
 		// But if the select grounds its result (e.g., snapshot(//...)), the body
 		// operates on grounded data and consuming is fine.
-		if v.Select != nil && xpath3.ExprUsesDescendantOrSelf(v.Select) &&
+		if v.Select != nil && xpathstream.ExprUsesDescendantOrSelf(v.Select) &&
 			!exprEndsWithGrounding(v.Select.AST()) {
 			if forEachBodyConsumesContext(v.Body) {
 				return staticError(errCodeXTSE3430,
@@ -433,7 +434,7 @@ func forEachBodyConsumesContext(body []instruction) bool {
 			// Also check for implicit context usage via downward steps (child/
 			// descendant axis) which navigate into children of the streaming
 			// context item.
-			if exprReferencesContextItem(expr.AST()) || xpath3.ExprHasDownwardStep(expr) {
+			if exprReferencesContextItem(expr.AST()) || xpathstream.ExprHasDownwardStep(expr) {
 				return true
 			}
 		}
@@ -553,12 +554,12 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst instruction) error {
 	// Check if grouping key navigates downward (e.g., PRICE/text()) — only
 	// when the select is NOT grounded, because grounded items can be navigated.
 	if !selectGrounded {
-		if fg.GroupBy != nil && xpath3.ExprHasDownwardStep(fg.GroupBy) {
+		if fg.GroupBy != nil && xpathstream.ExprHasDownwardStep(fg.GroupBy) {
 			return staticError(errCodeXTSE3430,
 				"xsl:for-each-group group-by expression %q navigates downward, which is not streamable",
 				fg.GroupBy.String())
 		}
-		if fg.GroupAdjacent != nil && xpath3.ExprHasDownwardStep(fg.GroupAdjacent) {
+		if fg.GroupAdjacent != nil && xpathstream.ExprHasDownwardStep(fg.GroupAdjacent) {
 			return staticError(errCodeXTSE3430,
 				"xsl:for-each-group group-adjacent expression %q navigates downward, which is not streamable",
 				fg.GroupAdjacent.String())
@@ -569,7 +570,7 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst instruction) error {
 	// current-group() in the body are not streamable — the processor would
 	// need to buffer unbounded amounts of data.  When the select is grounded,
 	// items are already in memory and crawling is fine.
-	if !selectGrounded && fg.Select != nil && xpath3.ExprUsesDescendantOrSelf(fg.Select) {
+	if !selectGrounded && fg.Select != nil && xpathstream.ExprUsesDescendantOrSelf(fg.Select) {
 		groupRefs := countCurrentGroupConsumingRefs(fg.Body)
 		if groupRefs > 0 {
 			return staticError(errCodeXTSE3430,
@@ -662,7 +663,7 @@ func patternHasNonMotionlessPredicate(pat *pattern) bool {
 			continue
 		}
 		nonMotionless := false
-		xpath3.WalkExpr(alt.expr, func(e xpath3.Expr) bool {
+		xpathstream.WalkExpr(alt.expr, func(e xpath3.Expr) bool {
 			if nonMotionless {
 				return false
 			}
@@ -670,7 +671,7 @@ func patternHasNonMotionlessPredicate(pat *pattern) bool {
 			case xpath3.LocationPath:
 				for _, step := range v.Steps {
 					for _, pred := range step.Predicates {
-						if xpath3.PredicateIsNonMotionlessWithStep(pred, &step) {
+						if xpathstream.PredicateIsNonMotionlessWithStep(pred, &step) {
 							nonMotionless = true
 							return false
 						}
@@ -678,7 +679,7 @@ func patternHasNonMotionlessPredicate(pat *pattern) bool {
 				}
 			case xpath3.FilterExpr:
 				for _, pred := range v.Predicates {
-					if xpath3.PredicateIsNonMotionless(pred) {
+					if xpathstream.PredicateIsNonMotionless(pred) {
 						nonMotionless = true
 						return false
 					}
@@ -752,7 +753,7 @@ func bodyUsesCurrentGroup(body []instruction) bool {
 			if expr == nil {
 				continue
 			}
-			if xpath3.ExprUsesFunction(expr, "current-group") {
+			if xpathstream.ExprUsesFunction(expr, "current-group") {
 				return true
 			}
 		}
@@ -849,7 +850,7 @@ func exprUsesCurrentGroupConsumingly(expr *xpath3.Expression) bool {
 
 // exprUsesCurrentGroup returns true if the expression calls current-group() anywhere.
 func exprUsesCurrentGroup(expr *xpath3.Expression) bool {
-	return xpath3.ExprUsesFunction(expr, "current-group")
+	return xpathstream.ExprUsesFunction(expr, "current-group")
 }
 
 // checkMapStreamable checks xsl:map instructions for streamability violations.
@@ -876,12 +877,12 @@ func checkMapStreamable(ss *Stylesheet, inst instruction) error {
 			// Check if key and select/body EACH consume the stream.
 			// Use ExprHasDownwardStep which counts downward steps even
 			// inside grounding functions — each still consumes the stream.
-			keyConsuming := me.Key != nil && xpath3.ExprHasDownwardStep(me.Key)
-			selectConsuming := me.Select != nil && xpath3.ExprHasDownwardStep(me.Select)
+			keyConsuming := me.Key != nil && xpathstream.ExprHasDownwardStep(me.Key)
+			selectConsuming := me.Select != nil && xpathstream.ExprHasDownwardStep(me.Select)
 			bodyConsuming := false
 			for _, meChild := range me.Body {
 				for _, expr := range getInstructionExprs(meChild) {
-					if expr != nil && xpath3.ExprHasDownwardStep(expr) {
+					if expr != nil && xpathstream.ExprHasDownwardStep(expr) {
 						bodyConsuming = true
 						break
 					}
@@ -1024,7 +1025,7 @@ func collectVarExprs(body []instruction, varExprs map[string]xpath3.Expr) {
 // in the given set.
 func exprReferencesAnyVar(expr xpath3.Expr, vars map[string]bool) bool {
 	found := false
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -1070,7 +1071,7 @@ func bodyAccumulatesStreamedNodesInner(body []instruction, elemParams map[string
 // exprReferencesContextItem returns true if the expression references "." (context item).
 func exprReferencesContextItem(expr xpath3.Expr) bool {
 	found := false
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}

@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -13,7 +14,7 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 	// Parent/ancestor axes are motionless — ancestors of the streaming context
 	// are always available. However, preceding/preceding-sibling axes require
 	// backward access to already-consumed nodes, which is non-streamable.
-	if xpath3.ExprUsesPrecedingAxis(expr) {
+	if xpathstream.ExprUsesPrecedingAxis(expr) {
 		return staticError(errCodeXTSE3430,
 			"expression %q uses preceding/preceding-sibling axis, which is not streamable", expr.String())
 	}
@@ -122,7 +123,7 @@ func exprHasShallowDescentCallWithClimbingArg(ss *Stylesheet, expr *xpath3.Expre
 		return false
 	}
 	found := false
-	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -150,7 +151,7 @@ func exprHasMixedPostureSequenceInPath(expr *xpath3.Expression) bool {
 		return false
 	}
 	found := false
-	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -200,7 +201,7 @@ func exprHasUnionInPathStep(expr *xpath3.Expression) bool {
 		return false
 	}
 	found := false
-	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -282,7 +283,7 @@ func seqItemIsCrawling(expr xpath3.Expr) bool {
 		return false
 	}
 	found := false
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -316,7 +317,7 @@ func exprHasCrawlingGroundingArg(expr *xpath3.Expression) bool {
 		return false
 	}
 	found := false
-	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -346,7 +347,7 @@ func exprHasHigherOrderWithConsumingArg(expr *xpath3.Expression) bool {
 		return false
 	}
 	found := false
-	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -390,7 +391,7 @@ func argHasStreamingDownwardUngrounded(expr xpath3.Expr) bool {
 		}
 	}
 	hasDown := false
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		if hasDown {
 			return false
 		}
@@ -437,7 +438,7 @@ func accRuleMatchesElement(rule *accumulatorRule) bool {
 func patternMatchesNonElement(expr xpath3.Expr) bool {
 	// Walk to find the last/most-specific step and check its node test.
 	var lastTest xpath3.NodeTest
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		switch v := e.(type) {
 		case xpath3.LocationPath:
 			if len(v.Steps) > 0 {
@@ -467,7 +468,7 @@ func exprUsesAccumulatorAfterOnAncestor(expr *xpath3.Expression) bool {
 		return false
 	}
 	found := false
-	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -487,7 +488,7 @@ func exprUsesAccumulatorAfterOnAncestor(expr *xpath3.Expression) bool {
 // hasUpwardAxis checks if an expression contains a parent or ancestor axis step.
 func hasUpwardAxis(expr xpath3.Expr) bool {
 	found := false
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -507,7 +508,7 @@ func hasUpwardAxis(expr xpath3.Expr) bool {
 // exprCallsFunction checks if an expression is or contains a specific function call.
 func exprCallsFunction(expr xpath3.Expr, name string) bool {
 	found := false
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -1070,7 +1071,7 @@ func predicateIsNonMotionlessSS(ss *Stylesheet, pred xpath3.Expr, step *xpath3.S
 			// the CHILDREN only (not the node itself) to avoid infinite
 			// recursion.
 			first := true
-			xpath3.WalkExpr(e, func(child xpath3.Expr) bool {
+			xpathstream.WalkExpr(e, func(child xpath3.Expr) bool {
 				if nonMotionless {
 					return false
 				}
@@ -1094,5 +1095,5 @@ func predicateIsNonMotionlessSS(ss *Stylesheet, pred xpath3.Expr, step *xpath3.S
 // the downward step from an ancestor may access nodes that have not yet been
 // streamed.
 func exprHasUpThenDownNavigation(expr *xpath3.Expression) bool {
-	return xpath3.ExprHasUpThenDownNavigation(expr)
+	return xpathstream.ExprHasUpThenDownNavigation(expr)
 }

@@ -10,7 +10,7 @@ xinclude       → helium, xpointer
                   → xpath1 (via xpointer)
                   → internal/encoding
 xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence
-xslt3          → helium, xpath3, xsd, html, internal/lexicon, internal/sequence, xslt3/internal/elements
+xslt3          → helium, xpath3, xsd, html, internal/lexicon, internal/sequence, internal/xpathstream, xslt3/internal/elements
 xsd            → helium, xpath1, internal/lexicon
 relaxng        → helium
 schematron     → helium, xpath1
@@ -28,6 +28,7 @@ internal/icu   → (none)
 internal/sequence → (none)
 internal/strcursor → (none)
 internal/unparsedtext → (none)
+internal/xpathstream → xpath3
 test           → helium
 ```
 

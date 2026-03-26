@@ -98,7 +98,8 @@ func NodePrefix(n helium.Node) string
 | `regex.go` | XPath regex→Go regex translation |
 | `regex_public.go` | Public regex API |
 | `static_check.go` | Static expression checks |
-| `streamability.go` | XPath AST inspection for XSLT streamability analysis |
+| `streamability.go` | Internal streamability precomputation (unexported); query helpers moved to `internal/xpathstream` |
+| `stream_info.go` | Exported `StreamInfo` struct + accessor method |
 | `node_identity.go` | Node identity comparison |
 | `uri_resolution.go` | URI resolution for fn:doc, fn:unparsed-text |
 | `arithmetic_datetime.go` | Date/time arithmetic |

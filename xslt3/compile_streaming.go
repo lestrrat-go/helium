@@ -6,7 +6,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
-	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/internal/xpathstream"
 )
 
 // compileSourceDocument compiles an xsl:source-document element.
@@ -1070,11 +1070,11 @@ func mergeStreamCheck(inst *mergeInst) error {
 		if !src.StreamableAttr || src.Select == nil {
 			continue
 		}
-		if !xpath3.ExprUsesDescendantOrSelf(src.Select) {
+		if !xpathstream.ExprUsesDescendantOrSelf(src.Select) {
 			continue
 		}
 		for _, mk := range src.Keys {
-			if xpath3.ExprUsesUpwardAxis(mk.Select) {
+			if xpathstream.ExprUsesUpwardAxis(mk.Select) {
 				src.StreamableAttr = false
 				break
 			}

@@ -342,6 +342,18 @@ Shared `fn:unparsed-text` / `fn:unparsed-text-lines` resource loading.
 - Files: `unparsedtext.go`
 - Imports: none
 
+## internal/xpathstream/
+
+Streamability analysis helpers for XPath 3.1 expressions. Moved from xpath3 public API to reduce exported surface. Used by xslt3 streaming analysis.
+
+- **WalkExpr(Expr, func(Expr) bool)** — AST walker
+- **ExprHasDownwardStep / ExprUsesUpwardAxis / ExprUsesPrecedingAxis / ExprUsesDescendantOrSelf** — axis queries
+- **ExprUsesFunction / ExprUsesContextItem / ExprHasUpThenDownNavigation** — expression property queries
+- **PredicateIsNonMotionless / PredicateIsNonMotionlessWithStep / ExprTreeHasNonMotionlessPredicate** — predicate analysis
+- **CountDownwardSelections** — downward selection counter
+- Files: `xpathstream.go`
+- Imports: xpath3
+
 ## internal/bitset/
 
 Generic bitset operations for bitmask types.

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -19,7 +20,7 @@ func checkGlobalVarsStreamingContext(ss *Stylesheet) error {
 		if v.Select == nil {
 			continue
 		}
-		if xpath3.ExprHasDownwardStep(v.Select) || xpath3.ExprUsesContextItem(v.Select) || xpath3.ExprUsesDescendantOrSelf(v.Select) {
+		if xpathstream.ExprHasDownwardStep(v.Select) || xpathstream.ExprUsesContextItem(v.Select) || xpathstream.ExprUsesDescendantOrSelf(v.Select) {
 			return dynamicError(errCodeXPDY0002,
 				"global variable $%s references the document context, which is absent when the initial mode is streamable",
 				v.Name)
