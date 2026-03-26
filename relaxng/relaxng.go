@@ -171,6 +171,14 @@ func (e *ValidateError) Error() string {
 	return e.Output
 }
 
+func (v Validator) closeHandler() {
+	if v.cfg != nil && v.cfg.errorHandler != nil {
+		if cl, ok := v.cfg.errorHandler.(io.Closer); ok {
+			_ = cl.Close()
+		}
+	}
+}
+
 // Validate validates a document against the compiled grammar.
 // It returns nil if the document is valid, or a *ValidateError with details.
 // (libxml2: xmlRelaxNGValidateDoc)
@@ -183,6 +191,7 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 		cfg = &validateConfig{}
 	}
 	output, valid, validationErrors := validateDocument(ctx, doc, v.grammar, cfg)
+	v.closeHandler()
 	if valid {
 		return nil
 	}

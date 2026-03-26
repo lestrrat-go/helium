@@ -52,6 +52,14 @@ func (c Compiler) ErrorHandler(h helium.ErrorHandler) Compiler {
 	return c
 }
 
+func (c Compiler) closeHandler() {
+	if c.cfg != nil && c.cfg.errorHandler != nil {
+		if cl, ok := c.cfg.errorHandler.(io.Closer); ok {
+			_ = cl.Close()
+		}
+	}
+}
+
 // Compile compiles a Schematron document into a Schema.
 // (libxml2: xmlSchematronNewParserCtxt + xmlSchematronParse)
 func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Schema, error) {
@@ -63,11 +71,7 @@ func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Schema, e
 		cfg = &compileConfig{}
 	}
 	schema, err := compileSchema(ctx, doc, cfg)
-	if cfg.errorHandler != nil {
-		if cl, ok := cfg.errorHandler.(io.Closer); ok {
-			_ = cl.Close()
-		}
-	}
+	c.closeHandler()
 	return schema, err
 }
 
@@ -89,11 +93,7 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 		cfg = &compileConfig{}
 	}
 	schema, compileErr := compileSchema(ctx, doc, cfg)
-	if cfg.errorHandler != nil {
-		if cl, ok := cfg.errorHandler.(io.Closer); ok {
-			_ = cl.Close()
-		}
-	}
+	c.closeHandler()
 	return schema, compileErr
 }
 
@@ -156,6 +156,14 @@ func (v Validator) ErrorHandler(h helium.ErrorHandler) Validator {
 	return v
 }
 
+func (v Validator) closeHandler() {
+	if v.cfg != nil && v.cfg.errorHandler != nil {
+		if cl, ok := v.cfg.errorHandler.(io.Closer); ok {
+			_ = cl.Close()
+		}
+	}
+}
+
 // Validate validates a document against the compiled schema.
 // It returns nil if the document is valid, or a *ValidateError with details.
 // (libxml2: xmlSchematronValidateDoc)
@@ -165,6 +173,7 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 		cfg = &validateConfig{}
 	}
 	output, valid := validateDocument(ctx, doc, v.schema, cfg)
+	v.closeHandler()
 	if valid {
 		return nil
 	}
