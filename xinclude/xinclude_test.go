@@ -979,14 +979,12 @@ func TestXIncludeEntityMergeConflict(t *testing.T) {
 		},
 	}
 
-	var warnings []string
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	count, err := xinclude.NewProcessor().
 		Resolver(resolver).
 		NoXIncludeMarkers().
 		NoBaseFixup().
-		WarningHandler(func(msg string) {
-			warnings = append(warnings, msg)
-		}).
+		ErrorHandler(collector).
 		Process(t.Context(), doc)
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
@@ -999,9 +997,11 @@ func TestXIncludeEntityMergeConflict(t *testing.T) {
 	require.Equal(t, "target-value", string(ent.Content()))
 
 	// Warning should have been emitted
+	_ = collector.Close()
+	warnings := collector.Errors()
 	require.Len(t, warnings, 1)
-	require.Contains(t, warnings[0], "greeting")
-	require.Contains(t, warnings[0], "mismatch")
+	require.Contains(t, warnings[0].Error(), "greeting")
+	require.Contains(t, warnings[0].Error(), "mismatch")
 }
 
 func TestXIncludeEntityMergeNoTargetDTD(t *testing.T) {
