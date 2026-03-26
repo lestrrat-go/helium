@@ -197,20 +197,29 @@ func validateAttributeValueInternal(doc *Document, typ enum.AttributeType, defva
 
 // ValidationError represents a validity constraint violation.
 // It does not stop parsing; the parser continues and collects errors.
+// It implements Unwrap() []error for integration with errors.Is/errors.As.
 type ValidationError struct {
-	Errors []string
+	errs []error
 }
 
 func (e *ValidationError) Error() string {
-	return strings.Join(e.Errors, "; ")
+	msgs := make([]string, len(e.errs))
+	for i, err := range e.errs {
+		msgs[i] = err.Error()
+	}
+	return strings.Join(msgs, "; ")
+}
+
+func (e *ValidationError) Unwrap() []error {
+	return e.errs
 }
 
 func (e *ValidationError) addf(format string, args ...any) {
-	e.Errors = append(e.Errors, fmt.Sprintf(format, args...))
+	e.errs = append(e.errs, fmt.Errorf(format, args...))
 }
 
 func (e *ValidationError) hasErrors() bool {
-	return len(e.Errors) > 0
+	return len(e.errs) > 0
 }
 
 // validCtx carries validation state through the document walk.

@@ -3,6 +3,7 @@ package helium_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -363,10 +364,11 @@ func TestValidateDTDRequiredAttribute(t *testing.T) {
 	require.Error(t, err, "missing #REQUIRED attribute should fail validation")
 	require.NotNil(t, doc, "document should still be returned with validation error")
 
-	ve, ok := err.(*helium.ValidationError)
+	ve, ok := errors.AsType[*helium.ValidationError](err)
 	require.True(t, ok, "error should be *ValidationError")
-	require.True(t, len(ve.Errors) > 0)
-	require.Contains(t, ve.Errors[0], "required")
+	unwrapped := ve.Unwrap()
+	require.True(t, len(unwrapped) > 0)
+	require.Contains(t, unwrapped[0].Error(), "required")
 }
 
 func TestValidateDTDRequiredPresent(t *testing.T) {
