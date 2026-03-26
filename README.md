@@ -662,9 +662,15 @@ Applies an XSLT 3.0 stylesheet to one or more XML documents, similar to `xsltpro
 
 # Performance
 
-Helium parses XML into a full DOM tree. Despite the richer output, its
-throughput is competitive with `encoding/xml` (which only produces a token
-stream) and approaches libxml2 (C, via cgo) on larger documents.
+Helium parses XML into a full DOM tree. The benchmark below compares that DOM
+build against two lower-level baselines: an `encoding/xml` token loop
+(`Decoder.Token`) and libxml2 via cgo.
+
+That is a narrower benchmark than every real `encoding/xml` workload. Many Go
+programs use `encoding/xml` to decode directly into structs, and this section is
+not meant to dismiss that use case or the package. The point here is simply
+that Helium's DOM parse remains competitive with the stdlib token benchmark and
+approaches libxml2 on larger documents.
 
 Benchmarks parse real-world XML files of varying sizes (AMD Ryzen 9 7900X3D,
 Go 1.24, `go test -bench -benchmem -count=5`, median shown):
