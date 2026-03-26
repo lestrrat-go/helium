@@ -455,8 +455,6 @@ func wildcardMatchesAttr(wc *Wildcard, attrNS string) bool {
 	return wildcardMatches(wc, attrNS)
 }
 
-// elemTextContent returns the concatenated text content of an element,
-// including both text nodes and CDATA sections.
 // lookupElemDecl finds the global element declaration for an instance element.
 func lookupElemDecl(elem *helium.Element, schema *Schema) *ElementDecl {
 	edecl, ok := schema.LookupElement(elem.LocalName(), elem.URI())
@@ -470,6 +468,8 @@ func lookupElemDecl(elem *helium.Element, schema *Schema) *ElementDecl {
 	return nil
 }
 
+// elemTextContent returns the concatenated text content of an element,
+// including both text nodes and CDATA sections.
 func elemTextContent(elem *helium.Element) string {
 	var buf []byte
 	for child := range helium.Children(elem) {
