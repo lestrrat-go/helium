@@ -20,6 +20,7 @@ type Catalog struct {
 
 // Resolve resolves an external identifier (pubID and/or sysID) to a URI.
 // Returns the resolved URI or "" if not found.
+// A nil receiver is safe and always returns "".
 func (c *Catalog) Resolve(pubID, sysID string) string {
 	if c == nil {
 		return ""
@@ -29,6 +30,7 @@ func (c *Catalog) Resolve(pubID, sysID string) string {
 
 // ResolveURI resolves a URI reference.
 // Returns the resolved URI or "" if not found.
+// A nil receiver is safe and always returns "".
 func (c *Catalog) ResolveURI(uri string) string {
 	if c == nil {
 		return ""

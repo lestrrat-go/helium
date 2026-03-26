@@ -488,11 +488,11 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 
 	cfg := unparsedTextConfig(ctx)
-	resolvedURI, err := unparsedtext.ResolveURI(cfg, uri)
+	resolvedURI, err := unparsedtext.ResolveURI(ctx, cfg, uri)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: cannot resolve URI: %v", err)}
 	}
-	body, err := unparsedtext.ReadURI(cfg, resolvedURI)
+	body, err := unparsedtext.ReadURI(ctx, cfg, resolvedURI)
 	if err != nil {
 		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: cannot retrieve resource: %v", err)}
 	}

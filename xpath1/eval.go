@@ -231,7 +231,7 @@ func evalStepNoPredicates(ctx *evalContext, nodes []helium.Node, step Step) ([]h
 
 // filterByNodeTest returns only those nodes that match the given node test.
 func filterByNodeTest(candidates []helium.Node, nt NodeTest, axis AxisType, ctx *evalContext) []helium.Node {
-	var matched []helium.Node
+	matched := make([]helium.Node, 0, len(candidates))
 	for _, c := range candidates {
 		if matchNodeTest(nt, c, axis, ctx) {
 			matched = append(matched, c)

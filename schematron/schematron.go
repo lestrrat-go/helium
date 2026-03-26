@@ -40,6 +40,14 @@ func (c Compiler) SchemaFilename(name string) Compiler {
 	return c
 }
 
+// BaseDir sets the base directory used to resolve relative paths
+// during schema compilation.
+func (c Compiler) BaseDir(dir string) Compiler {
+	c = c.clone()
+	c.cfg.baseDir = dir
+	return c
+}
+
 // ErrorHandler sets a handler that receives compilation errors.
 // When set, errors are delivered to the handler instead of being discarded.
 func (c Compiler) ErrorHandler(h helium.ErrorHandler) Compiler {

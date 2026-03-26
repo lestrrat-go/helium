@@ -7,6 +7,7 @@ package unparsedtext
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,8 +55,8 @@ func (e *Error) Error() string {
 
 // LoadText resolves href, retrieves its content, decodes it, validates
 // XML characters, and returns the result as a string.
-func LoadText(cfg *Config, href, encoding string) (string, error) {
-	resolvedURI, err := ResolveURI(cfg, href)
+func LoadText(ctx context.Context, cfg *Config, href, encoding string) (string, error) {
+	resolvedURI, err := ResolveURI(ctx, cfg, href)
 	if err != nil {
 		return "", err
 	}
@@ -79,8 +80,8 @@ func LoadText(cfg *Config, href, encoding string) (string, error) {
 
 // LoadTextLines calls LoadText and splits the result into lines per
 // the XPath spec line-ending rules.
-func LoadTextLines(cfg *Config, href, encoding string) ([]string, error) {
-	text, err := LoadText(cfg, href, encoding)
+func LoadTextLines(ctx context.Context, cfg *Config, href, encoding string) ([]string, error) {
+	text, err := LoadText(ctx, cfg, href, encoding)
 	if err != nil {
 		return nil, err
 	}
@@ -89,13 +90,13 @@ func LoadTextLines(cfg *Config, href, encoding string) ([]string, error) {
 
 // IsAvailable returns true if LoadText would succeed for the given href
 // and encoding.
-func IsAvailable(cfg *Config, href, encoding string) bool {
-	_, err := LoadText(cfg, href, encoding)
+func IsAvailable(ctx context.Context, cfg *Config, href, encoding string) bool {
+	_, err := LoadText(ctx, cfg, href, encoding)
 	return err == nil
 }
 
 // ResolveURI validates and resolves an href against the base URI in cfg.
-func ResolveURI(cfg *Config, href string) (string, error) {
+func ResolveURI(_ context.Context, cfg *Config, href string) (string, error) {
 	if strings.Contains(href, "#") {
 		return "", &Error{Code: ErrCodeRetrieval, Message: "URI must not contain a fragment identifier"}
 	}
@@ -206,7 +207,7 @@ func extractHTTPCharset(contentType string) string {
 }
 
 // ReadURI reads the content at the resolved URI.
-func ReadURI(cfg *Config, uri string) ([]byte, error) {
+func ReadURI(_ context.Context, cfg *Config, uri string) ([]byte, error) {
 	if cfg != nil && cfg.URIResolver != nil {
 		rc, err := cfg.URIResolver.ResolveURI(uri)
 		if err != nil {

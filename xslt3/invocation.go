@@ -12,18 +12,18 @@ import (
 	"github.com/lestrrat-go/helium/xsd"
 )
 
-// InvocationKind identifies the entry mode for a stylesheet invocation.
-type InvocationKind uint8
+// invocationKind identifies the entry mode for a stylesheet invocation.
+type invocationKind uint8
 
 const (
-	// InvocationTransform is the default apply-templates entry with a source document.
-	InvocationTransform InvocationKind = iota + 1
-	// InvocationApplyTemplates applies templates with explicit mode/selection control.
-	InvocationApplyTemplates
-	// InvocationCallTemplate calls a named template directly.
-	InvocationCallTemplate
-	// InvocationCallFunction calls a named function directly.
-	InvocationCallFunction
+	// invocationTransform is the default apply-templates entry with a source document.
+	invocationTransform invocationKind = iota + 1
+	// invocationApplyTemplates applies templates with explicit mode/selection control.
+	invocationApplyTemplates
+	// invocationCallTemplate calls a named template directly.
+	invocationCallTemplate
+	// invocationCallFunction calls a named function directly.
+	invocationCallFunction
 )
 
 // OnMultipleMatchMode controls behavior when multiple templates match.
@@ -61,7 +61,7 @@ type Invocation struct {
 type invocationConfig struct {
 	ss *Stylesheet
 
-	kind InvocationKind
+	kind invocationKind
 
 	source          *helium.Document
 	initialTemplate string
@@ -96,7 +96,7 @@ type invocationConfig struct {
 	resolvedOutputDef *OutputDef
 }
 
-func newInvocation(ss *Stylesheet, kind InvocationKind) Invocation {
+func newInvocation(ss *Stylesheet, kind invocationKind) Invocation {
 	return Invocation{cfg: &invocationConfig{ss: ss, kind: kind}}
 }
 
@@ -340,7 +340,7 @@ func (inv Invocation) validate() error {
 		return errNilStylesheet
 	}
 	switch c.kind {
-	case InvocationTransform:
+	case invocationTransform:
 		// nil source is allowed: the stylesheet may use xsl:source-document,
 		// global-context-item use="absent", or an initial template.
 		// executeTransform will raise XTDE0040 if source is truly needed.
@@ -350,14 +350,14 @@ func (inv Invocation) validate() error {
 		if c.initialTemplateParams != nil {
 			return fmt.Errorf("xslt3: SetInitialTemplateParameter is not valid for Transform (use CallTemplate)")
 		}
-	case InvocationApplyTemplates:
+	case invocationApplyTemplates:
 		// nil source is allowed when a match selection is provided, or when
 		// the stylesheet does not require a source document.
 		// executeTransform will raise XTDE0040 if needed.
 		if c.initialTemplateParams != nil {
 			return fmt.Errorf("xslt3: SetInitialTemplateParameter is not valid for ApplyTemplates (use CallTemplate)")
 		}
-	case InvocationCallTemplate:
+	case invocationCallTemplate:
 		if c.initialTemplate == "" {
 			return fmt.Errorf("xslt3: CallTemplate requires a template name")
 		}
@@ -370,7 +370,7 @@ func (inv Invocation) validate() error {
 		if c.initialModeParams != nil {
 			return fmt.Errorf("xslt3: SetInitialModeParameter is not valid for CallTemplate (use Transform or ApplyTemplates)")
 		}
-	case InvocationCallFunction:
+	case invocationCallFunction:
 		if c.initialFunction == "" {
 			return fmt.Errorf("xslt3: CallFunction requires a function name")
 		}
@@ -409,19 +409,19 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 
 	// Entry mode
 	switch c.kind {
-	case InvocationCallTemplate:
+	case invocationCallTemplate:
 		tcfg.initialTemplate = c.initialTemplate
-	case InvocationCallFunction:
+	case invocationCallFunction:
 		tcfg.initialFunction = c.initialFunction
 		tcfg.initialFunctionParams = c.initialArgs
-	case InvocationApplyTemplates:
+	case invocationApplyTemplates:
 		if c.mode != "" {
 			tcfg.initialMode = c.mode
 		}
 		if c.matchSelection != nil {
 			tcfg.initialMatchSelection = c.matchSelection
 		}
-	case InvocationTransform:
+	case invocationTransform:
 		if c.mode != "" {
 			tcfg.initialMode = c.mode
 		}
@@ -444,7 +444,7 @@ func (inv Invocation) toTransformConfig() *transformConfig {
 	if c.tunnelParameters != nil {
 		tunnel := maps.Clone(c.tunnelParameters.toMap())
 		switch c.kind {
-		case InvocationCallTemplate:
+		case invocationCallTemplate:
 			tcfg.initialTemplateTunnel = tunnel
 		default:
 			tcfg.initialModeTunnel = tunnel
