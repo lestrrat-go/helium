@@ -8,5 +8,6 @@ type compilerCfg struct {
 }
 
 type validatorCfg struct {
-	filename string
+	filename     string
+	errorHandler helium.ErrorHandler
 }

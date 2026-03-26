@@ -132,6 +132,13 @@ func (v Validator) Filename(name string) Validator {
 	return v
 }
 
+// ErrorHandler sets a handler that receives validation errors.
+func (v Validator) ErrorHandler(h helium.ErrorHandler) Validator {
+	v = v.clone()
+	v.cfg.errorHandler = h
+	return v
+}
+
 // ValidateError holds detailed validation failure output.
 type ValidateError struct {
 	Output string // libxml2-compatible validation output
@@ -144,12 +151,15 @@ func (e *ValidateError) Error() string {
 // Validate validates a document against the compiled grammar.
 // It returns nil if the document is valid, or a *ValidateError with details.
 // (libxml2: xmlRelaxNGValidateDoc)
-func (v Validator) Validate(_ context.Context, doc *helium.Document) error {
+func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	cfg := v.cfg
 	if cfg == nil {
 		cfg = &validatorCfg{}
 	}
-	output, valid := validateDocument(doc, v.grammar, cfg)
+	output, valid := validateDocument(ctx, doc, v.grammar, cfg)
 	if valid {
 		return nil
 	}
