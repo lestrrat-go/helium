@@ -19,9 +19,6 @@ func newValidationContext(ctx context.Context, schema *Schema, cfg *validateConf
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if handler == nil {
-		handler = helium.NilErrorHandler{}
-	}
 	return &validationContext{
 		ctx:          ctx,
 		schema:       schema,
