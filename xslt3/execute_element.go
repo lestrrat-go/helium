@@ -843,7 +843,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			}
 			// Use literal mode: XSLT evaluation values are plain text
 			// that may contain & from resolved entities.
-			elem.SetLiteralAttributeNS(localName, value, ns)
+			_ = elem.SetLiteralAttributeNS(localName, value, ns)
 			ec.annotateAttr(elem, inst.TypeName, localName, nsURI, value)
 			out.noteOutput()
 			return nil
@@ -859,7 +859,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			}
 		}
 		elem.RemoveAttribute(name)
-		elem.SetLiteralAttribute(name, value)
+		_ = elem.SetLiteralAttribute(name, value)
 		ec.annotateAttr(elem, inst.TypeName, name, "", value)
 		out.noteOutput()
 		return nil
@@ -893,7 +893,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 		if err != nil {
 			return err
 		}
-		elem.SetLiteralAttributeNS(localName, value, ns)
+		_ = elem.SetLiteralAttributeNS(localName, value, ns)
 		ec.annotateAttr(elem, inst.TypeName, localName, uri, value)
 		out.noteOutput()
 		return nil
@@ -908,7 +908,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 
 	// Remove existing attribute with same name to allow replacement
 	elem.RemoveAttribute(name)
-	elem.SetLiteralAttribute(name, value)
+	_ = elem.SetLiteralAttribute(name, value)
 	ec.annotateAttr(elem, inst.TypeName, name, "", value)
 	out.noteOutput()
 	return nil
@@ -935,7 +935,7 @@ func copyAttributeToElement(elem *helium.Element, attr *helium.Attribute) {
 			}
 		}
 		ns := helium.NewNamespace(prefix, uri)
-		elem.SetLiteralAttributeNS(localName, attr.Value(), ns)
+		_ = elem.SetLiteralAttributeNS(localName, attr.Value(), ns)
 		// Ensure the namespace declaration is present on the element
 		// so that the prefix is properly declared in the serialized output.
 		if prefix != "" && !hasNSDecl(elem, prefix, uri) {
@@ -943,7 +943,7 @@ func copyAttributeToElement(elem *helium.Element, attr *helium.Attribute) {
 		}
 		return
 	}
-	elem.SetLiteralAttribute(attr.Name(), attr.Value())
+	_ = elem.SetLiteralAttribute(attr.Name(), attr.Value())
 }
 
 // conflictingAttrPrefix returns true if the given prefix is already used

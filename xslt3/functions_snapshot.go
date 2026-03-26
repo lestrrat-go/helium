@@ -479,13 +479,13 @@ func shallowCopyElement(src *helium.Element, doc *helium.Document) (*helium.Elem
 	for _, a := range src.Attributes() {
 		if a.URI() != "" {
 			ns := helium.NewNamespace(a.Prefix(), a.URI())
-			elem.SetLiteralAttributeNS(a.LocalName(), a.Value(), ns)
+			_ = elem.SetLiteralAttributeNS(a.LocalName(), a.Value(), ns)
 			if a.Prefix() != "" && !declaredPrefixes[a.Prefix()] {
 				_ = elem.DeclareNamespace(a.Prefix(), a.URI())
 				declaredPrefixes[a.Prefix()] = true
 			}
 		} else {
-			elem.SetLiteralAttribute(a.Name(), a.Value())
+			_ = elem.SetLiteralAttribute(a.Name(), a.Value())
 		}
 	}
 

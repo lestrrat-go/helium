@@ -989,7 +989,7 @@ func fnAnalyzeString(_ context.Context, args []Sequence) (Sequence, error) {
 				if err != nil {
 					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
 				}
-				groupElem.SetLiteralAttribute("nr", fmt.Sprintf("%d", g))
+				_ = groupElem.SetLiteralAttribute("nr", fmt.Sprintf("%d", g))
 				if err := groupElem.AppendText([]byte(s[gs:ge])); err != nil {
 					return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
 				}

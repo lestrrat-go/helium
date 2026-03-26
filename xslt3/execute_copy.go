@@ -1021,9 +1021,9 @@ func (ec *execContext) copyElementNoNamespaces(src *helium.Element) error {
 			if nsErr != nil {
 				return nsErr
 			}
-			elem.SetLiteralAttributeNS(a.LocalName(), a.Value(), ns)
+			_ = elem.SetLiteralAttributeNS(a.LocalName(), a.Value(), ns)
 		} else {
-			elem.SetLiteralAttribute(a.Name(), a.Value())
+			_ = elem.SetLiteralAttribute(a.Name(), a.Value())
 		}
 	}
 
