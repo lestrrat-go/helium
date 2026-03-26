@@ -33,6 +33,10 @@ type evalContext struct {
 }
 
 func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
+	return newEvalContextWithConfig(ctx, node, getEvalConfig(ctx))
+}
+
+func newEvalContextWithConfig(ctx context.Context, node helium.Node, cfg *evalConfig) *evalContext {
 	opCount := 0
 	ectx := &evalContext{
 		goCtx:    ctx,
@@ -42,8 +46,7 @@ func newEvalContext(ctx context.Context, node helium.Node) *evalContext {
 		opCount:  &opCount,
 		docOrder: &ixpath.DocOrderCache{},
 	}
-	// Pull config from context.Context if present.
-	if cfg := getEvalConfig(ctx); cfg != nil {
+	if cfg != nil {
 		ectx.namespaces = cfg.namespaces
 		ectx.variables = cfg.variables
 		ectx.opLimit = cfg.opLimit

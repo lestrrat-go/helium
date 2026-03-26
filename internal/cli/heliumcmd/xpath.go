@@ -159,13 +159,13 @@ func (c *xpathCommand) processInput(ctx context.Context, cfg *xpathConfig, input
 }
 
 func (c *xpathCommand) evalXPath1(ctx context.Context, cfg *xpathConfig, doc *helium.Document) int {
-	expr, err := xpath1.Compile(cfg.expr)
+	expr, err := xpath1.NewCompiler().Compile(cfg.expr)
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitXPath
 	}
 
-	res, err := expr.Evaluate(ctx, doc)
+	res, err := xpath1.NewEvaluator().Evaluate(ctx, expr, doc)
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 		return ExitXPath

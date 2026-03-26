@@ -192,14 +192,14 @@ func (c *evalConfig) clone() *evalConfig {
 	return &cp
 }
 
-// WithNamespaces sets namespace prefix->URI bindings on the returned context.
+// Deprecated: Use Evaluator.Namespaces instead.
 func WithNamespaces(ctx context.Context, ns map[string]string) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.namespaces = maps.Clone(ns)
 	})
 }
 
-// WithAdditionalNamespaces merges namespace prefix->URI bindings into the returned context.
+// Deprecated: Use Evaluator.AdditionalNamespaces instead.
 func WithAdditionalNamespaces(ctx context.Context, ns map[string]string) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		if c.namespaces == nil {
@@ -211,14 +211,14 @@ func WithAdditionalNamespaces(ctx context.Context, ns map[string]string) context
 	})
 }
 
-// WithVariables sets variable name->value bindings on the returned context.
+// Deprecated: Use Evaluator.Variables instead.
 func WithVariables(ctx context.Context, vars map[string]any) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.variables = maps.Clone(vars)
 	})
 }
 
-// WithAdditionalVariables merges variable name->value bindings into the returned context.
+// Deprecated: Use Evaluator.AdditionalVariables instead.
 func WithAdditionalVariables(ctx context.Context, vars map[string]any) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		if c.variables == nil {
@@ -230,14 +230,14 @@ func WithAdditionalVariables(ctx context.Context, vars map[string]any) context.C
 	})
 }
 
-// WithOpLimit sets the operation counter limit (0 = unlimited) on the returned context.
+// Deprecated: Use Evaluator.OpLimit instead.
 func WithOpLimit(ctx context.Context, limit int) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.opLimit = limit
 	})
 }
 
-// WithFunction registers an unqualified custom XPath function on the returned context.
+// Deprecated: Use Evaluator.Function instead.
 func WithFunction(ctx context.Context, name string, fn Function) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		if c.functions == nil {
@@ -247,14 +247,14 @@ func WithFunction(ctx context.Context, name string, fn Function) context.Context
 	})
 }
 
-// WithFunctions sets unqualified custom function registrations on the returned context.
+// Deprecated: Use Evaluator.Function instead.
 func WithFunctions(ctx context.Context, fns map[string]Function) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.functions = maps.Clone(fns)
 	})
 }
 
-// WithFunctionNS registers a namespace-qualified custom XPath function on the returned context.
+// Deprecated: Use Evaluator.FunctionNS instead.
 func WithFunctionNS(ctx context.Context, uri, name string, fn Function) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		if c.functionsNS == nil {
@@ -264,11 +264,116 @@ func WithFunctionNS(ctx context.Context, uri, name string, fn Function) context.
 	})
 }
 
-// WithFunctionsNS sets namespace-qualified custom function registrations on the returned context.
+// Deprecated: Use Evaluator.FunctionNS instead.
 func WithFunctionsNS(ctx context.Context, fns map[QualifiedName]Function) context.Context {
 	return updateEvalConfig(ctx, func(c *evalConfig) {
 		c.functionsNS = maps.Clone(fns)
 	})
+}
+
+// Evaluator evaluates compiled XPath 1.0 expressions against nodes.
+// Configuration is set via fluent clone-on-write methods that return
+// a new Evaluator with the updated setting, mirroring the xpath3 API.
+type Evaluator struct {
+	cfg *evalConfig
+}
+
+// NewEvaluator returns a new Evaluator with default (empty) configuration.
+func NewEvaluator() Evaluator {
+	return Evaluator{cfg: &evalConfig{}}
+}
+
+func (e Evaluator) clone() Evaluator {
+	return Evaluator{cfg: e.cfg.clone()}
+}
+
+// Namespaces returns a new Evaluator with the given namespace prefix->URI bindings,
+// replacing any previously set namespaces.
+func (e Evaluator) Namespaces(ns map[string]string) Evaluator {
+	out := e.clone()
+	out.cfg.namespaces = maps.Clone(ns)
+	return out
+}
+
+// AdditionalNamespaces returns a new Evaluator with the given namespace bindings
+// merged into the existing set.
+func (e Evaluator) AdditionalNamespaces(ns map[string]string) Evaluator {
+	out := e.clone()
+	if out.cfg.namespaces == nil {
+		out.cfg.namespaces = make(map[string]string, len(ns))
+	}
+	for k, v := range ns {
+		out.cfg.namespaces[k] = v
+	}
+	return out
+}
+
+// Variables returns a new Evaluator with the given variable name->value bindings,
+// replacing any previously set variables.
+func (e Evaluator) Variables(vars map[string]any) Evaluator {
+	out := e.clone()
+	out.cfg.variables = maps.Clone(vars)
+	return out
+}
+
+// AdditionalVariables returns a new Evaluator with the given variable bindings
+// merged into the existing set.
+func (e Evaluator) AdditionalVariables(vars map[string]any) Evaluator {
+	out := e.clone()
+	if out.cfg.variables == nil {
+		out.cfg.variables = make(map[string]any, len(vars))
+	}
+	for k, v := range vars {
+		out.cfg.variables[k] = v
+	}
+	return out
+}
+
+// OpLimit returns a new Evaluator with the given operation counter limit.
+// A value of 0 means unlimited (the default).
+func (e Evaluator) OpLimit(n int) Evaluator {
+	out := e.clone()
+	out.cfg.opLimit = n
+	return out
+}
+
+// Function returns a new Evaluator with the given unqualified custom function registered.
+func (e Evaluator) Function(name string, fn Function) Evaluator {
+	out := e.clone()
+	if out.cfg.functions == nil {
+		out.cfg.functions = make(map[string]Function)
+	}
+	out.cfg.functions[name] = fn
+	return out
+}
+
+// FunctionNS returns a new Evaluator with the given namespace-qualified custom function registered.
+func (e Evaluator) FunctionNS(uri, name string, fn Function) Evaluator {
+	out := e.clone()
+	if out.cfg.functionsNS == nil {
+		out.cfg.functionsNS = make(map[QualifiedName]Function)
+	}
+	out.cfg.functionsNS[QualifiedName{URI: uri, Name: name}] = fn
+	return out
+}
+
+// Evaluate evaluates a compiled expression against the given context node.
+func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.Node) (*Result, error) {
+	ectx := newEvalContextWithConfig(ctx, node, e.cfg)
+	return eval(ectx, expr.ast)
+}
+
+// Find evaluates a compiled expression and returns the resulting node-set.
+// Returns ErrNotNodeSet if the expression does not evaluate to a node-set.
+func (e Evaluator) Find(ctx context.Context, expr *Expression, node helium.Node) ([]helium.Node, error) {
+	r, err := e.Evaluate(ctx, expr, node)
+	if err != nil {
+		return nil, err
+	}
+	if r.Type != NodeSetResult {
+		return nil, ErrNotNodeSet
+	}
+	return r.NodeSet, nil
 }
 
 // Expression is a compiled XPath expression, reusable across evaluations.
@@ -277,9 +382,17 @@ type Expression struct {
 	ast    Expr
 }
 
+// Compiler compiles XPath 1.0 expression strings into reusable Expression
+// values, mirroring the xpath3.Compiler API.
+type Compiler struct{}
+
+// NewCompiler returns a new Compiler.
+func NewCompiler() Compiler {
+	return Compiler{}
+}
+
 // Compile parses an XPath expression string into a reusable Expression.
-// (libxml2: xmlXPathCompile / xmlXPathCtxtCompile)
-func Compile(expr string) (*Expression, error) {
+func (Compiler) Compile(expr string) (*Expression, error) {
 	ast, err := Parse(expr)
 	if err != nil {
 		return nil, err
@@ -288,12 +401,25 @@ func Compile(expr string) (*Expression, error) {
 }
 
 // MustCompile is like Compile but panics on error.
-func MustCompile(expr string) *Expression {
-	e, err := Compile(expr)
+func (c Compiler) MustCompile(expr string) *Expression {
+	e, err := c.Compile(expr)
 	if err != nil {
 		panic("xpath: Compile(" + expr + "): " + err.Error())
 	}
 	return e
+}
+
+// Compile parses an XPath expression string into a reusable Expression.
+// It is a convenience wrapper around NewCompiler().Compile().
+// (libxml2: xmlXPathCompile / xmlXPathCtxtCompile)
+func Compile(expr string) (*Expression, error) {
+	return NewCompiler().Compile(expr)
+}
+
+// MustCompile is like Compile but panics on error.
+// It is a convenience wrapper around NewCompiler().MustCompile().
+func MustCompile(expr string) *Expression {
+	return NewCompiler().MustCompile(expr)
 }
 
 // Evaluate evaluates the compiled expression against the given context node.

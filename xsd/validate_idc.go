@@ -36,8 +36,8 @@ func (vc *validationContext) validateIDConstraints(elem *helium.Element, edecl *
 
 	for _, idc := range edecl.IDCs {
 		// Use the schema's namespace context for XPath evaluation.
-		nsCtx := xpath1.WithAdditionalNamespaces(vc.ctx, idc.Namespaces)
-		table, err := evaluateIDC(nsCtx, elem, idc)
+		ev := xpath1.NewEvaluator().AdditionalNamespaces(idc.Namespaces)
+		table, err := evaluateIDC(vc.ctx, ev, elem, idc)
 		if err != nil {
 			continue
 		}
@@ -81,14 +81,18 @@ func (vc *validationContext) validateIDConstraints(elem *helium.Element, edecl *
 }
 
 // evaluateIDC evaluates the selector and field XPaths for a single IDC.
-func evaluateIDC(nsCtx context.Context, elem *helium.Element, idc *IDConstraint) (*idcTable, error) {
+func evaluateIDC(ctx context.Context, ev xpath1.Evaluator, elem *helium.Element, idc *IDConstraint) (*idcTable, error) {
 	// Evaluate selector XPath using pre-compiled expression when available.
 	var selectorResult *xpath1.Result
 	var err error
 	if idc.SelectorExpr != nil {
-		selectorResult, err = idc.SelectorExpr.Evaluate(nsCtx, elem)
+		selectorResult, err = ev.Evaluate(ctx, idc.SelectorExpr, elem)
 	} else {
-		selectorResult, err = xpath1.Evaluate(nsCtx, elem, idc.Selector)
+		compiled, compErr := xpath1.Compile(idc.Selector)
+		if compErr != nil {
+			return nil, fmt.Errorf("xsd: IDC selector XPath failed: %w", compErr)
+		}
+		selectorResult, err = ev.Evaluate(ctx, compiled, elem)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("xsd: IDC selector XPath failed: %w", err)
@@ -112,9 +116,14 @@ func evaluateIDC(nsCtx context.Context, elem *helium.Element, idc *IDConstraint)
 		for i, fieldXPath := range idc.Fields {
 			var fieldResult *xpath1.Result
 			if i < len(idc.FieldExprs) && idc.FieldExprs[i] != nil {
-				fieldResult, err = idc.FieldExprs[i].Evaluate(nsCtx, node)
+				fieldResult, err = ev.Evaluate(ctx, idc.FieldExprs[i], node)
 			} else {
-				fieldResult, err = xpath1.Evaluate(nsCtx, node, fieldXPath)
+				compiled, compErr := xpath1.Compile(fieldXPath)
+				if compErr != nil {
+					allPresent = false
+					break
+				}
+				fieldResult, err = ev.Evaluate(ctx, compiled, node)
 			}
 			if err != nil {
 				allPresent = false
