@@ -261,7 +261,9 @@ Generic channel-based async event sink.
 
 ## enum/
 
-DTD declaration enumerations matching libxml2 C enums.
+Shared enumeration package for DTD declaration symbols reused across packages.
+Values match libxml2 C enums so helium, sax, and downstream packages can share
+the same typed constants without redefining parallel enum sets.
 
 - `AttributeType` — CDATA, ID, IDREF, IDREFS, ENTITY, ENTITIES, NMTOKEN, NMTOKENS, ENUMERATION, NOTATION
 - `AttributeDefault` — REQUIRED, IMPLIED, FIXED

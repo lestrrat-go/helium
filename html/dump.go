@@ -36,6 +36,21 @@ const defaultHTMLDTD = `<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional
 func (w Writer) WriteDoc(out io.Writer, doc *helium.Document) error {
 	cfg := w.dumpConfig
 
+	d := htmlDumper{
+		format:                !cfg.noFormat,
+		preserveCase:          cfg.preserveCase,
+		noDefaultDTD:          cfg.noDefaultDTD,
+		noEscapeURIAttributes: cfg.noEscapeURIAttributes,
+		escapeControlChars:    cfg.escapeControlChars,
+	}
+	return d.dumpDocument(out, doc)
+}
+
+func (d *htmlDumper) dumpDocument(out io.Writer, doc *helium.Document) error {
+	if doc == nil {
+		return nil
+	}
+
 	// If the document was parsed from Latin-1/Windows-1252, convert
 	// UTF-8 output back to single-byte encoding to match libxml2.
 	// strict=true for explicit ISO-8859-1 charset (numeric char refs for
@@ -53,11 +68,9 @@ func (w Writer) WriteDoc(out io.Writer, doc *helium.Document) error {
 		if err := dumpDTD(out, dtd); err != nil {
 			return err
 		}
-	} else if !cfg.noDefaultDTD && doc.Type() == helium.HTMLDocumentNode {
+	} else if !d.noDefaultDTD && doc.Type() == helium.HTMLDocumentNode {
 		_, _ = io.WriteString(out, defaultHTMLDTD)
 	}
-
-	d := htmlDumper{format: !cfg.noFormat, preserveCase: cfg.preserveCase, noEscapeURIAttributes: cfg.noEscapeURIAttributes, escapeControlChars: cfg.escapeControlChars}
 
 	// Serialize all children of the document
 	for child := range helium.Children(doc) {
@@ -77,6 +90,7 @@ func (w Writer) WriteDoc(out io.Writer, doc *helium.Document) error {
 type htmlDumper struct {
 	format                bool
 	preserveCase          bool
+	noDefaultDTD          bool
 	noEscapeURIAttributes bool
 	escapeControlChars    bool
 	// nsEmitted tracks namespace prefix→URI bindings that were actually
@@ -93,14 +107,20 @@ type htmlDumper struct {
 // (libxml2: htmlNodeDumpOutput).
 func (w Writer) WriteNode(out io.Writer, n helium.Node) error {
 	cfg := w.dumpConfig
-	d := htmlDumper{format: !cfg.noFormat, preserveCase: cfg.preserveCase, noEscapeURIAttributes: cfg.noEscapeURIAttributes, escapeControlChars: cfg.escapeControlChars}
+	d := htmlDumper{
+		format:                !cfg.noFormat,
+		preserveCase:          cfg.preserveCase,
+		noDefaultDTD:          cfg.noDefaultDTD,
+		noEscapeURIAttributes: cfg.noEscapeURIAttributes,
+		escapeControlChars:    cfg.escapeControlChars,
+	}
 	return d.dumpNode(out, n)
 }
 
 func (d *htmlDumper) dumpNode(out io.Writer, n helium.Node) error {
 	switch n.Type() {
 	case helium.DocumentNode, helium.HTMLDocumentNode:
-		return NewWriter().WriteDoc(out, n.(*helium.Document))
+		return d.dumpDocument(out, n.(*helium.Document))
 	case helium.DTDNode:
 		return dumpDTD(out, n.(*helium.DTD))
 	case helium.CommentNode:
