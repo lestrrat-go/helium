@@ -195,14 +195,14 @@ func validateAttributeValueInternal(doc *Document, typ enum.AttributeType, defva
 	return nil
 }
 
-// ValidationError represents a validity constraint violation.
+// DTDValidateError represents a validity constraint violation.
 // It does not stop parsing; the parser continues and collects errors.
 // It implements Unwrap() []error for integration with errors.Is/errors.As.
-type ValidationError struct {
+type DTDValidateError struct {
 	errs []error
 }
 
-func (e *ValidationError) Error() string {
+func (e *DTDValidateError) Error() string {
 	msgs := make([]string, len(e.errs))
 	for i, err := range e.errs {
 		msgs[i] = err.Error()
@@ -210,21 +210,21 @@ func (e *ValidationError) Error() string {
 	return strings.Join(msgs, "; ")
 }
 
-func (e *ValidationError) Unwrap() []error {
+func (e *DTDValidateError) Unwrap() []error {
 	return e.errs
 }
 
-func (e *ValidationError) addf(format string, args ...any) {
+func (e *DTDValidateError) addf(format string, args ...any) {
 	e.errs = append(e.errs, fmt.Errorf(format, args...))
 }
 
-func (e *ValidationError) hasErrors() bool {
+func (e *DTDValidateError) hasErrors() bool {
 	return len(e.errs) > 0
 }
 
 // validCtx carries validation state through the document walk.
 type validCtx struct {
-	ve     *ValidationError
+	ve     *DTDValidateError
 	ids    map[string]bool // ID values seen (uniqueness check)
 	idrefs map[string]bool // IDREF values to resolve (cross-ref check)
 }
@@ -256,9 +256,9 @@ func lookupElementDecl(doc *Document, name, prefix string) (*ElementDecl, *DTD) 
 
 // validateDocument validates a parsed document against its DTD.
 // This is the equivalent of libxml2's xmlValidateDocument.
-func validateDocument(doc *Document) *ValidationError {
+func validateDocument(doc *Document) *DTDValidateError {
 	vctx := &validCtx{
-		ve:     &ValidationError{},
+		ve:     &DTDValidateError{},
 		ids:    make(map[string]bool),
 		idrefs: make(map[string]bool),
 	}
@@ -463,7 +463,7 @@ func checkStandaloneWhitespace(extSubset *DTD, elem *Element, name string, vctx 
 
 // validateElementContent validates that the element's children match the
 // declared content model.
-func validateElementContent(dtd *DTD, elem *Element, edecl *ElementDecl, ve *ValidationError) {
+func validateElementContent(dtd *DTD, elem *Element, edecl *ElementDecl, ve *DTDValidateError) {
 	ename := elem.LocalName()
 
 	switch edecl.decltype {
@@ -490,7 +490,7 @@ func validateElementContent(dtd *DTD, elem *Element, edecl *ElementDecl, ve *Val
 // validateMixedContent validates children of a mixed-content element.
 // In mixed content (#PCDATA | a | b)*, text nodes are always allowed,
 // and element children must appear in the declared list.
-func validateMixedContent(elem *Element, content *ElementContent, ve *ValidationError) {
+func validateMixedContent(elem *Element, content *ElementContent, ve *DTDValidateError) {
 	if content == nil {
 		return
 	}
