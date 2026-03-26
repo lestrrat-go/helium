@@ -151,7 +151,7 @@ func fnMapEntry(_ context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ItemSlice{NewMap([]MapEntry{{Key: ka, Value: args[1]}})}, nil
+	return ItemSlice{newSingleEntryMap(ka, args[1])}, nil
 }
 
 func fnMapRemove(_ context.Context, args []Sequence) (Sequence, error) {
