@@ -169,6 +169,7 @@ func (c *schematronValidateCommand) processInput(ctx context.Context, cfg *schem
 	}
 	if err != nil {
 		_, _ = fmt.Fprint(c.stderr, err)
+		_, _ = fmt.Fprintf(c.stderr, "%s fails to validate\n", input.name)
 		return ExitValidation
 	}
 	return ExitOK
