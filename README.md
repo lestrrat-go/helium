@@ -1,7 +1,7 @@
 # helium
 
-[![Build Status](https://travis-ci.org/lestrrat-go/helium.svg?branch=main)](https://travis-ci.org/lestrrat-go/helium)
-[![GoDoc](https://godoc.org/github.com/lestrrat-go/helium?status.svg)](https://godoc.org/github.com/lestrrat-go/helium)
+[![CI](https://github.com/lestrrat-go/helium/actions/workflows/ci.yml/badge.svg)](https://github.com/lestrrat-go/helium/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/lestrrat-go/helium.svg)](https://pkg.go.dev/github.com/lestrrat-go/helium)
 
 ** WARNING: THIS SOFTWARE SHOULD BE CONSIDERED ALPHA. ALL API STILL SUBJECT TO CHANGE **
 
