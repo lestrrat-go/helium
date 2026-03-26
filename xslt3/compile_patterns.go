@@ -1154,12 +1154,7 @@ func matchSchemaAttributeTest(ctx *execContext, t xpath3.SchemaAttributeTest, no
 	if prefix != "" {
 		ns = ctx.stylesheet.namespaces[prefix]
 	}
-	// Strip prefix from attribute's local name (may include prefix when created by xsl:attribute)
-	attrLocalName := attr.LocalName()
-	if idx := strings.IndexByte(attrLocalName, ':'); idx >= 0 {
-		attrLocalName = attrLocalName[idx+1:]
-	}
-	if attrLocalName != local || attr.URI() != ns {
+	if attr.LocalName() != local || attr.URI() != ns {
 		return false
 	}
 	if ctx.schemaRegistry == nil {

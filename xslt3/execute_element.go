@@ -531,7 +531,12 @@ func (ec *execContext) mapAnnotationsFromValidation(ann xsd.TypeAnnotations, src
 				// as a default/fixed value by schema validation. Copy it over.
 				if !dstFound {
 					// Copy the default/fixed attribute from the validated copy.
-					dstElem.SetLiteralAttribute(srcAttr.Name(), srcAttr.Value())
+					if srcAttr.URI() != "" {
+						ns, _ := ec.resultDoc.CreateNamespace(srcAttr.Prefix(), srcAttr.URI())
+						_ = dstElem.SetLiteralAttributeNS(srcAttr.LocalName(), srcAttr.Value(), ns)
+					} else {
+						_ = dstElem.SetLiteralAttribute(srcAttr.LocalName(), srcAttr.Value())
+					}
 					// Annotate the newly added attribute.
 					if typeName, ok := ann[srcAttr]; ok {
 						for _, dstAttr := range dstElem.Attributes() {
@@ -711,7 +716,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 				return err
 			}
 		}
-		attr, attrErr := out.doc.CreateAttribute(name, value, attrNS)
+		attr, attrErr := out.doc.CreateAttribute(localName, value, attrNS)
 		if attrErr != nil {
 			return attrErr
 		}
@@ -754,7 +759,15 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			tmpDoc := helium.NewDefaultDocument()
 			tmpElem := tmpDoc.CreateElement("_tmp")
 			{
+				if idx := strings.IndexByte(name, ':'); idx >= 0 {
+				prefix := name[:idx]
+				local := name[idx+1:]
+				uri := ec.resolvePrefix(prefix)
+				ns, _ := tmpDoc.CreateNamespace(prefix, uri)
+				_, _ = tmpElem.SetAttributeNS(local, value, ns)
+			} else {
 				_, _ = tmpElem.SetAttribute(name, value)
+			}
 				for _, attr := range tmpElem.Attributes() {
 					out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: attr})
 					out.noteOutput()

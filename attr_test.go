@@ -9,6 +9,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestCreateAttributeRejectsColon(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDefaultDocument()
+
+	// A colon in the name parameter is invalid — the name must be an NCName.
+	// Callers should use CreateAttribute(localName, value, ns) with a
+	// proper Namespace object instead of passing a QName.
+	_, err := doc.CreateAttribute("xml:base", "http://example.com", nil)
+	require.Error(t, err)
+
+	// Passing a proper local name should succeed.
+	ns := helium.NewNamespace("xml", helium.XMLNamespace)
+	attr, err := doc.CreateAttribute("base", "http://example.com", ns)
+	require.NoError(t, err)
+	require.Equal(t, "base", attr.LocalName())
+	require.Equal(t, "xml:base", attr.Name())
+}
+
 func TestAttributeAType(t *testing.T) {
 	t.Run("explicit attributes carry atype", func(t *testing.T) {
 		t.Parallel()

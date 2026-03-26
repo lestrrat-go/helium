@@ -422,7 +422,7 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 					attrNS = ns
 				}
 			}
-			copiedAttr, cErr := out.doc.CreateAttribute(attr.Name(), attr.Value(), attrNS)
+			copiedAttr, cErr := out.doc.CreateAttribute(attr.LocalName(), attr.Value(), attrNS)
 			if cErr != nil {
 				return cErr
 			}
@@ -873,7 +873,7 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 					attrNS = ns
 				}
 			}
-			copiedAttr, err := out.doc.CreateAttribute(attr.Name(), attr.Value(), attrNS)
+			copiedAttr, err := out.doc.CreateAttribute(attr.LocalName(), attr.Value(), attrNS)
 			if err != nil {
 				return err
 			}

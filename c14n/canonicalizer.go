@@ -24,50 +24,6 @@ type canonicalizer struct {
 	nsNodesByElement map[helium.Node][]nsSortEntry
 }
 
-// attrPrefix safely returns the namespace prefix for an attribute,
-// returning "" for non-namespaced attributes.
-// Handles the case where the parser stores "xml:space" as the full name
-// without a separate namespace object.
-func attrPrefix(attr *helium.Attribute) string {
-	name := attr.Name()
-	localName := attr.LocalName()
-	// If Name() includes a prefix (e.g. "xml:space"), extract it
-	if len(name) > len(localName) {
-		return name[:len(name)-len(localName)-1]
-	}
-	// Check for xml: prefix stored in LocalName (parser quirk)
-	if strings.HasPrefix(localName, "xml:") {
-		return "xml"
-	}
-	return ""
-}
-
-// attrLocalName returns the true local name of the attribute,
-// stripping any prefix that may be embedded in LocalName().
-func attrLocalName(attr *helium.Attribute) string {
-	ln := attr.LocalName()
-	if i := strings.IndexByte(ln, ':'); i >= 0 {
-		return ln[i+1:]
-	}
-	return ln
-}
-
-// attrURI safely returns the namespace URI for an attribute,
-// returning "" for non-namespaced attributes.
-func attrURI(attr *helium.Attribute) string {
-	p := attrPrefix(attr)
-	if p == "" {
-		return ""
-	}
-	// xml: prefix always maps to the XML namespace
-	if p == helium.XMLPrefix {
-		return helium.XMLNamespace
-	}
-	// If the attribute has a proper namespace object, use its URI
-	// We can safely call URI() since the prefix indicates a namespace exists
-	return attr.URI()
-}
-
 func (c *canonicalizer) process() error {
 	c.nsStack = newVisibleNSStack()
 
@@ -539,8 +495,8 @@ func (c *canonicalizer) renderNamespacesExclusive(e *helium.Element) error {
 
 	// Attribute namespaces
 	for _, attr := range e.Attributes() {
-		if p := attrPrefix(attr); p != "" {
-			utilized[p] = attrURI(attr)
+		if p := attr.Prefix(); p != "" {
+			utilized[p] = attr.URI()
 		}
 	}
 
@@ -602,7 +558,7 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 		if !c.isVisible(attr) {
 			continue
 		}
-		if p := attrPrefix(attr); p != "" {
+		if p := attr.Prefix(); p != "" {
 			candidates[p] = true
 		}
 	}
@@ -722,8 +678,8 @@ func (c *canonicalizer) renderAttributes(e *helium.Element) error {
 		}
 		entry := attrSortEntry{
 			attr:      attr,
-			localName: attrLocalName(attr),
-			nsURI:     attrURI(attr),
+			localName: attr.LocalName(),
+			nsURI:     attr.URI(),
 		}
 		entries = append(entries, entry)
 	}
@@ -781,10 +737,10 @@ func (c *canonicalizer) inheritXMLAttrs(e *helium.Element, entries *[]attrSortEn
 		}
 		anc := n.(*helium.Element)
 		for _, attr := range anc.Attributes() {
-			if attrURI(attr) != helium.XMLNamespace {
+			if attr.URI() != helium.XMLNamespace {
 				continue
 			}
-			ln := attrLocalName(attr)
+			ln := attr.LocalName()
 			if present[ln] {
 				continue
 			}
@@ -821,10 +777,10 @@ func (c *canonicalizer) inheritXMLAttrsC14N11(e *helium.Element, entries *[]attr
 		}
 		anc := n.(*helium.Element)
 		for _, attr := range anc.Attributes() {
-			if attrURI(attr) != helium.XMLNamespace {
+			if attr.URI() != helium.XMLNamespace {
 				continue
 			}
-			ln := attrLocalName(attr)
+			ln := attr.LocalName()
 			// C14N 1.1: only inherit xml:lang and xml:space
 			if ln != "lang" && ln != "space" {
 				continue
@@ -940,7 +896,7 @@ const xmlBaseLocalName = "base"
 // getXMLBaseAttr returns the xml:base attribute value of an element, or "".
 func getXMLBaseAttr(e *helium.Element) string {
 	for _, attr := range e.Attributes() {
-		if attrLocalName(attr) == xmlBaseLocalName && attrURI(attr) == helium.XMLNamespace {
+		if attr.LocalName() == xmlBaseLocalName && attr.URI() == helium.XMLNamespace {
 			return string(attr.Value())
 		}
 	}
@@ -1038,7 +994,7 @@ func (c *canonicalizer) writeAttribute(entry attrSortEntry) error {
 	// Write qualified name
 	if entry.nsURI != "" && entry.attr != nil {
 		// Namespaced attribute: use the prefix
-		p := attrPrefix(entry.attr)
+		p := entry.attr.Prefix()
 		if p != "" {
 			if _, err := io.WriteString(c.out, p); err != nil {
 				return err

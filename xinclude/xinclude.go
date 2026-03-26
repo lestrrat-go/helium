@@ -903,7 +903,8 @@ func computeAndSetBaseURI(elem *helium.Element, includedURI, targetBase string) 
 		return
 	}
 
-	_, _ = elem.SetAttribute(lexicon.QNameXMLBase, base)
+	xmlBaseNS := helium.NewNamespace(helium.XMLPrefix, helium.XMLNamespace)
+	_ = elem.SetLiteralAttributeNS("base", base, xmlBaseNS)
 }
 
 // computeBaseForIncludedNode sets xml:base on a node that was included via
@@ -920,6 +921,7 @@ func computeBaseForIncludedNode(elem *helium.Element, srcEffectiveBase, targetEf
 		}
 	}
 
+	xmlBaseNS := helium.NewNamespace(helium.XMLPrefix, helium.XMLNamespace)
 	if existingBase != "" {
 		// Element has xml:base in the source. If absolute, keep it.
 		if u, err := url.Parse(existingBase); err == nil && u.IsAbs() {
@@ -932,14 +934,14 @@ func computeBaseForIncludedNode(elem *helium.Element, srcEffectiveBase, targetEf
 		if newBase == "" {
 			return
 		}
-		_, _ = elem.SetAttribute(lexicon.QNameXMLBase, newBase)
+		_ = elem.SetLiteralAttributeNS("base", newBase, xmlBaseNS)
 	} else {
 		// No xml:base — set one relative to the target's effective base.
 		newBase := relativeURI(srcEffectiveBase, targetEffectiveBase)
 		if newBase == "" {
 			return
 		}
-		_, _ = elem.SetAttribute(lexicon.QNameXMLBase, newBase)
+		_ = elem.SetLiteralAttributeNS("base", newBase, xmlBaseNS)
 	}
 }
 
