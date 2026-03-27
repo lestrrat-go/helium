@@ -116,18 +116,20 @@ That is a narrower benchmark than every real `encoding/xml` workload. Many Go
 programs use `encoding/xml` to decode directly into structs, and this section is
 not meant to dismiss that use case or the package. The point here is simply
 that Helium's DOM parse remains competitive with the stdlib token benchmark and
-approaches libxml2 on larger documents.
+now reaches near-parity with libxml2 on the largest corpus in this benchmark.
 
 Benchmarks parse real-world XML files of varying sizes (AMD Ryzen 9 7900X3D,
 Go 1.24, `go test -bench -benchmem -count=5`, median shown):
 
 | File | Helium | `encoding/xml` | libxml2 (cgo) |
 |------|--------|----------------|---------------|
-| 109 KB | 86 MB/s | 80 MB/s | 165 MB/s |
-| 196 KB | 69 MB/s | 67 MB/s | 125 MB/s |
-| 3 MB | 228 MB/s | 132 MB/s | 368 MB/s |
+| 109 KB | 104 MB/s | 83 MB/s | 166 MB/s |
+| 196 KB | 99 MB/s | 70 MB/s | 126 MB/s |
+| 3 MB | 435 MB/s | 133 MB/s | 442 MB/s |
 
-Helium consistently allocates 40-60% fewer objects than `encoding/xml`.
+Helium also allocates far fewer objects than `encoding/xml` in this benchmark.
+On the 3 MB corpus, the current Helium DOM parse lands around `95 allocs/op`
+versus about `155k allocs/op` for `encoding/xml`.
 
 To run the benchmarks yourself:
 
