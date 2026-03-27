@@ -1,9 +1,10 @@
-package catalog
+package catalog_test
 
 import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/catalog"
 	"github.com/stretchr/testify/require"
 )
 
@@ -11,15 +12,15 @@ func TestResolveURIUnwrapsURN(t *testing.T) {
 	t.Parallel()
 
 	// Catalog with a public entry for "-//OASIS//DTD DocBook XML V4.1.2//EN".
-	cat := &Catalog{
-		Entries: []Entry{
+	cat := &catalog.Catalog{
+		Entries: []catalog.Entry{
 			{
-				Type: EntryPublic,
+				Type: catalog.EntryPublic,
 				Name: "-//OASIS//DTD DocBook XML V4.1.2//EN",
 				URL:  "file:///usr/share/xml/docbook.dtd",
 			},
 		},
-		Prefer: PreferPublic,
+		Prefer: catalog.PreferPublic,
 	}
 
 	// The URN encoding of "-//OASIS//DTD DocBook XML V4.1.2//EN" per RFC 3151:
@@ -36,10 +37,10 @@ func TestResolveURIUnwrapsURN(t *testing.T) {
 func TestResolveURINonURNUnchanged(t *testing.T) {
 	t.Parallel()
 
-	cat := &Catalog{
-		Entries: []Entry{
+	cat := &catalog.Catalog{
+		Entries: []catalog.Entry{
 			{
-				Type: EntryURI,
+				Type: catalog.EntryURI,
 				Name: "http://example.com/schema.xsd",
 				URL:  "file:///local/schema.xsd",
 			},
@@ -54,15 +55,15 @@ func TestResolveURINonURNUnchanged(t *testing.T) {
 func TestResolveURIURNNotFound(t *testing.T) {
 	t.Parallel()
 
-	cat := &Catalog{
-		Entries: []Entry{
+	cat := &catalog.Catalog{
+		Entries: []catalog.Entry{
 			{
-				Type: EntryPublic,
+				Type: catalog.EntryPublic,
 				Name: "-//Other//DTD//EN",
 				URL:  "file:///other.dtd",
 			},
 		},
-		Prefer: PreferPublic,
+		Prefer: catalog.PreferPublic,
 	}
 
 	// URN that unwraps to a public ID not in the catalog.
@@ -74,16 +75,16 @@ func TestResolveURIURNNotFound(t *testing.T) {
 // countingLoader is a Loader that counts how many times each URL is loaded.
 type countingLoader struct {
 	counts  map[string]*atomic.Int32
-	catalog *Catalog
+	cat     *catalog.Catalog
 }
 
-func (l *countingLoader) Load(filename string) (*Catalog, error) {
+func (l *countingLoader) Load(filename string) (*catalog.Catalog, error) {
 	if l.counts[filename] == nil {
 		l.counts[filename] = &atomic.Int32{}
 	}
 	l.counts[filename].Add(1)
 	// Return a copy so each entry gets its own catalog instance.
-	cp := *l.catalog
+	cp := *l.cat
 	return &cp, nil
 }
 
@@ -93,21 +94,21 @@ func TestVisitedCacheSkipsDuplicate(t *testing.T) {
 	// Build a catalog graph where the same target catalog ("shared.xml")
 	// is reachable from two nextCatalog entries. Without the visited
 	// cache, the target would be entered twice for the same query.
-	target := &Catalog{
-		Entries: []Entry{
-			{Type: EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///local/foo.dtd"},
+	target := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///local/foo.dtd"},
 		},
 	}
 
 	loader := &countingLoader{
-		counts:  make(map[string]*atomic.Int32),
-		catalog: target,
+		counts: make(map[string]*atomic.Int32),
+		cat:    target,
 	}
 
-	root := &Catalog{
-		Entries: []Entry{
-			{Type: EntryNextCatalog, URL: "shared.xml"},
-			{Type: EntryNextCatalog, URL: "shared.xml"},
+	root := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntryNextCatalog, URL: "shared.xml"},
+			{Type: catalog.EntryNextCatalog, URL: "shared.xml"},
 		},
 		Loader: loader,
 	}
@@ -130,21 +131,21 @@ func TestVisitedCacheStillResolves(t *testing.T) {
 	t.Parallel()
 
 	// Ensure the visited cache doesn't prevent valid resolution.
-	target := &Catalog{
-		Entries: []Entry{
-			{Type: EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///local/foo.dtd"},
+	target := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntrySystem, Name: "http://example.com/foo.dtd", URL: "file:///local/foo.dtd"},
 		},
 	}
 
 	loader := &countingLoader{
-		counts:  make(map[string]*atomic.Int32),
-		catalog: target,
+		counts: make(map[string]*atomic.Int32),
+		cat:    target,
 	}
 
-	root := &Catalog{
-		Entries: []Entry{
-			{Type: EntryNextCatalog, URL: "shared.xml"},
-			{Type: EntryNextCatalog, URL: "shared.xml"},
+	root := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntryNextCatalog, URL: "shared.xml"},
+			{Type: catalog.EntryNextCatalog, URL: "shared.xml"},
 		},
 		Loader: loader,
 	}
@@ -158,21 +159,21 @@ func TestVisitedCachePerQuery(t *testing.T) {
 
 	// The visited cache is per top-level Resolve call. Two different
 	// queries should each be able to visit the same catalog.
-	target := &Catalog{
-		Entries: []Entry{
-			{Type: EntrySystem, Name: "http://example.com/a.dtd", URL: "file:///a.dtd"},
-			{Type: EntrySystem, Name: "http://example.com/b.dtd", URL: "file:///b.dtd"},
+	target := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntrySystem, Name: "http://example.com/a.dtd", URL: "file:///a.dtd"},
+			{Type: catalog.EntrySystem, Name: "http://example.com/b.dtd", URL: "file:///b.dtd"},
 		},
 	}
 
 	loader := &countingLoader{
-		counts:  make(map[string]*atomic.Int32),
-		catalog: target,
+		counts: make(map[string]*atomic.Int32),
+		cat:    target,
 	}
 
-	root := &Catalog{
-		Entries: []Entry{
-			{Type: EntryNextCatalog, URL: "shared.xml"},
+	root := &catalog.Catalog{
+		Entries: []catalog.Entry{
+			{Type: catalog.EntryNextCatalog, URL: "shared.xml"},
 		},
 		Loader: loader,
 	}
