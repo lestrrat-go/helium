@@ -8,6 +8,57 @@ import (
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
+var charDataByteClass = buildCharDataByteClass()
+
+func buildCharDataByteClass() [256]uint8 {
+	var tbl [256]uint8
+	for i := 0; i < 0x80; i++ {
+		tbl[i] = 0
+	}
+	for i := 0; i < 0x20; i++ {
+		tbl[i] = 1
+	}
+	tbl['\t'] = 0
+	tbl['\n'] = 0
+	tbl['<'] = 1
+	tbl['&'] = 1
+	tbl['\r'] = 1
+	tbl[']'] = 1
+	for i := 0x80; i < 0x100; i++ {
+		tbl[i] = 1
+	}
+	return tbl
+}
+
+func scanSafeCharDataASCII(data []byte) int {
+	off := 0
+	for off+16 <= len(data) {
+		if charDataByteClass[data[off+0]]|
+			charDataByteClass[data[off+1]]|
+			charDataByteClass[data[off+2]]|
+			charDataByteClass[data[off+3]]|
+			charDataByteClass[data[off+4]]|
+			charDataByteClass[data[off+5]]|
+			charDataByteClass[data[off+6]]|
+			charDataByteClass[data[off+7]]|
+			charDataByteClass[data[off+8]]|
+			charDataByteClass[data[off+9]]|
+			charDataByteClass[data[off+10]]|
+			charDataByteClass[data[off+11]]|
+			charDataByteClass[data[off+12]]|
+			charDataByteClass[data[off+13]]|
+			charDataByteClass[data[off+14]]|
+			charDataByteClass[data[off+15]] != 0 {
+			break
+		}
+		off += 16
+	}
+	for off < len(data) && charDataByteClass[data[off]] == 0 {
+		off++
+	}
+	return off
+}
+
 // UTF8Cursor is a high-performance cursor for UTF-8 encoded input.
 // It works directly on a byte buffer, decoding UTF-8 on the fly.
 // ASCII bytes (< 0x80) are handled without utf8.DecodeRune overhead.
@@ -412,28 +463,10 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 	dlen := len(data)
 
 	for off < dlen {
-		// Fast inner loop: scan ahead for a run of plain ASCII bytes that
-		// can be bulk-copied (no <, &, \r, ]], control chars).
-		runStart := off
-		for off < dlen {
-			b := data[off]
-			if b >= 0x80 {
-				break
-			}
-			if b == '<' || b == '&' {
-				break
-			}
-			if b < 0x20 && b != 0x9 && b != 0xa {
-				// \r or other control chars need special handling
-				break
-			}
-			if b == ']' && off+2 < dlen && data[off+1] == ']' && data[off+2] == '>' {
-				break
-			}
-			off++
-		}
-		if off > runStart {
-			dst = append(dst, data[runStart:off]...)
+		runLen := scanSafeCharDataASCII(data[off:dlen])
+		if runLen > 0 {
+			dst = append(dst, data[off:off+runLen]...)
+			off += runLen
 		}
 		if off >= dlen {
 			break
@@ -445,7 +478,12 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 				break
 			}
 			if b == ']' {
-				break
+				if off+2 < dlen && data[off+1] == ']' && data[off+2] == '>' {
+					break
+				}
+				dst = append(dst, ']')
+				off++
+				continue
 			}
 			if b == '\r' {
 				dst = append(dst, '\n')
