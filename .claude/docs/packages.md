@@ -362,6 +362,16 @@ Generic bitset operations for bitmask types.
 - **Set[T](*T, T)** / **IsSet[T](T, T) → bool**
 - Files: `bitset.go`
 
+## internal/parser/
+
+Parser option bitset type and constants. Bit positions match libxml2's XML_PARSE_* constants.
+
+- **Option** — int-based bitset type for parser flags
+- Constants: `Recover`, `NoEnt`, `DTDLoad`, `DTDAttr`, `DTDValid`, `NoError`, `NoWarning`, `Pedantic`, `NoBlanks`, `XInclude`, `NoNet`, `NoDict`, `NsClean`, `NoCDATA`, `NoXIncNode`, `Compact`, `NoBaseFix`, `Huge`, `IgnoreEnc`, `BigLines`, `NoXXE`, `NoUnzip`, `NoSysCatalog`, `CatalogPI`, `SkipIDs`, `LenientXMLDecl`
+- Methods: `Set(Option)`, `Clear(Option)`, `IsSet(Option) → bool`
+- Files: `options.go`
+- Imports: internal/bitset
+
 ## internal/xmlchar/
 
 XML 1.0 NCName character classification. Single source of truth for NCNameStartChar, NCNameChar, and IsValidNCName.

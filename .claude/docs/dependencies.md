@@ -20,7 +20,7 @@ html           → helium, sax
 catalog        → helium, internal/catalog, internal/lexicon
 stream         → internal/encoding
 sax            → helium, enum
-helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/stack
+helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, internal/stack
 sink           → (none)
 enum           → (none)
 internal/lexicon → (none)
@@ -33,7 +33,7 @@ test           → helium
 ```
 
 ## Leaf packages (no helium deps)
-sink, enum, internal/bitset, internal/stack, internal/cliutil, internal/catalog, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/unparsedtext, internal/xsd/value
+sink, enum, internal/bitset, internal/parser, internal/stack, internal/cliutil, internal/catalog, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/unparsedtext, internal/xsd/value
 
 ## Core layer
 helium (root) → sax, enum, internal/*
