@@ -41,7 +41,7 @@ Central state struct. Key fields:
 
 ### Input Management
 - `inputTab` (inputStack) — LIFO stack of ByteCursor/RuneCursor. Entity expansion and external DTDs push new cursors.
-- `getCursor()` — current cursor, auto-pops exhausted ones
+- `getCursor()` — current cursor, auto-pops exhausted ones, caches the active cursor between parser calls
 
 ### Parser State Machine
 States: `psStart`, `psContent`, `psPrologue`, `psEpilogue`, `psCDATA`, `psDTD`, `psEntityDecl`, `psAttributeValue`, `psComment`, `psStartTag`, `psEndTag`, `psSystemLiteral`, `psPublicLiteral`, `psEntityValue`, `psIgnore`, `psMisc`, `psPI`, `psEOF`
@@ -144,6 +144,15 @@ Expands `&#NNN;`, `&#xHHH;`, `&name;`, `%name;` based on substitution type. Recu
 2. No current element → add to document
 3. Current is Element → add as child
 
+### DOM Fast Path
+
+When the default parser is building a DOM with the internal fast path enabled:
+- start-tag handling appends parser-created attributes directly in parse order instead of routing through the generic duplicate-checking setters
+- common-case ID/type propagation happens inline during start-tag processing
+- character data and fresh child nodes are linked directly into the current parent when parser invariants already guarantee the normal `xmlAddChild` preconditions
+
+These shortcuts preserve the public DOM shape; they only avoid generic API work that the parser has already proven unnecessary.
+
 ## Push Parser
 
 `PushParser` uses background goroutine + `pushStream` (thread-safe concurrent buffer):
@@ -166,6 +175,27 @@ Parser runs in background goroutine, reading from pushStream via `ParseReader`. 
 - Deliver chunks via SAX Characters callback
 
 Controlled by `Parser.SetCharBufferSize(size)`.
+
+For the UTF-8 cursor fast path, character-data scanners now continue across reader chunk boundaries before classifying the text run. This preserves CRLF normalization and prevents whitespace-only content from being split into mixed `Characters` / `IgnorableWhitespace` events at buffer edges.
+
+## UTF-8 Parser Fast Paths
+
+The parser has several ASCII/UTF-8 fast paths that bypass more general rune-by-rune logic when the input shape is already known:
+- `parseQName()` first tries `UTF8Cursor.ScanQNameBytes()` for common ASCII QNames and falls back to the older NCName/Name parser path for non-ASCII or malformed cases
+- `parseNCName()` uses `UTF8Cursor.ScanNCNameBytes()` on ASCII input
+- `parseAttributeValueInternal()` uses `UTF8Cursor.ScanSimpleAttrValue()` for non-normalized attribute values with no entities or special whitespace
+
+These fast paths all intern scanned names before advancing the cursor, because cursor advancement may compact the buffer and invalidate borrowed byte slices.
+
+When a UTF-8 fast path has already proven the consumed bytes contain no newlines, it now advances with `AdvanceFast()` instead of the full newline-counting `Advance()` path. This is currently used for:
+- `ConsumeString()` token consumption in the UTF-8 cursor
+- ASCII QName scans in `parseQName()`
+- ASCII NCName scans in `parseNCName()`
+- simple attribute value scans in `parseAttributeValueInternal()`
+
+## Name Interning
+
+`intern.go` seeds a global map from `internal/lexicon.WellKnownNames`, but the hot path now cheap-checks `(first byte, length)` before probing that map. That avoids paying the global map lookup for most document-local names that can never match a lexicon constant, while preserving the existing global-name-first behavior on actual candidates.
 
 ## Attribute Default Application
 

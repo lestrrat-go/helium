@@ -335,9 +335,13 @@ func (ctx *parserCtx) adaptCursor(v any) strcursor.Cursor {
 }
 
 func (ctx *parserCtx) getCursor() strcursor.Cursor {
-	// Fast path: return cached cursor if still valid (not done or only input).
+	// Fast path: for the common single-input case, the cached cursor remains
+	// valid even at EOF and callers can observe that directly via Peek/Done.
 	if cc := ctx.cachedCursor; cc != nil {
-		if !cc.Done() || ctx.inputTab.Len() <= 1 {
+		if ctx.inputTab.Len() <= 1 {
+			return cc
+		}
+		if !cc.Done() {
 			return cc
 		}
 		// Cached cursor is exhausted and there are more inputs — fall through.
@@ -1008,22 +1012,37 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 	recover := pctx.options.IsSet(parseRecover)
 
 	for !cur.Done() && !pctx.stopped {
-		if cur.HasPrefixString("</") {
+		if cur.Peek() == '<' && cur.PeekAt(1) == '/' {
 			break
 		}
 
 		var err error
-		if cur.HasPrefixString("<?") {
-			err = pctx.parsePI(ctx)
-		} else if cur.HasPrefixString("<![CDATA[") {
-			err = pctx.parseCDSect(ctx)
-		} else if cur.HasPrefixString("<!--") {
-			err = pctx.parseComment(ctx)
-		} else if cur.HasPrefixString("<") {
-			err = pctx.parseElement(ctx)
-		} else if cur.HasPrefixString("&") {
+		switch cur.Peek() {
+		case '<':
+			switch cur.PeekAt(1) {
+			case '?':
+				err = pctx.parsePI(ctx)
+			case '!':
+				switch {
+				case cur.PeekAt(2) == '[' &&
+					cur.PeekAt(3) == 'C' &&
+					cur.PeekAt(4) == 'D' &&
+					cur.PeekAt(5) == 'A' &&
+					cur.PeekAt(6) == 'T' &&
+					cur.PeekAt(7) == 'A' &&
+					cur.PeekAt(8) == '[':
+					err = pctx.parseCDSect(ctx)
+				case cur.PeekAt(2) == '-' && cur.PeekAt(3) == '-':
+					err = pctx.parseComment(ctx)
+				default:
+					err = pctx.parseElement(ctx)
+				}
+			default:
+				err = pctx.parseElement(ctx)
+			}
+		case '&':
 			err = pctx.parseReference(ctx)
-		} else {
+		default:
 			if err := pctx.parseCharData(ctx, false); err != nil {
 				if !recover || errors.Is(err, errParserStopped) {
 					return err
@@ -1282,7 +1301,7 @@ func (pctx *parserCtx) parseElement(ctx context.Context) error {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.HasPrefixString("/>") {
+	if cur.Peek() != '/' || cur.PeekAt(1) != '>' {
 		if err := pctx.parseContent(ctx); err != nil {
 			return pctx.error(ctx, err)
 		}
@@ -1358,7 +1377,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			pctx.pushNS("", attvalue)
 			nbNs++
 		SkipDefaultNS:
-			if cur.Peek() == '>' || cur.HasPrefixString("/>") {
+			if cur.Peek() == '>' || (cur.Peek() == '/' && cur.PeekAt(1) == '>') {
 				continue
 			}
 
@@ -1421,7 +1440,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			nbNs++
 
 		SkipNS:
-			if cur.Peek() == '>' || cur.HasPrefixString("/>") {
+			if cur.Peek() == '>' || (cur.Peek() == '/' && cur.PeekAt(1) == '>') {
 				continue
 			}
 
@@ -1577,7 +1596,11 @@ func (pctx *parserCtx) parseEndTag(ctx context.Context) error {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.ConsumeString("/>") {
+	if cur.Peek() == '/' && cur.PeekAt(1) == '>' {
+		if err := cur.Advance(2); err != nil {
+			return err
+		}
+	} else {
 		if !cur.ConsumeString("</") {
 			return pctx.error(ctx, ErrLtSlashRequired)
 		}
@@ -1690,7 +1713,7 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 	if !normalize {
 		if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
 			if v, nBytes := u8.ScanSimpleAttrValue(qch); nBytes > 0 {
-				if err = cur.Advance(nBytes); err != nil {
+				if err = u8.AdvanceFast(nBytes); err != nil {
 					return
 				}
 				value = v
@@ -2838,6 +2861,24 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix str
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
+	if u8, ok := cur.(*strcursor.UTF8Cursor); ok && cur.Peek() < utf8.RuneSelf {
+		prefixBytes, localBytes, nBytes, ok := u8.ScanQNameBytes()
+		if ok {
+			if !pctx.options.IsSet(parseHuge) {
+				if len(prefixBytes) > MaxNameLength || len(localBytes) > MaxNameLength {
+					return "", "", pctx.error(ctx, ErrNameTooLong)
+				}
+			}
+			if len(prefixBytes) > 0 {
+				prefix = pctx.internNameBytes(prefixBytes)
+			}
+			local = pctx.internNameBytes(localBytes)
+			if err := u8.AdvanceFast(nBytes); err != nil {
+				return "", "", err
+			}
+			return local, prefix, nil
+		}
+	}
 	var v string
 	v, err = pctx.parseNCName(ctx)
 	if err != nil {
@@ -2986,7 +3027,7 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 		// Intern BEFORE Advance, since Advance may compact the buffer
 		// and invalidate nameBytes.
 		ncname = pctx.internNameBytes(nameBytes)
-		if err = cur.Advance(len(nameBytes)); err != nil {
+		if err = u8.AdvanceFast(len(nameBytes)); err != nil {
 			return "", err
 		}
 		return

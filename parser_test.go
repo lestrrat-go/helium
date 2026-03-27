@@ -169,6 +169,23 @@ func TestParseNamespace(t *testing.T) {
 	if pdebug.Enabled {
 		pdebug.Dump(doc)
 	}
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+	require.Equal(t, "https://github.com/lestrrat-go/helium", root.URI())
+
+	const attrInput = `<?xml version="1.0"?>
+<root xmlns:x="urn:test" x:attr="value"/>`
+	doc, err = p.Parse(t.Context(), []byte(attrInput))
+	require.NoError(t, err)
+
+	root = doc.DocumentElement()
+	require.NotNil(t, root)
+	attr := root.GetAttributeNodeNS("attr", "urn:test")
+	require.NotNil(t, attr)
+	require.Equal(t, "x", attr.Prefix())
+	require.Equal(t, "urn:test", attr.URI())
+	require.Equal(t, "value", attr.Value())
 }
 
 func findDocumentElement(doc *helium.Document) helium.Node {

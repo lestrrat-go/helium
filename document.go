@@ -368,6 +368,25 @@ func (d *Document) allocAttribute(name string, ns *Namespace) *Attribute {
 	return attr
 }
 
+func (d *Document) createLiteralAttribute(name, value string, ns *Namespace) *Attribute {
+	var attr *Attribute
+	if d != nil {
+		attr = d.allocAttribute(name, ns)
+	} else {
+		attr = newAttribute(name, ns)
+	}
+
+	if value == "" {
+		return attr
+	}
+
+	t := d.CreateText([]byte(value))
+	setFirstChild(attr, t)
+	setLastChild(attr, t)
+	t.SetParent(attr)
+	return attr
+}
+
 func (d *Document) CreatePI(target, data string) *ProcessingInstruction {
 	return &ProcessingInstruction{
 		target: target,
