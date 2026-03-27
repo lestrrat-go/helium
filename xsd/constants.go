@@ -1,5 +1,11 @@
 package xsd
 
+// attrValTrue and attrValQualified are common XML attribute value strings.
+const (
+	attrValTrue      = "true"
+	attrValQualified = "qualified"
+)
+
 const (
 	elemAll            = "all"
 	elemAnnotation     = "annotation"
