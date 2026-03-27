@@ -10,6 +10,17 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
+type compileConfig struct {
+	filename     string // RNG filename for error messages
+	baseDir      string
+	errorHandler helium.ErrorHandler
+}
+
+type validateConfig struct {
+	filename     string
+	errorHandler helium.ErrorHandler
+}
+
 // ErrValidationFailed is returned by [Validator.Validate] when the document
 // does not conform to the schema. Individual validation errors are delivered
 // to the configured [helium.ErrorHandler].
@@ -149,21 +160,6 @@ func (v Validator) ErrorHandler(h helium.ErrorHandler) Validator {
 	v = v.clone()
 	v.cfg.errorHandler = h
 	return v
-}
-
-// ValidationError represents a single validation error with structured fields.
-type ValidationError struct {
-	Filename string // source filename
-	Line     int    // line number in the source document
-	Element  string // element name
-	Message  string // human-readable error description
-}
-
-func (e *ValidationError) Error() string {
-	if e.Filename == "" && e.Line == 0 && e.Element == "" {
-		return bareValidityError(e.Message)
-	}
-	return validityError(e.Filename, e.Line, e.Element, e.Message)
 }
 
 func (v Validator) closeHandler() {

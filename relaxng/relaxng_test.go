@@ -517,3 +517,19 @@ func TestCheckRules(t *testing.T) {
 		require.Contains(t, errs, "Found forbidden pattern data/except//ref")
 	})
 }
+
+func TestZeroCompilerFluent(t *testing.T) {
+	var c relaxng.Compiler
+	require.NotPanics(t, func() {
+		c2 := c.SchemaFilename("test.rng")
+		_ = c2
+	})
+}
+
+func TestZeroValidatorFluent(t *testing.T) {
+	var v relaxng.Validator
+	require.NotPanics(t, func() {
+		v2 := v.Filename("test.xml")
+		_ = v2
+	})
+}
