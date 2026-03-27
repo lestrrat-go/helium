@@ -18,7 +18,7 @@ func TestRunRelaxNGValidateVersion(t *testing.T) {
 
 	code := heliumcmd.Execute(ctx, []string{"relaxng", "validate", "--version"})
 	require.Equal(t, heliumcmd.ExitOK, code)
-	require.Contains(t, stderr.String(), "helium version")
+	require.Contains(t, stderr.String(), "using helium")
 }
 
 func TestRelaxNGValidateMissingSchemaArg(t *testing.T) {

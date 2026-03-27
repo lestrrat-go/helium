@@ -45,7 +45,7 @@ func executeLintStdin(t *testing.T, xmlContent string, flags ...string) (stdout,
 func TestParseArgsVersion(t *testing.T) {
 	_, errOut, code := executeLint(t, strings.NewReader(""), "--version")
 	require.Equal(t, heliumcmd.ExitOK, code)
-	require.Contains(t, errOut, "helium version")
+	require.Contains(t, errOut, "using helium")
 }
 
 func TestParseArgsUnrecognized(t *testing.T) {

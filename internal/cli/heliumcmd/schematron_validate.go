@@ -85,7 +85,7 @@ func (c *schematronValidateCommand) runContext(ctx context.Context, args []strin
 }
 
 func (c *schematronValidateCommand) showVersion() {
-	_, _ = fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
+	_, _ = fmt.Fprintf(c.stderr, "%s: using helium (%s)\n", c.prog, commitID())
 }
 
 func (c *schematronValidateCommand) showUsage() {

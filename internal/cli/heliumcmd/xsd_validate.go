@@ -94,7 +94,7 @@ func (c *xsdValidateCommand) runContext(ctx context.Context, args []string) int 
 }
 
 func (c *xsdValidateCommand) showVersion() {
-	_, _ = fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
+	_, _ = fmt.Fprintf(c.stderr, "%s: using helium (%s)\n", c.prog, commitID())
 }
 
 func (c *xsdValidateCommand) showUsage() {

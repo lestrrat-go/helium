@@ -154,7 +154,7 @@ func (c *command) runContext(ctx context.Context, args []string) int {
 }
 
 func (c *command) showVersion() {
-	_, _ = fmt.Fprintf(c.stderr, "%s: using helium version %s\n", c.prog, helium.Version)
+	_, _ = fmt.Fprintf(c.stderr, "%s: using helium (%s)\n", c.prog, commitID())
 }
 
 func (c *command) showUsage() {
