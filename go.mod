@@ -6,8 +6,8 @@ require (
 	github.com/dlclark/regexp2 v1.11.5
 	github.com/lestrrat-go/pdebug v0.0.0-20210111095411-35b07dbf089b
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/net v0.51.0
-	golang.org/x/text v0.34.0
+	golang.org/x/net v0.52.0
+	golang.org/x/text v0.35.0
 )
 
 require (
