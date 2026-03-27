@@ -3,6 +3,8 @@ package xslt3_test
 import (
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -263,4 +265,81 @@ func TestCompileStylesheetConvenience(t *testing.T) {
 	ss, err := xslt3.CompileStylesheet(t.Context(), doc)
 	require.NoError(t, err)
 	require.NotNil(t, ss)
+}
+
+func TestAttributeSetCycleDetection(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		xsl  string
+	}{
+		{
+			name: "direct self-cycle",
+			xsl: `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:attribute-set name="a" use-attribute-sets="a"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`,
+		},
+		{
+			name: "indirect two-node cycle",
+			xsl: `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:attribute-set name="a" use-attribute-sets="b"/>
+  <xsl:attribute-set name="b" use-attribute-sets="a"/>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			doc, err := helium.NewParser().Parse(ctx, []byte(tc.xsl))
+			require.NoError(t, err)
+
+			_, err = xslt3.CompileStylesheet(ctx, doc)
+			require.Error(t, err)
+			require.True(t, strings.Contains(err.Error(), "XTSE0720"),
+				"expected XTSE0720 in error, got: %v", err)
+		})
+	}
+}
+
+func TestCompileFileLoadsDTDDefinedExternalEntityInIncludedStylesheet(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.xsl"), []byte(`<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:include href="child.xsl"/>
+  <xsl:template match="/">
+    <out value="{$var}"/>
+  </xsl:template>
+</xsl:stylesheet>`), 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "child.xsl"), []byte(`<?xml version="1.0"?>
+<!DOCTYPE xsl:stylesheet SYSTEM "child.dtd">
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  &inject;
+</xsl:stylesheet>`), 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "child.dtd"), []byte(`<!ENTITY inject SYSTEM "inject.xsl">`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "inject.xsl"), []byte(`<?xml version="1.0"?>
+<xsl:variable xmlns:xsl="http://www.w3.org/1999/XSL/Transform" name="var" select="'from-dtd-entity'"/>`), 0o644))
+
+	mainPath := filepath.Join(tmpDir, "main.xsl")
+	p := helium.NewParser().LoadExternalDTD(true).SubstituteEntities(true).BaseURI(mainPath)
+	mainData, err := os.ReadFile(mainPath)
+	require.NoError(t, err)
+	doc, err := p.Parse(t.Context(), mainData)
+	require.NoError(t, err)
+	ss, err := xslt3.NewCompiler().BaseURI(mainPath).Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+	require.NoError(t, err)
+
+	result, err := xslt3.TransformString(t.Context(), source, ss)
+	require.NoError(t, err)
+	require.Contains(t, result, `value="from-dtd-entity"`)
 }

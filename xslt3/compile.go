@@ -15,7 +15,12 @@ import (
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
+	"github.com/lestrrat-go/helium/xslt3/internal/elements"
 )
+
+// elems is the package-level XSLT element registry, providing metadata
+// about all recognized XSLT elements (version, context, allowed attrs, etc.).
+var elems = elements.NewRegistry()
 
 // compiler holds state during stylesheet compilation.
 type compiler struct {

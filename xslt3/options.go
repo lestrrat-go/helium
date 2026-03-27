@@ -3,6 +3,7 @@ package xslt3
 import (
 	"io"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -26,36 +27,90 @@ type compileConfig struct {
 	resolver        URIResolver
 	packageResolver PackageResolver
 	staticParams    map[string]xpath3.Sequence // externally supplied static param values
-	importSchemas   []*xsd.Schema             // pre-compiled schemas for xsl:import-schema resolution
+	importSchemas   []*xsd.Schema              // pre-compiled schemas for xsl:import-schema resolution
 	isSubPackage    bool                       // true when compiling a sub-package (via xsl:use-package)
 }
 
 // --- Transform configuration (internal) ---
 
 type transformConfig struct {
-	sequenceParams     map[string]xpath3.Sequence
-	msgHandler         MessageHandler
-	initialTemplate    string
-	initialMode        string
-	initialModeParams       map[string]xpath3.Sequence
-	initialModeTunnel       map[string]xpath3.Sequence
-	initialTemplateParams   map[string]xpath3.Sequence
-	initialTemplateTunnel   map[string]xpath3.Sequence
-	initialFunction        string              // QName of initial function
-	initialFunctionParams  []xpath3.Sequence   // positional params for initial function
-	resultDocHandler   ResultDocumentHandler
-	collectionResolver xpath3.CollectionResolver
-	onMultipleMatch    string // "use-last" or "fail" — overrides default mode's on-multiple-match
-	rawResultHandler        RawResultHandler
-	baseOutputURI           string // base output URI for current-output-uri()
-	annotationHandler       AnnotationHandler
-	initialMatchSelection    xpath3.Sequence // initial match selection for apply-templates entry
-	rawCapture               bool            // enable captureItems on output frame for raw delivery
-	rawCapturedItems         xpath3.Sequence // items captured during raw-delivery transform (set by executeTransform)
-	primaryItems             xpath3.Sequence // items captured from primary output for json/adaptive serialization
-	primaryItemsHandler     PrimaryItemsHandler
-	sourceSchemas            []*xsd.Schema // pre-compiled schemas for source document validation
-	traceWriter              io.Writer     // destination for fn:trace output (nil = os.Stderr)
-	resolvedOutputDef        *OutputDef    // resolved primary output def (set by executeTransform)
-	globalContextSelect      string        // XPath for global context item (evaluated after strip-space)
+	sequenceParams        map[string]xpath3.Sequence
+	msgHandler            MessageHandler
+	initialTemplate       string
+	initialMode           string
+	initialModeParams     map[string]xpath3.Sequence
+	initialModeTunnel     map[string]xpath3.Sequence
+	initialTemplateParams map[string]xpath3.Sequence
+	initialTemplateTunnel map[string]xpath3.Sequence
+	initialFunction       string            // QName of initial function
+	initialFunctionParams []xpath3.Sequence // positional params for initial function
+	resultDocHandler      ResultDocumentHandler
+	collectionResolver    xpath3.CollectionResolver
+	onMultipleMatch       string // "use-last" or "fail" — overrides default mode's on-multiple-match
+	rawResultHandler      RawResultHandler
+	baseOutputURI         string // base output URI for current-output-uri()
+	annotationHandler     AnnotationHandler
+	initialMatchSelection xpath3.Sequence // initial match selection for apply-templates entry
+	rawCapture            bool            // enable captureItems on output frame for raw delivery
+	rawCapturedItems      xpath3.Sequence // items captured during raw-delivery transform (set by executeTransform)
+	primaryItems          xpath3.Sequence // items captured from primary output for json/adaptive serialization
+	primaryItemsHandler   PrimaryItemsHandler
+	sourceSchemas         []*xsd.Schema // pre-compiled schemas for source document validation
+	traceWriter           io.Writer     // destination for fn:trace output (nil = os.Stderr)
+	resolvedOutputDef     *OutputDef    // resolved primary output def (set by executeTransform)
+	globalContextSelect   string        // XPath for global context item (evaluated after strip-space)
+}
+
+// MessageHandler handles xsl:message output during transformation.
+// A non-nil error aborts the transform immediately.
+//
+// Handler methods are called from the goroutine executing Do/Serialize/WriteTo.
+// If you run transforms concurrently, your implementation must be safe for
+// concurrent use.
+type MessageHandler interface {
+	HandleMessage(msg string, terminate bool) error
+}
+
+// ResultDocumentHandler handles secondary result documents produced
+// by xsl:result-document. The outDef contains the effective output
+// definition (method, encoding, indent, etc.) for this result document.
+// A non-nil error aborts the transform.
+//
+// Handler methods are called from the goroutine executing Do/Serialize/WriteTo.
+// If you run transforms concurrently, your implementation must be safe for
+// concurrent use.
+type ResultDocumentHandler interface {
+	HandleResultDocument(href string, doc *helium.Document, outDef *OutputDef) error
+}
+
+// RawResultHandler receives the raw XDM result sequence from the primary
+// output before it is serialized into the result document tree.
+// A non-nil error aborts the transform.
+//
+// Handler methods are called from the goroutine executing Do/Serialize/WriteTo.
+// If you run transforms concurrently, your implementation must be safe for
+// concurrent use.
+type RawResultHandler interface {
+	HandleRawResult(seq xpath3.Sequence) error
+}
+
+// PrimaryItemsHandler receives non-node items captured from the primary
+// output during transformation (needed for json/adaptive serialization).
+// A non-nil error aborts the transform.
+//
+// Handler methods are called from the goroutine executing Do/Serialize/WriteTo.
+// If you run transforms concurrently, your implementation must be safe for
+// concurrent use.
+type PrimaryItemsHandler interface {
+	HandlePrimaryItems(seq xpath3.Sequence) error
+}
+
+// AnnotationHandler receives type annotations and schema declarations
+// from schema-aware transformations. A non-nil error aborts the transform.
+//
+// Handler methods are called from the goroutine executing Do/Serialize/WriteTo.
+// If you run transforms concurrently, your implementation must be safe for
+// concurrent use.
+type AnnotationHandler interface {
+	HandleAnnotations(annotations map[helium.Node]string, declarations xpath3.SchemaDeclarations) error
 }
