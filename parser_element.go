@@ -698,10 +698,10 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 	}
 	if cur.Peek() != '=' {
 		err = pctx.error(ctx, ErrEqualSignRequired)
-	}
-	if err2 := cur.Advance(1); err2 != nil {
-		err = err2
 		return
+	}
+	if err := cur.Advance(1); err != nil {
+		return "", "", "", err
 	}
 	pctx.skipBlanks(ctx)
 

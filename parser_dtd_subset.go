@@ -97,12 +97,22 @@ func (pctx *parserCtx) parseInternalSubset(ctx context.Context) error {
 			break
 		}
 
+		startCur := cur
+		startLine := cur.LineNumber()
+		startCol := cur.Column()
+		startByte := cur.Peek()
+
 		pctx.skipBlanks(ctx)
 		if err := pctx.parseMarkupDecl(ctx); err != nil {
 			return pctx.error(ctx, err)
 		}
 		if err := pctx.parsePEReference(ctx); err != nil {
 			return pctx.error(ctx, err)
+		}
+
+		cur = pctx.getCursor()
+		if cur == startCur && cur != nil && cur.LineNumber() == startLine && cur.Column() == startCol && cur.Peek() == startByte {
+			return pctx.error(ctx, ErrDocTypeNotFinished)
 		}
 	}
 
