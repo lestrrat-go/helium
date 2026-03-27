@@ -1,0 +1,45 @@
+name: Fuzz PR
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ['.', 'c14n', 'catalog', 'html', 'relaxng', 'schematron', 'sink', 'stream', 'xinclude', 'xpath1', 'xpath3', 'xpointer', 'xsd', 'xslt3']
+    name: "Fuzz smoke ${{ matrix.package }}"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Cache dependencies
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run fuzz smoke tests
+        run: |
+          FUZZTIME="5s"
+          for target in $(go test ./${{ matrix.package }}/ -list '^Fuzz' -run '^$' | grep '^Fuzz' || true); do
+            echo "::group::${target}"
+            go test ./${{ matrix.package }}/ -run '^$' -fuzz "^${target}\$" -fuzztime "${FUZZTIME}"
+            echo "::endgroup::"
+          done
