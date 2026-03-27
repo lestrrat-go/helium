@@ -69,7 +69,6 @@ func (c *UTF8Cursor) fillBuffer(minBytes int) error {
 	return nil
 }
 
-
 func (c *UTF8Cursor) Done() bool {
 	if c.bufpos < c.buflen {
 		return false
@@ -141,16 +140,18 @@ func (c *UTF8Cursor) Advance(n int) error {
 			return err
 		}
 	}
-	end := c.bufpos + n
+	start := c.bufpos
+	end := start + n
+	segment := c.buf[start:end]
 	lastNewline := -1
-	for i := c.bufpos; i < end; i++ {
-		if c.buf[i] == '\n' {
+	for i, b := range segment {
+		if b == '\n' {
 			c.lineno++
 			lastNewline = i
 		}
 	}
 	if lastNewline >= 0 {
-		c.column = end - lastNewline
+		c.column = len(segment) - lastNewline
 	} else {
 		c.column += n
 	}
@@ -158,9 +159,24 @@ func (c *UTF8Cursor) Advance(n int) error {
 	return nil
 }
 
-// AdvanceFast is an alias for Advance (kept for interface compatibility).
+// AdvanceFast skips per-byte column bookkeeping in the common no-newline case.
 func (c *UTF8Cursor) AdvanceFast(n int) error {
-	return c.Advance(n)
+	if c.buflen-c.bufpos < n {
+		if err := c.fillBuffer(n); err != nil {
+			return err
+		}
+	}
+	start := c.bufpos
+	end := start + n
+	segment := c.buf[start:end]
+	if idx := bytes.LastIndexByte(segment, '\n'); idx >= 0 {
+		c.lineno += bytes.Count(segment, []byte{'\n'})
+		c.column = len(segment) - idx
+	} else {
+		c.column += n
+	}
+	c.bufpos = end
+	return nil
 }
 
 func (c *UTF8Cursor) HasPrefix(b []byte) bool {
@@ -181,7 +197,12 @@ func (c *UTF8Cursor) HasPrefixString(s string) bool {
 			return false
 		}
 	}
-	return string(c.buf[c.bufpos:c.bufpos+n]) == s
+	for i := 0; i < n; i++ {
+		if c.buf[c.bufpos+i] != s[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *UTF8Cursor) Consume(b []byte) bool {
@@ -193,10 +214,23 @@ func (c *UTF8Cursor) Consume(b []byte) bool {
 }
 
 func (c *UTF8Cursor) ConsumeString(s string) bool {
-	if !c.HasPrefixString(s) {
+	n := len(s)
+	if c.buflen-c.bufpos < n {
+		if c.fillBuffer(n) != nil {
+			return false
+		}
+		if c.buflen-c.bufpos < n {
+			return false
+		}
+	}
+	for i := 0; i < n; i++ {
+		if c.buf[c.bufpos+i] != s[i] {
+			return false
+		}
+	}
+	if err := c.Advance(n); err != nil {
 		return false
 	}
-	_ = c.Advance(len(s))
 	return true
 }
 
@@ -316,7 +350,6 @@ func isASCIINameChar(b byte) bool {
 	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') ||
 		(b >= '0' && b <= '9') || b == '_' || b == '-' || b == '.'
 }
-
 
 // ScanSimpleAttrValue scans a simple attribute value (no entities, no special
 // whitespace) between the current position and the given quote character.
