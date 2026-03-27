@@ -51,6 +51,7 @@ func (e *resolveError) Error() string {
 }
 
 func TestXIncludeBasicXML(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="included.xml"/>
 	</root>`)
@@ -86,6 +87,7 @@ func TestXIncludeBasicXML(t *testing.T) {
 }
 
 func TestXIncludeText(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="data.txt" parse="text"/>
 	</root>`)
@@ -109,6 +111,7 @@ func TestXIncludeText(t *testing.T) {
 }
 
 func TestXIncludeFallback(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="missing.xml">
 			<xi:fallback><fallback-content/></xi:fallback>
@@ -140,6 +143,7 @@ func TestXIncludeFallback(t *testing.T) {
 }
 
 func TestXIncludeMissingNoFallback(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="missing.xml"/>
 	</root>`)
@@ -156,6 +160,7 @@ func TestXIncludeMissingNoFallback(t *testing.T) {
 }
 
 func TestXIncludeCircularDetection(t *testing.T) {
+	t.Parallel()
 	// self.xml includes self.xml — should be detected as circular
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="self.xml"/>
@@ -177,6 +182,7 @@ func TestXIncludeCircularDetection(t *testing.T) {
 }
 
 func TestXIncludeMarkerNodes(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="included.xml"/>
 	</root>`)
@@ -215,6 +221,7 @@ func TestXIncludeMarkerNodes(t *testing.T) {
 }
 
 func TestXIncludeMultiple(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="a.xml"/>
 		<xi:include href="b.xml"/>
@@ -246,6 +253,7 @@ func TestXIncludeMultiple(t *testing.T) {
 }
 
 func TestXIncludeNoHref(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include/>
 	</root>`)
@@ -261,6 +269,7 @@ func TestXIncludeNoHref(t *testing.T) {
 }
 
 func TestXIncludeBaseFixup(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="sub/included.xml"/>
 	</root>`)
@@ -298,6 +307,7 @@ func TestXIncludeBaseFixup(t *testing.T) {
 }
 
 func TestXIncludeNested(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="outer.xml"/>
 	</root>`)
@@ -341,6 +351,7 @@ func TestXIncludeNested(t *testing.T) {
 }
 
 func TestXIncludeNoIncludes(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root><a/><b/></root>`)
 
 	count, err := xinclude.NewProcessor().NoXIncludeMarkers().Process(t.Context(), doc)
@@ -351,6 +362,7 @@ func TestXIncludeNoIncludes(t *testing.T) {
 // --- New tests for added features ---
 
 func TestXIncludeNewNamespace(t *testing.T) {
+	t.Parallel()
 	// Test with 2003 XInclude namespace
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2003/XInclude">
 		<xi:include href="included.xml"/>
@@ -384,6 +396,7 @@ func TestXIncludeNewNamespace(t *testing.T) {
 }
 
 func TestXIncludeNewNamespaceFallback(t *testing.T) {
+	t.Parallel()
 	// Test that fallback works with 2003 namespace
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2003/XInclude">
 		<xi:include href="missing.xml">
@@ -414,6 +427,7 @@ func TestXIncludeNewNamespaceFallback(t *testing.T) {
 }
 
 func TestXIncludeDepthLimit(t *testing.T) {
+	t.Parallel()
 	// Create a chain that would exceed maxDepth (40)
 	resolver := &stringResolver{files: make(map[string]string)}
 	for i := 0; i < 50; i++ {
@@ -437,6 +451,7 @@ func TestXIncludeDepthLimit(t *testing.T) {
 }
 
 func TestXIncludeSameURLTwice(t *testing.T) {
+	t.Parallel()
 	// Same URL included at two non-nested positions should work (not circular)
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="shared.xml"/>
@@ -468,6 +483,7 @@ func TestXIncludeSameURLTwice(t *testing.T) {
 }
 
 func TestXIncludeTextEncoding(t *testing.T) {
+	t.Parallel()
 	// Test that encoding attribute is honored for text inclusion
 	// Create ISO-8859-1 encoded text: "caf\xe9" = "café" in latin1
 	latin1Data := []byte{0x63, 0x61, 0x66, 0xe9}
@@ -496,6 +512,7 @@ func TestXIncludeTextEncoding(t *testing.T) {
 }
 
 func TestXIncludeProcessTree(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<container>
 			<xi:include href="a.xml"/>
@@ -519,6 +536,7 @@ func TestXIncludeProcessTree(t *testing.T) {
 }
 
 func TestXIncludeParseFlags(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="included.xml"/>
 	</root>`)
@@ -571,6 +589,7 @@ func (r *byteResolver) Resolve(href, _ string) (io.ReadCloser, error) {
 // --- libxml2 golden file tests ---
 
 func TestLibxml2XIncludeGolden(t *testing.T) {
+	t.Parallel()
 	docsDir, err := filepath.Abs(filepath.Join("..", "testdata", "libxml2-compat", "xinclude", "docs"))
 	require.NoError(t, err)
 	resultDir, err := filepath.Abs(filepath.Join("..", "testdata", "libxml2-compat", "xinclude", "result"))
@@ -595,6 +614,7 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 		name := entry.Name()
 		if reason, ok := skip[name]; ok {
 			t.Run(name, func(t *testing.T) {
+				t.Parallel()
 				t.Skip(reason)
 			})
 			continue
@@ -616,6 +636,7 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			docPath := filepath.Join(docsDir, name)
 			data, err := os.ReadFile(docPath) //nolint:gosec // reading test data file from testdata directory
 			require.NoError(t, err)
@@ -648,6 +669,7 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 }
 
 func TestLibxml2XIncludeWithoutReader(t *testing.T) {
+	t.Parallel()
 	wrDir, err := filepath.Abs(filepath.Join("..", "testdata", "libxml2-compat", "xinclude", "without-reader"))
 	require.NoError(t, err)
 	resultDir, err := filepath.Abs(filepath.Join("..", "testdata", "libxml2-compat", "xinclude", "result"))
@@ -667,6 +689,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 
 	for _, name := range successTests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			docPath := filepath.Join(wrDir, name)
 			data, err := os.ReadFile(docPath) //nolint:gosec // reading test data file from testdata directory
 			require.NoError(t, err)
@@ -702,6 +725,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 
 	for _, tc := range errorTests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			docPath := filepath.Join(wrDir, tc.name)
 			data, err := os.ReadFile(docPath) //nolint:gosec // reading test data file
 			require.NoError(t, err)
@@ -723,6 +747,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 // --- Validation strictness tests ---
 
 func TestXIncludeIncludeInInclude(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="a.xml">
 			<xi:include href="b.xml"/>
@@ -746,6 +771,7 @@ func TestXIncludeIncludeInInclude(t *testing.T) {
 }
 
 func TestXIncludeMultipleFallback(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="missing.xml">
 			<xi:fallback><a/></xi:fallback>
@@ -765,6 +791,7 @@ func TestXIncludeMultipleFallback(t *testing.T) {
 }
 
 func TestXIncludeFallbackOutsideInclude(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:fallback><a/></xi:fallback>
 	</root>`)
@@ -778,6 +805,7 @@ func TestXIncludeFallbackOutsideInclude(t *testing.T) {
 }
 
 func TestXIncludeURITooLong(t *testing.T) {
+	t.Parallel()
 	longHref := strings.Repeat("a", 2001) + ".xml"
 	doc := parseXML(t, fmt.Sprintf(`<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="%s"/>
@@ -795,6 +823,7 @@ func TestXIncludeURITooLong(t *testing.T) {
 }
 
 func TestXIncludeNamespacedAttr(t *testing.T) {
+	t.Parallel()
 	// xi:include with namespace-qualified xi:href attribute should work
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include xi:href="included.xml"/>
@@ -828,6 +857,7 @@ func TestXIncludeNamespacedAttr(t *testing.T) {
 }
 
 func TestXIncludeParseNoEntWithXPointer(t *testing.T) {
+	t.Parallel()
 	// Document with entity reference that should be resolved before XPointer
 	resolver := &stringResolver{
 		files: map[string]string{
@@ -880,6 +910,7 @@ func (r *countingResolver) Resolve(href, base string) (io.ReadCloser, error) {
 }
 
 func TestXIncludeDocCacheAvoidsReResolve(t *testing.T) {
+	t.Parallel()
 	// When the same URI is included multiple times, the resolver should
 	// only be called once — subsequent includes reuse cached bytes.
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
@@ -920,6 +951,7 @@ func TestXIncludeDocCacheAvoidsReResolve(t *testing.T) {
 }
 
 func TestXIncludeEntityMerge(t *testing.T) {
+	t.Parallel()
 	// Included document defines entities; they should be merged into target's internal subset.
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
 		<xi:include href="entities.xml"/>
@@ -958,6 +990,7 @@ func TestXIncludeEntityMerge(t *testing.T) {
 }
 
 func TestXIncludeEntityMergeConflict(t *testing.T) {
+	t.Parallel()
 	// Target and included document both define the same entity with different content.
 	// Target's definition should win (first-definition-wins) and warning should fire.
 	doc, err := helium.NewParser().LoadExternalDTD(true).Parse(t.Context(), []byte(`<?xml version="1.0"?>
@@ -1005,6 +1038,7 @@ func TestXIncludeEntityMergeConflict(t *testing.T) {
 }
 
 func TestXIncludeEntityMergeNoTargetDTD(t *testing.T) {
+	t.Parallel()
 	// Target has no DTD; included document has entities.
 	// An internal subset should be created on the target and entities merged.
 	doc := parseXML(t, `<root xmlns:xi="http://www.w3.org/2001/XInclude">
@@ -1040,6 +1074,7 @@ func TestXIncludeEntityMergeNoTargetDTD(t *testing.T) {
 }
 
 func TestZeroValueProcessor(t *testing.T) {
+	t.Parallel()
 	// A document with no xi:include elements — Process should succeed with 0 substitutions.
 	doc := parseXML(t, `<root><child>text</child></root>`)
 	var proc xinclude.Processor
@@ -1049,6 +1084,7 @@ func TestZeroValueProcessor(t *testing.T) {
 }
 
 func TestZeroValueProcessorFluent(t *testing.T) {
+	t.Parallel()
 	doc := parseXML(t, `<root><child>text</child></root>`)
 	var proc xinclude.Processor
 	count, err := proc.NoXIncludeMarkers().Process(t.Context(), doc)

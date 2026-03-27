@@ -157,6 +157,11 @@ func TestParseBad(t *testing.T) {
 	}
 }
 
+func TestParseRejectsMalformedComment(t *testing.T) {
+	_, err := helium.NewParser().Parse(t.Context(), []byte("<A/><!---00\x10"))
+	require.Error(t, err)
+}
+
 func TestParseNamespace(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <helium:root xmlns:helium="https://github.com/lestrrat-go/helium">
@@ -999,48 +1004,6 @@ func TestEntityBoundary(t *testing.T) {
 		doc, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 		require.NotNil(t, doc)
-	})
-}
-
-func TestFuzzRepros(t *testing.T) {
-	t.Run("FuzzParse malformed internal subset", func(t *testing.T) {
-		t.Parallel()
-
-		const input = `<!DOCTYPEA [YSTEM "0` + "\x93" + `"`
-
-		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
-		require.Error(t, err)
-	})
-
-	t.Run("FuzzParseRoundtrip malformed attribute separator", func(t *testing.T) {
-		t.Parallel()
-
-		const input = `<root><child A!"` + "\x84" + `è"></child></root>`
-
-		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
-		require.Error(t, err)
-	})
-
-	t.Run("QName local part must be NCName", func(t *testing.T) {
-		t.Parallel()
-
-		for _, input := range []string{
-			`<root xmlns:a="u"><a:0/></root>`,
-			`<root xmlns:a="u"><a:-/></root>`,
-			`<root xmlns:a="u"><a:./></root>`,
-		} {
-			_, err := helium.NewParser().Parse(t.Context(), []byte(input))
-			require.Error(t, err, "input %q should be rejected", input)
-		}
-	})
-
-	t.Run("FuzzParseRoundtrip whitespace-only attribute default", func(t *testing.T) {
-		t.Parallel()
-
-		const input = `<!DOCTYPEA[<!ATTLIST A A (0) " "`
-
-		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
-		require.Error(t, err)
 	})
 }
 

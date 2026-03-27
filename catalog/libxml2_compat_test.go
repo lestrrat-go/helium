@@ -27,6 +27,8 @@ func libxml2ResultDir() string {
 // corresponding result golden file, it parses the script commands,
 // runs catalog resolution, and compares against the golden output.
 func TestLibxml2Compat(t *testing.T) {
+	t.Parallel()
+
 	testDir := libxml2TestDir()
 	resultDir := libxml2ResultDir()
 
@@ -51,6 +53,8 @@ func TestLibxml2Compat(t *testing.T) {
 		}
 
 		t.Run(base, func(t *testing.T) {
+			t.Parallel()
+
 			cat, err := catalog.Load(context.Background(), xmlPath)
 			require.NoError(t, err, "loading catalog %s", xmlPath)
 

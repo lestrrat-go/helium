@@ -328,7 +328,13 @@ func (pctx *parserCtx) parseComment(ctx context.Context) error {
 
 	for {
 		c, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isChar(c) || (q == '-' && r == '-' && c == '>') {
+		if !ok {
+			return pctx.error(ctx, ErrInvalidComment)
+		}
+		if !isChar(c) {
+			return pctx.error(ctx, ErrInvalidChar)
+		}
+		if q == '-' && r == '-' && c == '>' {
 			break
 		}
 		if q == '-' && r == '-' {
