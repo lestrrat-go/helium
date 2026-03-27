@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,55 +15,6 @@ import (
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/lestrrat-go/pdebug"
 )
-
-// BuildURI resolves a relative system ID against a base URI.
-// For local file paths (no scheme or file: scheme), it uses filepath.Join.
-// For other schemes, it uses url.ResolveReference.
-func BuildURI(systemID, base string) string {
-	u, err := url.Parse(systemID)
-	if err != nil {
-		return ""
-	}
-	if u.IsAbs() {
-		return systemID
-	}
-
-	// When the systemID is an absolute file path (starts with /) and
-	// the base has a scheme (e.g. http://), resolve via URL reference
-	// so that /path replaces only the path component of the base.
-	// Without this, filepath.Join would concatenate incorrectly.
-	baseURL, err := url.Parse(base)
-	if err != nil {
-		return ""
-	}
-
-	if baseURL.Scheme != "" && baseURL.Scheme != "file" {
-		return baseURL.ResolveReference(u).String()
-	}
-
-	// File path resolution
-	if filepath.IsAbs(systemID) {
-		return systemID
-	}
-	basePath := baseURL.Path
-	if basePath == "" {
-		basePath = base
-	}
-	// When the base ends with "/" it represents a directory;
-	// use it directly instead of calling filepath.Dir which
-	// would strip the last component.
-	dir := filepath.Dir(basePath)
-	if strings.HasSuffix(basePath, "/") {
-		dir = strings.TrimRight(basePath, "/")
-	}
-	result := filepath.Join(dir, systemID)
-	// Preserve trailing slash from systemID (indicates a directory
-	// base for xml:base chaining).
-	if strings.HasSuffix(systemID, "/") && !strings.HasSuffix(result, "/") {
-		result += "/"
-	}
-	return result
-}
 
 // fileParseInput wraps an os.File as a sax.ParseInput.
 type fileParseInput struct {
@@ -171,71 +121,6 @@ func (t *TreeBuilder) ProcessingInstruction(ctxif context.Context, target, data 
 	} else {
 		if err := parent.AddSibling(pi); err != nil {
 			return err
-		}
-	}
-	return nil
-}
-
-// LookupNSByPrefix walks the element and its ancestors to find a namespace
-// declaration matching the given prefix. The "xml" prefix is always
-// implicitly bound to the XML namespace.
-func LookupNSByPrefix(e *Element, prefix string) *Namespace {
-	var node Node = e
-	for node != nil {
-		if el, ok := node.(*Element); ok {
-			for _, ns := range el.Namespaces() {
-				if ns.Prefix() == prefix {
-					return ns
-				}
-			}
-		}
-		node = node.Parent()
-	}
-	if prefix == "xml" {
-		return NewNamespace("xml", lexicon.NamespaceXML)
-	}
-	return nil
-}
-
-// lookupNSByPrefix is the unexported alias for internal callers.
-func lookupNSByPrefix(e *Element, prefix string) *Namespace {
-	return LookupNSByPrefix(e, prefix)
-}
-
-// LookupNSByHref walks the element and its ancestors to find a namespace
-// declaration matching the given URI.
-func LookupNSByHref(e *Element, href string) *Namespace {
-	if href == lexicon.NamespaceXML {
-		return NewNamespace("xml", lexicon.NamespaceXML)
-	}
-	var node Node = e
-	for node != nil {
-		if el, ok := node.(*Element); ok {
-			for _, ns := range el.Namespaces() {
-				if ns.URI() == href {
-					return ns
-				}
-			}
-		}
-		node = node.Parent()
-	}
-	return nil
-}
-
-// lookupAttributeDecl looks up an attribute declaration in the document's
-// internal and external DTD subsets.
-func lookupAttributeDecl(doc *Document, name, prefix, elem string) *AttributeDecl {
-	if doc == nil {
-		return nil
-	}
-	if dtd := doc.IntSubset(); dtd != nil {
-		if decl, ok := dtd.LookupAttribute(name, prefix, elem); ok {
-			return decl
-		}
-	}
-	if dtd := doc.ExtSubset(); dtd != nil {
-		if decl, ok := dtd.LookupAttribute(name, prefix, elem); ok {
-			return decl
 		}
 	}
 	return nil

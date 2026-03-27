@@ -1215,3 +1215,151 @@ func TestXMLSpacePreserve(t *testing.T) {
 		require.Equal(t, helium.ElementNode, normal.FirstChild().Type(), "normal whitespace should be stripped")
 	})
 }
+
+func TestParseLenientXMLDecl(t *testing.T) {
+	const content = `<root />`
+
+	tests := []struct {
+		name       string
+		input      string
+		version    string
+		encoding   string
+		standalone helium.DocumentStandaloneType
+	}{
+		{
+			name:       "standard order: version encoding standalone",
+			input:      `<?xml version="1.0" encoding="utf-8" standalone="yes"?>` + content,
+			version:    "1.0",
+			encoding:   "utf-8",
+			standalone: helium.StandaloneExplicitYes,
+		},
+		{
+			name:       "encoding before version",
+			input:      `<?xml encoding="utf-8" version="1.0"?>` + content,
+			version:    "1.0",
+			encoding:   "utf-8",
+			standalone: helium.StandaloneImplicitNo,
+		},
+		{
+			name:       "standalone before version",
+			input:      `<?xml standalone="no" version="1.0"?>` + content,
+			version:    "1.0",
+			encoding:   "",
+			standalone: helium.StandaloneExplicitNo,
+		},
+		{
+			name:       "encoding standalone version",
+			input:      `<?xml encoding="euc-jp" standalone="yes" version="1.0"?>` + content,
+			version:    "1.0",
+			encoding:   "euc-jp",
+			standalone: helium.StandaloneExplicitYes,
+		},
+		{
+			name:       "standalone version encoding",
+			input:      `<?xml standalone="no" version="1.1" encoding="cp932"?>` + content,
+			version:    "1.1",
+			encoding:   "cp932",
+			standalone: helium.StandaloneExplicitNo,
+		},
+		{
+			name:       "version only",
+			input:      `<?xml version="1.0"?>` + content,
+			version:    "1.0",
+			encoding:   "",
+			standalone: helium.StandaloneImplicitNo,
+		},
+		{
+			name:       "encoding only (no version)",
+			input:      `<?xml encoding="utf-8"?>` + content,
+			version:    "",
+			encoding:   "utf-8",
+			standalone: helium.StandaloneImplicitNo,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := helium.NewParser().LenientXMLDecl(true)
+			doc, err := p.Parse(t.Context(), []byte(tt.input))
+			require.NoError(t, err, "Parse should succeed")
+			require.Equal(t, tt.version, doc.Version(), "version")
+			if tt.encoding != "" {
+				require.Equal(t, tt.encoding, doc.Encoding(), "encoding")
+			}
+			require.Equal(t, int(tt.standalone), int(doc.Standalone()), "standalone")
+		})
+	}
+}
+
+func TestParseLenientXMLDeclRejectsWithoutFlag(t *testing.T) {
+	input := `<?xml encoding="utf-8" version="1.0"?><root />`
+	p := helium.NewParser()
+	_, err := p.Parse(t.Context(), []byte(input))
+	require.Error(t, err, "strict parser should reject encoding before version")
+}
+
+func TestParseNameRejectsInvalidUTF8InContinuation(t *testing.T) {
+	xml := []byte("<ro\xffoot/>")
+	p := helium.NewParser()
+	_, err := p.Parse(t.Context(), xml)
+	require.Error(t, err)
+}
+
+func TestParseNCNameRejectsInvalidUTF8InContinuation(t *testing.T) {
+	xml := []byte("<root at\xffr=\"v\"/>")
+	p := helium.NewParser()
+	_, err := p.Parse(t.Context(), xml)
+	require.Error(t, err)
+}
+
+func TestParseNCNameReportsInvalidStartRune(t *testing.T) {
+	xml := []byte("<root 1a=\"v\"/>")
+	p := helium.NewParser()
+	_, err := p.Parse(t.Context(), xml)
+	require.Error(t, err)
+}
+
+func TestMaxDepthExceeded(t *testing.T) {
+	input := []byte(strings.Repeat("<a>", 10) + strings.Repeat("</a>", 10))
+	p := helium.NewParser().MaxDepth(5)
+
+	_, err := p.Parse(t.Context(), input)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "exceeded max depth")
+}
+
+func TestMaxDepthWithinLimit(t *testing.T) {
+	input := []byte(strings.Repeat("<a>", 5) + "hello" + strings.Repeat("</a>", 5))
+	p := helium.NewParser().MaxDepth(10)
+
+	doc, err := p.Parse(t.Context(), input)
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+}
+
+func TestMaxDepthExactLimit(t *testing.T) {
+	input := []byte(strings.Repeat("<a>", 5) + "hello" + strings.Repeat("</a>", 5))
+	p := helium.NewParser().MaxDepth(5)
+
+	doc, err := p.Parse(t.Context(), input)
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+}
+
+func TestMaxDepthZeroUnlimited(t *testing.T) {
+	input := []byte(strings.Repeat("<a>", 100) + "hello" + strings.Repeat("</a>", 100))
+	p := helium.NewParser()
+
+	doc, err := p.Parse(t.Context(), input)
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+}
+
+func TestMaxDepthParseReader(t *testing.T) {
+	input := strings.Repeat("<a>", 10) + strings.Repeat("</a>", 10)
+	p := helium.NewParser().MaxDepth(5)
+
+	_, err := p.ParseReader(t.Context(), bytes.NewReader([]byte(input)))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "exceeded max depth")
+}
