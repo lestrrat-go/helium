@@ -1,16 +1,17 @@
-package encoding
+package encoding_test
 
 import (
 	"encoding/binary"
 	"testing"
 
+	xmlenc "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/stretchr/testify/require"
 )
 
 func TestISO88591(t *testing.T) {
 	t.Parallel()
 
-	e := Load("iso-8859-1")
+	e := xmlenc.Load("iso-8859-1")
 	require.NotNil(t, e)
 
 	dec := e.NewDecoder()
@@ -116,7 +117,7 @@ func TestUCS4Decode(t *testing.T) {
 	t.Run("UCS-4BE", func(t *testing.T) {
 		t.Parallel()
 
-		e := Load("ucs4be")
+		e := xmlenc.Load("ucs4be")
 		require.NotNil(t, e)
 		var buf []byte
 		for _, cp := range codePoints {
@@ -132,7 +133,7 @@ func TestUCS4Decode(t *testing.T) {
 	t.Run("UCS-4LE", func(t *testing.T) {
 		t.Parallel()
 
-		e := Load("ucs4le")
+		e := xmlenc.Load("ucs4le")
 		require.NotNil(t, e)
 		var buf []byte
 		for _, cp := range codePoints {
@@ -148,7 +149,7 @@ func TestUCS4Decode(t *testing.T) {
 	t.Run("UCS-4 2143", func(t *testing.T) {
 		t.Parallel()
 
-		e := Load("ucs4_2143")
+		e := xmlenc.Load("ucs4_2143")
 		require.NotNil(t, e)
 		// 2143 byte order: for code point 0x00000041 (BE: 00 00 00 41)
 		// positions 2,1,4,3 → [00, 00, 41, 00]
@@ -167,7 +168,7 @@ func TestUCS4Decode(t *testing.T) {
 	t.Run("UCS-4 3412", func(t *testing.T) {
 		t.Parallel()
 
-		e := Load("ucs4_3412")
+		e := xmlenc.Load("ucs4_3412")
 		require.NotNil(t, e)
 		// 3412 byte order: for code point 0x00000041 (BE: 00 00 00 41)
 		// positions 3,4,1,2 → [00, 41, 00, 00]
@@ -191,19 +192,19 @@ func TestUCS4Aliases(t *testing.T) {
 		"ucs4be", "ucs-4be", "utf-32be", "utf32be", "ISO-10646-UCS-4",
 	}
 	for _, name := range aliases {
-		require.NotNil(t, Load(name), "expected %q to be loadable", name)
+		require.NotNil(t, xmlenc.Load(name), "expected %q to be loadable", name)
 	}
 
 	leAliases := []string{"ucs4le", "ucs-4le", "utf-32le", "utf32le"}
 	for _, name := range leAliases {
-		require.NotNil(t, Load(name), "expected %q to be loadable", name)
+		require.NotNil(t, xmlenc.Load(name), "expected %q to be loadable", name)
 	}
 }
 
 func TestUCS2(t *testing.T) {
 	t.Parallel()
 
-	e := Load("ucs-2")
+	e := xmlenc.Load("ucs-2")
 	require.NotNil(t, e)
 
 	// UCS-2 is essentially UTF-16BE without surrogates.
@@ -224,7 +225,7 @@ func TestUCS4RoundTrip(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			e := Load(name)
+			e := xmlenc.Load(name)
 			require.NotNil(t, e)
 
 			encoded, err := e.NewEncoder().Bytes([]byte(testStr))
@@ -241,19 +242,19 @@ func TestUCS4RoundTrip(t *testing.T) {
 func TestLoadUnknown(t *testing.T) {
 	t.Parallel()
 
-	require.Nil(t, Load("definitely-not-an-encoding"))
+	require.Nil(t, xmlenc.Load("definitely-not-an-encoding"))
 }
 
 func requireEncodingLoadable(t *testing.T, name string) {
 	t.Helper()
-	require.NotNil(t, Load(name), "expected encoding %q to be loadable", name)
+	require.NotNil(t, xmlenc.Load(name), "expected encoding %q to be loadable", name)
 }
 
 func requireEquivalentEncoding(t *testing.T, canonical, alias string) {
 	t.Helper()
 
-	canonicalEnc := Load(canonical)
-	aliasEnc := Load(alias)
+	canonicalEnc := xmlenc.Load(canonical)
+	aliasEnc := xmlenc.Load(alias)
 	require.NotNil(t, canonicalEnc, "canonical encoding %q is not loadable", canonical)
 	require.NotNil(t, aliasEnc, "alias encoding %q is not loadable", alias)
 

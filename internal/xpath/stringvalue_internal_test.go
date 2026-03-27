@@ -1,9 +1,10 @@
-package xpath
+package xpath_test
 
 import (
 	"testing"
 
-	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,5 +26,5 @@ func TestStringValue_DeepTreeDoesNotTruncate(t *testing.T) {
 	leaf := doc.CreateText([]byte("leaf"))
 	require.NoError(t, parent.AddChild(leaf))
 
-	require.Equal(t, "prefixleaf", StringValue(root))
+	require.Equal(t, "prefixleaf", xpath.StringValue(root))
 }
