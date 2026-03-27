@@ -28,7 +28,7 @@ func Example_helium_validate_dtd() {
   <!ATTLIST doc id ID #REQUIRED>
 ]>
 <doc/>`))
-	_ = collector.Close()
+	// The parser closes the collector automatically after validation.
 
 	// The document is still returned even when validation fails.
 	fmt.Printf("doc returned: %v\n", doc != nil)

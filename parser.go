@@ -453,6 +453,14 @@ func (p Parser) ErrorHandler(h ErrorHandler) Parser {
 	return p
 }
 
+func (p Parser) closeHandler() {
+	if p.cfg != nil && p.cfg.errorHandler != nil {
+		if cl, ok := p.cfg.errorHandler.(io.Closer); ok {
+			_ = cl.Close()
+		}
+	}
+}
+
 // --- Terminal methods ---
 
 // Parse parses XML from a byte slice and returns the resulting Document
@@ -501,7 +509,9 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
 		if handler == nil {
 			handler = NilErrorHandler{}
 		}
-		if err := validateDocument(ctx, pctx.doc, handler); err != nil {
+		err := validateDocument(ctx, pctx.doc, handler)
+		p.closeHandler()
+		if err != nil {
 			return pctx.doc, err
 		}
 	}
@@ -550,7 +560,9 @@ func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error)
 		if handler == nil {
 			handler = NilErrorHandler{}
 		}
-		if err := validateDocument(ctx, pctx.doc, handler); err != nil {
+		err := validateDocument(ctx, pctx.doc, handler)
+		p.closeHandler()
+		if err != nil {
 			return pctx.doc, err
 		}
 	}

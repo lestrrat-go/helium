@@ -361,7 +361,7 @@ func TestValidateDTDRequiredAttribute(t *testing.T) {
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	doc, err := p.Parse(t.Context(), []byte(input))
-	_ = collector.Close()
+
 	require.Error(t, err, "missing #REQUIRED attribute should fail validation")
 	require.NotNil(t, doc, "document should still be returned with validation error")
 	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
@@ -394,7 +394,7 @@ func TestValidateDTDFixedMismatch(t *testing.T) {
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(input))
-	_ = collector.Close()
+
 	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 	require.True(t, containsError(collector.Errors(), "must be"))
 }
@@ -425,7 +425,7 @@ func TestValidateDTDEmptyElement(t *testing.T) {
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(input))
-	_ = collector.Close()
+
 	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 	require.True(t, containsError(collector.Errors(), "EMPTY"))
 }
@@ -654,7 +654,7 @@ func TestValidateDTDIDDuplicate(t *testing.T) {
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(input))
-	_ = collector.Close()
+
 	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 	require.True(t, containsError(collector.Errors(), "duplicate ID"))
 }
@@ -689,7 +689,7 @@ func TestValidateDTDIDRefMissing(t *testing.T) {
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(input))
-	_ = collector.Close()
+
 	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 	require.True(t, containsError(collector.Errors(), "unknown ID"))
 }
@@ -724,7 +724,7 @@ func TestValidateDTDIDRefsMissing(t *testing.T) {
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(input))
-	_ = collector.Close()
+
 	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 	require.True(t, containsError(collector.Errors(), "unknown ID"))
 }

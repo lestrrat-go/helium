@@ -74,7 +74,7 @@ func TestExtSubsetLookup_AttributeInExtSubset(t *testing.T) {
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 	p := helium.NewParser().LoadExternalDTD(true).ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(xml))
-	_ = collector.Close()
+
 	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 	require.True(t, containsError(collector.Errors(), "attribute role is required"))
 }
@@ -129,7 +129,7 @@ func TestEnumerationAttributeValidation(t *testing.T) {
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
 		_, err := p.Parse(t.Context(), []byte(xml))
-		_ = collector.Close()
+	
 		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 		require.True(t, containsError(collector.Errors(), "not among the enumerated set"))
 	})
@@ -180,7 +180,7 @@ func TestEntityAttributeValidation(t *testing.T) {
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
 		_, err := p.Parse(t.Context(), []byte(xml))
-		_ = collector.Close()
+	
 		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 		require.True(t, containsError(collector.Errors(), "undeclared entity"))
 	})
@@ -198,7 +198,7 @@ func TestEntityAttributeValidation(t *testing.T) {
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
 		_, err := p.Parse(t.Context(), []byte(xml))
-		_ = collector.Close()
+	
 		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 		require.True(t, containsError(collector.Errors(), "not unparsed"))
 	})
@@ -238,7 +238,7 @@ func TestEntitiesAttributeValidation(t *testing.T) {
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
 		_, err := p.Parse(t.Context(), []byte(xml))
-		_ = collector.Close()
+	
 		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 		require.True(t, containsError(collector.Errors(), "undeclared entity"))
 	})
@@ -276,7 +276,7 @@ func TestNotationAttributeValidation(t *testing.T) {
 		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
 		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
 		_, err := p.Parse(t.Context(), []byte(xml))
-		_ = collector.Close()
+	
 		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 		require.True(t, containsError(collector.Errors(), "undeclared notation"))
 	})
