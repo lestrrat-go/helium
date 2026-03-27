@@ -96,7 +96,7 @@ These affect multiple packages (especially C14N test skips):
 | XInclude | Recursive inclusion, fallback, marker nodes, base URI fixup, circular detection |
 | Catalog | OASIS XML Catalog, public/system ID resolution, URI resolution, catalog chaining, URN support |
 | XML Writer | Streaming output, namespace scopes, indentation, DTD internal subsets, self-close optimization |
-| Serialization | WriteDoc, WriteNode, formatted output, encoding handling |
+| Serialization | Write, WriteString, Writer.WriteTo, formatted output, encoding handling |
 | XPath 3.1 | Full expression eval, FLWOR, maps, arrays, inline functions, HOFs, 100+ built-in functions, VM compiler |
 | XSLT 3.0 | Templates, apply/call, include/import, functions, keys, sort, number, for-each-group, streaming instructions, schema awareness, accumulator, merge |
 

@@ -12,7 +12,9 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   - Terminal methods: `Parse(ctx, []byte) → (*Document, error)`, `ParseReader(ctx, io.Reader) → (*Document, error)`, `ParseFile(ctx, string) → (*Document, error)`, `ParseInNodeContext(ctx, Node, []byte) → (Node, error)`, `NewPushParser(ctx) → *PushParser`
 - **NewWriter() → Writer** — create fluent XML writer builder
   - Writer methods: `Format(bool)`, `IndentString(string)`, `SelfCloseEmptyElements(bool)`, `XMLDeclaration(bool)`, `IncludeDTD(bool)`, `EscapeNonASCII(bool)`, `AllowPrefixUndeclarations(bool)`
-  - Terminal methods: `WriteDoc(io.Writer, *Document) → error`, `WriteNode(io.Writer, Node) → error`
+  - Terminal method: `WriteTo(io.Writer, Node) → error`
+- **Write(io.Writer, Node) → error** — serialize node with default settings
+- **WriteString(Node) → (string, error)** — serialize node to string with default settings
 - **Element.FindAttribute(AttributePredicate) → (*Attribute, bool)** — attribute-node lookup by matcher; built-in matchers: `QNamePredicate`, `LocalNamePredicate`, `NSPredicate`
 - **Element.GetAttribute(qname) → (string, bool)** / **Element.GetAttributeNS(local, nsURI) → (string, bool)** — attribute value lookup by QName or expanded name
 - Key types: `Document`, `Element`, `Attribute`, `Namespace`, `DTD`, `Entity`, `Text`, `CDATASection`, `Comment`, `PI`
@@ -167,7 +169,9 @@ HTML 4.01 parser producing helium DOM or SAX events.
 - Terminal: **Parse(ctx, []byte)**, **ParseFile(ctx, path)**, **ParseWithSAX(ctx, []byte, SAXHandler)**, **NewPushParser(ctx)**, **NewSAXPushParser(ctx, SAXHandler)**
 - **NewWriter() → Writer** — create fluent writer builder
 - Writer methods: `DefaultDTD(bool)`, `Format(bool)`, `PreserveCase(bool)`, `EscapeURIAttributes(bool)`, `EscapeControlChars(bool)`
-- Terminal: **WriteDoc(io.Writer, *Document)**, **WriteNode(io.Writer, Node)**
+- Terminal: **WriteTo(io.Writer, Node)**
+- **Write(io.Writer, Node) → error** — serialize with default settings
+- **WriteString(Node) → (string, error)** — serialize to string with default settings
 - Auto-closing, void elements, implicit html/head/body insertion
 - Encoding: prescan charset=utf-8 → U+FFFD for invalid bytes; otherwise Latin-1/Win-1252→UTF-8
 - Entity resolution: 2125 WHATWG + 106 legacy HTML4; legacy entities work without `;`
