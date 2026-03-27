@@ -157,6 +157,11 @@ func TestParseBad(t *testing.T) {
 	}
 }
 
+func TestParseRejectsMalformedComment(t *testing.T) {
+	_, err := helium.NewParser().Parse(t.Context(), []byte("<A/><!---00\x10"))
+	require.Error(t, err)
+}
+
 func TestParseNamespace(t *testing.T) {
 	const input = `<?xml version="1.0"?>
 <helium:root xmlns:helium="https://github.com/lestrrat-go/helium">

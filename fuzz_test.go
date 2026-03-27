@@ -49,6 +49,13 @@ func TestFuzzParseRoundtripRepro(t *testing.T) {
 		_, err = p.Parse(t.Context(), buf.Bytes())
 		require.NoError(t, err)
 	})
+	t.Run("malformed_comment_tail", func(t *testing.T) {
+		// The parser previously accepted an unterminated comment body,
+		// which let the writer emit an invalid comment roundtrip.
+		data := []byte("<A/><!---00\x10")
+		_, err := helium.NewParser().Parse(t.Context(), data)
+		require.Error(t, err)
+	})
 }
 
 func FuzzParse(f *testing.F) {
