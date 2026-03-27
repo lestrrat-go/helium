@@ -137,23 +137,17 @@ All validation errors flow through `ErrorHandler.Handle()`. No `strings.Builder`
 
 ### RelaxNG
 
-Errors written to `strings.Builder` AND sent to `ErrorHandler.Handle()` if configured.
-
-### ValidateError (relaxng only)
-
-```
-type ValidateError struct {
-    Output string             // full libxml2-compatible formatted output
-    Errors []ValidationError  // structured per-error details
-}
-func (e *ValidateError) Error() string { return e.Output }
-```
+`Validate()` returns `ErrValidationFailed` sentinel on failure. Individual errors buffered internally during validation (for backtracking), flushed to `ErrorHandler` at the end.
 
 ### Schematron
 
 `Validate()` returns `ErrValidationFailed` sentinel on failure. Individual `*ValidationError` errors go to `ErrorHandler`. `Quiet()` suppresses error delivery to the handler.
 
-XSD also uses `ErrValidationFailed` sentinel. Individual errors go to ErrorHandler.
+### DTD
+
+`Parse()` with `ValidateDTD(true)` returns `ErrDTDValidationFailed` sentinel on failure. Individual errors go to the parser's `ErrorHandler`.
+
+XSD, RelaxNG, Schematron, and DTD all use sentinel error + ErrorHandler pattern.
 
 ### XSD Validation Error Helpers (`xsd/validate_context.go`)
 

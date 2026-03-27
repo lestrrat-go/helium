@@ -23,12 +23,12 @@ func (c internalValidationCollector) Handle(_ context.Context, err error) {
 	}
 }
 
-func validateAndCollect(t *testing.T, schema *Schema, doc *helium.Document) (error, []*ValidationError) {
+func validateAndCollect(t *testing.T, schema *Schema, doc *helium.Document) ([]*ValidationError, error) {
 	t.Helper()
 	var collected []*ValidationError
 	handler := internalValidationCollector{errors: &collected}
 	err := NewValidator(schema).ErrorHandler(handler).Validate(t.Context(), doc)
-	return err, collected
+	return collected, err
 }
 
 func collectedString(collected []*ValidationError) string {
@@ -267,7 +267,7 @@ func TestLetVariableChainedDependency(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item val="bad"/></root>`))
 		require.NoError(t, err)
 
-		err, collected := validateAndCollect(t, schema, doc)
+		collected, err := validateAndCollect(t, schema, doc)
 		require.ErrorIs(t, err, ErrValidationFailed)
 		got := collectedString(collected)
 		require.Contains(t, got, "x is bad")
@@ -301,7 +301,7 @@ func TestLetVariableChainedDependency(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item/></root>`))
 		require.NoError(t, err)
 
-		err, collected := validateAndCollect(t, schema, doc)
+		collected, err := validateAndCollect(t, schema, doc)
 		// a=1 should be reported since $a is properly registered.
 		require.ErrorIs(t, err, ErrValidationFailed)
 		require.Contains(t, collectedString(collected), "a=1")
@@ -387,7 +387,7 @@ func TestUnionContextIntegration(t *testing.T) {
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><invoice/><credit-note/><other/></root>`))
 	require.NoError(t, err)
 
-	err, collected := validateAndCollect(t, schema, doc)
+	collected, err := validateAndCollect(t, schema, doc)
 	// Both invoice and credit-note should trigger the assert.
 	require.ErrorIs(t, err, ErrValidationFailed)
 	got := collectedString(collected)

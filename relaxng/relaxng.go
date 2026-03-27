@@ -6,10 +6,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 )
+
+// ErrValidationFailed is returned by [Validator.Validate] when the document
+// does not conform to the schema. Individual validation errors are delivered
+// to the configured [helium.ErrorHandler].
+var ErrValidationFailed = errors.New("relaxng: validation failed")
 
 // Compiler compiles RELAX NG documents into Grammars.
 type Compiler struct {
@@ -162,19 +166,6 @@ func (e *ValidationError) Error() string {
 	return validityError(e.Filename, e.Line, e.Element, e.Message)
 }
 
-// ValidateError holds detailed validation failure output.
-type ValidateError struct {
-	Errors []ValidationError // structured per-error details
-}
-
-func (e *ValidateError) Error() string {
-	var sb strings.Builder
-	for i := range e.Errors {
-		sb.WriteString(e.Errors[i].Error())
-	}
-	return sb.String()
-}
-
 func (v Validator) closeHandler() {
 	if v.cfg != nil && v.cfg.errorHandler != nil {
 		if cl, ok := v.cfg.errorHandler.(io.Closer); ok {
@@ -184,7 +175,8 @@ func (v Validator) closeHandler() {
 }
 
 // Validate validates a document against the compiled grammar.
-// It returns nil if the document is valid, or a *ValidateError with details.
+// It returns nil if the document is valid, or [ErrValidationFailed].
+// Individual validation errors are delivered to the configured [helium.ErrorHandler].
 // (libxml2: xmlRelaxNGValidateDoc)
 func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 	if ctx == nil {
@@ -194,10 +186,16 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error {
 	if cfg == nil {
 		cfg = &validateConfig{}
 	}
-	valid, validationErrors := validateDocument(ctx, doc, v.grammar, cfg)
+
+	handler := cfg.errorHandler
+	if handler == nil {
+		handler = helium.NilErrorHandler{}
+	}
+
+	valid := validateDocument(ctx, doc, v.grammar, cfg, handler)
 	v.closeHandler()
 	if valid {
 		return nil
 	}
-	return &ValidateError{Errors: validationErrors}
+	return ErrValidationFailed
 }

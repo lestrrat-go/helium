@@ -1,6 +1,7 @@
 package relaxng_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -165,10 +166,17 @@ func TestGoldenFiles(t *testing.T) {
 
 				// Validate.
 				filename := "./test/relaxng/" + tc.xmlBase
-				err = relaxng.NewValidator(grammar).Filename(filename).Validate(t.Context(), doc)
-				if err != nil {
-					got = compileWarnings + err.Error() + filename + " fails to validate\n"
+				valCollector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+				err = relaxng.NewValidator(grammar).Filename(filename).ErrorHandler(valCollector).Validate(t.Context(), doc)
+				_ = valCollector.Close()
+				if errors.Is(err, relaxng.ErrValidationFailed) {
+					var valErrs strings.Builder
+					for _, ve := range valCollector.Errors() {
+						valErrs.WriteString(ve.Error())
+					}
+					got = compileWarnings + valErrs.String() + filename + " fails to validate\n"
 				} else {
+					require.NoError(t, err)
 					got = compileWarnings + filename + " validates\n"
 				}
 			}
