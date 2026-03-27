@@ -11,10 +11,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBillionLaughs(t *testing.T) {
-	// Classic billion-laughs: 10 nested entities, each referencing 10 copies
-	// of the previous. Total expansion: 10^10 bytes.
-	xml := `<?xml version="1.0"?>
+func TestEntityAmplification(t *testing.T) {
+	t.Parallel()
+
+	t.Run("billion laughs", func(t *testing.T) {
+		t.Parallel()
+		// Classic billion-laughs: 10 nested entities, each referencing 10 copies
+		// of the previous. Total expansion: 10^10 bytes.
+		xml := `<?xml version="1.0"?>
 <!DOCTYPE lolz [
   <!ENTITY lol "lol">
   <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
@@ -28,47 +32,50 @@ func TestBillionLaughs(t *testing.T) {
 ]>
 <root>&lol9;</root>`
 
-	p := helium.NewParser().SubstituteEntities(true)
-	_, err := p.Parse(t.Context(), []byte(xml))
-	require.Error(t, err, "billion laughs should be rejected")
-	require.Contains(t, err.Error(), "amplification")
-}
+		p := helium.NewParser().SubstituteEntities(true)
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err, "billion laughs should be rejected")
+		require.Contains(t, err.Error(), "amplification")
+	})
 
-func TestQuadraticBlowup(t *testing.T) {
-	// Large entity repeated many times: quadratic blowup.
-	// helium.Entity content is 100KB, referenced 100 times → 10MB expansion from ~110KB input.
-	bigContent := strings.Repeat("A", 100_000)
-	refs := strings.Repeat("&big;", 100)
-	xml := fmt.Sprintf(`<?xml version="1.0"?>
+	t.Run("quadratic blowup", func(t *testing.T) {
+		t.Parallel()
+		// Large entity repeated many times: quadratic blowup.
+		// helium.Entity content is 100KB, referenced 100 times → 10MB expansion from ~110KB input.
+		bigContent := strings.Repeat("A", 100_000)
+		refs := strings.Repeat("&big;", 100)
+		xml := fmt.Sprintf(`<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ENTITY big "%s">
 ]>
 <root>%s</root>`, bigContent, refs)
 
-	p := helium.NewParser().SubstituteEntities(true)
-	_, err := p.Parse(t.Context(), []byte(xml))
-	require.Error(t, err, "quadratic blowup should be rejected")
-	require.Contains(t, err.Error(), "amplification")
-}
+		p := helium.NewParser().SubstituteEntities(true)
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.Error(t, err, "quadratic blowup should be rejected")
+		require.Contains(t, err.Error(), "amplification")
+	})
 
-func TestNormalEntities(t *testing.T) {
-	// Small expansion well within limits — must succeed.
-	xml := `<?xml version="1.0"?>
+	t.Run("normal entities", func(t *testing.T) {
+		t.Parallel()
+		// Small expansion well within limits — must succeed.
+		xml := `<?xml version="1.0"?>
 <!DOCTYPE root [
   <!ENTITY greeting "Hello, World!">
 ]>
 <root>&greeting;</root>`
 
-	p := helium.NewParser().SubstituteEntities(true)
-	doc, err := p.Parse(t.Context(), []byte(xml))
-	require.NoError(t, err)
-	require.NotNil(t, doc)
-}
+		p := helium.NewParser().SubstituteEntities(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+	})
 
-func TestParseHugeDisablesGuard(t *testing.T) {
-	// With RelaxLimits, billion laughs should be allowed (guard disabled).
-	// Use a smaller version to avoid actual memory exhaustion.
-	xml := `<?xml version="1.0"?>
+	t.Run("RelaxLimits disables guard", func(t *testing.T) {
+		t.Parallel()
+		// With RelaxLimits, billion laughs should be allowed (guard disabled).
+		// Use a smaller version to avoid actual memory exhaustion.
+		xml := `<?xml version="1.0"?>
 <!DOCTYPE lolz [
   <!ENTITY lol "lol">
   <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
@@ -78,10 +85,11 @@ func TestParseHugeDisablesGuard(t *testing.T) {
 ]>
 <root>&lol5;</root>`
 
-	p := helium.NewParser().SubstituteEntities(true).RelaxLimits(true)
-	doc, err := p.Parse(t.Context(), []byte(xml))
-	require.NoError(t, err)
-	require.NotNil(t, doc)
+		p := helium.NewParser().SubstituteEntities(true).RelaxLimits(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+	})
 }
 
 func TestPredefinedEntities(t *testing.T) {

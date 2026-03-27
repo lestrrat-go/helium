@@ -14,40 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestErrParseErrorUnwrap(t *testing.T) {
-	pe := helium.ErrParseError{
-		Err:        helium.ErrSpaceRequired,
-		Level:      helium.ErrorLevelError,
-		Line:       "<foo>",
-		LineNumber: 1,
-		Column:     5,
-	}
-	require.True(t, errors.Is(pe, helium.ErrSpaceRequired))
-	require.False(t, errors.Is(pe, helium.ErrEOF))
-}
+func TestErrParseError(t *testing.T) {
+	t.Parallel()
 
-func TestErrParseErrorAs(t *testing.T) {
-	pe := helium.ErrParseError{
-		Err:        helium.ErrSpaceRequired,
-		File:       "test.xml",
-		Level:      helium.ErrorLevelError,
-		Line:       "<foo>",
-		LineNumber: 3,
-		Column:     10,
-	}
-	var wrapped error = pe
-
-	var extracted helium.ErrParseError
-	require.True(t, errors.As(wrapped, &extracted))
-	require.Equal(t, "test.xml", extracted.File)
-	require.Equal(t, helium.ErrorLevelError, extracted.Level)
-	require.Equal(t, 3, extracted.LineNumber)
-	require.Equal(t, 10, extracted.Column)
-	require.Equal(t, "<foo>", extracted.Line)
-}
-
-func TestErrParseErrorErrorString(t *testing.T) {
-	t.Run("without file", func(t *testing.T) {
+	t.Run("Unwrap", func(t *testing.T) {
 		t.Parallel()
 		pe := helium.ErrParseError{
 			Err:        helium.ErrSpaceRequired,
@@ -56,66 +26,130 @@ func TestErrParseErrorErrorString(t *testing.T) {
 			LineNumber: 1,
 			Column:     5,
 		}
-		msg := pe.Error()
-		require.Contains(t, msg, "space required")
-		require.Contains(t, msg, "line 1")
-		require.Contains(t, msg, "column 5")
-		require.False(t, strings.HasPrefix(msg, ":"))
+		require.True(t, errors.Is(pe, helium.ErrSpaceRequired))
+		require.False(t, errors.Is(pe, helium.ErrEOF))
 	})
 
-	t.Run("with file", func(t *testing.T) {
+	t.Run("As", func(t *testing.T) {
 		t.Parallel()
 		pe := helium.ErrParseError{
 			Err:        helium.ErrSpaceRequired,
 			File:       "test.xml",
 			Level:      helium.ErrorLevelError,
 			Line:       "<foo>",
-			LineNumber: 1,
-			Column:     5,
+			LineNumber: 3,
+			Column:     10,
 		}
-		msg := pe.Error()
-		require.True(t, strings.HasPrefix(msg, "test.xml: "))
+		var wrapped error = pe
+
+		var extracted helium.ErrParseError
+		require.True(t, errors.As(wrapped, &extracted))
+		require.Equal(t, "test.xml", extracted.File)
+		require.Equal(t, helium.ErrorLevelError, extracted.Level)
+		require.Equal(t, 3, extracted.LineNumber)
+		require.Equal(t, 10, extracted.Column)
+		require.Equal(t, "<foo>", extracted.Line)
 	})
-}
 
-func TestErrParseErrorLevel(t *testing.T) {
-	_, err := helium.NewParser().Parse(t.Context(), []byte("<broken"))
-	require.Error(t, err)
+	t.Run("ErrorString", func(t *testing.T) {
+		t.Parallel()
 
-	var pe helium.ErrParseError
-	require.True(t, errors.As(err, &pe))
-	require.Equal(t, helium.ErrorLevelFatal, pe.Level)
-}
+		t.Run("without file", func(t *testing.T) {
+			t.Parallel()
+			pe := helium.ErrParseError{
+				Err:        helium.ErrSpaceRequired,
+				Level:      helium.ErrorLevelError,
+				Line:       "<foo>",
+				LineNumber: 1,
+				Column:     5,
+			}
+			msg := pe.Error()
+			require.Contains(t, msg, "space required")
+			require.Contains(t, msg, "line 1")
+			require.Contains(t, msg, "column 5")
+			require.False(t, strings.HasPrefix(msg, ":"))
+		})
 
-func TestErrParseErrorWarningLevel(t *testing.T) {
-	// XML with undefined entity reference in a non-standalone document
-	// with an external subset. The parser emits a warning (not an error)
-	// for undefined entities in this context.
-	const input = `<?xml version="1.0"?>
+		t.Run("with file", func(t *testing.T) {
+			t.Parallel()
+			pe := helium.ErrParseError{
+				Err:        helium.ErrSpaceRequired,
+				File:       "test.xml",
+				Level:      helium.ErrorLevelError,
+				Line:       "<foo>",
+				LineNumber: 1,
+				Column:     5,
+			}
+			msg := pe.Error()
+			require.True(t, strings.HasPrefix(msg, "test.xml: "))
+		})
+	})
+
+	t.Run("Level", func(t *testing.T) {
+		t.Parallel()
+		_, err := helium.NewParser().Parse(t.Context(), []byte("<broken"))
+		require.Error(t, err)
+
+		var pe helium.ErrParseError
+		require.True(t, errors.As(err, &pe))
+		require.Equal(t, helium.ErrorLevelFatal, pe.Level)
+	})
+
+	t.Run("WarningLevel", func(t *testing.T) {
+		t.Parallel()
+		// XML with undefined entity reference in a non-standalone document
+		// with an external subset. The parser emits a warning (not an error)
+		// for undefined entities in this context.
+		const input = `<?xml version="1.0"?>
 <!DOCTYPE root SYSTEM "nonexistent.dtd">
 <root>&undefined;</root>`
 
-	s := sax.New()
-	s.SetOnWarning(sax.WarningFunc(func(_ context.Context, err error) error {
-		return errors.New("warning escalated")
-	}))
+		s := sax.New()
+		s.SetOnWarning(sax.WarningFunc(func(_ context.Context, err error) error {
+			return errors.New("warning escalated")
+		}))
 
-	p := helium.NewParser().SAXHandler(s)
-	_, err := p.Parse(t.Context(), []byte(input))
-	require.Error(t, err)
+		p := helium.NewParser().SAXHandler(s)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err)
 
-	var pe helium.ErrParseError
-	require.True(t, errors.As(err, &pe))
-	require.Equal(t, helium.ErrorLevelWarning, pe.Level)
+		var pe helium.ErrParseError
+		require.True(t, errors.As(err, &pe))
+		require.Equal(t, helium.ErrorLevelWarning, pe.Level)
+	})
+}
+
+func TestErrorDomain(t *testing.T) {
+	t.Parallel()
+
+	t.Run("default is parser", func(t *testing.T) {
+		t.Parallel()
+		var pe helium.ErrParseError
+		require.Equal(t, helium.ErrorDomainParser, pe.Domain)
+	})
+
+	t.Run("namespace error", func(t *testing.T) {
+		t.Parallel()
+		const input = `<root xmlns:a="urn:a"><a:child xmlns:a="">text</a:child></root>`
+
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.Error(t, err)
+
+		var pe helium.ErrParseError
+		require.True(t, errors.As(err, &pe))
+		require.Equal(t, helium.ErrorDomainNamespace, pe.Domain)
+	})
 }
 
 func TestErrDTDDupTokenFixed(t *testing.T) {
+	t.Parallel()
 	e := helium.ErrDTDDupToken{Name: "foo"}
 	require.Contains(t, e.Error(), "standalone")
 	require.NotContains(t, e.Error(), "standlone")
 }
 
 func TestErrorLevelConstants(t *testing.T) {
+	t.Parallel()
 	require.Equal(t, helium.ErrorLevel(0), helium.ErrorLevelNone)
 	require.Equal(t, helium.ErrorLevel(1), helium.ErrorLevelWarning)
 	require.Equal(t, helium.ErrorLevel(2), helium.ErrorLevelError)
@@ -127,6 +161,7 @@ func TestErrorLevelConstants(t *testing.T) {
 }
 
 func TestParseNoError(t *testing.T) {
+	t.Parallel()
 	// Malformed XML triggers SAX Error callback
 	const input = `<?xml version="1.0"?><root><child>text</chld></root>`
 
@@ -161,6 +196,7 @@ func TestParseNoError(t *testing.T) {
 }
 
 func TestWarningLocationInfo(t *testing.T) {
+	t.Parallel()
 	// XML with external subset makes undeclared entity references a warning
 	// rather than an error.
 	const input = "<!DOCTYPE doc SYSTEM \"foo\">\n<doc>&undeclared;</doc>"
@@ -215,6 +251,8 @@ func TestWarningLocationInfo(t *testing.T) {
 }
 
 func TestFormatError(t *testing.T) {
+	t.Parallel()
+
 	t.Run("parser error with file", func(t *testing.T) {
 		t.Parallel()
 		pe := helium.ErrParseError{
@@ -282,20 +320,4 @@ func TestFormatError(t *testing.T) {
 		got := pe.FormatError()
 		require.Equal(t, "empty.xml:1: parser error : end of document reached", got)
 	})
-}
-
-func TestErrorDomainDefault(t *testing.T) {
-	var pe helium.ErrParseError
-	require.Equal(t, helium.ErrorDomainParser, pe.Domain)
-}
-
-func TestNamespaceErrorDomain(t *testing.T) {
-	const input = `<root xmlns:a="urn:a"><a:child xmlns:a="">text</a:child></root>`
-
-	_, err := helium.NewParser().Parse(t.Context(), []byte(input))
-	require.Error(t, err)
-
-	var pe helium.ErrParseError
-	require.True(t, errors.As(err, &pe))
-	require.Equal(t, helium.ErrorDomainNamespace, pe.Domain)
 }
