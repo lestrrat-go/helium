@@ -470,12 +470,6 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 	return c.buf[c.bufpos : c.bufpos+off], nRunes
 }
 
-// isASCIINameChar checks if b is a valid ASCII XML NameChar (without ':').
-func isASCIINameChar(b byte) bool {
-	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') ||
-		(b >= '0' && b <= '9') || b == '_' || b == '-' || b == '.'
-}
-
 // ScanSimpleAttrValue scans a simple attribute value (no entities, no special
 // whitespace) between the current position and the given quote character.
 // Returns the value string and byte count, or ("", 0) if the value contains
