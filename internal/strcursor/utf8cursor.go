@@ -638,8 +638,9 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte) (string, int) {
 			off++
 		} else {
 			_ = c.fillBuffer(off + utf8.UTFMax)
-			_, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
-			if w == 0 {
+			r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
+			if w == 0 || r == utf8.RuneError {
+				// Invalid or incomplete UTF-8 — fall back to slow path.
 				return "", 0
 			}
 			off += w
