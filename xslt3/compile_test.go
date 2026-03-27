@@ -19,6 +19,8 @@ const minimalStylesheet = `<?xml version="1.0"?>
 </xsl:stylesheet>`
 
 func TestCompilerBaseURI(t *testing.T) {
+	t.Parallel()
+
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(minimalStylesheet))
 	require.NoError(t, err)
 
@@ -45,6 +47,8 @@ func (r *stubURIResolver) Resolve(uri string) (io.ReadCloser, error) {
 }
 
 func TestCompilerURIResolver(t *testing.T) {
+	t.Parallel()
+
 	r := &stubURIResolver{}
 	c1 := xslt3.NewCompiler()
 	c2 := c1.URIResolver(r)
@@ -80,6 +84,8 @@ func (r *stubPackageResolver) ResolvePackage(name string, version string) (io.Re
 }
 
 func TestCompilerPackageResolver(t *testing.T) {
+	t.Parallel()
+
 	r := &stubPackageResolver{}
 	c := xslt3.NewCompiler().PackageResolver(r)
 
@@ -98,6 +104,8 @@ func TestCompilerPackageResolver(t *testing.T) {
 }
 
 func TestUsePackageWithoutResolver(t *testing.T) {
+	t.Parallel()
+
 	pkgSheet := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:use-package name="http://example.com/some-package"/>
@@ -114,6 +122,8 @@ func TestUsePackageWithoutResolver(t *testing.T) {
 }
 
 func TestUsePackageExcludedByUseWhenDoesNotRequireResolver(t *testing.T) {
+	t.Parallel()
+
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:param name="use-package" as="xs:boolean" static="yes" select="false()"
@@ -132,6 +142,8 @@ func TestUsePackageExcludedByUseWhenDoesNotRequireResolver(t *testing.T) {
 }
 
 func TestCompilerStaticParameters(t *testing.T) {
+	t.Parallel()
+
 	// Static parameters affect compile-time use-when evaluation.
 	// When debug='yes', the use-when branch includes the debug template.
 	p := xslt3.NewParameters()
@@ -163,6 +175,8 @@ func TestCompilerStaticParameters(t *testing.T) {
 }
 
 func TestCompilerSetStaticParameter(t *testing.T) {
+	t.Parallel()
+
 	c1 := xslt3.NewCompiler().SetStaticParameter("mode", xpath3.SingleString("a"))
 	c2 := c1.SetStaticParameter("mode", xpath3.SingleString("b"))
 
@@ -199,6 +213,8 @@ func TestCompilerSetStaticParameter(t *testing.T) {
 }
 
 func TestCompilerClearStaticParameters(t *testing.T) {
+	t.Parallel()
+
 	c1 := xslt3.NewCompiler().SetStaticParameter("mode", xpath3.SingleString("a"))
 	c2 := c1.ClearStaticParameters()
 
@@ -223,6 +239,8 @@ func TestCompilerClearStaticParameters(t *testing.T) {
 }
 
 func TestMustCompilePanicsOnError(t *testing.T) {
+	t.Parallel()
+
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<not-a-stylesheet/>`))
 	require.NoError(t, err)
 
@@ -232,6 +250,8 @@ func TestMustCompilePanicsOnError(t *testing.T) {
 }
 
 func TestMustCompileSuccess(t *testing.T) {
+	t.Parallel()
+
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(minimalStylesheet))
 	require.NoError(t, err)
 
@@ -242,6 +262,8 @@ func TestMustCompileSuccess(t *testing.T) {
 }
 
 func TestCompilerCloneOnWrite(t *testing.T) {
+	t.Parallel()
+
 	c1 := xslt3.NewCompiler().BaseURI("file:///a.xsl")
 	c2 := c1.BaseURI("file:///b.xsl")
 
@@ -259,6 +281,8 @@ func TestCompilerCloneOnWrite(t *testing.T) {
 }
 
 func TestCompileStylesheetConvenience(t *testing.T) {
+	t.Parallel()
+
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(minimalStylesheet))
 	require.NoError(t, err)
 
@@ -307,6 +331,8 @@ func TestAttributeSetCycleDetection(t *testing.T) {
 }
 
 func TestCompileFileLoadsDTDDefinedExternalEntityInIncludedStylesheet(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.xsl"), []byte(`<?xml version="1.0"?>

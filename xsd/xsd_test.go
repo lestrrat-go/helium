@@ -172,6 +172,7 @@ func shouldSkip(name string) string {
 }
 
 func TestGoldenFiles(t *testing.T) {
+	t.Parallel()
 	filterEnv := os.Getenv("HELIUM_XMLSCHEMA_TEST_FILES")
 
 	cases := discoverTests(t)
@@ -183,6 +184,7 @@ func TestGoldenFiles(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if filterEnv != "" && !strings.Contains(tc.name, filterEnv) {
 				t.Skip("filtered out by HELIUM_XMLSCHEMA_TEST_FILES")
 				skipped++
@@ -248,6 +250,7 @@ func TestGoldenFiles(t *testing.T) {
 }
 
 func TestXsiNil(t *testing.T) {
+	t.Parallel()
 	const schemaSrc = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root">
@@ -275,6 +278,7 @@ func TestXsiNil(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("nillable element with xsi:nil=true validates", func(t *testing.T) {
+		t.Parallel()
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-elem xsi:nil="true"/>
@@ -286,6 +290,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("non-nillable element with xsi:nil=true fails", func(t *testing.T) {
+		t.Parallel()
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <non-nillable-elem xsi:nil="true"/>
@@ -299,6 +304,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("nilled element with text content fails", func(t *testing.T) {
+		t.Parallel()
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-elem xsi:nil="true">some text</nillable-elem>
@@ -312,6 +318,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("nilled element with child element fails", func(t *testing.T) {
+		t.Parallel()
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-complex xsi:nil="true"><child>x</child></nillable-complex>
@@ -325,6 +332,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("nilled complex element with attributes validates", func(t *testing.T) {
+		t.Parallel()
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-complex xsi:nil="true" attr1="val"/>
@@ -336,6 +344,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("nillable element without xsi:nil validates normally", func(t *testing.T) {
+		t.Parallel()
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-elem>hello</nillable-elem>
@@ -347,6 +356,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("xsi:nil=1 is equivalent to true", func(t *testing.T) {
+		t.Parallel()
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-elem xsi:nil="1"/>
@@ -358,6 +368,7 @@ func TestXsiNil(t *testing.T) {
 	})
 
 	t.Run("xsi:nil=false does not trigger nil handling", func(t *testing.T) {
+		t.Parallel()
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <nillable-elem xsi:nil="false">hello</nillable-elem>
@@ -382,6 +393,7 @@ func extractBaseName(name string) string {
 }
 
 func TestDefaultFixedValidation(t *testing.T) {
+	t.Parallel()
 	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string, out *string) error {
 		t.Helper()
 		xsdDoc, err := helium.NewParser().Parse(t.Context(), []byte(xsdStr))
@@ -411,6 +423,7 @@ func TestDefaultFixedValidation(t *testing.T) {
 	}
 
 	t.Run("element_fixed_correct_value", func(t *testing.T) {
+		t.Parallel()
 		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root" type="xs:string" fixed="hello"/>
 </xs:schema>`
@@ -420,6 +433,7 @@ func TestDefaultFixedValidation(t *testing.T) {
 	})
 
 	t.Run("element_fixed_wrong_value", func(t *testing.T) {
+		t.Parallel()
 		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root" type="xs:string" fixed="hello"/>
 </xs:schema>`
@@ -431,6 +445,7 @@ func TestDefaultFixedValidation(t *testing.T) {
 	})
 
 	t.Run("element_fixed_empty", func(t *testing.T) {
+		t.Parallel()
 		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root" type="xs:string" fixed="hello"/>
 </xs:schema>`
@@ -440,6 +455,7 @@ func TestDefaultFixedValidation(t *testing.T) {
 	})
 
 	t.Run("element_default_empty_integer", func(t *testing.T) {
+		t.Parallel()
 		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root" type="xs:integer" default="42"/>
 </xs:schema>`
@@ -449,6 +465,7 @@ func TestDefaultFixedValidation(t *testing.T) {
 	})
 
 	t.Run("attribute_fixed_correct", func(t *testing.T) {
+		t.Parallel()
 		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root">
     <xs:complexType>
@@ -462,6 +479,7 @@ func TestDefaultFixedValidation(t *testing.T) {
 	})
 
 	t.Run("attribute_fixed_wrong", func(t *testing.T) {
+		t.Parallel()
 		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root">
     <xs:complexType>
@@ -478,6 +496,7 @@ func TestDefaultFixedValidation(t *testing.T) {
 }
 
 func TestMultipleAttributeErrors(t *testing.T) {
+	t.Parallel()
 	compileAndValidate := func(t *testing.T, xsdStr, xmlStr string, out *string) error {
 		t.Helper()
 		xsdDoc, err := helium.NewParser().Parse(t.Context(), []byte(xsdStr))
@@ -507,6 +526,7 @@ func TestMultipleAttributeErrors(t *testing.T) {
 	}
 
 	t.Run("multiple unknown attributes", func(t *testing.T) {
+		t.Parallel()
 		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root">
     <xs:complexType>
@@ -523,6 +543,7 @@ func TestMultipleAttributeErrors(t *testing.T) {
 	})
 
 	t.Run("multiple missing required attributes", func(t *testing.T) {
+		t.Parallel()
 		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root">
     <xs:complexType>
@@ -540,6 +561,7 @@ func TestMultipleAttributeErrors(t *testing.T) {
 	})
 
 	t.Run("no declarations multiple attrs", func(t *testing.T) {
+		t.Parallel()
 		xsdStr := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root" type="xs:string"/>
 </xs:schema>`
@@ -553,6 +575,7 @@ func TestMultipleAttributeErrors(t *testing.T) {
 }
 
 func TestRedefine(t *testing.T) {
+	t.Parallel()
 	tmpDir := filepath.Join("..", ".tmp", "redefine-test")
 	require.NoError(t, os.MkdirAll(tmpDir, 0o750)) //nolint:gosec // test temp directory
 	t.Cleanup(func() {
@@ -583,6 +606,7 @@ func TestRedefine(t *testing.T) {
 	}
 
 	t.Run("complexType_extension", func(t *testing.T) {
+		t.Parallel()
 		writeFile(t, "base-ct-ext.xsd", `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="personType">
@@ -618,6 +642,7 @@ func TestRedefine(t *testing.T) {
 	})
 
 	t.Run("complexType_restriction", func(t *testing.T) {
+		t.Parallel()
 		writeFile(t, "base-ct-restr.xsd", `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="itemType">
@@ -650,6 +675,7 @@ func TestRedefine(t *testing.T) {
 	})
 
 	t.Run("simpleType_restriction", func(t *testing.T) {
+		t.Parallel()
 		writeFile(t, "base-st.xsd", `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="nameType">
@@ -679,6 +705,7 @@ func TestRedefine(t *testing.T) {
 	})
 
 	t.Run("group_redefine", func(t *testing.T) {
+		t.Parallel()
 		writeFile(t, "base-grp.xsd", `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:group name="fieldsGroup">
@@ -715,6 +742,7 @@ func TestRedefine(t *testing.T) {
 	})
 
 	t.Run("attributeGroup_redefine", func(t *testing.T) {
+		t.Parallel()
 		writeFile(t, "base-ag.xsd", `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:attributeGroup name="myAttrs">
@@ -743,6 +771,7 @@ func TestRedefine(t *testing.T) {
 	})
 
 	t.Run("chameleon_redefine", func(t *testing.T) {
+		t.Parallel()
 		// Redefined schema has no targetNamespace — adopts the including schema's NS.
 		writeFile(t, "base-chameleon.xsd", `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -776,6 +805,7 @@ func TestRedefine(t *testing.T) {
 }
 
 func TestFacetConsistency(t *testing.T) {
+	t.Parallel()
 	compileWithErrors := func(t *testing.T, xsdStr string) string {
 		t.Helper()
 		xsdDoc, err := helium.NewParser().Parse(t.Context(), []byte(xsdStr))
@@ -789,6 +819,7 @@ func TestFacetConsistency(t *testing.T) {
 	}
 
 	t.Run("minLength_greater_than_maxLength", func(t *testing.T) {
+		t.Parallel()
 		errs := compileWithErrors(t, `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="badType">
@@ -802,6 +833,7 @@ func TestFacetConsistency(t *testing.T) {
 	})
 
 	t.Run("length_with_minLength", func(t *testing.T) {
+		t.Parallel()
 		errs := compileWithErrors(t, `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="badType">
@@ -815,6 +847,7 @@ func TestFacetConsistency(t *testing.T) {
 	})
 
 	t.Run("maxInclusive_with_maxExclusive", func(t *testing.T) {
+		t.Parallel()
 		errs := compileWithErrors(t, `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="badType">
@@ -828,6 +861,7 @@ func TestFacetConsistency(t *testing.T) {
 	})
 
 	t.Run("minInclusive_with_minExclusive", func(t *testing.T) {
+		t.Parallel()
 		errs := compileWithErrors(t, `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="badType">
@@ -841,6 +875,7 @@ func TestFacetConsistency(t *testing.T) {
 	})
 
 	t.Run("minInclusive_greater_than_maxInclusive", func(t *testing.T) {
+		t.Parallel()
 		errs := compileWithErrors(t, `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="badType">
@@ -854,6 +889,7 @@ func TestFacetConsistency(t *testing.T) {
 	})
 
 	t.Run("fractionDigits_greater_than_totalDigits", func(t *testing.T) {
+		t.Parallel()
 		errs := compileWithErrors(t, `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="badType">
@@ -867,6 +903,7 @@ func TestFacetConsistency(t *testing.T) {
 	})
 
 	t.Run("valid_minLength_maxLength", func(t *testing.T) {
+		t.Parallel()
 		errs := compileWithErrors(t, `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="goodType">
@@ -880,6 +917,7 @@ func TestFacetConsistency(t *testing.T) {
 	})
 
 	t.Run("derived_widens_maxLength", func(t *testing.T) {
+		t.Parallel()
 		errs := compileWithErrors(t, `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="baseType">
@@ -897,6 +935,7 @@ func TestFacetConsistency(t *testing.T) {
 	})
 
 	t.Run("derived_widens_minLength", func(t *testing.T) {
+		t.Parallel()
 		errs := compileWithErrors(t, `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="baseType">
@@ -915,6 +954,7 @@ func TestFacetConsistency(t *testing.T) {
 }
 
 func TestWithAnnotations(t *testing.T) {
+	t.Parallel()
 	ctx := t.Context()
 
 	schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -962,6 +1002,7 @@ func TestWithAnnotations(t *testing.T) {
 }
 
 func TestZeroCompilerFluent(t *testing.T) {
+	t.Parallel()
 	var c xsd.Compiler
 	require.NotPanics(t, func() {
 		c2 := c.SchemaFilename("test.xsd").BaseDir("/tmp")
@@ -970,6 +1011,7 @@ func TestZeroCompilerFluent(t *testing.T) {
 }
 
 func TestZeroValidatorFluent(t *testing.T) {
+	t.Parallel()
 	var v xsd.Validator
 	require.NotPanics(t, func() {
 		v2 := v.Filename("test.xml")

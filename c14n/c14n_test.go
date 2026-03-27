@@ -164,6 +164,7 @@ func runC14NTest(t *testing.T, category, name string, mode c14n.Mode, can c14n.C
 }
 
 func TestC14N10WithoutComments(t *testing.T) {
+	t.Parallel()
 	names := []string{
 		"example-1",
 		"example-2",
@@ -189,12 +190,14 @@ func TestC14N10WithoutComments(t *testing.T) {
 
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			runC14NTest(t, "without-comments", name, c14n.C14N10, c14n.NewCanonicalizer(c14n.C14N10))
 		})
 	}
 }
 
 func TestExclusiveC14N10WithoutComments(t *testing.T) {
+	t.Parallel()
 	names := []string{
 		"test-0",
 		"test-1",
@@ -218,12 +221,14 @@ func TestExclusiveC14N10WithoutComments(t *testing.T) {
 
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			runC14NTest(t, "exc-without-comments", name, c14n.ExclusiveC14N10, c14n.NewCanonicalizer(c14n.ExclusiveC14N10))
 		})
 	}
 }
 
 func TestC14N10WithComments(t *testing.T) {
+	t.Parallel()
 	names := []string{
 		"example-1",
 		"example-2",
@@ -236,12 +241,14 @@ func TestC14N10WithComments(t *testing.T) {
 
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			runC14NTest(t, "with-comments", name, c14n.C14N10, c14n.NewCanonicalizer(c14n.C14N10).Comments())
 		})
 	}
 }
 
 func TestC14N11WithoutComments(t *testing.T) {
+	t.Parallel()
 	names := []string{
 		"example-1",
 		"example-2",
@@ -275,12 +282,14 @@ func TestC14N11WithoutComments(t *testing.T) {
 
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			runC14NTest(t, "1-1-without-comments", name, c14n.C14N11, c14n.NewCanonicalizer(c14n.C14N11))
 		})
 	}
 }
 
 func TestZeroValueCanonicalizer(t *testing.T) {
+	t.Parallel()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root b="2" a="1"><child/></root>`))
 	require.NoError(t, err)
 
@@ -292,6 +301,7 @@ func TestZeroValueCanonicalizer(t *testing.T) {
 }
 
 func TestZeroValueCanonicalizerFluent(t *testing.T) {
+	t.Parallel()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><!-- comment --><child/></root>`))
 	require.NoError(t, err)
 
@@ -302,6 +312,7 @@ func TestZeroValueCanonicalizerFluent(t *testing.T) {
 }
 
 func TestRelativeNamespaceURIRejected(t *testing.T) {
+	t.Parallel()
 	// C14N spec requires failure on relative namespace URIs.
 	xml := `<?xml version="1.0"?><root xmlns:bad="relative/uri"><child/></root>`
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
@@ -313,6 +324,7 @@ func TestRelativeNamespaceURIRejected(t *testing.T) {
 }
 
 func TestAbsoluteNamespaceURIAccepted(t *testing.T) {
+	t.Parallel()
 	xml := `<?xml version="1.0"?><root xmlns:ok="http://example.com"><child/></root>`
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
 	require.NoError(t, err)
@@ -322,6 +334,7 @@ func TestAbsoluteNamespaceURIAccepted(t *testing.T) {
 }
 
 func TestEmptyNamespaceURIAccepted(t *testing.T) {
+	t.Parallel()
 	// Empty namespace URI (default namespace undeclaration) must be allowed.
 	xml := `<?xml version="1.0"?><root xmlns="http://example.com"><child xmlns=""/></root>`
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))

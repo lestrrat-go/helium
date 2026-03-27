@@ -9,6 +9,8 @@ import (
 )
 
 func TestEvaluateXPath1(t *testing.T) {
+	t.Parallel()
+
 	doc, err := helium.NewParser().Parse(t.Context(), []byte("<root><child>text</child></root>"))
 	require.NoError(t, err)
 
@@ -19,6 +21,8 @@ func TestEvaluateXPath1(t *testing.T) {
 }
 
 func TestParseFragmentID(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		fragment string
 		scheme   string
@@ -39,7 +43,11 @@ func TestParseFragmentID(t *testing.T) {
 }
 
 func TestXmlnsScheme(t *testing.T) {
+	t.Parallel()
+
 	t.Run("xmlns with xpath1", func(t *testing.T) {
+		t.Parallel()
+
 		// Mirrors libxml2 issue289base test
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <rootB xmlns="abc://d/e:f">
@@ -53,6 +61,8 @@ func TestXmlnsScheme(t *testing.T) {
 	})
 
 	t.Run("xmlns with xpointer", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:ns="urn:test"><ns:child>hello</ns:child></root>`))
 		require.NoError(t, err)
@@ -64,6 +74,8 @@ func TestXmlnsScheme(t *testing.T) {
 	})
 
 	t.Run("multiple xmlns bindings", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
 <root xmlns:a="urn:a" xmlns:b="urn:b"><a:x/><b:y/></root>`))
 		require.NoError(t, err)
@@ -75,6 +87,8 @@ func TestXmlnsScheme(t *testing.T) {
 	})
 
 	t.Run("invalid xmlns body", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 
@@ -85,6 +99,8 @@ func TestXmlnsScheme(t *testing.T) {
 }
 
 func TestXPointerEscaping(t *testing.T) {
+	t.Parallel()
+
 	// Test XPointer escaping through public APIs with table-driven approach
 	tests := []struct {
 		name     string
@@ -105,6 +121,8 @@ func TestXPointerEscaping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -120,6 +138,8 @@ func TestXPointerEscaping(t *testing.T) {
 }
 
 func TestParseFragmentIDTable(t *testing.T) {
+	t.Parallel()
+
 	// Test ParseFragmentID with table-driven approach
 	tests := []struct {
 		name       string
@@ -137,6 +157,8 @@ func TestParseFragmentIDTable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			scheme, body, err := xpointer.ParseFragmentID(tt.fragment)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -150,11 +172,15 @@ func TestParseFragmentIDTable(t *testing.T) {
 }
 
 func TestCascadingParts(t *testing.T) {
+	t.Parallel()
+
 	// Document with known structure: <book><chapter><image/></chapter></book>
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<book><chapter><image href="linus.gif"/></chapter></book>`))
 	require.NoError(t, err)
 
 	t.Run("first part fails, second succeeds", func(t *testing.T) {
+		t.Parallel()
+
 		// element(foo) fails (no ID "foo"), element(/1/1/1) succeeds
 		nodes, err := xpointer.Evaluate(t.Context(), doc, "element(foo)element(/1/1/1)")
 		require.NoError(t, err)
@@ -163,6 +189,8 @@ func TestCascadingParts(t *testing.T) {
 	})
 
 	t.Run("first part succeeds, second ignored", func(t *testing.T) {
+		t.Parallel()
+
 		// element(/1/1/1) succeeds immediately, element(foo) never tried
 		nodes, err := xpointer.Evaluate(t.Context(), doc, "element(/1/1/1)element(foo)")
 		require.NoError(t, err)
@@ -171,6 +199,8 @@ func TestCascadingParts(t *testing.T) {
 	})
 
 	t.Run("all parts fail", func(t *testing.T) {
+		t.Parallel()
+
 		// Both element(foo) and element(bar) fail
 		nodes, err := xpointer.Evaluate(t.Context(), doc, "element(foo)element(bar)")
 		require.NoError(t, err)
@@ -178,6 +208,8 @@ func TestCascadingParts(t *testing.T) {
 	})
 
 	t.Run("xpath1 cascade", func(t *testing.T) {
+		t.Parallel()
+
 		// First XPath returns empty, second finds the element
 		nodes, err := xpointer.Evaluate(t.Context(), doc, "xpath1(//nonexistent)xpath1(//image)")
 		require.NoError(t, err)
@@ -186,12 +218,16 @@ func TestCascadingParts(t *testing.T) {
 	})
 
 	t.Run("syntax error aborts cascade", func(t *testing.T) {
+		t.Parallel()
+
 		// xpointer with invalid XPath is a syntax error — cascade aborts
 		_, err := xpointer.Evaluate(t.Context(), doc, "xpointer(:::invalid)element(/1/1/1)")
 		require.Error(t, err)
 	})
 
 	t.Run("unknown scheme continues cascade", func(t *testing.T) {
+		t.Parallel()
+
 		// unknown scheme allows fallback to next part
 		nodes, err := xpointer.Evaluate(t.Context(), doc, "bogus(data)element(/1/1/1)")
 		require.NoError(t, err)
@@ -201,6 +237,8 @@ func TestCascadingParts(t *testing.T) {
 }
 
 func TestBareNameChildSequence(t *testing.T) {
+	t.Parallel()
+
 	// Parse with NewParser so xml:id registers in the ID table.
 	p := helium.NewParser()
 	doc, err := p.Parse(t.Context(), []byte(`<?xml version="1.0"?>
@@ -208,6 +246,8 @@ func TestBareNameChildSequence(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("name/1/1 navigates from ID", func(t *testing.T) {
+		t.Parallel()
+
 		// "r/1/1" = look up ID "r", then 1st child (a), then 1st child (b)
 		nodes, err := xpointer.Evaluate(t.Context(), doc, "r/1/1")
 		require.NoError(t, err)
@@ -216,6 +256,8 @@ func TestBareNameChildSequence(t *testing.T) {
 	})
 
 	t.Run("name/1 navigates one level", func(t *testing.T) {
+		t.Parallel()
+
 		nodes, err := xpointer.Evaluate(t.Context(), doc, "r/1")
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
@@ -223,6 +265,8 @@ func TestBareNameChildSequence(t *testing.T) {
 	})
 
 	t.Run("unknown ID returns nil", func(t *testing.T) {
+		t.Parallel()
+
 		nodes, err := xpointer.Evaluate(t.Context(), doc, "nosuchid/1")
 		require.NoError(t, err)
 		require.Nil(t, nodes)
@@ -230,6 +274,8 @@ func TestBareNameChildSequence(t *testing.T) {
 }
 
 func TestMultiSchemeExpressionsTable(t *testing.T) {
+	t.Parallel()
+
 	// Test expressions with multiple schemes using table-driven approach
 	tests := []struct {
 		name      string
@@ -283,6 +329,8 @@ func TestMultiSchemeExpressionsTable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(tt.xml))
 			require.NoError(t, err)
 

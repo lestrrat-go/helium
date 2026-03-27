@@ -31,6 +31,7 @@ func (w *countingWriter) WriteString(s string) (int, error) {
 }
 
 func TestStartDocument(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -39,6 +40,7 @@ func TestStartDocument(t *testing.T) {
 }
 
 func TestStartDocumentZeroValueWriterReturnsError(t *testing.T) {
+	t.Parallel()
 	var w stream.Writer
 	require.NotPanics(t, func() {
 		err := w.StartDocument("", "", "")
@@ -47,6 +49,7 @@ func TestStartDocumentZeroValueWriterReturnsError(t *testing.T) {
 }
 
 func TestStartDocumentWithEncoding(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("1.0", "UTF-8", ""))
@@ -55,6 +58,7 @@ func TestStartDocumentWithEncoding(t *testing.T) {
 }
 
 func TestStartDocumentWithStandalone(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("1.0", "", "yes"))
@@ -63,6 +67,7 @@ func TestStartDocumentWithStandalone(t *testing.T) {
 }
 
 func TestStartDocumentFull(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("1.0", "ISO-8859-1", "no"))
@@ -71,19 +76,23 @@ func TestStartDocumentFull(t *testing.T) {
 }
 
 func TestStartDocumentEncodingValidation(t *testing.T) {
+	t.Parallel()
 	t.Run("valid encoding", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		require.NoError(t, w.StartDocument("1.0", "UTF-8", ""))
 	})
 
 	t.Run("valid encoding case insensitive", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		require.NoError(t, w.StartDocument("1.0", "utf-8", ""))
 	})
 
 	t.Run("invalid encoding", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		err := w.StartDocument("1.0", "BOGUS-999", "")
@@ -92,6 +101,7 @@ func TestStartDocumentEncodingValidation(t *testing.T) {
 	})
 
 	t.Run("empty encoding skips validation", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		require.NoError(t, w.StartDocument("1.0", "", ""))
@@ -99,6 +109,7 @@ func TestStartDocumentEncodingValidation(t *testing.T) {
 }
 
 func TestSimpleElement(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -109,6 +120,7 @@ func TestSimpleElement(t *testing.T) {
 }
 
 func TestElementWithText(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -120,6 +132,7 @@ func TestElementWithText(t *testing.T) {
 }
 
 func TestElementWithEscaping(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -129,6 +142,7 @@ func TestElementWithEscaping(t *testing.T) {
 }
 
 func TestWriteStringBatchesPlainText(t *testing.T) {
+	t.Parallel()
 	out := &countingWriter{}
 	w := stream.NewWriter(out)
 
@@ -140,6 +154,7 @@ func TestWriteStringBatchesPlainText(t *testing.T) {
 }
 
 func TestNestedElements(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -153,6 +168,7 @@ func TestNestedElements(t *testing.T) {
 }
 
 func TestAttribute(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -162,6 +178,7 @@ func TestAttribute(t *testing.T) {
 }
 
 func TestAttributeEscaping(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -171,6 +188,7 @@ func TestAttributeEscaping(t *testing.T) {
 }
 
 func TestAttributeWhitespaceEscaping(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -180,6 +198,7 @@ func TestAttributeWhitespaceEscaping(t *testing.T) {
 }
 
 func TestMultipleAttributes(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -190,6 +209,7 @@ func TestMultipleAttributes(t *testing.T) {
 }
 
 func TestAttributeWithContent(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -200,6 +220,7 @@ func TestAttributeWithContent(t *testing.T) {
 }
 
 func TestSingleQuotes(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf).QuoteChar('\'')
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -211,6 +232,7 @@ func TestSingleQuotes(t *testing.T) {
 }
 
 func TestDoubleQuotesInSingleQuoteMode(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf).QuoteChar('\'')
 	require.NoError(t, w.StartElement("root"))
@@ -220,6 +242,7 @@ func TestDoubleQuotesInSingleQuoteMode(t *testing.T) {
 }
 
 func TestFullEndElement(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -228,6 +251,7 @@ func TestFullEndElement(t *testing.T) {
 }
 
 func TestFullEndElementWithAttr(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -237,6 +261,7 @@ func TestFullEndElementWithAttr(t *testing.T) {
 }
 
 func TestWriteElement(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.WriteElement("item", "hello"))
@@ -244,6 +269,7 @@ func TestWriteElement(t *testing.T) {
 }
 
 func TestComment(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -255,6 +281,7 @@ func TestComment(t *testing.T) {
 }
 
 func TestCommentInsideElement(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -264,6 +291,7 @@ func TestCommentInsideElement(t *testing.T) {
 }
 
 func TestPI(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -275,6 +303,7 @@ func TestPI(t *testing.T) {
 }
 
 func TestPIEmptyContent(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.WritePI("target", ""))
@@ -282,6 +311,7 @@ func TestPIEmptyContent(t *testing.T) {
 }
 
 func TestPIXmlForbidden(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	err := w.StartPI("xml")
@@ -290,6 +320,7 @@ func TestPIXmlForbidden(t *testing.T) {
 }
 
 func TestPIXmlCaseForbidden(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	err := w.StartPI("XML")
@@ -298,6 +329,7 @@ func TestPIXmlCaseForbidden(t *testing.T) {
 }
 
 func TestCDATA(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -307,6 +339,7 @@ func TestCDATA(t *testing.T) {
 }
 
 func TestCDATAInvalidState(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	// CDATA can only be inside an element
@@ -315,6 +348,7 @@ func TestCDATAInvalidState(t *testing.T) {
 }
 
 func TestWriteRaw(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -324,6 +358,7 @@ func TestWriteRaw(t *testing.T) {
 }
 
 func TestNamespaceElement(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElementNS("ns", "root", "http://example.com"))
@@ -332,6 +367,7 @@ func TestNamespaceElement(t *testing.T) {
 }
 
 func TestDefaultNamespace(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElementNS("", "root", "http://example.com"))
@@ -340,6 +376,7 @@ func TestDefaultNamespace(t *testing.T) {
 }
 
 func TestNamespaceAttribute(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -349,6 +386,7 @@ func TestNamespaceAttribute(t *testing.T) {
 }
 
 func TestNamespaceNotRedeclared(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElementNS("ns", "root", "http://example.com"))
@@ -359,6 +397,7 @@ func TestNamespaceNotRedeclared(t *testing.T) {
 }
 
 func TestNamespaceRedeclaredDifferentURI(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElementNS("ns", "root", "http://example.com/1"))
@@ -369,6 +408,7 @@ func TestNamespaceRedeclaredDifferentURI(t *testing.T) {
 }
 
 func TestWriteElementNS(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.WriteElementNS("ns", "item", "http://example.com", "content"))
@@ -376,6 +416,7 @@ func TestWriteElementNS(t *testing.T) {
 }
 
 func TestDTD(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -388,6 +429,7 @@ func TestDTD(t *testing.T) {
 }
 
 func TestDTDSystem(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -400,6 +442,7 @@ func TestDTDSystem(t *testing.T) {
 }
 
 func TestDTDWithSubset(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -412,6 +455,7 @@ func TestDTDWithSubset(t *testing.T) {
 }
 
 func TestStartDTDPubidRequiresSysid(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -421,6 +465,7 @@ func TestStartDTDPubidRequiresSysid(t *testing.T) {
 }
 
 func TestStartDTDWithInternalDecls(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -446,6 +491,7 @@ func TestStartDTDWithInternalDecls(t *testing.T) {
 }
 
 func TestWriteDTDEntityEscaping(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -460,6 +506,7 @@ func TestWriteDTDEntityEscaping(t *testing.T) {
 }
 
 func TestDTDExternalEntity(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -474,6 +521,7 @@ func TestDTDExternalEntity(t *testing.T) {
 }
 
 func TestDTDNotation(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -488,6 +536,7 @@ func TestDTDNotation(t *testing.T) {
 }
 
 func TestDTDIndentPublicSystem(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf).Indent("  ")
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -501,6 +550,7 @@ func TestDTDIndentPublicSystem(t *testing.T) {
 }
 
 func TestDTDIndentSystemOnly(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf).Indent("  ")
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -514,6 +564,7 @@ func TestDTDIndentSystemOnly(t *testing.T) {
 }
 
 func TestIndentation(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf).Indent("  ")
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -530,6 +581,7 @@ func TestIndentation(t *testing.T) {
 }
 
 func TestIndentationDeepNesting(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf).Indent("\t")
 	require.NoError(t, w.StartElement("a"))
@@ -543,6 +595,7 @@ func TestIndentationDeepNesting(t *testing.T) {
 }
 
 func TestIndentationMixedContent(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf).Indent("  ")
 	require.NoError(t, w.StartElement("root"))
@@ -555,7 +608,9 @@ func TestIndentationMixedContent(t *testing.T) {
 }
 
 func TestIndentCommentNewline(t *testing.T) {
+	t.Parallel()
 	t.Run("comment followed by element", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf).Indent("  ")
 		require.NoError(t, w.StartElement("root"))
@@ -569,6 +624,7 @@ func TestIndentCommentNewline(t *testing.T) {
 	})
 
 	t.Run("comment as last child", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf).Indent("  ")
 		require.NoError(t, w.StartElement("root"))
@@ -580,6 +636,7 @@ func TestIndentCommentNewline(t *testing.T) {
 	})
 
 	t.Run("comment at document level", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf).Indent("  ")
 		require.NoError(t, w.StartDocument("", "", ""))
@@ -593,6 +650,7 @@ func TestIndentCommentNewline(t *testing.T) {
 	})
 
 	t.Run("no indent no trailing newline", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		require.NoError(t, w.StartElement("root"))
@@ -604,7 +662,9 @@ func TestIndentCommentNewline(t *testing.T) {
 }
 
 func TestIndentPINewline(t *testing.T) {
+	t.Parallel()
 	t.Run("PI followed by element", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf).Indent("  ")
 		require.NoError(t, w.StartElement("root"))
@@ -617,6 +677,7 @@ func TestIndentPINewline(t *testing.T) {
 	})
 
 	t.Run("PI at document level", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf).Indent("  ")
 		require.NoError(t, w.StartDocument("", "", ""))
@@ -629,6 +690,7 @@ func TestIndentPINewline(t *testing.T) {
 	})
 
 	t.Run("no indent no trailing newline", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		require.NoError(t, w.StartElement("root"))
@@ -640,6 +702,7 @@ func TestIndentPINewline(t *testing.T) {
 }
 
 func TestEndDocumentClosesAll(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -651,6 +714,7 @@ func TestEndDocumentClosesAll(t *testing.T) {
 }
 
 func TestEndDocumentClosesOpenPI(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -662,6 +726,7 @@ func TestEndDocumentClosesOpenPI(t *testing.T) {
 }
 
 func TestEndDocumentClosesOpenCDATA(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -673,6 +738,7 @@ func TestEndDocumentClosesOpenCDATA(t *testing.T) {
 }
 
 func TestEndDocumentClosesOpenComment(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -684,6 +750,7 @@ func TestEndDocumentClosesOpenComment(t *testing.T) {
 }
 
 func TestEndDocumentClosesOpenDTD(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -693,7 +760,9 @@ func TestEndDocumentClosesOpenDTD(t *testing.T) {
 }
 
 func TestStateValidation(t *testing.T) {
+	t.Parallel()
 	t.Run("StartDocumentTwice", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		require.NoError(t, w.StartDocument("", "", ""))
@@ -702,6 +771,7 @@ func TestStateValidation(t *testing.T) {
 	})
 
 	t.Run("AttributeOutsideElement", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		err := w.StartAttribute("name")
@@ -709,6 +779,7 @@ func TestStateValidation(t *testing.T) {
 	})
 
 	t.Run("EndElementWithoutStart", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		err := w.EndElement()
@@ -716,6 +787,7 @@ func TestStateValidation(t *testing.T) {
 	})
 
 	t.Run("EndCommentWithoutStart", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		err := w.EndComment()
@@ -723,6 +795,7 @@ func TestStateValidation(t *testing.T) {
 	})
 
 	t.Run("EndPIWithoutStart", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		err := w.EndPI()
@@ -730,6 +803,7 @@ func TestStateValidation(t *testing.T) {
 	})
 
 	t.Run("EndCDATAWithoutStart", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		err := w.EndCDATA()
@@ -737,6 +811,7 @@ func TestStateValidation(t *testing.T) {
 	})
 
 	t.Run("EndDTDWithoutStart", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		err := w.EndDTD()
@@ -744,6 +819,7 @@ func TestStateValidation(t *testing.T) {
 	})
 
 	t.Run("WriteStringInNone", func(t *testing.T) {
+		t.Parallel()
 		var buf bytes.Buffer
 		w := stream.NewWriter(&buf)
 		err := w.WriteString("text")
@@ -752,6 +828,7 @@ func TestStateValidation(t *testing.T) {
 }
 
 func TestStickyError(t *testing.T) {
+	t.Parallel()
 	// Use a writer that fails after N bytes
 	fw := &failWriter{failAfter: 5}
 	w := stream.NewWriter(fw)
@@ -763,6 +840,7 @@ func TestStickyError(t *testing.T) {
 }
 
 func TestFlush(t *testing.T) {
+	t.Parallel()
 	fb := &flushableBuffer{}
 	w := stream.NewWriter(fb)
 	require.NoError(t, w.StartElement("root"))
@@ -772,6 +850,7 @@ func TestFlush(t *testing.T) {
 }
 
 func TestStartAttributeViaStartEnd(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -783,6 +862,7 @@ func TestStartAttributeViaStartEnd(t *testing.T) {
 }
 
 func TestStartAttributeMultiPart(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -795,6 +875,7 @@ func TestStartAttributeMultiPart(t *testing.T) {
 }
 
 func TestEndElementClosesAttribute(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -806,6 +887,7 @@ func TestEndElementClosesAttribute(t *testing.T) {
 }
 
 func TestStartCommentViaStartEnd(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -817,6 +899,7 @@ func TestStartCommentViaStartEnd(t *testing.T) {
 }
 
 func TestStartPIViaStartEnd(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -828,6 +911,7 @@ func TestStartPIViaStartEnd(t *testing.T) {
 }
 
 func TestCompleteDocument(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("1.0", "UTF-8", ""))
@@ -860,6 +944,7 @@ func TestCompleteDocument(t *testing.T) {
 }
 
 func TestCompleteDocumentIndented(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf).Indent("  ")
 	require.NoError(t, w.StartDocument("1.0", "UTF-8", ""))
@@ -878,6 +963,7 @@ func TestCompleteDocumentIndented(t *testing.T) {
 }
 
 func TestWithoutStartDocument(t *testing.T) {
+	t.Parallel()
 	// Writer should work without StartDocument for fragment output
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
@@ -888,6 +974,7 @@ func TestWithoutStartDocument(t *testing.T) {
 }
 
 func TestWriteRawInDocument(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("", "", ""))
@@ -899,6 +986,7 @@ func TestWriteRawInDocument(t *testing.T) {
 }
 
 func TestNamespaceElementWithAttribute(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElementNS("soap", "Envelope", "http://schemas.xmlsoap.org/soap/envelope/"))
@@ -912,6 +1000,7 @@ func TestNamespaceElementWithAttribute(t *testing.T) {
 }
 
 func TestEmptyElementSibling(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))
@@ -924,6 +1013,7 @@ func TestEmptyElementSibling(t *testing.T) {
 }
 
 func TestWriteAttributeNS(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartElement("root"))

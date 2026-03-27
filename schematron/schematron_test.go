@@ -108,6 +108,7 @@ func shouldSkip(name string) string {
 }
 
 func TestGoldenFiles(t *testing.T) {
+	t.Parallel()
 	filterEnv := os.Getenv("HELIUM_SCHEMATRON_TEST_FILES")
 
 	cases := discoverTests(t)
@@ -119,6 +120,7 @@ func TestGoldenFiles(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if filterEnv != "" && !strings.Contains(tc.name, filterEnv) {
 				t.Skip("filtered out by HELIUM_SCHEMATRON_TEST_FILES")
 				skipped++
@@ -193,6 +195,7 @@ func extractBaseName(name string) string {
 }
 
 func TestWithQuiet(t *testing.T) {
+	t.Parallel()
 	const sct = `<schema xmlns="http://www.ascc.net/xml/schematron">
   <pattern name="test">
     <rule context="AAA">
@@ -210,6 +213,7 @@ func TestWithQuiet(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("failing document", func(t *testing.T) {
+		t.Parallel()
 		doc, err := p.Parse(t.Context(), []byte(`<AAA><CCC/></AAA>`))
 		require.NoError(t, err)
 
@@ -229,6 +233,7 @@ func TestWithQuiet(t *testing.T) {
 	})
 
 	t.Run("passing document", func(t *testing.T) {
+		t.Parallel()
 		// This schema only has a report (no assert), so a doc without BBB validates.
 		const reportOnly = `<schema xmlns="http://www.ascc.net/xml/schematron">
   <pattern name="test">
@@ -263,6 +268,7 @@ func TestWithQuiet(t *testing.T) {
 }
 
 func TestWithErrorHandler(t *testing.T) {
+	t.Parallel()
 	const sct = `<schema xmlns="http://www.ascc.net/xml/schematron">
   <pattern name="test">
     <rule context="AAA">
@@ -279,6 +285,7 @@ func TestWithErrorHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("errors delivered to handler", func(t *testing.T) {
+		t.Parallel()
 		var collected []*schematron.ValidationError
 		handler := validationErrorCollector{errors: &collected}
 
@@ -302,6 +309,7 @@ func TestWithErrorHandler(t *testing.T) {
 	})
 
 	t.Run("passing document no handler calls", func(t *testing.T) {
+		t.Parallel()
 		var collected []*schematron.ValidationError
 		handler := validationErrorCollector{errors: &collected}
 
@@ -318,6 +326,7 @@ func TestWithErrorHandler(t *testing.T) {
 	})
 
 	t.Run("quiet suppresses handler delivery", func(t *testing.T) {
+		t.Parallel()
 		var collected []*schematron.ValidationError
 		handler := validationErrorCollector{errors: &collected}
 
@@ -383,6 +392,7 @@ func collectedString(collected []*schematron.ValidationError) string {
 }
 
 func TestCompileEmptyContext(t *testing.T) {
+	t.Parallel()
 	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 		<pattern><rule context=""><assert test="true()">ok</assert></rule></pattern>
 	</schema>`)
@@ -390,6 +400,7 @@ func TestCompileEmptyContext(t *testing.T) {
 }
 
 func TestCompileRuleNoAssert(t *testing.T) {
+	t.Parallel()
 	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 		<pattern><rule context="*"></rule></pattern>
 	</schema>`)
@@ -397,6 +408,7 @@ func TestCompileRuleNoAssert(t *testing.T) {
 }
 
 func TestCompilePatternNoRules(t *testing.T) {
+	t.Parallel()
 	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 		<pattern></pattern>
 	</schema>`)
@@ -404,12 +416,14 @@ func TestCompilePatternNoRules(t *testing.T) {
 }
 
 func TestCompileSchemaNoPatterns(t *testing.T) {
+	t.Parallel()
 	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 	</schema>`)
 	require.Contains(t, errs, "schema has no pattern element")
 }
 
 func TestCompileNonRuleInPattern(t *testing.T) {
+	t.Parallel()
 	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 		<pattern>
 			<bogus/>
@@ -420,6 +434,7 @@ func TestCompileNonRuleInPattern(t *testing.T) {
 }
 
 func TestCompileValidSchema(t *testing.T) {
+	t.Parallel()
 	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 		<pattern>
 			<rule context="*"><assert test="true()">ok</assert></rule>
@@ -429,6 +444,7 @@ func TestCompileValidSchema(t *testing.T) {
 }
 
 func TestCompileRuleWithLetOnly(t *testing.T) {
+	t.Parallel()
 	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 		<pattern>
 			<rule context="*">
@@ -440,6 +456,7 @@ func TestCompileRuleWithLetOnly(t *testing.T) {
 }
 
 func TestCompileMultipleErrors(t *testing.T) {
+	t.Parallel()
 	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 		<pattern>
 			<rule context="">
@@ -451,6 +468,7 @@ func TestCompileMultipleErrors(t *testing.T) {
 }
 
 func TestCompileValueOfNoSelect(t *testing.T) {
+	t.Parallel()
 	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 		<pattern>
 			<rule context="*"><assert test="true()">val: <value-of/></assert></rule>
@@ -460,6 +478,7 @@ func TestCompileValueOfNoSelect(t *testing.T) {
 }
 
 func TestCompileTitleAfterPattern(t *testing.T) {
+	t.Parallel()
 	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 		<pattern><rule context="*"><assert test="true()">ok</assert></rule></pattern>
 		<title>late title</title>
@@ -468,6 +487,7 @@ func TestCompileTitleAfterPattern(t *testing.T) {
 }
 
 func TestCompileNsAfterPattern(t *testing.T) {
+	t.Parallel()
 	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 		<pattern><rule context="*"><assert test="true()">ok</assert></rule></pattern>
 		<ns prefix="p" uri="urn:test"/>
@@ -476,6 +496,7 @@ func TestCompileNsAfterPattern(t *testing.T) {
 }
 
 func TestCompileTitleBeforeNsBeforePattern(t *testing.T) {
+	t.Parallel()
 	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 		<title>my schema</title>
 		<ns prefix="p" uri="urn:test"/>
@@ -485,7 +506,9 @@ func TestCompileTitleBeforeNsBeforePattern(t *testing.T) {
 }
 
 func TestNameInterpolation(t *testing.T) {
+	t.Parallel()
 	t.Run("non-namespaced element", func(t *testing.T) {
+		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern><rule context="item">
 				<assert test="false()"><name/> is invalid</assert>
@@ -502,6 +525,7 @@ func TestNameInterpolation(t *testing.T) {
 	})
 
 	t.Run("namespaced element", func(t *testing.T) {
+		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<ns prefix="ex" uri="http://example.com"/>
 			<pattern><rule context="ex:item">
@@ -520,7 +544,9 @@ func TestNameInterpolation(t *testing.T) {
 }
 
 func TestValueOfInterpolation(t *testing.T) {
+	t.Parallel()
 	t.Run("boolean true", func(t *testing.T) {
+		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern><rule context="item">
 				<assert test="false()">result is <value-of select="true()"/></assert>
@@ -537,6 +563,7 @@ func TestValueOfInterpolation(t *testing.T) {
 	})
 
 	t.Run("boolean false", func(t *testing.T) {
+		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern><rule context="item">
 				<assert test="false()">result is <value-of select="false()"/></assert>
@@ -553,6 +580,7 @@ func TestValueOfInterpolation(t *testing.T) {
 	})
 
 	t.Run("nodeset names", func(t *testing.T) {
+		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern><rule context="root">
 				<assert test="false()">children: <value-of select="*"/></assert>
@@ -569,6 +597,7 @@ func TestValueOfInterpolation(t *testing.T) {
 	})
 
 	t.Run("empty nodeset", func(t *testing.T) {
+		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern><rule context="root">
 				<assert test="false()">children: [<value-of select="nonexistent"/>]</assert>
@@ -586,7 +615,9 @@ func TestValueOfInterpolation(t *testing.T) {
 }
 
 func TestContextPatterns(t *testing.T) {
+	t.Parallel()
 	t.Run("simple element", func(t *testing.T) {
+		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern><rule context="a">
 				<assert test="false()">found a</assert>
@@ -604,6 +635,7 @@ func TestContextPatterns(t *testing.T) {
 	})
 
 	t.Run("union context", func(t *testing.T) {
+		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern><rule context="a | b">
 				<assert test="false()">found</assert>
@@ -623,6 +655,7 @@ func TestContextPatterns(t *testing.T) {
 	})
 
 	t.Run("absolute path", func(t *testing.T) {
+		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern><rule context="/root/a">
 				<assert test="false()">found</assert>
@@ -640,6 +673,7 @@ func TestContextPatterns(t *testing.T) {
 	})
 
 	t.Run("predicate", func(t *testing.T) {
+		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern><rule context="a[@x]">
 				<assert test="false()">found</assert>
@@ -657,6 +691,7 @@ func TestContextPatterns(t *testing.T) {
 	})
 
 	t.Run("wildcard", func(t *testing.T) {
+		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern><rule context="*">
 				<assert test="false()">found <name/></assert>
@@ -675,7 +710,9 @@ func TestContextPatterns(t *testing.T) {
 }
 
 func TestLetVariableChainedDependency(t *testing.T) {
+	t.Parallel()
 	t.Run("independent lets", func(t *testing.T) {
+		t.Parallel()
 		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 			<pattern>
 				<rule context="item">
@@ -698,6 +735,7 @@ func TestLetVariableChainedDependency(t *testing.T) {
 	})
 
 	t.Run("LIFO evaluation order", func(t *testing.T) {
+		t.Parallel()
 		// libxml2 stores lets in LIFO order. When a is defined first and b
 		// second, the list is [b, a]. b is evaluated first (before a is
 		// registered), so $a in b's expression is NaN. We verify the
@@ -723,6 +761,7 @@ func TestLetVariableChainedDependency(t *testing.T) {
 }
 
 func TestUnionContextIntegration(t *testing.T) {
+	t.Parallel()
 	schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
 		<pattern>
 			<rule context="invoice | credit-note">
@@ -744,6 +783,7 @@ func TestUnionContextIntegration(t *testing.T) {
 }
 
 func TestZeroCompilerFluent(t *testing.T) {
+	t.Parallel()
 	var c schematron.Compiler
 	require.NotPanics(t, func() {
 		c2 := c.SchemaFilename("test.sch")
@@ -752,6 +792,7 @@ func TestZeroCompilerFluent(t *testing.T) {
 }
 
 func TestZeroValidatorFluent(t *testing.T) {
+	t.Parallel()
 	var v schematron.Validator
 	require.NotPanics(t, func() {
 		v2 := v.Filename("test.xml")

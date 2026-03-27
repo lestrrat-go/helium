@@ -65,17 +65,20 @@ func parseTestDoc(t *testing.T) *helium.Document {
 }
 
 func TestCompile(t *testing.T) {
+	t.Parallel()
 	expr, err := xpath3.NewCompiler().Compile(`/library/book`)
 	require.NoError(t, err)
 	require.Equal(t, `/library/book`, expr.String())
 }
 
 func TestCompileError(t *testing.T) {
+	t.Parallel()
 	_, err := xpath3.NewCompiler().Compile(`][`)
 	require.Error(t, err)
 }
 
 func TestMustCompile(t *testing.T) {
+	t.Parallel()
 	require.NotPanics(t, func() {
 		xpath3.NewCompiler().MustCompile(`/library/book`)
 	})
@@ -85,6 +88,7 @@ func TestMustCompile(t *testing.T) {
 }
 
 func TestFind(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	nodes, err := find(t.Context(), doc, `/library/book`)
 	require.NoError(t, err)
@@ -92,12 +96,14 @@ func TestFind(t *testing.T) {
 }
 
 func TestFindError(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	_, err := find(t.Context(), doc, `count(/library/book)`)
 	require.Error(t, err)
 }
 
 func TestEvaluateConvenience(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `count(/library/book)`)
 	require.NoError(t, err)
@@ -107,6 +113,7 @@ func TestEvaluateConvenience(t *testing.T) {
 }
 
 func TestWithDefaultLanguage(t *testing.T) {
+	t.Parallel()
 	compiled, err := xpath3.NewCompiler().Compile(`default-language()`)
 	require.NoError(t, err)
 
@@ -123,6 +130,7 @@ func TestWithDefaultLanguage(t *testing.T) {
 }
 
 func TestInlineFunctionPreservesDefaultLanguage(t *testing.T) {
+	t.Parallel()
 	compiled, err := xpath3.NewCompiler().Compile(`let $f := function() { default-language() } return $f()`)
 	require.NoError(t, err)
 
@@ -138,6 +146,7 @@ func TestInlineFunctionPreservesDefaultLanguage(t *testing.T) {
 }
 
 func TestPrefixedVariableRequiresDeclaredNamespace(t *testing.T) {
+	t.Parallel()
 	compiled, err := xpath3.NewCompiler().Compile(`$p:v`)
 	require.NoError(t, err)
 
@@ -154,6 +163,7 @@ func TestPrefixedVariableRequiresDeclaredNamespace(t *testing.T) {
 }
 
 func TestInlineFunctionDoesNotInheritFocus(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	_, err := evaluate(t.Context(), doc, `let $f := function() { boolean(.) } return $f()`)
@@ -165,6 +175,7 @@ func TestInlineFunctionDoesNotInheritFocus(t *testing.T) {
 }
 
 func TestNilContextRangeExpr(t *testing.T) {
+	t.Parallel()
 	// "1 to 10" doesn't require a context item; evaluation with nil node must succeed.
 	result, err := evaluate(t.Context(), nil, `1 to 10`)
 	require.NoError(t, err)
@@ -172,6 +183,7 @@ func TestNilContextRangeExpr(t *testing.T) {
 }
 
 func TestNilContextWithContextItem(t *testing.T) {
+	t.Parallel()
 	// Evaluating "." with a context item (atomic value) and nil node must succeed.
 	compiled, err := xpath3.NewCompiler().Compile(".")
 	require.NoError(t, err)
@@ -183,6 +195,7 @@ func TestNilContextWithContextItem(t *testing.T) {
 }
 
 func TestNilContextElementKindTest(t *testing.T) {
+	t.Parallel()
 	// "element()" as standalone expression parses as child::element() step.
 	// With a valid context node, it should select child elements.
 	doc := parseTestDoc(t)
@@ -193,6 +206,7 @@ func TestNilContextElementKindTest(t *testing.T) {
 }
 
 func TestResultIsNodeSet(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `/library/book`)
 	require.NoError(t, err)
@@ -204,6 +218,7 @@ func TestResultIsNodeSet(t *testing.T) {
 }
 
 func TestPrefixedFunctionMissingDoesNotFallBackToFnNamespace(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	compiled, err := xpath3.NewCompiler().Compile(`p:count(/library/book)`)
@@ -216,6 +231,7 @@ func TestPrefixedFunctionMissingDoesNotFallBackToFnNamespace(t *testing.T) {
 }
 
 func TestURIQualifiedFunctionMissingDoesNotFallBackToFnNamespace(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	_, err := evaluate(t.Context(), doc, `Q{urn:other}substring("XPath", 2, 3)`)
@@ -224,6 +240,7 @@ func TestURIQualifiedFunctionMissingDoesNotFallBackToFnNamespace(t *testing.T) {
 }
 
 func TestStringCoercionRejectsMultiItemSequence(t *testing.T) {
+	t.Parallel()
 	_, err := evaluate(t.Context(), nil, `string-to-codepoints(("ab", "cd"))`)
 	require.Error(t, err)
 
@@ -233,6 +250,7 @@ func TestStringCoercionRejectsMultiItemSequence(t *testing.T) {
 }
 
 func TestIntegerCoercionRejectsMultiItemSequence(t *testing.T) {
+	t.Parallel()
 	_, err := evaluate(t.Context(), nil, `remove((1, 2, 3), (2, 3))`)
 	require.Error(t, err)
 
@@ -242,6 +260,7 @@ func TestIntegerCoercionRejectsMultiItemSequence(t *testing.T) {
 }
 
 func TestPublicStringArgsRejectMultiItemSequence(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	tests := []struct {
@@ -273,6 +292,7 @@ func TestPublicStringArgsRejectMultiItemSequence(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := evaluate(t.Context(), doc, tc.expr)
 			require.Error(t, err)
 
@@ -284,6 +304,7 @@ func TestPublicStringArgsRejectMultiItemSequence(t *testing.T) {
 }
 
 func TestPublicStringArgsPreserveAtomizationErrors(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	tests := []struct {
@@ -298,6 +319,7 @@ func TestPublicStringArgsPreserveAtomizationErrors(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := evaluate(t.Context(), doc, tc.expr)
 			require.Error(t, err)
 
@@ -309,6 +331,7 @@ func TestPublicStringArgsPreserveAtomizationErrors(t *testing.T) {
 }
 
 func TestResolveQNameRejectsMalformedQName(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	_, err := evaluate(t.Context(), doc, `resolve-QName("pre:thi:ng", /library/book[1])`)
@@ -320,6 +343,7 @@ func TestResolveQNameRejectsMalformedQName(t *testing.T) {
 }
 
 func TestJSONDocUsesURIResolverAndBaseURI(t *testing.T) {
+	t.Parallel()
 	compiled, err := xpath3.NewCompiler().Compile(`json-doc("data.json")?name`)
 	require.NoError(t, err)
 
@@ -337,6 +361,7 @@ func TestJSONDocUsesURIResolverAndBaseURI(t *testing.T) {
 }
 
 func TestDocUsesURIResolverAndBaseURI(t *testing.T) {
+	t.Parallel()
 	compiled, err := xpath3.NewCompiler().Compile(`string(doc("data.xml")/root/name)`)
 	require.NoError(t, err)
 
@@ -354,6 +379,7 @@ func TestDocUsesURIResolverAndBaseURI(t *testing.T) {
 }
 
 func TestNodeComparisonAfterPrimaryDocOrderBuild(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	compiled, err := xpath3.NewCompiler().Compile(`let $warm := (/library | /library/book[1]) return doc("other.xml")/other/item[1] << doc("other.xml")/other/item[2]`)
@@ -373,6 +399,7 @@ func TestNodeComparisonAfterPrimaryDocOrderBuild(t *testing.T) {
 }
 
 func TestCollectionUsesBaseURIResolution(t *testing.T) {
+	t.Parallel()
 	compiled, err := xpath3.NewCompiler().Compile(`collection("data")`)
 	require.NoError(t, err)
 
@@ -392,6 +419,7 @@ func TestCollectionUsesBaseURIResolution(t *testing.T) {
 }
 
 func TestEmptySequenceResultIsNodeSet(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `/library/missing`)
 	require.NoError(t, err)
@@ -403,6 +431,7 @@ func TestEmptySequenceResultIsNodeSet(t *testing.T) {
 }
 
 func TestResultIsBoolean(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `count(/library/book) > 2`)
 	require.NoError(t, err)
@@ -413,6 +442,7 @@ func TestResultIsBoolean(t *testing.T) {
 }
 
 func TestResultIsString(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `string(/library/book[1]/title)`)
 	require.NoError(t, err)
@@ -423,6 +453,7 @@ func TestResultIsString(t *testing.T) {
 }
 
 func TestResultIsNumber(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `sum(/library/book/price)`)
 	require.NoError(t, err)
@@ -433,6 +464,7 @@ func TestResultIsNumber(t *testing.T) {
 }
 
 func TestResultIsAtomic(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `42`)
 	require.NoError(t, err)
@@ -444,6 +476,7 @@ func TestResultIsAtomic(t *testing.T) {
 }
 
 func TestResultSequence(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `(1, 2, 3)`)
 	require.NoError(t, err)
@@ -453,6 +486,7 @@ func TestResultSequence(t *testing.T) {
 // --- Location paths ---
 
 func TestDescendantAxis(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	nodes, err := find(t.Context(), doc, `//title`)
 	require.NoError(t, err)
@@ -460,6 +494,7 @@ func TestDescendantAxis(t *testing.T) {
 }
 
 func TestPredicateFilter(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	nodes, err := find(t.Context(), doc, `/library/book[@lang="en"]`)
 	require.NoError(t, err)
@@ -467,6 +502,7 @@ func TestPredicateFilter(t *testing.T) {
 }
 
 func TestPositionalPredicate(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	nodes, err := find(t.Context(), doc, `/library/book[2]`)
 	require.NoError(t, err)
@@ -474,6 +510,7 @@ func TestPositionalPredicate(t *testing.T) {
 }
 
 func TestAttributeAccess(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `string(/library/book[1]/@id)`)
 	require.NoError(t, err)
@@ -486,6 +523,7 @@ func TestAttributeAccess(t *testing.T) {
 // --- String functions ---
 
 func TestStringFunctions(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	tests := []struct {
 		expr string
@@ -500,6 +538,7 @@ func TestStringFunctions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.expr, func(t *testing.T) {
+			t.Parallel()
 			result, err := evaluate(t.Context(), doc, tt.expr)
 			require.NoError(t, err)
 			s, ok := result.IsString()
@@ -510,6 +549,7 @@ func TestStringFunctions(t *testing.T) {
 }
 
 func TestStringFunctionsRejectMultiItemSequences(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	tests := []struct {
@@ -527,6 +567,7 @@ func TestStringFunctionsRejectMultiItemSequences(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := evaluate(t.Context(), doc, tt.expr)
 			require.Error(t, err)
 
@@ -540,6 +581,7 @@ func TestStringFunctionsRejectMultiItemSequences(t *testing.T) {
 // --- Numeric functions ---
 
 func TestNumericFunctions(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	tests := []struct {
 		expr string
@@ -553,6 +595,7 @@ func TestNumericFunctions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.expr, func(t *testing.T) {
+			t.Parallel()
 			result, err := evaluate(t.Context(), doc, tt.expr)
 			require.NoError(t, err)
 			n, ok := result.IsNumber()
@@ -565,6 +608,7 @@ func TestNumericFunctions(t *testing.T) {
 // --- Boolean functions ---
 
 func TestBooleanFunctions(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	tests := []struct {
 		expr string
@@ -580,6 +624,7 @@ func TestBooleanFunctions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.expr, func(t *testing.T) {
+			t.Parallel()
 			result, err := evaluate(t.Context(), doc, tt.expr)
 			require.NoError(t, err)
 			b, ok := result.IsBoolean()
@@ -592,9 +637,11 @@ func TestBooleanFunctions(t *testing.T) {
 // --- Aggregate functions ---
 
 func TestAggregateFunctions(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	t.Run("min", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `min(/library/book/year)`)
 		require.NoError(t, err)
 		n, ok := result.IsNumber()
@@ -603,6 +650,7 @@ func TestAggregateFunctions(t *testing.T) {
 	})
 
 	t.Run("max", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `max(/library/book/year)`)
 		require.NoError(t, err)
 		n, ok := result.IsNumber()
@@ -614,15 +662,18 @@ func TestAggregateFunctions(t *testing.T) {
 // --- Sequence operations ---
 
 func TestSequenceOperations(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	t.Run("range", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `1 to 5`)
 		require.NoError(t, err)
 		require.Equal(t, 5, result.Sequence().Len())
 	})
 
 	t.Run("reverse", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `reverse((1, 2, 3))`)
 		require.NoError(t, err)
 		seq := result.Sequence()
@@ -633,12 +684,14 @@ func TestSequenceOperations(t *testing.T) {
 	})
 
 	t.Run("distinct-values", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `distinct-values((1, 2, 2, 3, 3))`)
 		require.NoError(t, err)
 		require.Equal(t, 3, result.Sequence().Len())
 	})
 
 	t.Run("subsequence", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `subsequence((1, 2, 3, 4, 5), 2, 3)`)
 		require.NoError(t, err)
 		require.Equal(t, 3, result.Sequence().Len())
@@ -648,6 +701,7 @@ func TestSequenceOperations(t *testing.T) {
 // --- Arithmetic ---
 
 func TestArithmetic(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	tests := []struct {
 		expr string
@@ -663,6 +717,7 @@ func TestArithmetic(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.expr, func(t *testing.T) {
+			t.Parallel()
 			result, err := evaluate(t.Context(), doc, tt.expr)
 			require.NoError(t, err)
 			n, ok := result.IsNumber()
@@ -675,6 +730,7 @@ func TestArithmetic(t *testing.T) {
 // --- Comparisons ---
 
 func TestComparisons(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	tests := []struct {
 		expr string
@@ -693,6 +749,7 @@ func TestComparisons(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.expr, func(t *testing.T) {
+			t.Parallel()
 			result, err := evaluate(t.Context(), doc, tt.expr)
 			require.NoError(t, err)
 			b, ok := result.IsBoolean()
@@ -705,6 +762,7 @@ func TestComparisons(t *testing.T) {
 // --- Logic ---
 
 func TestLogic(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	tests := []struct {
 		expr string
@@ -717,6 +775,7 @@ func TestLogic(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.expr, func(t *testing.T) {
+			t.Parallel()
 			result, err := evaluate(t.Context(), doc, tt.expr)
 			require.NoError(t, err)
 			b, ok := result.IsBoolean()
@@ -729,9 +788,11 @@ func TestLogic(t *testing.T) {
 // --- FLWOR ---
 
 func TestFLWOR(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	t.Run("for", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `for $x in (1, 2, 3) return $x * 2`)
 		require.NoError(t, err)
 		seq := result.Sequence()
@@ -742,6 +803,7 @@ func TestFLWOR(t *testing.T) {
 	})
 
 	t.Run("let", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `let $x := 42 return $x`)
 		require.NoError(t, err)
 		n, ok := result.IsNumber()
@@ -753,9 +815,11 @@ func TestFLWOR(t *testing.T) {
 // --- Quantified expressions ---
 
 func TestQuantified(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	t.Run("some", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `some $x in (1, 2, 3) satisfies $x > 2`)
 		require.NoError(t, err)
 		b, ok := result.IsBoolean()
@@ -764,6 +828,7 @@ func TestQuantified(t *testing.T) {
 	})
 
 	t.Run("every", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `every $x in (1, 2, 3) satisfies $x > 0`)
 		require.NoError(t, err)
 		b, ok := result.IsBoolean()
@@ -775,6 +840,7 @@ func TestQuantified(t *testing.T) {
 // --- If-then-else ---
 
 func TestIfThenElse(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `if (count(/library/book) > 2) then "many" else "few"`)
 	require.NoError(t, err)
@@ -786,6 +852,7 @@ func TestIfThenElse(t *testing.T) {
 // --- Cast / instance of ---
 
 func TestCast(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `"42" cast as xs:integer`)
 	require.NoError(t, err)
@@ -795,6 +862,7 @@ func TestCast(t *testing.T) {
 }
 
 func TestCastable(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `"42" castable as xs:integer`)
 	require.NoError(t, err)
@@ -806,6 +874,7 @@ func TestCastable(t *testing.T) {
 // --- Map constructor + functions ---
 
 func TestMapConstructor(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `map:size(map { "a": 1, "b": 2 })`)
 	require.NoError(t, err)
@@ -817,6 +886,7 @@ func TestMapConstructor(t *testing.T) {
 // --- Array constructor + functions ---
 
 func TestArrayConstructor(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `array:size([1, 2, 3])`)
 	require.NoError(t, err)
@@ -828,9 +898,11 @@ func TestArrayConstructor(t *testing.T) {
 // --- Math functions ---
 
 func TestMathFunctions(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	t.Run("pi", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `math:pi()`)
 		require.NoError(t, err)
 		n, ok := result.IsNumber()
@@ -839,6 +911,7 @@ func TestMathFunctions(t *testing.T) {
 	})
 
 	t.Run("sqrt", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `math:sqrt(16)`)
 		require.NoError(t, err)
 		n, ok := result.IsNumber()
@@ -850,9 +923,11 @@ func TestMathFunctions(t *testing.T) {
 // --- Higher-order functions ---
 
 func TestHOFFunctions(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	t.Run("for-each", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `for-each((1, 2, 3), function($x) { $x * 10 })`)
 		require.NoError(t, err)
 		seq := result.Sequence()
@@ -863,6 +938,7 @@ func TestHOFFunctions(t *testing.T) {
 	})
 
 	t.Run("for-each function coercion", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `let $f := function($ff as (function(item()) as item()), $s as xs:string){$ff($ff($s))} return
 			for-each((upper-case#1, lower-case#1, normalize-space#1, concat(?, '!')), $f(?, ' Say NO! '))`)
 		require.NoError(t, err)
@@ -877,12 +953,14 @@ func TestHOFFunctions(t *testing.T) {
 	})
 
 	t.Run("filter", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `filter((1, 2, 3, 4, 5), function($x) { $x > 3 })`)
 		require.NoError(t, err)
 		require.Equal(t, 2, result.Sequence().Len())
 	})
 
 	t.Run("fold-left", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `fold-left((1, 2, 3), 0, function($a, $b) { $a + $b })`)
 		require.NoError(t, err)
 		n, ok := result.IsNumber()
@@ -894,6 +972,7 @@ func TestHOFFunctions(t *testing.T) {
 // --- Simple map operator ---
 
 func TestSimpleMapOperator(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `(1, 2, 3) ! (. * 2)`)
 	require.NoError(t, err)
@@ -907,6 +986,7 @@ func TestSimpleMapOperator(t *testing.T) {
 // --- Try-catch ---
 
 func TestTryCatch(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `try { error() } catch * { "caught" }`)
 	require.NoError(t, err)
@@ -916,6 +996,7 @@ func TestTryCatch(t *testing.T) {
 }
 
 func TestTryCatchMatchesCustomQNameError(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `
 		try { error(QName("urn:test-errors", "t:oops"), "boom") }
@@ -933,6 +1014,7 @@ func TestTryCatchMatchesCustomQNameError(t *testing.T) {
 }
 
 func TestErrorRejectsNonQNameCode(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	_, err := evaluate(t.Context(), doc, `error("oops")`)
 	require.Error(t, err)
@@ -943,6 +1025,7 @@ func TestErrorRejectsNonQNameCode(t *testing.T) {
 }
 
 func TestApplyRejectsEmptyArrayArgument(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	_, err := evaluate(t.Context(), doc, `apply(function($x) { $x }, ())`)
 	require.Error(t, err)
@@ -955,6 +1038,7 @@ func TestApplyRejectsEmptyArrayArgument(t *testing.T) {
 // --- Context with variables ---
 
 func TestContextVariables(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	compiled, err := xpath3.NewCompiler().Compile(`count(/library/book[price > $threshold])`)
 	require.NoError(t, err)
@@ -970,6 +1054,7 @@ func TestContextVariables(t *testing.T) {
 }
 
 func TestWithVariablesCopiesSequences(t *testing.T) {
+	t.Parallel()
 	seq := xpath3.SingleInteger(1)
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		Variables(xpath3.VariablesFromMap(map[string]xpath3.Sequence{
@@ -992,6 +1077,7 @@ func TestWithVariablesCopiesSequences(t *testing.T) {
 // --- Context with namespaces ---
 
 func TestContextNamespaces(t *testing.T) {
+	t.Parallel()
 	xmlNS := `<root xmlns:ex="http://example.com"><ex:item>hello</ex:item></root>`
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(xmlNS))
 	require.NoError(t, err)
@@ -1029,6 +1115,7 @@ func TestUndeclaredPrefixInPathStep(t *testing.T) {
 // --- Op limit ---
 
 func TestOpLimit(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	compiled, err := xpath3.NewCompiler().Compile(`/library/book/title`)
 	require.NoError(t, err)
@@ -1042,9 +1129,11 @@ func TestOpLimit(t *testing.T) {
 // --- Regex functions ---
 
 func TestRegexFunctions(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	t.Run("matches", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `matches("hello world", "^hello")`)
 		require.NoError(t, err)
 		b, ok := result.IsBoolean()
@@ -1053,6 +1142,7 @@ func TestRegexFunctions(t *testing.T) {
 	})
 
 	t.Run("replace", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `replace("hello world", "world", "XPath")`)
 		require.NoError(t, err)
 		s, ok := result.IsString()
@@ -1061,6 +1151,7 @@ func TestRegexFunctions(t *testing.T) {
 	})
 
 	t.Run("tokenize", func(t *testing.T) {
+		t.Parallel()
 		result, err := evaluate(t.Context(), doc, `tokenize("a-b-c", "-")`)
 		require.NoError(t, err)
 		require.Equal(t, 3, result.Sequence().Len())
@@ -1087,9 +1178,11 @@ func BenchmarkMatchesLiteralRegex(b *testing.B) {
 // --- Union / intersect / except ---
 
 func TestSetOperations(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 
 	t.Run("union", func(t *testing.T) {
+		t.Parallel()
 		nodes, err := find(t.Context(), doc, `/library/book[1] | /library/book[3]`)
 		require.NoError(t, err)
 		require.Len(t, nodes, 2)
@@ -1099,6 +1192,7 @@ func TestSetOperations(t *testing.T) {
 // --- Expression reuse ---
 
 func TestExpressionReuse(t *testing.T) {
+	t.Parallel()
 	expr := xpath3.NewCompiler().MustCompile(`count(/library/book)`)
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 
@@ -1121,6 +1215,7 @@ func TestExpressionReuse(t *testing.T) {
 // --- Inline function ---
 
 func TestInlineFunction(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc,
 		`let $double := function($x) { $x * 2 } return $double(21)`)
@@ -1133,6 +1228,7 @@ func TestInlineFunction(t *testing.T) {
 // --- String concat operator ---
 
 func TestStringConcatOperator(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `"hello" || " " || "world"`)
 	require.NoError(t, err)
@@ -1144,6 +1240,7 @@ func TestStringConcatOperator(t *testing.T) {
 // --- Arrow operator ---
 
 func TestArrowOperator(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `"hello" => upper-case()`)
 	require.NoError(t, err)
@@ -1155,6 +1252,7 @@ func TestArrowOperator(t *testing.T) {
 // --- Lookup ---
 
 func TestMapLookup(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `map { "x": 42 }?x`)
 	require.NoError(t, err)
@@ -1164,6 +1262,7 @@ func TestMapLookup(t *testing.T) {
 }
 
 func TestArrayLookup(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	result, err := evaluate(t.Context(), doc, `[10, 20, 30]?2`)
 	require.NoError(t, err)
@@ -1173,6 +1272,7 @@ func TestArrayLookup(t *testing.T) {
 }
 
 func TestArrayLookupRejectsOversizedIndex(t *testing.T) {
+	t.Parallel()
 	doc := parseTestDoc(t)
 	_, err := evaluate(t.Context(), doc, `[10, 20, 30]?9999999999999999999999999`)
 	require.Error(t, err)

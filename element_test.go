@@ -20,6 +20,7 @@ func mustCreateText(t *testing.T, doc *helium.Document, text []byte) *helium.Tex
 }
 
 func TestElementTree(t *testing.T) {
+	t.Parallel()
 	doc := helium.NewDefaultDocument()
 	e1 := mustCreateElement(t, doc, "root")
 	e2 := mustCreateElement(t, doc, "e2")
@@ -60,6 +61,7 @@ func TestElementTree(t *testing.T) {
 }
 
 func TestElementContent(t *testing.T) {
+	t.Parallel()
 	doc := helium.NewDefaultDocument()
 	e := mustCreateElement(t, doc, "root")
 	for _, chunk := range [][]byte{[]byte("Hello "), []byte("World!")} {
