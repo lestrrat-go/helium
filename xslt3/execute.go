@@ -80,44 +80,44 @@ type execContext struct {
 	errSourceLine                int                        // source line of last-executed instruction (for xsl:catch)
 	errSourceModule              string                     // source module of last-executed instruction (for xsl:catch)
 	msgHandler                   MessageHandler
-	transformConfig                 *transformConfig
-	transformCtx                 context.Context             // parent context from Transform caller (for cancellation/deadlines)
-	currentTime                  time.Time                   // stable fn:current-* value for whole transformation
-	schemaRegistry               *schemaRegistry             // merged schema registry for schema-aware processing
-	typeAnnotations              map[helium.Node]string      // node → xs:... type annotation (schema-aware)
-	preservedIDAnnotations       map[helium.Node]string      // ID/IDREF annotations preserved after input-type-annotations="strip"
-	nilledElements               map[*helium.Element]struct{} // elements with xsi:nil="true" confirmed by XSD validation
+	transformConfig              *transformConfig
+	transformCtx                 context.Context               // parent context from Transform caller (for cancellation/deadlines)
+	currentTime                  time.Time                     // stable fn:current-* value for whole transformation
+	schemaRegistry               *schemaRegistry               // merged schema registry for schema-aware processing
+	typeAnnotations              map[helium.Node]string        // node → xs:... type annotation (schema-aware)
+	preservedIDAnnotations       map[helium.Node]string        // ID/IDREF annotations preserved after input-type-annotations="strip"
+	nilledElements               map[*helium.Element]struct{}  // elements with xsi:nil="true" confirmed by XSD validation
 	validatedDocs                map[*helium.Document]struct{} // documents that have been schema-validated
-	resultDocuments              map[string]*helium.Document // secondary result documents keyed by href
-	resultDocItems               map[string]xpath3.Sequence  // secondary result document items for json/adaptive serialization
-	resultDocOutputDefs          map[string]*OutputDef       // effective output definition per secondary result document
-	usedResultURIs               map[string]struct{}         // URIs already written by xsl:result-document (includes "")
-	insideResultDocPrimary       bool                        // true while executing result-document body targeting primary URI
-	currentResultDocMethod       string                      // effective output method during result-document body execution
-	temporaryOutputDepth         int                         // >0 when inside a temporary output state (XTDE1480)
-	primaryClaimedImplicitly     bool                        // true when implicit content has been written to primary output
-	staticBaseURIOverride        string                      // non-empty when xml:base on an LRE overrides the template's base URI
-	currentOutputURI             string                      // current output URI for current-output-uri() function
-	inPatternMatch               bool                        // true during pattern matching (current-output-uri() returns empty)
-	patternMatchErr              error                       // non-nil if a fatal error occurred during pattern matching
-	inSortKeyEval                bool                        // true during sort key evaluation (current-output-uri() returns empty)
-	atomicTextNodes              map[helium.Node]struct{}    // text nodes created from atomic item serialization
-	nodeMemoIDs                  map[helium.Node]uint64      // stable per-transform node identities for function caching
+	resultDocuments              map[string]*helium.Document   // secondary result documents keyed by href
+	resultDocItems               map[string]xpath3.Sequence    // secondary result document items for json/adaptive serialization
+	resultDocOutputDefs          map[string]*OutputDef         // effective output definition per secondary result document
+	usedResultURIs               map[string]struct{}           // URIs already written by xsl:result-document (includes "")
+	insideResultDocPrimary       bool                          // true while executing result-document body targeting primary URI
+	currentResultDocMethod       string                        // effective output method during result-document body execution
+	temporaryOutputDepth         int                           // >0 when inside a temporary output state (XTDE1480)
+	primaryClaimedImplicitly     bool                          // true when implicit content has been written to primary output
+	staticBaseURIOverride        string                        // non-empty when xml:base on an LRE overrides the template's base URI
+	currentOutputURI             string                        // current output URI for current-output-uri() function
+	inPatternMatch               bool                          // true during pattern matching (current-output-uri() returns empty)
+	patternMatchErr              error                         // non-nil if a fatal error occurred during pattern matching
+	inSortKeyEval                bool                          // true during sort key evaluation (current-output-uri() returns empty)
+	atomicTextNodes              map[helium.Node]struct{}      // text nodes created from atomic item serialization
+	nodeMemoIDs                  map[helium.Node]uint64        // stable per-transform node identities for function caching
 	nextNodeMemoID               uint64
 	paramDocOutputDefs           map[*resultDocumentInst]*OutputDef // per-invocation cache for parameter-document output defs
-	primaryCharacterMaps         []string                     // character map names from xsl:result-document targeting primary output
-	primaryResolvedCharMap       map[rune]string              // resolved character map from parameter-document for primary output
-	primaryOutputOverrides       *OutputDef                   // serialization param overrides from primary xsl:result-document
-	rawResultSequence            xpath3.Sequence              // raw XDM result sequence (set when initial template has as="...")
-	nsFixupAllowed               map[*helium.Element]struct{} // elements whose prefix NS was auto-generated (fixup eligible)
-	overridingTemplate           *template                    // currently executing overriding template (for xsl:original)
-	overridingVarDef             *variable                    // currently evaluating overriding variable (for $xsl:original)
-	originalFunc                 xpath3.Function              // current xsl:original function (set during overriding function call)
-	currentAttrSetOriginal       *attributeSetDef             // original attribute-set for use-attribute-sets="xsl:original"
-	docOrderCache                *xpath3.DocOrderCache        // shared document-order cache for consistent cross-document ordering
-	packageVarCache              map[*variable]xpath3.Sequence // cache for package-scoped variable evaluations
-	globalContextAbsent          bool                         // true when global context item is absent (select evaluated to empty)
-	traceWriter                  io.Writer                    // destination for fn:trace output (nil = os.Stderr)
+	primaryCharacterMaps         []string                           // character map names from xsl:result-document targeting primary output
+	primaryResolvedCharMap       map[rune]string                    // resolved character map from parameter-document for primary output
+	primaryOutputOverrides       *OutputDef                         // serialization param overrides from primary xsl:result-document
+	rawResultSequence            xpath3.Sequence                    // raw XDM result sequence (set when initial template has as="...")
+	nsFixupAllowed               map[*helium.Element]struct{}       // elements whose prefix NS was auto-generated (fixup eligible)
+	overridingTemplate           *template                          // currently executing overriding template (for xsl:original)
+	overridingVarDef             *variable                          // currently evaluating overriding variable (for $xsl:original)
+	originalFunc                 xpath3.Function                    // current xsl:original function (set during overriding function call)
+	currentAttrSetOriginal       *attributeSetDef                   // original attribute-set for use-attribute-sets="xsl:original"
+	docOrderCache                *xpath3.DocOrderCache              // shared document-order cache for consistent cross-document ordering
+	packageVarCache              map[*variable]xpath3.Sequence      // cache for package-scoped variable evaluations
+	globalContextAbsent          bool                               // true when global context item is absent (select evaluated to empty)
+	traceWriter                  io.Writer                          // destination for fn:trace output (nil = os.Stderr)
 
 	// cached base XPath evaluator — rebuilt when invalidation keys change
 	cachedBaseEval                  xpath3.Evaluator
@@ -1440,4 +1440,192 @@ func findPackageVar(pkg *Stylesheet, name string, visited map[*Stylesheet]struct
 		}
 	}
 	return nil
+}
+
+// executeInstruction dispatches execution of a compiled XSLT instruction.
+func (ec *execContext) executeInstruction(ctx context.Context, inst instruction) error {
+	// Track source location for xsl:catch error variables ($err:line-number, $err:module)
+	if s, ok := inst.(interface {
+		getSourceLine() int
+		getSourceModule() string
+	}); ok {
+		if line := s.getSourceLine(); line > 0 {
+			ec.errSourceLine = line
+			ec.errSourceModule = s.getSourceModule()
+		}
+	}
+
+	// Apply per-instruction static base URI override from xml:base
+	if s, ok := inst.(interface{ getStaticBaseURI() string }); ok {
+		if sbu := s.getStaticBaseURI(); sbu != "" {
+			savedBase := ec.staticBaseURIOverride
+			ec.staticBaseURIOverride = sbu
+			defer func() { ec.staticBaseURIOverride = savedBase }()
+		}
+	}
+
+	// Apply per-instruction xpath-default-namespace if set
+	if h, ok := inst.(xpathNSHolder); ok && h.xpathNSIsSet() {
+		savedNS := ec.xpathDefaultNS
+		savedHas := ec.hasXPathDefaultNS
+		ec.xpathDefaultNS = h.getXPathDefaultNS()
+		ec.hasXPathDefaultNS = true
+		defer func() {
+			ec.xpathDefaultNS = savedNS
+			ec.hasXPathDefaultNS = savedHas
+		}()
+	}
+	switch v := inst.(type) {
+	case *applyTemplatesInst:
+		return ec.execApplyTemplates(ctx, v)
+	case *callTemplateInst:
+		return ec.execCallTemplate(ctx, v)
+	case *valueOfInst:
+		return ec.execValueOf(ctx, v)
+	case *textInst:
+		return ec.execText(v)
+	case *literalTextInst:
+		return ec.execLiteralText(v)
+	case *elementInst:
+		return ec.execElement(ctx, v)
+	case *attributeInst:
+		return ec.execAttribute(ctx, v)
+	case *commentInst:
+		return ec.execComment(ctx, v)
+	case *piInst:
+		return ec.execPI(ctx, v)
+	case *ifInst:
+		return ec.execIf(ctx, v)
+	case *chooseInst:
+		return ec.execChoose(ctx, v)
+	case *forEachInst:
+		return ec.execForEach(ctx, v)
+	case *variableInst:
+		return ec.execVariable(ctx, v)
+	case *paramInst:
+		return ec.execParam(ctx, v)
+	case *copyInst:
+		return ec.execCopy(ctx, v)
+	case *copyOfInst:
+		return ec.execCopyOf(ctx, v)
+	case *literalResultElement:
+		return ec.execLiteralResultElement(ctx, v)
+	case *messageInst:
+		return ec.execMessage(ctx, v)
+	case *numberInst:
+		return ec.execNumber(ctx, v)
+	case *sequenceInst:
+		if v.DefaultValidation != "" {
+			saved := ec.defaultValidation
+			ec.defaultValidation = v.DefaultValidation
+			err := ec.executeSequenceConstructor(ctx, v.Body)
+			ec.defaultValidation = saved
+			return err
+		}
+		return ec.executeSequenceConstructor(ctx, v.Body)
+	case *resultDocumentInst:
+		return ec.execResultDocument(ctx, v)
+	case *xslSequenceInst:
+		return ec.execXSLSequence(ctx, v)
+	case *performSortInst:
+		return ec.execPerformSort(ctx, v)
+	case *nextMatchInst:
+		return ec.execNextMatch(ctx, v)
+	case *applyImportsInst:
+		return ec.execApplyImports(ctx, v)
+	case *wherePopulatedInst:
+		return ec.execWherePopulated(ctx, v)
+	case *onEmptyInst:
+		return ec.execOnEmpty(ctx, v)
+	case *onNonEmptyInst:
+		return ec.execOnNonEmpty(ctx, v)
+	case *tryCatchInst:
+		return ec.execTryCatch(ctx, v)
+	case *forEachGroupInst:
+		return ec.execForEachGroup(ctx, v)
+	case *namespaceInst:
+		return ec.execNamespace(ctx, v)
+	case *sourceDocumentInst:
+		return ec.execSourceDocument(ctx, v)
+	case *iterateInst:
+		return ec.execIterate(ctx, v)
+	case *forkInst:
+		return ec.execFork(ctx, v)
+	case *breakInst:
+		return ec.execBreak(ctx, v)
+	case *nextIterationInst:
+		return ec.execNextIteration(ctx, v)
+	case *mergeInst:
+		return ec.execMerge(ctx, v)
+	case *mapInst:
+		return ec.execMap(ctx, v)
+	case *mapEntryInst:
+		return ec.execMapEntry(ctx, v)
+	case *analyzeStringInst:
+		return ec.execAnalyzeString(ctx, v)
+	case *assertInst:
+		return ec.execAssert(ctx, v)
+	case *documentInst:
+		return ec.execDocument(ctx, v)
+	case *evaluateInst:
+		return ec.execEvaluate(ctx, v)
+	case *fallbackInst:
+		return ec.execFallback(ctx, v)
+	case *collationScopeInst:
+		saved := ec.defaultCollation
+		ec.defaultCollation = v.DefaultCollation
+		err := ec.executeInstruction(ctx, v.Inner)
+		ec.defaultCollation = saved
+		return err
+	default:
+		return dynamicError(errCodeXTDE0820, "unsupported instruction type %T", inst)
+	}
+}
+
+// execFallback executes a forwards-compatible unknown instruction.
+// If fallback instructions are present, they are executed; otherwise XTDE1450.
+func (ec *execContext) execFallback(ctx context.Context, inst *fallbackInst) error {
+	if !inst.HasFallback {
+		return dynamicError(errCodeXTDE1450,
+			"no xsl:fallback was found for forwards-compatible instruction %s", inst.Name)
+	}
+	return ec.executeSequenceConstructor(ctx, inst.Body)
+}
+
+// effectiveStripSpace returns the strip-space rules for the current execution
+// scope. When executing code from a used package, the package's own rules
+// are used (package-scoped isolation).
+func (ec *execContext) effectiveStripSpace() []nameTest {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return ec.currentPackage.stripSpace
+	}
+	return ec.stylesheet.stripSpace
+}
+
+// effectivePreserveSpace returns the preserve-space rules for the current
+// execution scope.
+func (ec *execContext) effectivePreserveSpace() []nameTest {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return ec.currentPackage.preserveSpace
+	}
+	return ec.stylesheet.preserveSpace
+}
+
+// effectiveStripNamespaces returns the namespace bindings for strip/preserve
+// resolution in the current execution scope.
+func (ec *execContext) effectiveStripNamespaces() map[string]string {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return ec.currentPackage.namespaces
+	}
+	return ec.stylesheet.namespaces
+}
+
+// docCacheKey returns a package-scoped key for document caching. When
+// executing in a used package with different strip-space rules, the key
+// includes the package pointer so each package gets its own stripped copy.
+func (ec *execContext) docCacheKey(uri string) string {
+	if ec.currentPackage != nil && ec.currentPackage != ec.stylesheet {
+		return fmt.Sprintf("%s@%p", uri, ec.currentPackage)
+	}
+	return uri
 }
