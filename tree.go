@@ -113,7 +113,7 @@ func (t *TreeBuilder) StartDocument(ctxif context.Context) error {
 
 	ctx := t.pctx(ctxif)
 	ctx.doc = NewDocument(ctx.version, ctx.encoding, ctx.standalone)
-	ctx.doc.ids = make(map[string]*Element)
+	ctx.doc.idsSkip = ctx.loadsubset.IsSet(SkipIDs)
 	ctx.doc.url = ctx.baseURI
 	return nil
 }

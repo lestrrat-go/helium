@@ -52,6 +52,7 @@ type Document struct {
 	intSubset *DTD
 	extSubset *DTD
 	ids       map[string]*Element
+	idsSkip   bool
 
 	// Slab allocators for high-frequency node types.
 	// These reduce per-node heap allocation overhead by allocating
@@ -888,6 +889,9 @@ func (d *Document) RegisterID(id string, elem *Element) {
 func (d *Document) GetElementByID(id string) *Element {
 	if d.ids != nil {
 		return d.ids[id]
+	}
+	if d.idsSkip {
+		return nil
 	}
 
 	// Fallback: O(n) tree walk for documents not built via parser.

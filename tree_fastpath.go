@@ -9,7 +9,7 @@ import (
 
 func (pctx *parserCtx) fastStartDocument() {
 	pctx.doc = NewDocument(pctx.version, pctx.encoding, pctx.standalone)
-	pctx.doc.ids = make(map[string]*Element)
+	pctx.doc.idsSkip = pctx.loadsubset.IsSet(SkipIDs)
 	pctx.doc.url = pctx.baseURI
 }
 
