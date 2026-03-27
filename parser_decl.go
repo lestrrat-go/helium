@@ -580,6 +580,9 @@ func (ctx *parserCtx) parseNmtoken() (string, error) {
 		}
 		off += w
 	}
+	if off == 0 {
+		return "", fmt.Errorf("expected Nmtoken, got %q", cur.Peek())
+	}
 	name := cur.PeekString(off)
 	if err := cur.Advance(off); err != nil {
 		return "", err

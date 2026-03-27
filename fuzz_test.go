@@ -11,6 +11,26 @@ import (
 // TestFuzzParseRoundtripRepro contains regression tests for crashes and
 // incorrect behaviour discovered by the FuzzParseRoundtrip fuzzer.
 func TestFuzzParseRoundtripRepro(t *testing.T) {
+	t.Run("empty_local_after_colon_in_attr", func(t *testing.T) {
+		// Attribute name "A:" has an empty local part after the colon.
+		// parseNmtoken returned ("", nil) for zero-length input, so
+		// parseQName accepted an empty local name. The writer then
+		// emitted `=""` which is not valid XML.
+		data := []byte(`<A A:=""/>`)
+		p := helium.NewParser()
+		doc, err := p.Parse(t.Context(), data)
+		if err != nil {
+			return // correctly rejected
+		}
+
+		var buf bytes.Buffer
+		w := helium.NewWriter()
+		err = w.WriteDoc(&buf, doc)
+		require.NoError(t, err)
+
+		_, err = p.Parse(t.Context(), buf.Bytes())
+		require.NoError(t, err)
+	})
 	t.Run("invalid_utf8_in_attr_value", func(t *testing.T) {
 		// Attribute value contains a truncated UTF-8 sequence (\xd4 without
 		// a continuation byte). The parser must reject this as invalid.
