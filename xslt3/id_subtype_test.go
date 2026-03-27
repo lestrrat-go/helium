@@ -8,7 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const idSubtypeStylesheet = `
+func TestAnnotateAttrRegistersIDSubtype(t *testing.T) {
+	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0"
   xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
   xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -25,17 +26,19 @@ const idSubtypeStylesheet = `
   </xsl:import-schema>
 
   <xsl:template match="/">
-    <out><xsl:value-of select="id('alpha')/name()"/></out>
+    <result>
+      <found><xsl:value-of select="boolean(id('alpha'))"/></found>
+      <name><xsl:value-of select="id('alpha')/name()"/></name>
+    </result>
   </xsl:template>
-</xsl:stylesheet>`
-
-func TestIDRecognizesSchemaValidatedIDSubtype(t *testing.T) {
-	ss := compileStylesheetString(t, idSubtypeStylesheet)
+</xsl:stylesheet>`)
 
 	source, err := helium.NewParser().Parse(t.Context(), []byte(`<root id="alpha"/>`))
 	require.NoError(t, err)
 
 	result, err := xslt3.TransformString(t.Context(), source, ss)
 	require.NoError(t, err)
-	require.Contains(t, result, ">root</out>")
+
+	require.Contains(t, result, "<found>true</found>")
+	require.Contains(t, result, "<name>root</name>")
 }
