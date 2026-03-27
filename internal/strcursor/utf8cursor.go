@@ -9,6 +9,7 @@ import (
 )
 
 var charDataByteClass = buildCharDataByteClass()
+var ncNameByteClass = buildNCNameByteClass()
 
 func buildCharDataByteClass() [256]uint8 {
 	var tbl [256]uint8
@@ -27,6 +28,26 @@ func buildCharDataByteClass() [256]uint8 {
 	for i := 0x80; i < 0x100; i++ {
 		tbl[i] = 1
 	}
+	return tbl
+}
+
+func buildNCNameByteClass() [256]uint8 {
+	var tbl [256]uint8
+	for i := 0; i < 0x100; i++ {
+		tbl[i] = 1
+	}
+	for i := 'A'; i <= 'Z'; i++ {
+		tbl[i] = 0
+	}
+	for i := 'a'; i <= 'z'; i++ {
+		tbl[i] = 0
+	}
+	for i := '0'; i <= '9'; i++ {
+		tbl[i] = 0
+	}
+	tbl['_'] = 0
+	tbl['-'] = 0
+	tbl['.'] = 0
 	return tbl
 }
 
@@ -54,6 +75,35 @@ func scanSafeCharDataASCII(data []byte) int {
 		off += 16
 	}
 	for off < len(data) && charDataByteClass[data[off]] == 0 {
+		off++
+	}
+	return off
+}
+
+func scanASCIINameChars(data []byte) int {
+	off := 0
+	for off+16 <= len(data) {
+		if ncNameByteClass[data[off+0]]|
+			ncNameByteClass[data[off+1]]|
+			ncNameByteClass[data[off+2]]|
+			ncNameByteClass[data[off+3]]|
+			ncNameByteClass[data[off+4]]|
+			ncNameByteClass[data[off+5]]|
+			ncNameByteClass[data[off+6]]|
+			ncNameByteClass[data[off+7]]|
+			ncNameByteClass[data[off+8]]|
+			ncNameByteClass[data[off+9]]|
+			ncNameByteClass[data[off+10]]|
+			ncNameByteClass[data[off+11]]|
+			ncNameByteClass[data[off+12]]|
+			ncNameByteClass[data[off+13]]|
+			ncNameByteClass[data[off+14]]|
+			ncNameByteClass[data[off+15]] != 0 {
+			break
+		}
+		off += 16
+	}
+	for off < len(data) && ncNameByteClass[data[off]] == 0 {
 		off++
 	}
 	return off
@@ -375,13 +425,17 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 				break
 			}
 		}
+		runLen := scanASCIINameChars(c.buf[c.bufpos+off : c.buflen])
+		if runLen > 0 {
+			off += runLen
+			nRunes += runLen
+			if c.bufpos+off >= c.buflen {
+				continue
+			}
+		}
 		b = c.buf[c.bufpos+off]
 		if b < 0x80 {
-			if !isASCIINameChar(b) {
-				break
-			}
-			off++
-			nRunes++
+			break
 		} else {
 			_ = c.fillBuffer(off + utf8.UTFMax)
 			r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
