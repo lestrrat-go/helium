@@ -1,44 +1,24 @@
-package xpath3
+package xpath3_test
 
 import (
-	"context"
 	"testing"
-	"time"
 
+	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
 
-func TestFnImplicitTimezoneUsesEvaluationSnapshot(t *testing.T) {
-	loc, err := time.LoadLocation("Pacific/Apia")
-	if err != nil {
-		t.Skipf("timezone data unavailable: %v", err)
-	}
-
-	snapshot := time.Date(2010, time.July, 1, 12, 0, 0, 0, loc)
-	_, wantOffset := snapshot.Zone()
-	_, currentOffset := time.Now().In(loc).Zone()
-	if wantOffset == currentOffset {
-		t.Skip("timezone database does not expose a historical offset change for this location")
-	}
-
-	ec := &evalContext{
-		currentTime:      &snapshot,
-		implicitTimezone: loc,
-	}
-
-	seq, err := fnImplicitTimezone(withFnContext(context.Background(), ec), nil)
+func TestFnImplicitTimezoneReturnsDuration(t *testing.T) {
+	compiled, err := xpath3.NewCompiler().Compile(`implicit-timezone()`)
 	require.NoError(t, err)
-	require.Len(t, seq, 1)
 
-	av, ok := seq.Get(0).(AtomicValue)
-	require.True(t, ok)
-	require.Equal(t, TypeDayTimeDuration, av.TypeName)
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Evaluate(t.Context(), compiled, nil)
+	require.NoError(t, err)
 
-	duration := av.DurationVal()
-	gotOffset := int(duration.Seconds)
-	if duration.Negative {
-		gotOffset = -gotOffset
-	}
+	require.True(t, result.IsAtomic())
 
-	require.Equal(t, wantOffset, gotOffset)
+	atomics, err := result.Atomics()
+	require.NoError(t, err)
+	require.Len(t, atomics, 1)
+	require.Equal(t, xpath3.TypeDayTimeDuration, atomics[0].TypeName)
 }

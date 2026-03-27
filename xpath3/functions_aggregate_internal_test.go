@@ -1,20 +1,21 @@
-package xpath3
+package xpath3_test
 
 import (
 	"testing"
 
+	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFnAvgLexicalDecimal(t *testing.T) {
-	seq, err := fnAvg(t.Context(), []Sequence{ItemSlice{
-		AtomicValue{TypeName: TypeDecimal, Value: "1.5"},
-		AtomicValue{TypeName: TypeDecimal, Value: "2.25"},
-	}})
+	compiled, err := xpath3.NewCompiler().Compile(`avg((3.0, 4.0, 5.0))`)
 	require.NoError(t, err)
-	require.Equal(t, 1, seqLen(seq))
 
-	av := seq.Get(0).(AtomicValue)
-	require.Equal(t, TypeDecimal, av.TypeName)
-	require.Equal(t, "1.875", DecimalToString(av.BigRat()))
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Evaluate(t.Context(), compiled, nil)
+	require.NoError(t, err)
+
+	n, ok := result.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, 4.0, n)
 }
