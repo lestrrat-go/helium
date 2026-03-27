@@ -6,7 +6,7 @@
 
 ** WARNING: THIS SOFTWARE SHOULD BE CONSIDERED ALPHA. ALL API STILL SUBJECT TO CHANGE **
 
-Helium is an XML toolkit for Go covering XML parsing, SAX2-style streaming,
+Helium is a fast XML toolkit for Go covering XML parsing, SAX2-style streaming,
 XPath 3.1, XSLT 3.0, XInclude, XSD, Relax NG, and Schematron.
 
 The root `helium` package handles parsing, DOM building, and serialization, but
@@ -115,20 +115,22 @@ build against two lower-level baselines: an `encoding/xml` token loop
 That is a narrower benchmark than every real `encoding/xml` workload. Many Go
 programs use `encoding/xml` to decode directly into structs, and this section is
 not meant to dismiss that use case or the package. The point here is simply
-that Helium's DOM parse remains competitive with the stdlib token benchmark and
-now reaches near-parity with libxml2 on the largest corpus in this benchmark.
+that Helium's DOM parse is already quite fast: it is materially faster than the
+stdlib token benchmark on all three corpora, and on the largest corpus in this
+benchmark it is now clearly ahead of libxml2.
 
 Benchmarks parse real-world XML files of varying sizes (AMD Ryzen 9 7900X3D,
-Go 1.24, `go test -bench -benchmem -count=5`, median shown):
+Go 1.26.1, `go test -run '^$' -bench 'Benchmark(HeliumParse|StdlibXMLDecode|Libxml2Parse)$' -benchmem -count=3 -tags libxml2bench ./bench`,
+median shown):
 
 | File | Helium | `encoding/xml` | libxml2 (cgo) |
 |------|--------|----------------|---------------|
-| 109 KB | 104 MB/s | 83 MB/s | 166 MB/s |
-| 196 KB | 99 MB/s | 70 MB/s | 126 MB/s |
-| 3 MB | 435 MB/s | 133 MB/s | 442 MB/s |
+| 109 KB | 110 MB/s | 77 MB/s | 160 MB/s |
+| 196 KB | 108 MB/s | 66 MB/s | 119 MB/s |
+| 3 MB | 440 MB/s | 120 MB/s | 379 MB/s |
 
 Helium also allocates far fewer objects than `encoding/xml` in this benchmark.
-On the 3 MB corpus, the current Helium DOM parse lands around `95 allocs/op`
+On the 3 MB corpus, the current Helium DOM parse lands around `94 allocs/op`
 versus about `155k allocs/op` for `encoding/xml`.
 
 To run the benchmarks yourself:
