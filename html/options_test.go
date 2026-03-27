@@ -33,7 +33,7 @@ func TestZeroValueWriter(t *testing.T) {
 
 	var w html.Writer
 	var buf bytes.Buffer
-	require.NoError(t, w.WriteDoc(&buf, doc))
+	require.NoError(t, w.WriteTo(&buf, doc))
 	require.Contains(t, buf.String(), "<p>hi</p>")
 }
 
@@ -55,12 +55,12 @@ func TestOptionsNoDefaultDTD(t *testing.T) {
 
 	// Without NoDefaultDTD, serialization adds a default DOCTYPE
 	var withDTD bytes.Buffer
-	require.NoError(t, html.NewWriter().WriteDoc(&withDTD, doc))
+	require.NoError(t, html.NewWriter().WriteTo(&withDTD, doc))
 	require.True(t, strings.Contains(withDTD.String(), "<!DOCTYPE"), "default should include DOCTYPE")
 
 	// With NoDefaultDTD, no DOCTYPE in output
 	var noDTD bytes.Buffer
-	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteDoc(&noDTD, doc))
+	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteTo(&noDTD, doc))
 	require.False(t, strings.Contains(noDTD.String(), "<!DOCTYPE"), "WithNoDefaultDTD should suppress DOCTYPE")
 }
 
@@ -88,10 +88,10 @@ func TestWriteNodeDocumentPreservesWriterOptions(t *testing.T) {
 		EscapeControlChars(true)
 
 	var want bytes.Buffer
-	require.NoError(t, writer.WriteDoc(&want, doc))
+	require.NoError(t, writer.WriteTo(&want, doc))
 
 	var got bytes.Buffer
-	require.NoError(t, writer.WriteNode(&got, doc))
+	require.NoError(t, writer.WriteTo(&got, doc))
 
 	require.Equal(t, want.String(), got.String())
 	require.Equal(t, "<HTML><Body><A HREF=\"caf\u00e9\">&#x80;</A></Body></HTML>", got.String())
@@ -103,7 +103,7 @@ func TestWriteLegacyCompatSuppressed(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, html.NewWriter().WriteDoc(&buf, doc))
+	require.NoError(t, html.NewWriter().WriteTo(&buf, doc))
 	output := buf.String()
 	require.True(t, strings.HasPrefix(output, "<!DOCTYPE html>\n"), "about:legacy-compat SYSTEM ID should be suppressed, got: %s", output)
 }
@@ -115,7 +115,7 @@ func TestWriteNameAttrURIOnAnchor(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteDoc(&buf, doc))
+	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteTo(&buf, doc))
 	output := buf.String()
 	require.Contains(t, output, `name="foo%20bar"`, "name on <a> should be URI-escaped")
 }
@@ -127,7 +127,7 @@ func TestWriteNameAttrNonURIOnMeta(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteDoc(&buf, doc))
+	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteTo(&buf, doc))
 	output := buf.String()
 	require.Contains(t, output, `name="foo bar"`, "name on <meta> should not be URI-escaped")
 }
@@ -139,7 +139,7 @@ func TestDuplicateAttrKeepsFirst(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteDoc(&buf, doc))
+	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteTo(&buf, doc))
 	output := buf.String()
 	require.Contains(t, output, `class="first"`, "first occurrence should be kept")
 	require.NotContains(t, output, `class="second"`, "duplicate should be dropped")
@@ -152,7 +152,7 @@ func TestDuplicateAttrCaseInsensitive(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteDoc(&buf, doc))
+	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteTo(&buf, doc))
 	output := buf.String()
 	require.Contains(t, output, `class="upper"`, "first (case-insensitive) should be kept")
 	require.NotContains(t, output, `class="lower"`, "duplicate should be dropped")
@@ -164,7 +164,7 @@ func TestOptionsNoBlanks(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteDoc(&buf, doc))
+	require.NoError(t, html.NewWriter().DefaultDTD(false).WriteTo(&buf, doc))
 	output := buf.String()
 
 	// The output should not contain whitespace between tags

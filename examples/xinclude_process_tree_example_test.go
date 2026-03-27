@@ -31,7 +31,7 @@ func Example_xinclude_process_tree() {
 		return
 	}
 
-	out, err := doc.XMLString()
+	out, err := helium.WriteString(doc)
 	if err != nil {
 		fmt.Printf("serialize failed: %s\n", err)
 		return

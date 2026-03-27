@@ -3,6 +3,7 @@ package examples_test
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 )
@@ -22,19 +23,18 @@ func Example_helium_writer_options() {
 		return
 	}
 
-	s, err := doc.XMLString(
-		helium.NewWriter().
-			XMLDeclaration(false).
-			IncludeDTD(false).
-			SelfCloseEmptyElements(false).
-			Format(true).
-			IndentString("\t"),
-	)
-	if err != nil {
+	var buf strings.Builder
+	w := helium.NewWriter().
+		XMLDeclaration(false).
+		IncludeDTD(false).
+		SelfCloseEmptyElements(false).
+		Format(true).
+		IndentString("\t")
+	if err := w.WriteTo(&buf, doc); err != nil {
 		fmt.Printf("failed to serialize: %s\n", err)
 		return
 	}
-	fmt.Print(s)
+	fmt.Print(buf.String())
 	// Output:
 	// <root>
 	// 	<item>hello</item>

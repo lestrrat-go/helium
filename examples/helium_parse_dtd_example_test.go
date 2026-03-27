@@ -38,7 +38,7 @@ func Example_helium_parse_dtd() {
 	// The serialized output shows lang="en" on <child>, even though
 	// it was not present in the original source — the parser applied
 	// the DTD default.
-	s, err := doc.XMLString()
+	s, err := helium.WriteString(doc)
 	if err != nil {
 		fmt.Printf("failed to serialize: %s\n", err)
 		return

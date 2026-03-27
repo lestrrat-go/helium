@@ -75,7 +75,7 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 				_, _ = io.WriteString(w, "<!DOCTYPE html>")
 				doctypeEmitted = true
 			}
-			if err := hw.WriteNode(w, child); err != nil {
+			if err := hw.WriteTo(w, child); err != nil {
 				return err
 			}
 		}
@@ -89,7 +89,7 @@ func serializeHTML(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 	if escapeCtrl {
 		hw = hw.EscapeControlChars(true)
 	}
-	return hw.WriteDoc(w, doc)
+	return hw.WriteTo(w, doc)
 }
 
 // serializeXHTML serializes using the XHTML output method.

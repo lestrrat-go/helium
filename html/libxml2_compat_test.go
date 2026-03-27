@@ -481,7 +481,7 @@ func TestHTMLSerialization(t *testing.T) {
 			require.NoError(t, err, "ParseFile should succeed (file = %s)", name)
 
 			var buf bytes.Buffer
-			err = html.NewWriter().WriteDoc(&buf, doc)
+			err = html.NewWriter().WriteTo(&buf, doc)
 			require.NoError(t, err, "WriteDoc should succeed (file = %s)", name)
 
 			expected, err := os.ReadFile(expectedPath)

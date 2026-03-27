@@ -54,7 +54,7 @@ func TestElementTree(t *testing.T) {
 		require.Equal(t, e1, e.Parent(), "%s.Parent is e1", e.Name())
 	}
 
-	str, err := e1.XMLString()
+	str, err := helium.WriteString(e1)
 	require.NoError(t, err, "e1.XMLString succeeds")
 	require.Equal(t, `<root><e2 id="e2">e2</e2><e3 id="e3"/><e4 id="e4"/></root>`, str, "e1.XMLString produces expected result")
 }

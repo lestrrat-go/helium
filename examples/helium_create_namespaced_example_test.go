@@ -45,7 +45,7 @@ func Example_helium_create_namespaced() {
 
 	// The xmlns declaration only appears on the root element;
 	// child elements are implicitly in the same namespace.
-	s, err := doc.XMLString()
+	s, err := helium.WriteString(doc)
 	if err != nil {
 		fmt.Printf("failed to serialize: %s\n", err)
 		return

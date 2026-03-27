@@ -29,7 +29,7 @@ func Example_helium_parse_with_options() {
 
 	// The output will be compact (no whitespace between elements)
 	// because StripBlanks stripped the whitespace-only text nodes.
-	s, err := doc.XMLString()
+	s, err := helium.WriteString(doc)
 	if err != nil {
 		fmt.Printf("failed to serialize: %s\n", err)
 		return

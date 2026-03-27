@@ -100,7 +100,7 @@ func TestLibxml2Compat(t *testing.T) {
 
 			var buf bytes.Buffer
 			d := helium.NewWriter()
-			require.NoError(t, d.WriteDoc(&buf, doc), "dumping %s", name)
+			require.NoError(t, d.WriteTo(&buf, doc), "dumping %s", name)
 
 			actual := buf.String()
 

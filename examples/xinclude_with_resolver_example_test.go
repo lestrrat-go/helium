@@ -63,7 +63,7 @@ func Example_xinclude_with_resolver() {
 	fmt.Printf("substitutions: %d\n", n)
 
 	// The xi:include element has been replaced with the <greeting> element.
-	s, err := doc.XMLString()
+	s, err := helium.WriteString(doc)
 	if err != nil {
 		fmt.Printf("failed to serialize: %s\n", err)
 		return

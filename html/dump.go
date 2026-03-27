@@ -31,11 +31,23 @@ var htmlURIAttrs = map[string]bool{
 // Mirrors libxml2's htmlDocContentDumpOutput behavior.
 const defaultHTMLDTD = `<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN" "http://www.w3.org/TR/REC-html40/loose.dtd">` + "\n"
 
-// WriteDoc serializes an HTML document to the writer
-// (libxml2: htmlDocContentDumpOutput).
-func (w Writer) WriteDoc(out io.Writer, doc *helium.Document) error {
-	cfg := w.dumpConfig
+// Write serializes an HTML node to the given writer using default settings.
+func Write(out io.Writer, node helium.Node) error {
+	return NewWriter().WriteTo(out, node)
+}
 
+// WriteString serializes an HTML node to a string using default settings.
+func WriteString(node helium.Node) (string, error) {
+	var buf strings.Builder
+	if err := Write(&buf, node); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// WriteTo serializes an HTML node to the given writer.
+func (w Writer) WriteTo(out io.Writer, node helium.Node) error {
+	cfg := w.dumpConfig
 	d := htmlDumper{
 		format:                !cfg.noFormat,
 		preserveCase:          cfg.preserveCase,
@@ -43,7 +55,7 @@ func (w Writer) WriteDoc(out io.Writer, doc *helium.Document) error {
 		noEscapeURIAttributes: cfg.noEscapeURIAttributes,
 		escapeControlChars:    cfg.escapeControlChars,
 	}
-	return d.dumpDocument(out, doc)
+	return d.dumpNode(out, node)
 }
 
 func (d *htmlDumper) dumpDocument(out io.Writer, doc *helium.Document) error {
@@ -103,19 +115,6 @@ type htmlDumper struct {
 	nsAvailable map[string]string
 }
 
-// WriteNode serializes an HTML node to the writer
-// (libxml2: htmlNodeDumpOutput).
-func (w Writer) WriteNode(out io.Writer, n helium.Node) error {
-	cfg := w.dumpConfig
-	d := htmlDumper{
-		format:                !cfg.noFormat,
-		preserveCase:          cfg.preserveCase,
-		noDefaultDTD:          cfg.noDefaultDTD,
-		noEscapeURIAttributes: cfg.noEscapeURIAttributes,
-		escapeControlChars:    cfg.escapeControlChars,
-	}
-	return d.dumpNode(out, n)
-}
 
 func (d *htmlDumper) dumpNode(out io.Writer, n helium.Node) error {
 	switch n.Type() {

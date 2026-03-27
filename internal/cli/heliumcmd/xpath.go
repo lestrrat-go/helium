@@ -274,7 +274,7 @@ func (c *xpathCommand) printXPathNode(n helium.Node) int {
 		}
 	default:
 		d := helium.NewWriter()
-		if err := d.WriteNode(c.stdout, n); err != nil {
+		if err := d.WriteTo(c.stdout, n); err != nil {
 			_, _ = fmt.Fprintf(c.stderr, "%s: %s\n", c.prog, err)
 			return ExitErr
 		}

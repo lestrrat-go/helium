@@ -1205,7 +1205,7 @@ func innerXML(elem *helium.Element) string {
 	var b bytes.Buffer
 	w := helium.NewWriter().XMLDeclaration(false)
 	for child := range helium.Children(elem) {
-		_ = w.WriteNode(&b, child)
+		_ = w.WriteTo(&b, child)
 	}
 	return b.String()
 }

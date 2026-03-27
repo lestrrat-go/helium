@@ -632,7 +632,7 @@ func TestLibxml2XIncludeGolden(t *testing.T) {
 				// Success case: compare output against expected result
 				require.NoError(t, procErr, "processing %s", name)
 
-				got, err := doc.XMLString()
+				got, err := helium.WriteString(doc)
 				require.NoError(t, err)
 
 				expected, err := os.ReadFile(resultFile) //nolint:gosec // reading test expected result from testdata directory
@@ -680,7 +680,7 @@ func TestLibxml2XIncludeWithoutReader(t *testing.T) {
 				Process(t.Context(), doc)
 			require.NoError(t, err, "processing %s", name)
 
-			got, err := doc.XMLString()
+			got, err := helium.WriteString(doc)
 			require.NoError(t, err)
 
 			resultFile := filepath.Join(resultDir, name)

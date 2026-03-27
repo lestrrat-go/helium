@@ -10,7 +10,7 @@ import (
 )
 
 func Example_html_write_doc() {
-	// html.NewWriter().WriteDoc serializes an entire HTML document using HTML
+	// html.NewWriter().WriteTo serializes an entire HTML document using HTML
 	// output rules. That means you get document-level behavior such as an HTML
 	// doctype and HTML-friendly serialization, rather than raw XML formatting.
 	doc, err := html.NewParser().Parse(context.Background(), []byte(`<html><body><div>Hello</div></body></html>`))
@@ -20,7 +20,7 @@ func Example_html_write_doc() {
 	}
 
 	var buf bytes.Buffer
-	if err := html.NewWriter().WriteDoc(&buf, doc); err != nil {
+	if err := html.NewWriter().WriteTo(&buf, doc); err != nil {
 		fmt.Printf("failed to write: %s\n", err)
 		return
 	}

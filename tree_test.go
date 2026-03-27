@@ -449,7 +449,7 @@ func TestCopyNode(t *testing.T) {
 		require.NotNil(t, root)
 		require.Equal(t, "http://docbook.org/ns/docbook", root.URI())
 
-		xml, err := dst.XMLString()
+		xml, err := helium.WriteString(dst)
 		require.NoError(t, err)
 		require.Contains(t, xml, `xmlns="http://docbook.org/ns/docbook"`)
 	})
@@ -632,13 +632,13 @@ func TestCopyDoc(t *testing.T) {
 		src, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err)
 
-		srcXML, err := src.XMLString()
+		srcXML, err := helium.WriteString(src)
 		require.NoError(t, err)
 
 		dst, err := helium.CopyDoc(src)
 		require.NoError(t, err)
 
-		dstXML, err := dst.XMLString()
+		dstXML, err := helium.WriteString(dst)
 		require.NoError(t, err)
 
 		require.Equal(t, srcXML, dstXML)

@@ -15,19 +15,19 @@ func Example_helium_serialize() {
 		return
 	}
 
-	// XMLString returns the entire XML document as a string.
+	// WriteString returns the entire XML document as a string.
 	// This is convenient for small documents or when you need a string value.
-	s, err := doc.XMLString()
+	s, err := helium.WriteString(doc)
 	if err != nil {
 		fmt.Printf("failed to serialize: %s\n", err)
 		return
 	}
 	fmt.Print(s)
 
-	// XML writes the document to any io.Writer, which is more efficient
+	// Write writes the document to any io.Writer, which is more efficient
 	// for large documents or when streaming to a file/network connection.
 	var buf bytes.Buffer
-	if err := doc.XML(&buf); err != nil {
+	if err := helium.Write(&buf, doc); err != nil {
 		fmt.Printf("failed to serialize: %s\n", err)
 		return
 	}

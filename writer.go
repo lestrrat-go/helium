@@ -9,6 +9,22 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
+// Write serializes a node (document or element) to the given writer using
+// default settings.
+func Write(out io.Writer, node Node) error {
+	return NewWriter().WriteTo(out, node)
+}
+
+// WriteString serializes a node (document or element) to a string using
+// default settings.
+func WriteString(node Node) (string, error) {
+	var buf strings.Builder
+	if err := Write(&buf, node); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
 const xmlTextNoEnc = "textnoenc"
 
 // Writer serializes an XML document tree (libxml2: xmlSaveCtxt).
@@ -28,8 +44,8 @@ type Writer struct {
 }
 
 // writeSession holds the mutable state for a single serialization pass.
-// It is created inside WriteDoc / WriteNode and threaded through the
-// internal helper methods so that Writer itself stays immutable.
+// It is created inside WriteTo and threaded through the internal helper
+// methods so that Writer itself stays immutable.
 type writeSession struct {
 	Writer
 	escapeNonASCII bool
@@ -119,12 +135,21 @@ func hasOnlyTextChildren(n Node) bool {
 	return true
 }
 
-// WriteDoc serializes a complete Document to the given writer
-// (libxml2: xmlDocDumpFormatMemory / xmlSaveDoc).
-func (d Writer) WriteDoc(out io.Writer, doc *Document) error {
+// WriteTo serializes a node (document or element) to the given writer.
+// When the node is a Document, document-level setup (encoding, XHTML
+// detection, DTD filtering) is applied automatically.
+func (d Writer) WriteTo(out io.Writer, node Node) error {
+	if doc, ok := node.(*Document); ok {
+		return d.writeDoc(out, doc)
+	}
+	s := writeSession{Writer: d, escapeNonASCII: !d.noEscapeNonASCII}
+	return s.writeNode(out, node)
+}
+
+func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 	if pdebug.Enabled {
-		g := pdebug.IPrintf("START Writer.WriteDoc")
-		defer g.IRelease("END Writer.WriteDoc")
+		g := pdebug.IPrintf("START Writer.writeDoc")
+		defer g.IRelease("END Writer.writeDoc")
 	}
 
 	s := writeSession{Writer: d}
@@ -204,14 +229,7 @@ func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
 	return nil
 }
 
-// WriteNode serializes a single node and its subtree to the given writer
-// (libxml2: xmlNodeDump).
-func (d Writer) WriteNode(out io.Writer, n Node) error {
-	s := writeSession{Writer: d, escapeNonASCII: !d.noEscapeNonASCII}
-	return s.writeNode(out, n)
-}
-
-// writeNode is the internal implementation used by both WriteDoc and WriteNode.
+// writeNode is the internal implementation for node serialization.
 func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START Writer.WriteNode '%s'", n.Name())

@@ -109,11 +109,9 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, doc *helium
 		switch v := item.(type) {
 		case xpath3.NodeItem:
 			var buf bytes.Buffer
-			switch n := v.Node.(type) {
-			case *helium.Element:
-				_ = n.XML(&buf, helium.NewWriter().XMLDeclaration(false))
-			case *helium.Document:
-				_ = n.XML(&buf, helium.NewWriter().XMLDeclaration(false))
+			switch v.Node.(type) {
+			case *helium.Element, *helium.Document:
+				_ = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, v.Node)
 			default:
 				if v.Node.Type() == helium.CommentNode {
 					buf.WriteString("<!--")
@@ -326,11 +324,10 @@ func serializeNodeWithMethod(node helium.Node, method string) string {
 	case methodText:
 		return nodeStringValue(node)
 	default: // "xml" or empty
-		if elem, ok := node.(*helium.Element); ok {
-			_ = elem.XML(&buf, helium.NewWriter().XMLDeclaration(false))
-		} else if doc, ok := node.(*helium.Document); ok {
-			_ = doc.XML(&buf, helium.NewWriter().XMLDeclaration(false))
-		} else {
+		switch node.(type) {
+		case *helium.Element, *helium.Document:
+			_ = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, node)
+		default:
 			buf.WriteString(string(node.Content()))
 		}
 		return buf.String()
