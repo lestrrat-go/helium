@@ -128,6 +128,24 @@ Run specific test subsets via env vars:
 - `-tags debug` — used in CI (`go test -v -race -tags debug ./...`)
 - No `//go:build` tags in test files
 
+## Fuzzing
+
+- Public-package fuzz coverage lives in package-local `fuzz_test.go` files.
+- Direct fuzz targets exist for `.`, `c14n`, `catalog`, `html`, `relaxng`, `schematron`, `sink`, `stream`, `xinclude`, `xpath1`, `xpath3`, `xpointer`, `xsd`, `xslt3`.
+- `shim` intentionally excluded from repo fuzz matrix.
+- `enum` + `sax` intentionally excluded from direct fuzzing → constants/interface-only surface.
+- Bound fuzz input sizes early. Return on oversize inputs.
+- Prefer in-memory stubs over filesystem/network access.
+- Parse/compile/validate/transform fuzz targets MUST tolerate invalid intermediate inputs by returning early instead of asserting.
+
+## Fuzz CI
+
+- `ci.yml` runs smoke fuzzing on push/PR.
+- Smoke fuzz duration → `5s` per discovered `Fuzz...` target.
+- `fuzz.yml` runs deep fuzzing on weekly schedule + manual dispatch.
+- Deep fuzz duration default → `5m` per discovered `Fuzz...` target.
+- Workflows discover fuzz targets via `go test ./<pkg>/ -list '^Fuzz' -run '^$'`.
+
 ## Common Test Patterns
 
 ### 1. Golden File Comparison (DOM/SAX)
