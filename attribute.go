@@ -12,42 +12,6 @@ type Attribute struct {
 	ns          *Namespace
 }
 
-func newAttributeDecl() *AttributeDecl {
-	attr := &AttributeDecl{}
-	attr.etype = AttributeDeclNode
-	return attr
-}
-
-func (n *AttributeDecl) AddChild(cur Node) error {
-	return addChild(n, cur)
-}
-
-func (n *AttributeDecl) AppendText(b []byte) error {
-	return appendText(n, b)
-}
-
-func (n *AttributeDecl) AddSibling(cur Node) error {
-	return addSibling(n, cur)
-}
-
-func (n *AttributeDecl) Replace(nodes ...Node) error {
-	return replaceNode(n, nodes...)
-}
-
-func (n *AttributeDecl) SetTreeDoc(doc *Document) {
-	setTreeDoc(n, doc)
-}
-
-// AType returns the attribute type (e.g. enum.AttrID, enum.AttrCDATA).
-func (n *AttributeDecl) AType() enum.AttributeType {
-	return n.atype
-}
-
-// Elem returns the element name this attribute declaration belongs to.
-func (n *AttributeDecl) Elem() string {
-	return n.elem
-}
-
 func newAttribute(name string, ns *Namespace) *Attribute {
 	attr := &Attribute{}
 	attr.etype = AttributeNode

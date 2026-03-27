@@ -1,6 +1,12 @@
 package helium
 
-import "github.com/lestrrat-go/helium/internal/lexicon"
+import (
+	"net/url"
+	"path/filepath"
+	"strings"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
+)
 
 // NodeGetBase returns the effective base URI for a node by walking ancestors
 // and resolving xml:base attributes. Returns empty string if no base URI found.
@@ -53,4 +59,43 @@ func NodeGetBase(doc *Document, n Node) string {
 // xsl:copy to preserve the original element's base URI on the copy.
 func SetNodeBaseURI(n Node, uri string) {
 	n.baseDocNode().entityBaseURI = uri
+}
+
+// BuildURI resolves a relative system ID against a base URI.
+// For local file paths (no scheme or file: scheme), it uses filepath.Join.
+// For other schemes, it uses url.ResolveReference.
+func BuildURI(systemID, base string) string {
+	u, err := url.Parse(systemID)
+	if err != nil {
+		return ""
+	}
+	if u.IsAbs() {
+		return systemID
+	}
+
+	baseURL, err := url.Parse(base)
+	if err != nil {
+		return ""
+	}
+
+	if baseURL.Scheme != "" && baseURL.Scheme != "file" {
+		return baseURL.ResolveReference(u).String()
+	}
+
+	if filepath.IsAbs(systemID) {
+		return systemID
+	}
+	basePath := baseURL.Path
+	if basePath == "" {
+		basePath = base
+	}
+	dir := filepath.Dir(basePath)
+	if strings.HasSuffix(basePath, "/") {
+		dir = strings.TrimRight(basePath, "/")
+	}
+	result := filepath.Join(dir, systemID)
+	if strings.HasSuffix(systemID, "/") && !strings.HasSuffix(result, "/") {
+		result += "/"
+	}
+	return result
 }

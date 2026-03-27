@@ -57,11 +57,15 @@ testdata/libxml2-compat/
 | File | Package | Purpose |
 |------|---------|---------|
 | `libxml2_compat_test.go` | root, html, catalog | Golden file comparison suite |
+| `parser_test.go` | root | Core parser coverage: XML decl, names/QNames, depth limits, general parse regressions |
+| `parser_sax_test.go` | root | SAX/dispatch/stop-parser regression coverage |
+| `parser_entity_test.go` | root | Entity expansion, XXE, amplification, and boundary regressions |
+| `parser_push_test.go` | root | Push parser coverage |
+| `writer_test.go` | root | XML writer/escaping coverage and related benchmarks |
 | `c14n_test.go` | c14n | C14N golden file tests |
 | `xsd_test.go` | xsd | Schema validation golden tests |
 | `relaxng_test.go` | relaxng | RELAX NG golden tests |
 | `schematron_test.go` | schematron | Schematron golden tests |
-| `parser_dispatch_test.go` | root | Focused parser regression coverage for chunked-reader whitespace classification |
 | `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization and ASCII QName scanner regression coverage |
 
 ## `examples/`

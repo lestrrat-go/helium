@@ -14,32 +14,6 @@ type Element struct {
 	node
 }
 
-func newElementDecl() *ElementDecl {
-	e := ElementDecl{}
-	e.etype = ElementDeclNode
-	return &e
-}
-
-func (n *ElementDecl) AddChild(cur Node) error {
-	return addChild(n, cur)
-}
-
-func (n *ElementDecl) AppendText(b []byte) error {
-	return appendText(n, b)
-}
-
-func (n *ElementDecl) AddSibling(cur Node) error {
-	return addSibling(n, cur)
-}
-
-func (n *ElementDecl) Replace(nodes ...Node) error {
-	return replaceNode(n, nodes...)
-}
-
-func (n *ElementDecl) SetTreeDoc(doc *Document) {
-	setTreeDoc(n, doc)
-}
-
 func newElement(name string) *Element {
 	e := Element{}
 	e.name = name

@@ -7,7 +7,18 @@
 - **`p := helium.NewParser(); pp := p.NewPushParser(ctx)`** — background push parser (parses incrementally as data arrives)
 - **`ParseInNodeContext(ctx, node, []byte)`** — parse fragment in element context
 
-Key files: `parser.go` (API), `parserctx.go` (state machine), `tree.go` (SAX→DOM)
+Key files:
+- `parser.go` — public parser builder/API
+- `parserctx.go` — parser context/state, cursor stack, SAX dispatch, error handling
+- `parser_document.go` — top-level document/prolog/epilogue flow
+- `parser_element.go` — element/start-tag/end-tag/attribute/chardata parsing
+- `parser_whitespace.go` — blank skipping and ignorable-whitespace classification
+- `parser_xml_decl.go` + `parser_decl.go` — XML declaration and name/QName helpers
+- `parser_dtd_subset.go` + `parser_dtd_element.go` + `parser_dtd_attr.go` — DTD subset/declaration parsing
+- `parser_entity_decl.go` + `parser_entity_ref.go` — entity declaration and reference expansion
+- `parser_encoding.go` — encoding detection/switching and low-level cursor helpers
+- `parser_content.go` — comments, PI, CDATA, misc
+- `tree_builder.go` — SAX→DOM
 
 ## Parse Pipeline
 
@@ -92,6 +103,15 @@ Special cases:
 - **ASCII-compatible**: parse XML decl at byte level, then switch
 
 `switchEncoding()`: pop ByteCursor, create encoder, push RuneCursor.
+
+## File Responsibilities
+
+- `parserctx.go` owns the parser context, input/cursor stack, SAX callback dispatch, location/error reporting, and other shared parser state.
+- `parser_document.go` owns the top-level parse pipeline (`parseDocument`, `parseContent`, recovery re-sync).
+- `parser_element.go` owns recursive element parsing, start/end tags, attributes, and character data.
+- `parser_xml_decl.go` owns byte/rune XML declaration parsing; `parser_decl.go` owns the lower-level declaration token/value helpers and name/QName parsing.
+- `parser_dtd_*` files split DTD handling by declaration kind instead of keeping all markup parsing in one file.
+- `parser_entity_decl.go` handles entity declaration bodies and balanced-chunk parsing; `parser_entity_ref.go` handles references, char refs, replay, and amplification checks.
 
 ## Entity Expansion
 
