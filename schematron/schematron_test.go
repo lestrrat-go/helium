@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -114,28 +115,26 @@ func TestGoldenFiles(t *testing.T) {
 	cases := discoverTests(t)
 	require.NotEmpty(t, cases, "no test cases discovered")
 
-	passed := 0
-	skipped := 0
-	failed := 0
+	var passed, skipped, failed atomic.Int64
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			if filterEnv != "" && !strings.Contains(tc.name, filterEnv) {
 				t.Skip("filtered out by HELIUM_SCHEMATRON_TEST_FILES")
-				skipped++
+				skipped.Add(1)
 				return
 			}
 
 			if reason, ok := skipExact[tc.name]; ok {
 				t.Skipf("skipping: %s", reason)
-				skipped++
+				skipped.Add(1)
 				return
 			}
 			baseName := extractBaseName(tc.name)
 			if reason := shouldSkip(baseName); reason != "" {
 				t.Skipf("skipping: %s", reason)
-				skipped++
+				skipped.Add(1)
 				return
 			}
 
@@ -173,15 +172,15 @@ func TestGoldenFiles(t *testing.T) {
 			}
 
 			if got == string(expected) {
-				passed++
+				passed.Add(1)
 			} else {
-				failed++
+				failed.Add(1)
 				require.Equal(t, string(expected), got)
 			}
 		})
 	}
 
-	t.Logf("Results: %d passed, %d failed, %d skipped (out of %d total)", passed, failed, skipped, len(cases))
+	t.Logf("Results: %d passed, %d failed, %d skipped (out of %d total)", passed.Load(), failed.Load(), skipped.Load(), len(cases))
 }
 
 // extractBaseName extracts the base name from a result file name.
