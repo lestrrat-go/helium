@@ -154,7 +154,7 @@ RELAX NG schema compilation and validation.
 - Group backtracking for greedy pattern over-consumption
 - `ValidateError.Output` — libxml2-compatible error string; `ValidateError.Errors` — structured `[]ValidationError`
 - `ValidationError{Filename, Line, Element, Message}` — per-error structured type
-- Files: `relaxng.go` (API), `doc.go`, `grammar.go` (data model), `parse.go` (compiler), `validate.go` (engine), `errors.go`
+- Files: `relaxng.go` (API + config), `doc.go`, `grammar.go` (data model), `parse.go` (compiler), `parse_check.go` (compile checks), `validate.go` (engine), `errors.go` (error types + formatting)
 - Imports: helium
 - Status: 159/159 golden tests passing
 

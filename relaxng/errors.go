@@ -7,6 +7,21 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
+// ValidationError represents a single validation error with structured fields.
+type ValidationError struct {
+	Filename string // source filename
+	Line     int    // line number in the source document
+	Element  string // element name
+	Message  string // human-readable error description
+}
+
+func (e *ValidationError) Error() string {
+	if e.Filename == "" && e.Line == 0 && e.Element == "" {
+		return bareValidityError(e.Message)
+	}
+	return validityError(e.Filename, e.Line, e.Element, e.Message)
+}
+
 // validityError formats a validation error in libxml2 format:
 //
 //	{file}:{line}: element {name}: Relax-NG validity error : {msg}\n
