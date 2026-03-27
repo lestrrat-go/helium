@@ -18,7 +18,7 @@ func TestRunXSDValidateVersion(t *testing.T) {
 
 	code := heliumcmd.Execute(ctx, []string{"xsd", "validate", "--version"})
 	require.Equal(t, heliumcmd.ExitOK, code)
-	require.Contains(t, stderr.String(), "helium version")
+	require.Contains(t, stderr.String(), "using helium")
 }
 
 func TestXSDValidateMissingSchemaArg(t *testing.T) {

@@ -17,7 +17,7 @@ func TestRunXPathVersion(t *testing.T) {
 
 	code := heliumcmd.Execute(ctx, []string{"xpath", "--version"})
 	require.Equal(t, heliumcmd.ExitOK, code)
-	require.Contains(t, stderr.String(), "helium version")
+	require.Contains(t, stderr.String(), "using helium")
 }
 
 func TestXPathMissingExpr(t *testing.T) {
