@@ -879,7 +879,7 @@ func computeAndSetBaseURI(elem *helium.Element, includedURI, targetBase string) 
 		return
 	}
 
-	xmlBaseNS := helium.NewNamespace(helium.XMLPrefix, helium.XMLNamespace)
+	xmlBaseNS := helium.NewNamespace(lexicon.PrefixXML, lexicon.NamespaceXML)
 	_ = elem.SetLiteralAttributeNS("base", base, xmlBaseNS)
 }
 
@@ -897,7 +897,7 @@ func computeBaseForIncludedNode(elem *helium.Element, srcEffectiveBase, targetEf
 		}
 	}
 
-	xmlBaseNS := helium.NewNamespace(helium.XMLPrefix, helium.XMLNamespace)
+	xmlBaseNS := helium.NewNamespace(lexicon.PrefixXML, lexicon.NamespaceXML)
 	if existingBase != "" {
 		// Element has xml:base in the source. If absolute, keep it.
 		if u, err := url.Parse(existingBase); err == nil && u.IsAbs() {

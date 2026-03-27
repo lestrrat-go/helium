@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 type attrNamespaceCacheEntry struct {
@@ -44,10 +45,10 @@ func (pctx *parserCtx) fastLookupAttributeNamespace(doc *Document, prefix string
 
 	uri := pctx.nsTab.Lookup(prefix)
 	if uri == "" {
-		if prefix != XMLPrefix {
+		if prefix != lexicon.PrefixXML {
 			return nil, cache, nil
 		}
-		uri = XMLNamespace
+		uri = lexicon.NamespaceXML
 	}
 
 	ns, err := doc.CreateNamespace(prefix, uri)
@@ -187,7 +188,7 @@ func (pctx *parserCtx) fastStartElement(localname, prefix, uri string, attrs []a
 				}
 			}
 		}
-		if registerIDs && attr.prefix == XMLPrefix && attr.localname == "id" {
+		if registerIDs && attr.prefix == lexicon.PrefixXML && attr.localname == "id" {
 			doc.RegisterID(attr.value, e)
 		}
 	}

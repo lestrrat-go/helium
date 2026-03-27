@@ -1,5 +1,7 @@
 package helium
 
+import "github.com/lestrrat-go/helium/internal/lexicon"
+
 // NodeGetBase returns the effective base URI for a node by walking ancestors
 // and resolving xml:base attributes. Returns empty string if no base URI found.
 func NodeGetBase(doc *Document, n Node) string {
@@ -12,7 +14,7 @@ func NodeGetBase(doc *Document, n Node) string {
 	for cur := n; cur != nil; cur = cur.Parent() {
 		if cur.Type() == ElementNode {
 			elem := cur.(*Element)
-			if val, ok := elem.GetAttributeNS("base", XMLNamespace); ok && val != "" {
+			if val, ok := elem.GetAttributeNS("base", lexicon.NamespaceXML); ok && val != "" {
 				bases = append(bases, val)
 			}
 		}

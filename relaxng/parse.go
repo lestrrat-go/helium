@@ -1119,8 +1119,8 @@ func resolveQName(schemaElem *helium.Element, qname string) (localName, ns strin
 			}
 		}
 		// The xml prefix is always bound to the XML namespace by definition.
-		if prefix == helium.XMLPrefix {
-			return localName, helium.XMLNamespace
+		if prefix == lexicon.PrefixXML {
+			return localName, lexicon.NamespaceXML
 		}
 		// Prefix not found — return as-is
 		return localName, ""

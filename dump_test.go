@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/stretchr/testify/require"
 )
 
@@ -100,7 +101,7 @@ func TestDumpNsSkipsXmlPrefix(t *testing.T) {
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	// Add explicit xml: namespace declaration to the element
-	require.NoError(t, root.DeclareNamespace("xml", helium.XMLNamespace))
+	require.NoError(t, root.DeclareNamespace("xml", lexicon.NamespaceXML))
 
 	str, err := doc.XMLString()
 	require.NoError(t, err)

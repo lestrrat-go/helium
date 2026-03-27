@@ -413,7 +413,7 @@ func stylesheetBaseURI(n helium.Node, fallback string) string {
 				break
 			}
 		}
-		if xmlBase, ok := elem.GetAttributeNS("base", helium.XMLNamespace); ok && xmlBase != "" {
+		if xmlBase, ok := elem.GetAttributeNS("base", lexicon.NamespaceXML); ok && xmlBase != "" {
 			bases = append(bases, xmlBase)
 		}
 	}
