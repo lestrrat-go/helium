@@ -241,6 +241,16 @@ func (c *UTF8Cursor) Advance(n int) error {
 			return err
 		}
 	}
+	if n == 1 {
+		if c.buf[c.bufpos] == '\n' {
+			c.lineno++
+			c.column = 1
+		} else {
+			c.column++
+		}
+		c.bufpos++
+		return nil
+	}
 	start := c.bufpos
 	end := start + n
 	segment := c.buf[start:end]
@@ -266,6 +276,16 @@ func (c *UTF8Cursor) AdvanceFast(n int) error {
 		if err := c.fillBuffer(n); err != nil {
 			return err
 		}
+	}
+	if n == 1 {
+		if c.buf[c.bufpos] == '\n' {
+			c.lineno++
+			c.column = 1
+		} else {
+			c.column++
+		}
+		c.bufpos++
+		return nil
 	}
 	start := c.bufpos
 	end := start + n
