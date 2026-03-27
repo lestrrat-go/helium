@@ -10,6 +10,18 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
+type compileConfig struct {
+	filename     string
+	baseDir      string
+	errorHandler helium.ErrorHandler
+}
+
+type validateConfig struct {
+	filename     string
+	quiet        bool
+	errorHandler helium.ErrorHandler
+}
+
 // ErrValidationFailed is returned by [Validator.Validate] when the document
 // does not conform to the schema. Individual validation errors are delivered
 // to the configured [helium.ErrorHandler].
