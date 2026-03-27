@@ -8,6 +8,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestFuzzParseRoundtripRepro contains regression tests for crashes and
+// incorrect behaviour discovered by the FuzzParseRoundtrip fuzzer.
+func TestFuzzParseRoundtripRepro(t *testing.T) {
+	t.Run("invalid_utf8_in_attr_value", func(t *testing.T) {
+		// Attribute value contains a truncated UTF-8 sequence (\xd4 without
+		// a continuation byte). The parser must reject this as invalid.
+		data := []byte("<root A!\"×\xd4\"></root>")
+		p := helium.NewParser()
+		doc, err := p.Parse(t.Context(), data)
+		if err != nil {
+			return // correctly rejected
+		}
+
+		var buf bytes.Buffer
+		w := helium.NewWriter()
+		err = w.WriteDoc(&buf, doc)
+		require.NoError(t, err)
+
+		_, err = p.Parse(t.Context(), buf.Bytes())
+		require.NoError(t, err)
+	})
+}
+
 func FuzzParse(f *testing.F) {
 	f.Add([]byte(`<?xml version="1.0"?><root/>`))
 	f.Add([]byte(`<root xmlns="http://example.com" xmlns:ns="http://ns.example.com"><ns:child attr="value">text</ns:child></root>`))
