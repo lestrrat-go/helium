@@ -67,6 +67,10 @@ type Document struct {
 	textChunks []*[slabSize]Text
 	nsChunks   []*[slabSize]Namespace
 	attrChunks []*[slabSize]Attribute
+
+	// Slab allocator for parsed text content bytes.
+	textContentSlab   []byte
+	textContentChunks []*[textContentSlabSize]byte
 }
 
 // NewDefaultDocument creates a minimal user-built document with version "1.0",
@@ -116,14 +120,19 @@ func (d *Document) Free() {
 	for _, c := range d.attrChunks {
 		attrChunkPool.Put(c)
 	}
+	for _, c := range d.textContentChunks {
+		textContentChunkPool.Put(c)
+	}
 	d.elemChunks = nil
 	d.textChunks = nil
 	d.nsChunks = nil
 	d.attrChunks = nil
+	d.textContentChunks = nil
 	d.elemSlab = nil
 	d.textSlab = nil
 	d.nsSlab = nil
 	d.attrSlab = nil
+	d.textContentSlab = nil
 }
 
 func (d Document) XMLString(writers ...Writer) (string, error) {
@@ -431,12 +440,14 @@ func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD
 }
 
 const slabSize = 256
+const textContentSlabSize = 64 * 1024
 
 var (
-	elemChunkPool = pool.New(func() *[slabSize]Element { return new([slabSize]Element) }, nil)
-	textChunkPool = pool.New(func() *[slabSize]Text { return new([slabSize]Text) }, nil)
-	nsChunkPool   = pool.New(func() *[slabSize]Namespace { return new([slabSize]Namespace) }, nil)
-	attrChunkPool = pool.New(func() *[slabSize]Attribute { return new([slabSize]Attribute) }, nil)
+	elemChunkPool        = pool.New(func() *[slabSize]Element { return new([slabSize]Element) }, nil)
+	textChunkPool        = pool.New(func() *[slabSize]Text { return new([slabSize]Text) }, nil)
+	nsChunkPool          = pool.New(func() *[slabSize]Namespace { return new([slabSize]Namespace) }, nil)
+	attrChunkPool        = pool.New(func() *[slabSize]Attribute { return new([slabSize]Attribute) }, nil)
+	textContentChunkPool = pool.New(func() *[textContentSlabSize]byte { return new([textContentSlabSize]byte) }, nil)
 )
 
 func (d *Document) CreateElement(name string) *Element {
@@ -472,11 +483,57 @@ func (d *Document) CreateText(value []byte) *Text {
 		e = &Text{}
 	}
 	e.etype = TextNode
-	e.content = make([]byte, len(value))
-	copy(e.content, value)
+	if d != nil {
+		e.content = d.allocTextContent(len(value))
+		copy(e.content, value)
+	} else {
+		e.content = make([]byte, len(value))
+		copy(e.content, value)
+	}
 	e.name = textNodeName
 	e.doc = d
 	return e
+}
+
+func (d *Document) allocTextContent(size int) []byte {
+	if size <= 0 {
+		return nil
+	}
+	if size > textContentSlabSize {
+		return make([]byte, size)
+	}
+	if len(d.textContentSlab) < size {
+		chunk := textContentChunkPool.Get()
+		d.textContentChunks = append(d.textContentChunks, chunk)
+		d.textContentSlab = chunk[:]
+	}
+	buf := d.textContentSlab[:size:size]
+	d.textContentSlab = d.textContentSlab[size:]
+	return buf
+}
+
+func (d *Document) growOwnedTextContent(cur []byte, extra int) []byte {
+	if extra <= 0 {
+		return cur
+	}
+
+	need := len(cur) + extra
+	if cap(cur) >= need {
+		return cur
+	}
+
+	newCap := cap(cur) * 2
+	if newCap < need {
+		newCap = need
+	}
+	if newCap < 64 {
+		newCap = 64
+	}
+
+	next := d.allocTextContent(newCap)
+	next = next[:len(cur)]
+	copy(next, cur)
+	return next
 }
 
 func (d *Document) allocText() *Text {

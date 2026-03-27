@@ -32,6 +32,9 @@ func (n *Text) AppendText(b []byte) error {
 			g.IRelease("END Text.AppendText '%s'", n.content)
 		}()
 	}
+	if doc := n.doc; doc != nil {
+		n.content = doc.growOwnedTextContent(n.content, len(b))
+	}
 	n.content = append(n.content, b...)
 	return nil
 }

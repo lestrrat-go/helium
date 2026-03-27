@@ -8,6 +8,107 @@ import (
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
+var charDataByteClass = buildCharDataByteClass()
+var ncNameByteClass = buildNCNameByteClass()
+
+func buildCharDataByteClass() [256]uint8 {
+	var tbl [256]uint8
+	for i := 0; i < 0x80; i++ {
+		tbl[i] = 0
+	}
+	for i := 0; i < 0x20; i++ {
+		tbl[i] = 1
+	}
+	tbl['\t'] = 0
+	tbl['\n'] = 0
+	tbl['<'] = 1
+	tbl['&'] = 1
+	tbl['\r'] = 1
+	tbl[']'] = 1
+	for i := 0x80; i < 0x100; i++ {
+		tbl[i] = 1
+	}
+	return tbl
+}
+
+func buildNCNameByteClass() [256]uint8 {
+	var tbl [256]uint8
+	for i := 0; i < 0x100; i++ {
+		tbl[i] = 1
+	}
+	for i := 'A'; i <= 'Z'; i++ {
+		tbl[i] = 0
+	}
+	for i := 'a'; i <= 'z'; i++ {
+		tbl[i] = 0
+	}
+	for i := '0'; i <= '9'; i++ {
+		tbl[i] = 0
+	}
+	tbl['_'] = 0
+	tbl['-'] = 0
+	tbl['.'] = 0
+	return tbl
+}
+
+func scanSafeCharDataASCII(data []byte) int {
+	off := 0
+	for off+16 <= len(data) {
+		if charDataByteClass[data[off+0]]|
+			charDataByteClass[data[off+1]]|
+			charDataByteClass[data[off+2]]|
+			charDataByteClass[data[off+3]]|
+			charDataByteClass[data[off+4]]|
+			charDataByteClass[data[off+5]]|
+			charDataByteClass[data[off+6]]|
+			charDataByteClass[data[off+7]]|
+			charDataByteClass[data[off+8]]|
+			charDataByteClass[data[off+9]]|
+			charDataByteClass[data[off+10]]|
+			charDataByteClass[data[off+11]]|
+			charDataByteClass[data[off+12]]|
+			charDataByteClass[data[off+13]]|
+			charDataByteClass[data[off+14]]|
+			charDataByteClass[data[off+15]] != 0 {
+			break
+		}
+		off += 16
+	}
+	for off < len(data) && charDataByteClass[data[off]] == 0 {
+		off++
+	}
+	return off
+}
+
+func scanASCIINameChars(data []byte) int {
+	off := 0
+	for off+16 <= len(data) {
+		if ncNameByteClass[data[off+0]]|
+			ncNameByteClass[data[off+1]]|
+			ncNameByteClass[data[off+2]]|
+			ncNameByteClass[data[off+3]]|
+			ncNameByteClass[data[off+4]]|
+			ncNameByteClass[data[off+5]]|
+			ncNameByteClass[data[off+6]]|
+			ncNameByteClass[data[off+7]]|
+			ncNameByteClass[data[off+8]]|
+			ncNameByteClass[data[off+9]]|
+			ncNameByteClass[data[off+10]]|
+			ncNameByteClass[data[off+11]]|
+			ncNameByteClass[data[off+12]]|
+			ncNameByteClass[data[off+13]]|
+			ncNameByteClass[data[off+14]]|
+			ncNameByteClass[data[off+15]] != 0 {
+			break
+		}
+		off += 16
+	}
+	for off < len(data) && ncNameByteClass[data[off]] == 0 {
+		off++
+	}
+	return off
+}
+
 // UTF8Cursor is a high-performance cursor for UTF-8 encoded input.
 // It works directly on a byte buffer, decoding UTF-8 on the fly.
 // ASCII bytes (< 0x80) are handled without utf8.DecodeRune overhead.
@@ -68,7 +169,6 @@ func (c *UTF8Cursor) fillBuffer(minBytes int) error {
 	}
 	return nil
 }
-
 
 func (c *UTF8Cursor) Done() bool {
 	if c.bufpos < c.buflen {
@@ -141,16 +241,28 @@ func (c *UTF8Cursor) Advance(n int) error {
 			return err
 		}
 	}
-	end := c.bufpos + n
+	if n == 1 {
+		if c.buf[c.bufpos] == '\n' {
+			c.lineno++
+			c.column = 1
+		} else {
+			c.column++
+		}
+		c.bufpos++
+		return nil
+	}
+	start := c.bufpos
+	end := start + n
+	segment := c.buf[start:end]
 	lastNewline := -1
-	for i := c.bufpos; i < end; i++ {
-		if c.buf[i] == '\n' {
+	for i, b := range segment {
+		if b == '\n' {
 			c.lineno++
 			lastNewline = i
 		}
 	}
 	if lastNewline >= 0 {
-		c.column = end - lastNewline
+		c.column = len(segment) - lastNewline
 	} else {
 		c.column += n
 	}
@@ -158,9 +270,34 @@ func (c *UTF8Cursor) Advance(n int) error {
 	return nil
 }
 
-// AdvanceFast is an alias for Advance (kept for interface compatibility).
+// AdvanceFast skips per-byte column bookkeeping in the common no-newline case.
 func (c *UTF8Cursor) AdvanceFast(n int) error {
-	return c.Advance(n)
+	if c.buflen-c.bufpos < n {
+		if err := c.fillBuffer(n); err != nil {
+			return err
+		}
+	}
+	if n == 1 {
+		if c.buf[c.bufpos] == '\n' {
+			c.lineno++
+			c.column = 1
+		} else {
+			c.column++
+		}
+		c.bufpos++
+		return nil
+	}
+	start := c.bufpos
+	end := start + n
+	segment := c.buf[start:end]
+	if idx := bytes.LastIndexByte(segment, '\n'); idx >= 0 {
+		c.lineno += bytes.Count(segment, []byte{'\n'})
+		c.column = len(segment) - idx
+	} else {
+		c.column += n
+	}
+	c.bufpos = end
+	return nil
 }
 
 func (c *UTF8Cursor) HasPrefix(b []byte) bool {
@@ -181,7 +318,12 @@ func (c *UTF8Cursor) HasPrefixString(s string) bool {
 			return false
 		}
 	}
-	return string(c.buf[c.bufpos:c.bufpos+n]) == s
+	for i := 0; i < n; i++ {
+		if c.buf[c.bufpos+i] != s[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *UTF8Cursor) Consume(b []byte) bool {
@@ -193,10 +335,23 @@ func (c *UTF8Cursor) Consume(b []byte) bool {
 }
 
 func (c *UTF8Cursor) ConsumeString(s string) bool {
-	if !c.HasPrefixString(s) {
+	n := len(s)
+	if c.buflen-c.bufpos < n {
+		if c.fillBuffer(n) != nil {
+			return false
+		}
+		if c.buflen-c.bufpos < n {
+			return false
+		}
+	}
+	for i := 0; i < n; i++ {
+		if c.buf[c.bufpos+i] != s[i] {
+			return false
+		}
+	}
+	if err := c.Advance(n); err != nil {
 		return false
 	}
-	_ = c.Advance(len(s))
 	return true
 }
 
@@ -290,13 +445,17 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 				break
 			}
 		}
+		runLen := scanASCIINameChars(c.buf[c.bufpos+off : c.buflen])
+		if runLen > 0 {
+			off += runLen
+			nRunes += runLen
+			if c.bufpos+off >= c.buflen {
+				continue
+			}
+		}
 		b = c.buf[c.bufpos+off]
 		if b < 0x80 {
-			if !isASCIINameChar(b) {
-				break
-			}
-			off++
-			nRunes++
+			break
 		} else {
 			_ = c.fillBuffer(off + utf8.UTFMax)
 			r, w := utf8.DecodeRune(c.buf[c.bufpos+off : c.buflen])
@@ -310,13 +469,6 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 
 	return c.buf[c.bufpos : c.bufpos+off], nRunes
 }
-
-// isASCIINameChar checks if b is a valid ASCII XML NameChar (without ':').
-func isASCIINameChar(b byte) bool {
-	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') ||
-		(b >= '0' && b <= '9') || b == '_' || b == '-' || b == '.'
-}
-
 
 // ScanSimpleAttrValue scans a simple attribute value (no entities, no special
 // whitespace) between the current position and the given quote character.
@@ -379,28 +531,10 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 	dlen := len(data)
 
 	for off < dlen {
-		// Fast inner loop: scan ahead for a run of plain ASCII bytes that
-		// can be bulk-copied (no <, &, \r, ]], control chars).
-		runStart := off
-		for off < dlen {
-			b := data[off]
-			if b >= 0x80 {
-				break
-			}
-			if b == '<' || b == '&' {
-				break
-			}
-			if b < 0x20 && b != 0x9 && b != 0xa {
-				// \r or other control chars need special handling
-				break
-			}
-			if b == ']' && off+2 < dlen && data[off+1] == ']' && data[off+2] == '>' {
-				break
-			}
-			off++
-		}
-		if off > runStart {
-			dst = append(dst, data[runStart:off]...)
+		runLen := scanSafeCharDataASCII(data[off:dlen])
+		if runLen > 0 {
+			dst = append(dst, data[off:off+runLen]...)
+			off += runLen
 		}
 		if off >= dlen {
 			break
@@ -412,7 +546,12 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 				break
 			}
 			if b == ']' {
-				break
+				if off+2 < dlen && data[off+1] == ']' && data[off+2] == '>' {
+					break
+				}
+				dst = append(dst, ']')
+				off++
+				continue
 			}
 			if b == '\r' {
 				dst = append(dst, '\n')
