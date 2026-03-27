@@ -457,6 +457,11 @@ func (p Parser) ErrorHandler(h ErrorHandler) Parser {
 
 // Parse parses XML from a byte slice and returns the resulting Document
 // (libxml2: xmlParseDoc / xmlParseMemory).
+//
+// When [ValidateDTD] is enabled and the document fails validation, the
+// returned error is [ErrDTDValidationFailed] and the document is still
+// returned. Individual validation errors are delivered to the [ErrorHandler]
+// configured via [Parser.ErrorHandler].
 func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -506,8 +511,9 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
 
 // ParseReader parses XML from an io.Reader and returns the resulting Document
 // (libxml2: xmlReadIO).
-// This is identical to Parse but reads from a stream instead of a byte slice.
+// This is identical to [Parse] but reads from a stream instead of a byte slice.
 // EBCDIC encoding detection is not supported when parsing from a reader.
+// See [Parse] for DTD validation error handling.
 func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error) {
 	if ctx == nil {
 		ctx = context.Background()
