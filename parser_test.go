@@ -1007,26 +1007,6 @@ func TestEntityBoundary(t *testing.T) {
 	})
 }
 
-func TestFuzzRepros(t *testing.T) {
-	t.Run("FuzzParse malformed internal subset", func(t *testing.T) {
-		t.Parallel()
-
-		const input = `<!DOCTYPEA [YSTEM "0` + "\x93" + `"`
-
-		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
-		require.Error(t, err)
-	})
-
-	t.Run("FuzzParseRoundtrip malformed attribute separator", func(t *testing.T) {
-		t.Parallel()
-
-		const input = `<root><child A!"` + "\x84" + `è"></child></root>`
-
-		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
-		require.Error(t, err)
-	})
-}
-
 func TestCurrentInputID(t *testing.T) {
 	t.Parallel()
 

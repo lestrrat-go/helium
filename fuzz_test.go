@@ -8,10 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestFuzzParseRoundtripRepro contains regression tests for crashes and
-// incorrect behaviour discovered by the FuzzParseRoundtrip fuzzer.
-func TestFuzzParseRoundtripRepro(t *testing.T) {
-	t.Run("empty_local_after_colon_in_attr", func(t *testing.T) {
+// TestFuzzRepros contains regression tests for crashes and incorrect behaviour
+// discovered by fuzz tests.
+func TestFuzzRepros(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty local after colon in attr", func(t *testing.T) {
+		t.Parallel()
 		// Attribute name "A:" has an empty local part after the colon.
 		// parseNmtoken returned ("", nil) for zero-length input, so
 		// parseQName accepted an empty local name. The writer then
@@ -31,7 +34,9 @@ func TestFuzzParseRoundtripRepro(t *testing.T) {
 		_, err = p.Parse(t.Context(), buf.Bytes())
 		require.NoError(t, err)
 	})
-	t.Run("invalid_utf8_in_attr_value", func(t *testing.T) {
+
+	t.Run("invalid utf8 in attr value", func(t *testing.T) {
+		t.Parallel()
 		// Attribute value contains a truncated UTF-8 sequence (\xd4 without
 		// a continuation byte). The parser must reject this as invalid.
 		data := []byte("<root A!\"×\xd4\"></root>")
@@ -49,11 +54,31 @@ func TestFuzzParseRoundtripRepro(t *testing.T) {
 		_, err = p.Parse(t.Context(), buf.Bytes())
 		require.NoError(t, err)
 	})
-	t.Run("malformed_comment_tail", func(t *testing.T) {
+
+	t.Run("malformed comment tail", func(t *testing.T) {
+		t.Parallel()
 		// The parser previously accepted an unterminated comment body,
 		// which let the writer emit an invalid comment roundtrip.
 		data := []byte("<A/><!---00\x10")
 		_, err := helium.NewParser().Parse(t.Context(), data)
+		require.Error(t, err)
+	})
+
+	t.Run("malformed internal subset", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<!DOCTYPEA [YSTEM "0` + "\x93" + `"`
+
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.Error(t, err)
+	})
+
+	t.Run("malformed attribute separator", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<root><child A!"` + "\x84" + `è"></child></root>`
+
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.Error(t, err)
 	})
 }
