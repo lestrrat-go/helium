@@ -94,6 +94,26 @@ func TestGetElementByID(t *testing.T) {
 		require.NotNil(t, doc.GetElementByID("r"))
 		require.NotNil(t, doc.GetElementByID("c"))
 	})
+
+	t.Run("after parse", func(t *testing.T) {
+		t.Parallel()
+		const input = `<root xml:id="root-id"><child xml:id="child-id"/></root>`
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+		require.NotNil(t, doc.GetElementByID("root-id"))
+		require.NotNil(t, doc.GetElementByID("child-id"))
+	})
+
+	t.Run("after parse with SkipIDs", func(t *testing.T) {
+		t.Parallel()
+		const input = `<root xml:id="root-id"><child xml:id="child-id"/></root>`
+
+		doc, err := helium.NewParser().SkipIDs(true).Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+		require.Nil(t, doc.GetElementByID("root-id"))
+		require.Nil(t, doc.GetElementByID("child-id"))
+	})
 }
 
 func TestDocProperties(t *testing.T) {
@@ -115,22 +135,4 @@ func TestDocProperties(t *testing.T) {
 		require.True(t, doc.HasProperty(helium.DocWellFormed|helium.DocXInclude))
 		require.False(t, doc.HasProperty(helium.DocWellFormed|helium.DocDTDValid))
 	})
-}
-
-func TestGetElementByIDAfterParse(t *testing.T) {
-	const input = `<root xml:id="root-id"><child xml:id="child-id"/></root>`
-
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
-	require.NoError(t, err)
-	require.NotNil(t, doc.GetElementByID("root-id"))
-	require.NotNil(t, doc.GetElementByID("child-id"))
-}
-
-func TestGetElementByIDAfterParseWithSkipIDs(t *testing.T) {
-	const input = `<root xml:id="root-id"><child xml:id="child-id"/></root>`
-
-	doc, err := helium.NewParser().SkipIDs(true).Parse(t.Context(), []byte(input))
-	require.NoError(t, err)
-	require.Nil(t, doc.GetElementByID("root-id"))
-	require.Nil(t, doc.GetElementByID("child-id"))
 }
