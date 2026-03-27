@@ -564,3 +564,76 @@ func (f *testFunc) MaxArity() int { return f.maxArity }
 func (f *testFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	return f.call(ctx, args)
 }
+
+func TestGeneralCompareShortCircuitsAtomization(t *testing.T) {
+	t.Run("empty left skips right atomization", func(t *testing.T) {
+		ok, err := xpath3.GeneralCompare(xpath3.TokenEquals, nil, xpath3.ItemSlice{xpath3.NewMap(nil)})
+		require.NoError(t, err)
+		require.False(t, ok)
+	})
+
+	t.Run("early match skips later atomization error", func(t *testing.T) {
+		right := xpath3.ItemSlice{
+			xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "match"},
+			xpath3.NewMap(nil),
+		}
+		ok, err := xpath3.GeneralCompare(xpath3.TokenEquals, xpath3.SingleString("match"), right)
+		require.NoError(t, err)
+		require.True(t, ok)
+	})
+}
+
+func TestVariableScopeLookupPrefersNearestBinding(t *testing.T) {
+	// let $x := 1 return (let $x := 2 return $x)  → 2  (inner shadows outer)
+	compiled, err := xpath3.NewCompiler().Compile(`let $x := 1 return let $x := 2 return $x`)
+	require.NoError(t, err)
+
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Evaluate(t.Context(), compiled, nil)
+	require.NoError(t, err)
+
+	n, ok := result.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, 2.0, n)
+}
+
+func TestVariableScopeLookupReachesOuter(t *testing.T) {
+	// let $x := 10 return let $y := 20 return $x  → 10  (outer visible)
+	compiled, err := xpath3.NewCompiler().Compile(`let $x := 10 return let $y := 20 return $x`)
+	require.NoError(t, err)
+
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Evaluate(t.Context(), compiled, nil)
+	require.NoError(t, err)
+
+	n, ok := result.IsNumber()
+	require.True(t, ok)
+	require.Equal(t, 10.0, n)
+}
+
+func TestUndeclaredPrefixErrorOnEvaluate(t *testing.T) {
+	compiled, err := xpath3.NewCompiler().Compile(`foo:bar`)
+	require.NoError(t, err, "compilation should succeed; prefix validation is deferred to evaluation")
+
+	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		StrictPrefixes().
+		Evaluate(t.Context(), compiled, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "foo")
+}
+
+func TestDeclaredPrefixResolvesOnEvaluate(t *testing.T) {
+	compiled, err := xpath3.NewCompiler().Compile(`foo:bar`)
+	require.NoError(t, err)
+
+	// Providing the namespace binding should pass prefix validation
+	// (evaluation may still fail because there is no context node,
+	// but the error should NOT be about an undeclared prefix).
+	_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		StrictPrefixes().
+		Namespaces(map[string]string{"foo": "urn:test"}).
+		Evaluate(t.Context(), compiled, nil)
+	if err != nil {
+		require.NotContains(t, err.Error(), "undeclared namespace prefix")
+	}
+}

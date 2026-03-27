@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -47,15 +48,15 @@ type evalContext struct {
 	// indirection. It is pointer-sized and nil when unused, so copies via
 	// withNode/withContextItem are negligible. The net/http dependency is
 	// already transitively required by golang.org/x/text.
-	httpClient         *http.Client
+	httpClient             *http.Client
 	typeAnnotations        map[helium.Node]string // node → xs:... type (from xslt3 schema awareness)
 	preservedIDAnnotations map[helium.Node]string // ID/IDREF annotations preserved after input-type-annotations="strip"
 	variableResolver       VariableResolver       // lazy resolver for variables not in static scope
-	functionResolver   FunctionResolver       // lazy resolver for functions (not visible to function-lookup)
-	strictPrefixes     bool                   // skip defaultPrefixNS fallback in prefix validation
-	schemaDeclarations SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
-	allowXML11Chars    bool                   // when true, codepoints-to-string allows XML 1.1 restricted characters (0x01-0x1F)
-	traceWriter        io.Writer              // destination for fn:trace output (nil = os.Stderr)
+	functionResolver       FunctionResolver       // lazy resolver for functions (not visible to function-lookup)
+	strictPrefixes         bool                   // skip defaultPrefixNS fallback in prefix validation
+	schemaDeclarations     SchemaDeclarations     // schema element/attribute declarations for schema-element()/schema-attribute() tests
+	allowXML11Chars        bool                   // when true, codepoints-to-string allows XML 1.1 restricted characters (0x01-0x1F)
+	traceWriter            io.Writer              // destination for fn:trace output (nil = os.Stderr)
 
 	// Cached function-call context to avoid context.WithValue per call.
 	cachedFnCtx    context.Context
@@ -258,4 +259,109 @@ func (ec *evalContext) countOps(n int) error {
 	return nil
 }
 
-// eval dispatches to the appropriate evaluator for each AST node type.
+type exprEvaluator func(*evalContext, Expr) (Sequence, error)
+
+func evalWith(evalFn exprEvaluator, ec *evalContext, expr Expr) (Sequence, error) {
+	ec.depth++
+	if ec.depth > maxRecursionDepth {
+		return nil, ErrRecursionLimit
+	}
+	defer func() { ec.depth-- }()
+
+	return evalFn(ec, expr)
+}
+
+func evalContextItemExpr(ec *evalContext) (Sequence, error) {
+	if ec.contextItem != nil {
+		return ItemSlice{ec.contextItem}, nil
+	}
+	if ixpath.IsNilNode(ec.node) {
+		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+	}
+	return ItemSlice{nodeItemFor(ec, ec.node)}, nil
+}
+
+func evalRootExpr(ec *evalContext) (Sequence, error) {
+	if ixpath.IsNilNode(ec.node) {
+		return nil, &XPathError{Code: errCodeXPDY0002, Message: "context item is absent"}
+	}
+	root := ixpath.DocumentRoot(ec.node)
+	// XPDY0050: the root of the context node's tree must be a document node.
+	if root.Type() != helium.DocumentNode && root.Type() != helium.HTMLDocumentNode {
+		return nil, &XPathError{Code: errCodeXPDY0050, Message: "root of the tree containing the context node is not a document node"}
+	}
+	return ItemSlice{nodeItemFor(ec, root)}, nil
+}
+
+func dispatchExpr(evalFn exprEvaluator, ec *evalContext, expr Expr) (Sequence, error) {
+	switch e := expr.(type) {
+	case compiledExprRef:
+		return nil, fmt.Errorf("%w: compiled expression reference outside VM", ErrUnsupportedExpr)
+	case LiteralExpr:
+		return evalLiteral(e)
+	case VariableExpr:
+		return evalVariable(ec, e)
+	case ContextItemExpr:
+		return evalContextItemExpr(ec)
+	case RootExpr:
+		return evalRootExpr(ec)
+	case SequenceExpr:
+		return evalSequenceExpr(evalFn, ec, e)
+	case *LocationPath:
+		return evalLocationPath(evalFn, ec, e)
+	case BinaryExpr:
+		return evalBinaryExpr(evalFn, ec, e)
+	case UnaryExpr:
+		return evalUnaryExpr(evalFn, ec, e)
+	case ConcatExpr:
+		return evalConcatExpr(evalFn, ec, e)
+	case SimpleMapExpr:
+		return evalSimpleMapExpr(evalFn, ec, e)
+	case RangeExpr:
+		return evalRangeExpr(evalFn, ec, e)
+	case UnionExpr:
+		return evalUnionExpr(evalFn, ec, e)
+	case IntersectExceptExpr:
+		return evalIntersectExceptExpr(evalFn, ec, e)
+	case FilterExpr:
+		return evalFilterExpr(evalFn, ec, e)
+	case PathExpr:
+		return evalPathExpr(evalFn, ec, e)
+	case PathStepExpr:
+		return evalPathStepExpr(evalFn, ec, e)
+	case LookupExpr:
+		return evalLookupExpr(evalFn, ec, e)
+	case UnaryLookupExpr:
+		return evalUnaryLookupExpr(evalFn, ec, e)
+	case FLWORExpr:
+		return evalFLWOR(evalFn, ec, e)
+	case QuantifiedExpr:
+		return evalQuantifiedExpr(evalFn, ec, e)
+	case IfExpr:
+		return evalIfExpr(evalFn, ec, e)
+	case TryCatchExpr:
+		return evalTryCatchExpr(evalFn, ec, e)
+	case InstanceOfExpr:
+		return evalInstanceOfExpr(evalFn, ec, e)
+	case CastExpr:
+		return evalCastExpr(evalFn, ec, e)
+	case CastableExpr:
+		return evalCastableExpr(evalFn, ec, e)
+	case TreatAsExpr:
+		return evalTreatAsExpr(evalFn, ec, e)
+	case FunctionCall:
+		return evalFunctionCall(evalFn, ec, e)
+	case DynamicFunctionCall:
+		return evalDynamicFunctionCall(evalFn, ec, e)
+	case NamedFunctionRef:
+		return evalNamedFunctionRef(ec, e)
+	case InlineFunctionExpr:
+		return evalInlineFunctionExpr(evalFn, ec, e)
+	case MapConstructorExpr:
+		return evalMapConstructorExpr(evalFn, ec, e)
+	case ArrayConstructorExpr:
+		return evalArrayConstructorExpr(evalFn, ec, e)
+	default:
+		return nil, fmt.Errorf("%w: %T", ErrUnsupportedExpr, expr)
+	}
+}
