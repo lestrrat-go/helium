@@ -412,7 +412,7 @@ func (c *UTF8Cursor) ConsumeString(s string) bool {
 			}
 		}
 	}
-	if err := c.Advance(n); err != nil {
+	if err := c.AdvanceFast(n); err != nil {
 		return false
 	}
 	return true
@@ -531,6 +531,74 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 	}
 
 	return c.buf[c.bufpos : c.bufpos+off], nRunes
+}
+
+// ScanQNameBytes scans a common ASCII QName without consuming it.
+// It returns the raw prefix and local-name byte slices, the total byte
+// length, and ok=true on success. Non-ASCII input, multiple colons, or
+// malformed prefix/local parts return ok=false so callers can fall back to
+// the full parser path.
+func (c *UTF8Cursor) ScanQNameBytes() (prefix, local []byte, nBytes int, ok bool) {
+	if err := c.fillBuffer(1); err != nil {
+		return nil, nil, 0, false
+	}
+
+	off := 0
+
+	b := c.buf[c.bufpos]
+	if (b < 'A' || b > 'Z') && (b < 'a' || b > 'z') && b != '_' {
+		return nil, nil, 0, false
+	}
+	off++
+
+	colon := -1
+	for {
+		if c.bufpos+off >= c.buflen {
+			if c.fillBuffer(off + 1) != nil {
+				break
+			}
+			if c.bufpos+off >= c.buflen {
+				break
+			}
+		}
+
+		b = c.buf[c.bufpos+off]
+		if b >= utf8.RuneSelf {
+			return nil, nil, 0, false
+		}
+		if b == ':' {
+			if colon >= 0 {
+				return nil, nil, 0, false
+			}
+			colon = off
+			off++
+
+			if c.bufpos+off >= c.buflen {
+				if c.fillBuffer(off + 1) != nil {
+					return nil, nil, 0, false
+				}
+				if c.bufpos+off >= c.buflen {
+					return nil, nil, 0, false
+				}
+			}
+
+			b = c.buf[c.bufpos+off]
+			if (b < 'A' || b > 'Z') && (b < 'a' || b > 'z') && b != '_' {
+				return nil, nil, 0, false
+			}
+			off++
+			continue
+		}
+		if ncNameByteClass[b] != 0 {
+			break
+		}
+		off++
+	}
+
+	if colon < 0 {
+		return nil, c.buf[c.bufpos : c.bufpos+off], off, true
+	}
+	return c.buf[c.bufpos : c.bufpos+colon], c.buf[c.bufpos+colon+1 : c.bufpos+off], off, true
 }
 
 // ScanSimpleAttrValue scans a simple attribute value (no entities, no special

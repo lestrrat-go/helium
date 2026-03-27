@@ -335,9 +335,13 @@ func (ctx *parserCtx) adaptCursor(v any) strcursor.Cursor {
 }
 
 func (ctx *parserCtx) getCursor() strcursor.Cursor {
-	// Fast path: return cached cursor if still valid (not done or only input).
+	// Fast path: for the common single-input case, the cached cursor remains
+	// valid even at EOF and callers can observe that directly via Peek/Done.
 	if cc := ctx.cachedCursor; cc != nil {
-		if !cc.Done() || ctx.inputTab.Len() <= 1 {
+		if ctx.inputTab.Len() <= 1 {
+			return cc
+		}
+		if !cc.Done() {
 			return cc
 		}
 		// Cached cursor is exhausted and there are more inputs — fall through.
@@ -1709,7 +1713,7 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 	if !normalize {
 		if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
 			if v, nBytes := u8.ScanSimpleAttrValue(qch); nBytes > 0 {
-				if err = cur.Advance(nBytes); err != nil {
+				if err = u8.AdvanceFast(nBytes); err != nil {
 					return
 				}
 				value = v
@@ -2857,6 +2861,24 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix str
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
+	if u8, ok := cur.(*strcursor.UTF8Cursor); ok && cur.Peek() < utf8.RuneSelf {
+		prefixBytes, localBytes, nBytes, ok := u8.ScanQNameBytes()
+		if ok {
+			if !pctx.options.IsSet(parseHuge) {
+				if len(prefixBytes) > MaxNameLength || len(localBytes) > MaxNameLength {
+					return "", "", pctx.error(ctx, ErrNameTooLong)
+				}
+			}
+			if len(prefixBytes) > 0 {
+				prefix = pctx.internNameBytes(prefixBytes)
+			}
+			local = pctx.internNameBytes(localBytes)
+			if err := u8.AdvanceFast(nBytes); err != nil {
+				return "", "", err
+			}
+			return local, prefix, nil
+		}
+	}
 	var v string
 	v, err = pctx.parseNCName(ctx)
 	if err != nil {
@@ -3005,7 +3027,7 @@ func (pctx *parserCtx) parseNCName(ctx context.Context) (ncname string, err erro
 		// Intern BEFORE Advance, since Advance may compact the buffer
 		// and invalidate nameBytes.
 		ncname = pctx.internNameBytes(nameBytes)
-		if err = cur.Advance(len(nameBytes)); err != nil {
+		if err = u8.AdvanceFast(len(nameBytes)); err != nil {
 			return "", err
 		}
 		return

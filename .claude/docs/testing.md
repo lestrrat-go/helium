@@ -62,7 +62,7 @@ testdata/libxml2-compat/
 | `relaxng_test.go` | relaxng | RELAX NG golden tests |
 | `schematron_test.go` | schematron | Schematron golden tests |
 | `parser_dispatch_test.go` | root | Focused parser regression coverage for chunked-reader whitespace classification |
-| `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization regression coverage |
+| `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization and ASCII QName scanner regression coverage |
 
 ## `examples/`
 
