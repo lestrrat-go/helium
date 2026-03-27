@@ -32,6 +32,8 @@ import (
 //
 //	HELIUM_LIBXML2_TEST_FILES=att1,comment.xml go test -run TestLibxml2Compat
 func TestLibxml2Compat(t *testing.T) {
+	t.Parallel()
+
 	dir := "testdata/libxml2-compat"
 
 	if _, err := os.Stat(dir); err != nil {
@@ -82,6 +84,8 @@ func TestLibxml2Compat(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			defer func() {
 				if r := recover(); r != nil {
 					require.Failf(t, "panic", "%v", r)
@@ -435,6 +439,8 @@ func mergeCharactersEvents(s string) string {
 //
 //	HELIUM_LIBXML2_SAX2_TEST_FILES=att1,xml2 go test -run TestLibxml2CompatSAX2
 func TestLibxml2CompatSAX2(t *testing.T) {
+	t.Parallel()
+
 	dir := "testdata/libxml2-compat"
 
 	if _, err := os.Stat(dir); err != nil {
@@ -484,6 +490,8 @@ func TestLibxml2CompatSAX2(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			defer func() {
 				if r := recover(); r != nil {
 					require.Failf(t, "panic", "%v", r)

@@ -14,6 +14,8 @@ import (
 )
 
 func TestXMLToDOMToXMLString(t *testing.T) {
+	t.Parallel()
+
 	skipped := map[string]struct{}{}
 	only := map[string]struct{}{}
 	if v := os.Getenv("HELIUM_DUMP_TEST_FILES"); v != "" {
@@ -82,6 +84,8 @@ func TestXMLToDOMToXMLString(t *testing.T) {
 }
 
 func TestDOMToXMLString(t *testing.T) {
+	t.Parallel()
+
 	doc := helium.NewDefaultDocument()
 	//	defer doc.Free()
 
@@ -120,6 +124,8 @@ func BenchmarkWriteNonASCII(b *testing.B) {
 }
 
 func TestDumpNsSkipsXmlPrefix(t *testing.T) {
+	t.Parallel()
+
 	doc := helium.NewDefaultDocument()
 	root := doc.CreateElement("root")
 	require.NoError(t, doc.SetDocumentElement(root))
@@ -136,6 +142,8 @@ func TestDumpNsSkipsXmlPrefix(t *testing.T) {
 }
 
 func TestDumpNsPropagatesWriteError(t *testing.T) {
+	t.Parallel()
+
 	doc := helium.NewDefaultDocument()
 	root := doc.CreateElement("root")
 	require.NoError(t, doc.SetDocumentElement(root))
@@ -169,7 +177,11 @@ func (w *namespaceFailWriter) Write(p []byte) (int, error) {
 }
 
 func TestFormatOutput(t *testing.T) {
+	t.Parallel()
+
 	t.Run("nested elements", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
 		require.NoError(t, err)
 
@@ -181,6 +193,8 @@ func TestFormatOutput(t *testing.T) {
 	})
 
 	t.Run("text-only element stays inline", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child>hello</child></root>`))
 		require.NoError(t, err)
 
@@ -192,6 +206,8 @@ func TestFormatOutput(t *testing.T) {
 	})
 
 	t.Run("custom indent string", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
 		require.NoError(t, err)
 
@@ -203,6 +219,8 @@ func TestFormatOutput(t *testing.T) {
 	})
 
 	t.Run("without format stays compact", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
 		require.NoError(t, err)
 
@@ -214,6 +232,8 @@ func TestFormatOutput(t *testing.T) {
 	})
 
 	t.Run("multiple children", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><a/><b/><c/></root>`))
 		require.NoError(t, err)
 
@@ -225,6 +245,8 @@ func TestFormatOutput(t *testing.T) {
 	})
 
 	t.Run("element XMLString with format", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
 		require.NoError(t, err)
 
@@ -239,6 +261,8 @@ func TestFormatOutput(t *testing.T) {
 	})
 
 	t.Run("comment and PI children", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><!--comment--><child/><?pi data?></root>`))
 		require.NoError(t, err)
 
@@ -250,6 +274,8 @@ func TestFormatOutput(t *testing.T) {
 	})
 
 	t.Run("deeply nested", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><a><b><c><d>text</d></c></b></a>`))
 		require.NoError(t, err)
 
@@ -316,7 +342,11 @@ func TestXHTML(t *testing.T) {
 }
 
 func TestNoEmpty(t *testing.T) {
+	t.Parallel()
+
 	t.Run("empty element uses open+close tags", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><br/></root>`))
 		require.NoError(t, err)
 
@@ -328,6 +358,8 @@ func TestNoEmpty(t *testing.T) {
 	})
 
 	t.Run("non-empty element unchanged", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><p>text</p></root>`))
 		require.NoError(t, err)
 
@@ -339,6 +371,8 @@ func TestNoEmpty(t *testing.T) {
 	})
 
 	t.Run("empty element with attributes", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><img src="a.png"/></root>`))
 		require.NoError(t, err)
 
@@ -350,6 +384,8 @@ func TestNoEmpty(t *testing.T) {
 	})
 
 	t.Run("combined with format", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><a/><b/></root>`))
 		require.NoError(t, err)
 
@@ -361,6 +397,8 @@ func TestNoEmpty(t *testing.T) {
 	})
 
 	t.Run("without NoEmpty stays self-closing", func(t *testing.T) {
+		t.Parallel()
+
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><br/></root>`))
 		require.NoError(t, err)
 
@@ -373,6 +411,8 @@ func TestNoEmpty(t *testing.T) {
 }
 
 func TestDumpQuotingViaPublicAPI(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		inputXML string

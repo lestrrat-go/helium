@@ -327,6 +327,8 @@ func normalizeCharDisplays(s string) string {
 //
 //	HELIUM_HTML_TEST_FILES=autoclose,implied1 go test -run TestLibxml2CompatHTMLSAX
 func TestLibxml2CompatHTMLSAX(t *testing.T) {
+	t.Parallel()
+
 	dir := "../testdata/libxml2-compat/html"
 
 	if _, err := os.Stat(dir); err != nil {
@@ -380,6 +382,8 @@ func TestLibxml2CompatHTMLSAX(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			defer func() {
 				if r := recover(); r != nil {
 					t.Fatalf("panic: %v", r)
@@ -426,6 +430,8 @@ func TestLibxml2CompatHTMLSAX(t *testing.T) {
 //
 //	HELIUM_HTML_TEST_FILES=autoclose,entities go test -run TestHTMLSerialization
 func TestHTMLSerialization(t *testing.T) {
+	t.Parallel()
+
 	dir := "../testdata/libxml2-compat/html"
 
 	if _, err := os.Stat(dir); err != nil {
@@ -471,6 +477,8 @@ func TestHTMLSerialization(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			defer func() {
 				if r := recover(); r != nil {
 					t.Fatalf("panic: %v", r)
@@ -643,6 +651,8 @@ func formatHTMLErrors(filename string, input []byte, errors []htmlError) string 
 //
 //	HELIUM_HTML_TEST_FILES=reg4,test3 go test -run TestHTMLErrors
 func TestHTMLErrors(t *testing.T) {
+	t.Parallel()
+
 	dir := "../testdata/libxml2-compat/html"
 
 	if _, err := os.Stat(dir); err != nil {
@@ -681,6 +691,8 @@ func TestHTMLErrors(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			defer func() {
 				if r := recover(); r != nil {
 					t.Fatalf("panic: %v", r)

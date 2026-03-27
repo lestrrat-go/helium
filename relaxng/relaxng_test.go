@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -118,26 +119,26 @@ func shouldSkip(name string) string {
 }
 
 func TestGoldenFiles(t *testing.T) {
+	t.Parallel()
 	filterEnv := os.Getenv("HELIUM_RELAXNG_TEST_FILES")
 
 	cases := discoverTests(t)
 	require.NotEmpty(t, cases, "no test cases discovered")
 
-	passed := 0
-	skipped := 0
-	failed := 0
+	var passed, skipped, failed atomic.Int64
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if filterEnv != "" && !strings.Contains(tc.name, filterEnv) {
 				t.Skip("filtered out by HELIUM_RELAXNG_TEST_FILES")
-				skipped++
+				skipped.Add(1)
 				return
 			}
 
 			if reason := shouldSkip(tc.name); reason != "" {
 				t.Skipf("skipping: %s", reason)
-				skipped++
+				skipped.Add(1)
 				return
 			}
 
@@ -182,18 +183,19 @@ func TestGoldenFiles(t *testing.T) {
 			}
 
 			if got == string(expected) {
-				passed++
+				passed.Add(1)
 			} else {
-				failed++
+				failed.Add(1)
 				require.Equal(t, string(expected), got)
 			}
 		})
 	}
 
-	t.Logf("Results: %d passed, %d failed, %d skipped (out of %d total)", passed, failed, skipped, len(cases))
+	t.Logf("Results: %d passed, %d failed, %d skipped (out of %d total)", passed.Load(), failed.Load(), skipped.Load(), len(cases))
 }
 
 func TestGetAttrWhitespace(t *testing.T) {
+	t.Parallel()
 	// Verify that whitespace-padded name attributes are trimmed so that
 	// define/ref matching works correctly.
 	input := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
@@ -221,6 +223,7 @@ func TestGetAttrWhitespace(t *testing.T) {
 }
 
 func TestXmlBaseInclude(t *testing.T) {
+	t.Parallel()
 	// Schema uses <div xml:base="xmlbase/"> wrapping <include href="included.rng"/>.
 	// The included file lives in testdata/xmlbase/included.rng.
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
@@ -239,6 +242,7 @@ func TestXmlBaseInclude(t *testing.T) {
 }
 
 func TestXmlBaseExternalRef(t *testing.T) {
+	t.Parallel()
 	// Schema uses xml:base on the root grammar element to redirect externalRef
 	// resolution to the xmlbase/ subdirectory.
 	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
@@ -257,7 +261,9 @@ func TestXmlBaseExternalRef(t *testing.T) {
 }
 
 func TestCheckCombine(t *testing.T) {
+	t.Parallel()
 	t.Run("conflicting define combine modes", func(t *testing.T) {
+		t.Parallel()
 		input := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
   <start><ref name="foo"/></start>
   <define name="foo" combine="choice">
@@ -278,6 +284,7 @@ func TestCheckCombine(t *testing.T) {
 	})
 
 	t.Run("multiple defines without combine", func(t *testing.T) {
+		t.Parallel()
 		input := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
   <start><ref name="foo"/></start>
   <define name="foo">
@@ -298,6 +305,7 @@ func TestCheckCombine(t *testing.T) {
 	})
 
 	t.Run("conflicting start combine modes", func(t *testing.T) {
+		t.Parallel()
 		input := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
   <start combine="choice">
     <element name="a"><empty/></element>
@@ -317,6 +325,7 @@ func TestCheckCombine(t *testing.T) {
 	})
 
 	t.Run("multiple starts without combine", func(t *testing.T) {
+		t.Parallel()
 		input := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
   <start>
     <element name="a"><empty/></element>
@@ -336,6 +345,7 @@ func TestCheckCombine(t *testing.T) {
 	})
 
 	t.Run("valid combine modes agree", func(t *testing.T) {
+		t.Parallel()
 		input := `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
   <start><ref name="foo"/></start>
   <define name="foo" combine="choice">
@@ -357,6 +367,7 @@ func TestCheckCombine(t *testing.T) {
 }
 
 func TestCheckRules(t *testing.T) {
+	t.Parallel()
 	const rngNS = "http://relaxng.org/ns/structure/1.0"
 
 	compile := func(t *testing.T, input string) (compileErrors, compileWarnings string) {
@@ -372,6 +383,7 @@ func TestCheckRules(t *testing.T) {
 	}
 
 	t.Run("list//element", func(t *testing.T) {
+		t.Parallel()
 		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <list><element name="a"><empty/></element></list>
 </element>`)
@@ -379,6 +391,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("attribute//element", func(t *testing.T) {
+		t.Parallel()
 		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <attribute name="a"><element name="b"><empty/></element></attribute>
 </element>`)
@@ -386,6 +399,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("list//list", func(t *testing.T) {
+		t.Parallel()
 		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <list><list><data type="string" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes"/></list></list>
 </element>`)
@@ -393,6 +407,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("attribute//attribute", func(t *testing.T) {
+		t.Parallel()
 		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <attribute name="a"><attribute name="b"/></attribute>
 </element>`)
@@ -400,6 +415,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("start//attribute", func(t *testing.T) {
+		t.Parallel()
 		errs, _ := compile(t, `<grammar xmlns="`+rngNS+`">
   <start><attribute name="a"/></start>
 </grammar>`)
@@ -407,6 +423,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("oneOrMore//group//attribute", func(t *testing.T) {
+		t.Parallel()
 		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <oneOrMore><group><attribute name="a"/></group></oneOrMore>
 </element>`)
@@ -414,6 +431,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("oneOrMore//interleave//attribute", func(t *testing.T) {
+		t.Parallel()
 		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <oneOrMore><interleave><attribute name="a"/><text/></interleave></oneOrMore>
 </element>`)
@@ -421,6 +439,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("anyName attribute without oneOrMore warning", func(t *testing.T) {
+		t.Parallel()
 		errs, warnings := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <attribute><anyName/></attribute>
 </element>`)
@@ -429,6 +448,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("nsName attribute without oneOrMore warning", func(t *testing.T) {
+		t.Parallel()
 		errs, warnings := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <attribute><nsName ns="http://example.com"/></attribute>
 </element>`)
@@ -437,6 +457,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("anyName attribute with oneOrMore no warning", func(t *testing.T) {
+		t.Parallel()
 		errs, warnings := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <oneOrMore><attribute><anyName/></attribute></oneOrMore>
 </element>`)
@@ -445,6 +466,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("element resets context", func(t *testing.T) {
+		t.Parallel()
 		// attribute inside element inside list: element resets context,
 		// so the attribute should not trigger list//attribute.
 		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
@@ -461,6 +483,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("valid schema", func(t *testing.T) {
+		t.Parallel()
 		errs, warnings := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <oneOrMore>
     <element name="item">
@@ -474,6 +497,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("data/except//element", func(t *testing.T) {
+		t.Parallel()
 		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`"
   datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
   <data type="string">
@@ -484,6 +508,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("list//text", func(t *testing.T) {
+		t.Parallel()
 		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <list><text/></list>
 </element>`)
@@ -491,6 +516,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("list//interleave", func(t *testing.T) {
+		t.Parallel()
 		errs, _ := compile(t, `<element name="root" xmlns="`+rngNS+`">
   <list>
     <interleave>
@@ -503,6 +529,7 @@ func TestCheckRules(t *testing.T) {
 	})
 
 	t.Run("ref in data/except", func(t *testing.T) {
+		t.Parallel()
 		errs, _ := compile(t, `<grammar xmlns="`+rngNS+`"
   datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
   <start>
@@ -519,6 +546,7 @@ func TestCheckRules(t *testing.T) {
 }
 
 func TestZeroCompilerFluent(t *testing.T) {
+	t.Parallel()
 	var c relaxng.Compiler
 	require.NotPanics(t, func() {
 		c2 := c.SchemaFilename("test.rng")
@@ -527,6 +555,7 @@ func TestZeroCompilerFluent(t *testing.T) {
 }
 
 func TestZeroValidatorFluent(t *testing.T) {
+	t.Parallel()
 	var v relaxng.Validator
 	require.NotPanics(t, func() {
 		v2 := v.Filename("test.xml")
