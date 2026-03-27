@@ -11,8 +11,7 @@ import (
 func Example_helium_validate_dtd() {
 	// ValidateDTD enables DTD-based validation during parsing.
 	// When a document violates its DTD constraints the parser
-	// returns a *DTDValidateError that wraps each individual
-	// violation as a separate error, accessible via Unwrap().
+	// returns ErrDTDValidationFailed.
 
 	p := helium.NewParser().ValidateDTD(true)
 
@@ -27,17 +26,8 @@ func Example_helium_validate_dtd() {
 
 	// The document is still returned even when validation fails.
 	fmt.Printf("doc returned: %v\n", doc != nil)
-
-	// Extract the DTDValidateError to inspect individual violations.
-	var ve *helium.DTDValidateError
-	if errors.As(err, &ve) {
-		fmt.Printf("validation errors: %d\n", len(ve.Unwrap()))
-		for _, sub := range ve.Unwrap() {
-			fmt.Println(sub)
-		}
-	}
+	fmt.Printf("validation failed: %v\n", errors.Is(err, helium.ErrDTDValidationFailed))
 	// Output:
 	// doc returned: true
-	// validation errors: 1
-	// element doc: attribute id is required
+	// validation failed: true
 }

@@ -35,6 +35,7 @@ type parserConfig struct {
 	baseURI        string
 	catalog        CatalogResolver
 	maxDepth       int
+	errorHandler   ErrorHandler
 }
 
 // Parser holds configuration for XML parsing (libxml2: xmlParserCtxt).
@@ -442,6 +443,16 @@ func (p Parser) Catalog(c CatalogResolver) Parser {
 	return p
 }
 
+// ErrorHandler sets the handler for validation errors produced during
+// DTD validation ([ValidateDTD]). When set, individual errors are delivered
+// to the handler as they occur. The returned error from Parse is
+// [ErrDTDValidationFailed] on failure.
+func (p Parser) ErrorHandler(h ErrorHandler) Parser {
+	p = p.clone()
+	p.cfg.errorHandler = h
+	return p
+}
+
 // --- Terminal methods ---
 
 // Parse parses XML from a byte slice and returns the resulting Document
@@ -481,8 +492,12 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) {
 
 	// DTD validation: run post-parse document validation when requested.
 	if p.cfg.options.IsSet(parseDTDValid) && pctx.doc != nil {
-		if ve := validateDocument(pctx.doc); ve != nil {
-			return pctx.doc, ve
+		handler := p.cfg.errorHandler
+		if handler == nil {
+			handler = NilErrorHandler{}
+		}
+		if err := validateDocument(ctx, pctx.doc, handler); err != nil {
+			return pctx.doc, err
 		}
 	}
 
@@ -525,8 +540,12 @@ func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*Document, error)
 	}
 
 	if p.cfg.options.IsSet(parseDTDValid) && pctx.doc != nil {
-		if ve := validateDocument(pctx.doc); ve != nil {
-			return pctx.doc, ve
+		handler := p.cfg.errorHandler
+		if handler == nil {
+			handler = NilErrorHandler{}
+		}
+		if err := validateDocument(ctx, pctx.doc, handler); err != nil {
+			return pctx.doc, err
 		}
 	}
 
