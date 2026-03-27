@@ -205,7 +205,7 @@ Schematron schema compilation and validation.
 - `ErrValidationFailed` — sentinel error returned on validation failure; individual `*ValidationError` delivered to ErrorHandler
 - Supports: schema, pattern, rule, assert, report, let, name, value-of
 - Variable bindings via `<let>` and `<param>`
-- Files: `schematron.go` (API), `schema.go`, `parse.go`, `validate.go`, `errors.go`
+- Files: `schematron.go` (API + config), `schema.go` (data model), `parse.go` (compilation), `validate.go` (validation), `errors.go` (error types + formatting)
 - Imports: helium, xpath1/
 
 ## catalog/

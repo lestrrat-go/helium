@@ -192,7 +192,6 @@ func extractBaseName(name string) string {
 	return name[:idx]
 }
 
-
 func TestWithQuiet(t *testing.T) {
 	const sct = `<schema xmlns="http://www.ascc.net/xml/schematron">
   <pattern name="test">
@@ -742,4 +741,20 @@ func TestUnionContextIntegration(t *testing.T) {
 	require.Contains(t, got, "invoice")
 	require.Contains(t, got, "credit-note")
 	require.NotContains(t, got, "other")
+}
+
+func TestZeroCompilerFluent(t *testing.T) {
+	var c schematron.Compiler
+	require.NotPanics(t, func() {
+		c2 := c.SchemaFilename("test.sch")
+		_ = c2
+	})
+}
+
+func TestZeroValidatorFluent(t *testing.T) {
+	var v schematron.Validator
+	require.NotPanics(t, func() {
+		v2 := v.Filename("test.xml")
+		_ = v2
+	})
 }
