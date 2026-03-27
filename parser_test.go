@@ -1020,6 +1020,28 @@ func TestFuzzRepros(t *testing.T) {
 		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.Error(t, err)
 	})
+
+	t.Run("QName local part must be NCName", func(t *testing.T) {
+		t.Parallel()
+
+		for _, input := range []string{
+			`<root xmlns:a="u"><a:0/></root>`,
+			`<root xmlns:a="u"><a:-/></root>`,
+			`<root xmlns:a="u"><a:./></root>`,
+		} {
+			_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+			require.Error(t, err, "input %q should be rejected", input)
+		}
+	})
+
+	t.Run("FuzzParseRoundtrip whitespace-only attribute default", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<!DOCTYPEA[<!ATTLIST A A (0) " "`
+
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.Error(t, err)
+	})
 }
 
 func TestCurrentInputID(t *testing.T) {

@@ -49,6 +49,18 @@ func TestFuzzParseRoundtripRepro(t *testing.T) {
 		_, err = p.Parse(t.Context(), buf.Bytes())
 		require.NoError(t, err)
 	})
+	t.Run("invalid_qname_local_in_attr", func(t *testing.T) {
+		p := helium.NewParser()
+
+		for _, data := range [][]byte{
+			[]byte(`<root a:0="x"/>`),
+			[]byte(`<root a:-="x"/>`),
+			[]byte(`<root a:.="x"/>`),
+		} {
+			_, err := p.Parse(t.Context(), data)
+			require.Error(t, err, "input %q should be rejected", data)
+		}
+	})
 }
 
 func FuzzParse(f *testing.F) {
