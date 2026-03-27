@@ -18,8 +18,8 @@
 //	    Filename("input.xml").
 //	    Validate(ctx, doc)
 //
-// On failure, the returned error is a [*ValidateError]. When an
-// [helium.ErrorHandler] is set via [Validator.ErrorHandler], individual
-// errors are delivered as [*ValidationError] values with structured fields
-// (Filename, Line, Element, Path, Message).
+// On failure, the returned error is [ErrValidationFailed]. Individual
+// errors are delivered as [*ValidationError] values to the configured
+// [helium.ErrorHandler] (structured fields: Filename, Line, Element,
+// Path, Message).
 package schematron

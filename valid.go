@@ -1,6 +1,7 @@
 package helium
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -176,38 +177,22 @@ func validateAttributeValueInternal(doc *Document, typ enum.AttributeType, defva
 	return nil
 }
 
-// DTDValidateError represents a validity constraint violation.
-// It does not stop parsing; the parser continues and collects errors.
-// It implements Unwrap() []error for integration with errors.Is/errors.As.
-type DTDValidateError struct {
-	errs []error
-}
-
-func (e *DTDValidateError) Error() string {
-	msgs := make([]string, len(e.errs))
-	for i, err := range e.errs {
-		msgs[i] = err.Error()
-	}
-	return strings.Join(msgs, "; ")
-}
-
-func (e *DTDValidateError) Unwrap() []error {
-	return e.errs
-}
-
-func (e *DTDValidateError) addf(format string, args ...any) {
-	e.errs = append(e.errs, fmt.Errorf(format, args...))
-}
-
-func (e *DTDValidateError) hasErrors() bool {
-	return len(e.errs) > 0
-}
+// ErrDTDValidationFailed is returned by DTD validation when the document
+// does not conform to the DTD. Individual validation errors are delivered
+// to the configured [ErrorHandler].
+var ErrDTDValidationFailed = errors.New("dtd: validation failed")
 
 // validCtx carries validation state through the document walk.
 type validCtx struct {
-	ve     *DTDValidateError
-	ids    map[string]bool // ID values seen (uniqueness check)
-	idrefs map[string]bool // IDREF values to resolve (cross-ref check)
+	handler ErrorHandler
+	failed  bool
+	ids     map[string]bool // ID values seen (uniqueness check)
+	idrefs  map[string]bool // IDREF values to resolve (cross-ref check)
+}
+
+func (vc *validCtx) addf(ctx context.Context, format string, args ...any) {
+	vc.failed = true
+	vc.handler.Handle(ctx, fmt.Errorf(format, args...))
 }
 
 // docDTDs returns the DTDs to search in order, respecting standalone.
@@ -237,11 +222,11 @@ func lookupElementDecl(doc *Document, name, prefix string) (*ElementDecl, *DTD) 
 
 // validateDocument validates a parsed document against its DTD.
 // This is the equivalent of libxml2's xmlValidateDocument.
-func validateDocument(doc *Document) *DTDValidateError {
+func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) error {
 	vctx := &validCtx{
-		ve:     &DTDValidateError{},
-		ids:    make(map[string]bool),
-		idrefs: make(map[string]bool),
+		handler: handler,
+		ids:     make(map[string]bool),
+		idrefs:  make(map[string]bool),
 	}
 
 	if doc.intSubset == nil && doc.extSubset == nil {
@@ -258,7 +243,7 @@ func validateDocument(doc *Document) *DTDValidateError {
 			dtdName = doc.extSubset.name
 		}
 		if dtdName != "" && root.LocalName() != dtdName {
-			vctx.ve.addf("root element name %q does not match DTD name %q", root.LocalName(), dtdName)
+			vctx.addf(ctx, "root element name %q does not match DTD name %q", root.LocalName(), dtdName)
 		}
 	}
 
@@ -268,21 +253,21 @@ func validateDocument(doc *Document) *DTDValidateError {
 			return nil
 		}
 		elem := n.(*Element)
-		validateOneElement(doc, elem, vctx)
+		validateOneElement(ctx, doc, elem, vctx)
 		return nil
 	}))
 
 	// Cross-reference check: every IDREF must match an existing ID
-	validateDocumentFinal(vctx)
+	validateDocumentFinal(ctx, vctx)
 
-	if vctx.ve.hasErrors() {
-		return vctx.ve
+	if vctx.failed {
+		return ErrDTDValidationFailed
 	}
 	return nil
 }
 
 // validateOneElement checks a single element against DTD declarations.
-func validateOneElement(doc *Document, elem *Element, vctx *validCtx) {
+func validateOneElement(ctx context.Context, doc *Document, elem *Element, vctx *validCtx) {
 	name := elem.LocalName()
 
 	edecl, dtd := lookupElementDecl(doc, name, elem.Prefix())
@@ -292,17 +277,17 @@ func validateOneElement(doc *Document, elem *Element, vctx *validCtx) {
 		// whitespace-only text nodes are a validity error (the external subset
 		// would have caused them to be treated as ignorable whitespace).
 		if doc.standalone == StandaloneExplicitYes && doc.extSubset != nil {
-			checkStandaloneWhitespace(doc.extSubset, elem, name, vctx)
+			checkStandaloneWhitespace(ctx, doc.extSubset, elem, name, vctx)
 		}
-		vctx.ve.addf("element %s: no declaration found", name)
+		vctx.addf(ctx, "element %s: no declaration found", name)
 		return
 	}
 
 	// Validate attributes against their declarations
-	validateElementAttributes(doc, elem, edecl, vctx)
+	validateElementAttributes(ctx, doc, elem, edecl, vctx)
 
 	// Validate element content model
-	validateElementContent(dtd, elem, edecl, vctx.ve)
+	validateElementContent(ctx, dtd, elem, edecl, vctx)
 }
 
 // validateElementAttributes checks that:
@@ -311,7 +296,7 @@ func validateOneElement(doc *Document, elem *Element, vctx *validCtx) {
 // - No undeclared attributes (if element is fully declared)
 // - ID values are unique across the document
 // - IDREF/IDREFS values are recorded for cross-reference checking
-func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl, vctx *validCtx) {
+func validateElementAttributes(ctx context.Context, doc *Document, elem *Element, edecl *ElementDecl, vctx *validCtx) {
 	ename := elem.LocalName()
 	attrs := elem.Attributes()
 
@@ -336,18 +321,18 @@ func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl,
 			switch adecl.def {
 			case enum.AttrDefaultRequired:
 				if !found {
-					vctx.ve.addf("element %s: attribute %s is required", ename, aname)
+					vctx.addf(ctx, "element %s: attribute %s is required", ename, aname)
 				}
 			case enum.AttrDefaultFixed:
 				if found && val != adecl.defvalue {
-					vctx.ve.addf("element %s: attribute %s has value %q but must be %q", ename, aname, val, adecl.defvalue)
+					vctx.addf(ctx, "element %s: attribute %s has value %q but must be %q", ename, aname, val, adecl.defvalue)
 				}
 			}
 
 			// Validate attribute value against its type (if present)
 			if found {
 				if err := validateAttributeValueInternal(doc, adecl.atype, val); err != nil {
-					vctx.ve.addf("element %s: attribute %s: %s", ename, aname, err)
+					vctx.addf(ctx, "element %s: attribute %s: %s", ename, aname, err)
 				}
 
 				// Check enumeration value against declared tokens
@@ -360,7 +345,7 @@ func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl,
 						}
 					}
 					if !inEnum {
-						vctx.ve.addf("element %s: attribute %s value %q is not among the enumerated set", ename, aname, val)
+						vctx.addf(ctx, "element %s: attribute %s value %q is not among the enumerated set", ename, aname, val)
 					}
 				}
 
@@ -368,7 +353,7 @@ func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl,
 				switch adecl.atype {
 				case enum.AttrID:
 					if vctx.ids[val] {
-						vctx.ve.addf("element %s: duplicate ID %q", ename, val)
+						vctx.addf(ctx, "element %s: duplicate ID %q", ename, val)
 					} else {
 						vctx.ids[val] = true
 					}
@@ -381,17 +366,17 @@ func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl,
 				case enum.AttrEntity:
 					ent, ok := doc.GetEntity(val)
 					if !ok {
-						vctx.ve.addf("element %s: attribute %s references undeclared entity %q", ename, aname, val)
+						vctx.addf(ctx, "element %s: attribute %s references undeclared entity %q", ename, aname, val)
 					} else if ent.EntityType() != enum.ExternalGeneralUnparsedEntity {
-						vctx.ve.addf("element %s: attribute %s references entity %q which is not unparsed", ename, aname, val)
+						vctx.addf(ctx, "element %s: attribute %s references entity %q which is not unparsed", ename, aname, val)
 					}
 				case enum.AttrEntities:
 					for _, entName := range strings.Fields(val) {
 						ent, ok := doc.GetEntity(entName)
 						if !ok {
-							vctx.ve.addf("element %s: attribute %s references undeclared entity %q", ename, aname, entName)
+							vctx.addf(ctx, "element %s: attribute %s references undeclared entity %q", ename, aname, entName)
 						} else if ent.EntityType() != enum.ExternalGeneralUnparsedEntity {
-							vctx.ve.addf("element %s: attribute %s references entity %q which is not unparsed", ename, aname, entName)
+							vctx.addf(ctx, "element %s: attribute %s references entity %q which is not unparsed", ename, aname, entName)
 						}
 					}
 				case enum.AttrNotation:
@@ -403,7 +388,7 @@ func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl,
 						}
 					}
 					if notFound {
-						vctx.ve.addf("element %s: attribute %s references undeclared notation %q", ename, aname, val)
+						vctx.addf(ctx, "element %s: attribute %s references undeclared notation %q", ename, aname, val)
 					}
 				}
 			}
@@ -413,10 +398,10 @@ func validateElementAttributes(doc *Document, elem *Element, edecl *ElementDecl,
 
 // validateDocumentFinal performs post-walk cross-reference checks.
 // Every IDREF value must match an ID declared somewhere in the document.
-func validateDocumentFinal(vctx *validCtx) {
+func validateDocumentFinal(ctx context.Context, vctx *validCtx) {
 	for ref := range vctx.idrefs {
 		if !vctx.ids[ref] {
-			vctx.ve.addf("IDREF %q references unknown ID", ref)
+			vctx.addf(ctx, "IDREF %q references unknown ID", ref)
 		}
 	}
 }
@@ -426,7 +411,7 @@ func validateDocumentFinal(vctx *validCtx) {
 // nodes. Per the VC: Standalone Document Declaration (XML §2.9), a
 // standalone="yes" document must not contain such whitespace when the
 // element declaration comes from the external subset.
-func checkStandaloneWhitespace(extSubset *DTD, elem *Element, name string, vctx *validCtx) {
+func checkStandaloneWhitespace(ctx context.Context, extSubset *DTD, elem *Element, name string, vctx *validCtx) {
 	extDecl, ok := extSubset.LookupElement(name, elem.Prefix())
 	if !ok {
 		extDecl, ok = extSubset.LookupElement(name, "")
@@ -436,7 +421,7 @@ func checkStandaloneWhitespace(extSubset *DTD, elem *Element, name string, vctx 
 	}
 	for child := range Children(elem) {
 		if child.Type() == TextNode && isBlankContent(child.Content()) {
-			vctx.ve.addf("standalone: element %s declared in the external subset contains white spaces nodes", name)
+			vctx.addf(ctx, "standalone: element %s declared in the external subset contains white spaces nodes", name)
 			return
 		}
 	}
@@ -444,26 +429,26 @@ func checkStandaloneWhitespace(extSubset *DTD, elem *Element, name string, vctx 
 
 // validateElementContent validates that the element's children match the
 // declared content model.
-func validateElementContent(dtd *DTD, elem *Element, edecl *ElementDecl, ve *DTDValidateError) {
+func validateElementContent(ctx context.Context, dtd *DTD, elem *Element, edecl *ElementDecl, vctx *validCtx) {
 	ename := elem.LocalName()
 
 	switch edecl.decltype {
 	case enum.EmptyElementType:
 		// EMPTY elements must have no children
 		if elem.FirstChild() != nil {
-			ve.addf("element %s: declared EMPTY but has content", ename)
+			vctx.addf(ctx, "element %s: declared EMPTY but has content", ename)
 		}
 	case enum.AnyElementType:
 		// ANY allows anything
 	case enum.MixedElementType:
 		// Mixed content: (#PCDATA | elem1 | elem2 | ...)*
 		// All child elements must be in the declared list
-		validateMixedContent(elem, edecl.content, ve)
+		validateMixedContent(ctx, elem, edecl.content, vctx)
 	case enum.ElementElementType:
 		// Element content: must match the content model exactly
 		children := collectChildElements(elem)
 		if !matchContentModel(edecl.content, children) {
-			ve.addf("element %s: content does not match declared content model", ename)
+			vctx.addf(ctx, "element %s: content does not match declared content model", ename)
 		}
 	}
 }
@@ -471,7 +456,7 @@ func validateElementContent(dtd *DTD, elem *Element, edecl *ElementDecl, ve *DTD
 // validateMixedContent validates children of a mixed-content element.
 // In mixed content (#PCDATA | a | b)*, text nodes are always allowed,
 // and element children must appear in the declared list.
-func validateMixedContent(elem *Element, content *ElementContent, ve *DTDValidateError) {
+func validateMixedContent(ctx context.Context, elem *Element, content *ElementContent, vctx *validCtx) {
 	if content == nil {
 		return
 	}
@@ -486,7 +471,7 @@ func validateMixedContent(elem *Element, content *ElementContent, ve *DTDValidat
 		case ElementNode:
 			cname := child.(*Element).LocalName()
 			if _, ok := allowed[cname]; !ok {
-				ve.addf("element %s: child element %s not allowed in mixed content", elem.LocalName(), cname)
+				vctx.addf(ctx, "element %s: child element %s not allowed in mixed content", elem.LocalName(), cname)
 			}
 		}
 	}

@@ -1,6 +1,8 @@
 package schematron
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -8,6 +10,34 @@ import (
 	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/stretchr/testify/require"
 )
+
+// internalValidationCollector collects *ValidationError from the handler.
+type internalValidationCollector struct {
+	errors *[]*ValidationError
+}
+
+func (c internalValidationCollector) Handle(_ context.Context, err error) {
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		*c.errors = append(*c.errors, ve)
+	}
+}
+
+func validateAndCollect(t *testing.T, schema *Schema, doc *helium.Document) ([]*ValidationError, error) {
+	t.Helper()
+	var collected []*ValidationError
+	handler := internalValidationCollector{errors: &collected}
+	err := NewValidator(schema).ErrorHandler(handler).Validate(t.Context(), doc)
+	return collected, err
+}
+
+func collectedString(collected []*ValidationError) string {
+	var sb strings.Builder
+	for _, ve := range collected {
+		sb.WriteString(ve.Error())
+	}
+	return sb.String()
+}
 
 func compileTestSchema(t *testing.T, xml string) (*Schema, string) {
 	t.Helper()
@@ -237,10 +267,11 @@ func TestLetVariableChainedDependency(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item val="bad"/></root>`))
 		require.NoError(t, err)
 
-		err = NewValidator(schema).Validate(t.Context(), doc)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "x is bad")
-		require.Contains(t, err.Error(), "y is hello")
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, ErrValidationFailed)
+		got := collectedString(collected)
+		require.Contains(t, got, "x is bad")
+		require.Contains(t, got, "y is hello")
 	})
 
 	t.Run("LIFO accumulation", func(t *testing.T) {
@@ -270,10 +301,10 @@ func TestLetVariableChainedDependency(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item/></root>`))
 		require.NoError(t, err)
 
-		err = NewValidator(schema).Validate(t.Context(), doc)
+		collected, err := validateAndCollect(t, schema, doc)
 		// a=1 should be reported since $a is properly registered.
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "a=1")
+		require.ErrorIs(t, err, ErrValidationFailed)
+		require.Contains(t, collectedString(collected), "a=1")
 	})
 }
 func TestXpathResultToStringBoolean(t *testing.T) {
@@ -356,11 +387,12 @@ func TestUnionContextIntegration(t *testing.T) {
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><invoice/><credit-note/><other/></root>`))
 	require.NoError(t, err)
 
-	err = NewValidator(schema).Validate(t.Context(), doc)
+	collected, err := validateAndCollect(t, schema, doc)
 	// Both invoice and credit-note should trigger the assert.
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invoice")
-	require.Contains(t, err.Error(), "credit-note")
+	require.ErrorIs(t, err, ErrValidationFailed)
+	got := collectedString(collected)
+	require.Contains(t, got, "invoice")
+	require.Contains(t, got, "credit-note")
 	// "other" should not be mentioned in failures.
-	require.NotContains(t, err.Error(), "other")
+	require.NotContains(t, got, "other")
 }

@@ -12,35 +12,35 @@ import (
 
 // validator holds state during document validation.
 type validator struct {
-	ctx              context.Context
-	grammar          *Grammar
-	filename         string
-	errorHandler     helium.ErrorHandler
-	structuredErrors []ValidationError
-	valid            bool
-	suppressDepth    int // when > 0, errors are suppressed (inside choice branches)
-	depth            int // recursion depth guard
+	ctx           context.Context
+	grammar       *Grammar
+	filename      string
+	errorHandler  helium.ErrorHandler
+	pendingErrors []error // buffered errors, flushed to errorHandler at end
+	valid         bool
+	suppressDepth int // when > 0, errors are suppressed (inside choice branches)
+	depth         int // recursion depth guard
 }
 
 const maxValidationDepth = 500
 
-func validateDocument(ctx context.Context, doc *helium.Document, grammar *Grammar, cfg *validateConfig) (bool, []ValidationError) {
+func validateDocument(ctx context.Context, doc *helium.Document, grammar *Grammar, cfg *validateConfig, handler helium.ErrorHandler) bool {
 	if grammar == nil || grammar.start == nil {
-		return false, nil
+		return false
 	}
 
 	v := &validator{
 		ctx:          ctx,
 		grammar:      grammar,
 		filename:     cfg.filename,
-		errorHandler: cfg.errorHandler,
+		errorHandler: handler,
 		valid:        true,
 	}
 
 	root := findDocElement(doc)
 	if root == nil {
 		v.valid = false
-		return false, nil
+		return false
 	}
 
 	// Create initial state: the root element
@@ -59,7 +59,12 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 		v.valid = false
 	}
 
-	return v.valid, v.structuredErrors
+	// Flush buffered errors to the handler.
+	for _, e := range v.pendingErrors {
+		handler.Handle(ctx, e)
+	}
+
+	return v.valid
 }
 
 // validState tracks the current position during validation.
@@ -196,14 +201,14 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 	savedSuppress := v.suppressDepth
 	v.suppressDepth = 0
 
-	errLenBefore := len(v.structuredErrors)
+	errLenBefore := len(v.pendingErrors)
 	if ret := v.validateElementBody(pat, elem, instanceAttrs, attrUsed, contentState); ret != 0 {
 		// For top-level choice content, check for unknown child elements
 		// and insert their errors before the body validation errors.
 		topChoice := len(pat.children) == 1 && pat.children[0].kind == patternChoice
 		if topChoice {
-			bodyErrors := append([]ValidationError(nil), v.structuredErrors[errLenBefore:]...)
-			v.structuredErrors = v.structuredErrors[:errLenBefore]
+			bodyErrors := append([]error(nil), v.pendingErrors[errLenBefore:]...)
+			v.pendingErrors = v.pendingErrors[:errLenBefore]
 			for _, n := range skipIgnored(contentState.seq) {
 				if e, ok := n.(*helium.Element); ok {
 					if !v.isKnownChildElement(pat, e.LocalName(), elemNS(e)) {
@@ -211,9 +216,9 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 					}
 				}
 			}
-			v.structuredErrors = append(v.structuredErrors, bodyErrors...)
+			v.pendingErrors = append(v.pendingErrors, bodyErrors...)
 		}
-		if len(v.structuredErrors) == errLenBefore {
+		if len(v.pendingErrors) == errLenBefore {
 			v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
 		}
 		v.suppressDepth = savedSuppress
@@ -315,7 +320,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		return v.validateGroupContent(pat, elem, attrs, attrUsed, state)
 
 	case patternChoice:
-		savedLen := len(v.structuredErrors)
+		savedLen := len(v.pendingErrors)
 		savedValid := v.valid
 		v.suppressDepth++
 		// Prefer branches that make progress; fall back to no-progress match.
@@ -328,14 +333,14 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 			copy(savedAttrUsed, attrUsed)
 
 			// Reset errors before each branch so branches don't accumulate.
-			v.structuredErrors = v.structuredErrors[:savedLen]
+			v.pendingErrors = v.pendingErrors[:savedLen]
 			v.valid = savedValid
 
 			if ret := v.validateContentPat(child, elem, attrs, attrUsed, state); ret == 0 {
 				if !seqEqual(state.seq, savedState.seq) || !boolSliceEqual(attrUsed, savedAttrUsed) {
 					// Branch made progress — use it.
 					v.suppressDepth--
-					v.structuredErrors = v.structuredErrors[:savedLen]
+					v.pendingErrors = v.pendingErrors[:savedLen]
 					v.valid = savedValid
 					return 0
 				}
@@ -344,7 +349,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 				*state = *savedState
 				copy(attrUsed, savedAttrUsed)
 			} else {
-				lastBranchLen = len(v.structuredErrors)
+				lastBranchLen = len(v.pendingErrors)
 				lastBranchValid = v.valid
 				*state = *savedState
 				copy(attrUsed, savedAttrUsed)
@@ -352,17 +357,17 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		}
 		v.suppressDepth--
 		if noProgressMatch {
-			v.structuredErrors = v.structuredErrors[:savedLen]
+			v.pendingErrors = v.pendingErrors[:savedLen]
 			v.valid = savedValid
 			return 0
 		}
 		// If errors grew from inside matched elements (e.g. attribute/value failures),
 		// keep those errors so the diagnostic chain is preserved.
 		if lastBranchLen > savedLen {
-			v.structuredErrors = v.structuredErrors[:lastBranchLen]
+			v.pendingErrors = v.pendingErrors[:lastBranchLen]
 			v.valid = lastBranchValid
 		} else {
-			v.structuredErrors = v.structuredErrors[:savedLen]
+			v.pendingErrors = v.pendingErrors[:savedLen]
 			v.valid = savedValid
 		}
 		if isValueChoice(pat) {
@@ -375,7 +380,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		savedState := state.clone()
 		savedAttrUsed := make([]bool, len(attrUsed))
 		copy(savedAttrUsed, attrUsed)
-		savedLen := len(v.structuredErrors)
+		savedLen := len(v.pendingErrors)
 		savedValid := v.valid
 		v.suppressDepth++
 		content := wrapChildren(pat.children)
@@ -384,7 +389,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		if ret != 0 {
 			*state = *savedState
 			copy(attrUsed, savedAttrUsed)
-			v.structuredErrors = v.structuredErrors[:savedLen]
+			v.pendingErrors = v.pendingErrors[:savedLen]
 			v.valid = savedValid
 		}
 		return 0
@@ -395,20 +400,20 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 			savedState := state.clone()
 			savedAttrUsed := make([]bool, len(attrUsed))
 			copy(savedAttrUsed, attrUsed)
-			savedLen := len(v.structuredErrors)
+			savedLen := len(v.pendingErrors)
 			savedValid := v.valid
 			v.suppressDepth++
 			ret := v.validateContentPat(content, elem, attrs, attrUsed, state)
 			v.suppressDepth--
 			if ret != 0 {
 				// Check if hard errors were emitted (from inside matched elements).
-				if len(v.structuredErrors) > savedLen {
+				if len(v.pendingErrors) > savedLen {
 					// Hard failure — propagate errors.
 					return -1
 				}
 				*state = *savedState
 				copy(attrUsed, savedAttrUsed)
-				v.structuredErrors = v.structuredErrors[:savedLen]
+				v.pendingErrors = v.pendingErrors[:savedLen]
 				v.valid = savedValid
 				break
 			}
@@ -429,18 +434,18 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 			savedState := state.clone()
 			savedAttrUsed := make([]bool, len(attrUsed))
 			copy(savedAttrUsed, attrUsed)
-			savedLen := len(v.structuredErrors)
+			savedLen := len(v.pendingErrors)
 			savedValid := v.valid
 			v.suppressDepth++
 			ret := v.validateContentPat(content, elem, attrs, attrUsed, state)
 			v.suppressDepth--
 			if ret != 0 {
-				if len(v.structuredErrors) > savedLen {
+				if len(v.pendingErrors) > savedLen {
 					return -1
 				}
 				*state = *savedState
 				copy(attrUsed, savedAttrUsed)
-				v.structuredErrors = v.structuredErrors[:savedLen]
+				v.pendingErrors = v.pendingErrors[:savedLen]
 				v.valid = savedValid
 				break
 			}
@@ -494,7 +499,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 								savedState := state.clone()
 								savedAttrUsed := make([]bool, len(attrUsed))
 								copy(savedAttrUsed, attrUsed)
-								savedLen := len(v.structuredErrors)
+								savedLen := len(v.pendingErrors)
 								savedValid := v.valid
 								v.suppressDepth++
 								ret := v.validateContentPat(child, elem, attrs, attrUsed, state)
@@ -504,7 +509,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 								}
 								*state = *savedState
 								copy(attrUsed, savedAttrUsed)
-								v.structuredErrors = v.structuredErrors[:savedLen]
+								v.pendingErrors = v.pendingErrors[:savedLen]
 								v.valid = savedValid
 							}
 						}
@@ -520,7 +525,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 						savedState := state.clone()
 						savedAttrUsed := make([]bool, len(attrUsed))
 						copy(savedAttrUsed, attrUsed)
-						savedLen := len(v.structuredErrors)
+						savedLen := len(v.pendingErrors)
 						savedValid := v.valid
 						v.suppressDepth++
 						ret := v.validateContentPat(member, elem, attrs, attrUsed, state)
@@ -530,7 +535,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 							consumed[i] = true
 							progress = true
 							gs.pos++
-							v.structuredErrors = v.structuredErrors[:savedLen]
+							v.pendingErrors = v.pendingErrors[:savedLen]
 							v.valid = savedValid
 							// Continue trying next members in same round
 							// (they might also match immediately).
@@ -539,7 +544,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 							// and try the next member.
 							*state = *savedState
 							copy(attrUsed, savedAttrUsed)
-							v.structuredErrors = v.structuredErrors[:savedLen]
+							v.pendingErrors = v.pendingErrors[:savedLen]
 							v.valid = savedValid
 							if v.isNullable(member) {
 								gs.pos++
@@ -562,7 +567,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 				savedState := state.clone()
 				savedAttrUsed := make([]bool, len(attrUsed))
 				copy(savedAttrUsed, attrUsed)
-				savedLen := len(v.structuredErrors)
+				savedLen := len(v.pendingErrors)
 				savedValid := v.valid
 				v.suppressDepth++
 				ret := v.validateContentPat(child, elem, attrs, attrUsed, state)
@@ -573,12 +578,12 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 					if !isRepeatable[i] {
 						done[i] = true
 					}
-					v.structuredErrors = v.structuredErrors[:savedLen]
+					v.pendingErrors = v.pendingErrors[:savedLen]
 					v.valid = savedValid
 				} else {
 					*state = *savedState
 					copy(attrUsed, savedAttrUsed)
-					v.structuredErrors = v.structuredErrors[:savedLen]
+					v.pendingErrors = v.pendingErrors[:savedLen]
 					v.valid = savedValid
 				}
 			}
@@ -664,7 +669,7 @@ func saveGroupBound(state *validState, attrUsed []bool, errLen int, valid bool) 
 func (b *groupBound) restore(state *validState, attrUsed []bool, v *validator) {
 	*state = *b.state
 	copy(attrUsed, b.attrUsed)
-	v.structuredErrors = v.structuredErrors[:b.errLen]
+	v.pendingErrors = v.pendingErrors[:b.errLen]
 	v.valid = b.valid
 }
 
@@ -682,7 +687,7 @@ func (v *validator) validateGroupContent(pat *pattern, elem *helium.Element,
 
 	// Save state before each child for backtracking.
 	bounds := make([]groupBound, 1, len(children)+1)
-	bounds[0] = saveGroupBound(state, attrUsed, len(v.structuredErrors), v.valid)
+	bounds[0] = saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid)
 
 	groupFailed := false
 	for gi, child := range children {
@@ -693,7 +698,7 @@ func (v *validator) validateGroupContent(pat *pattern, elem *helium.Element,
 			firstNodeBefore = trimmedBefore[0]
 		}
 
-		errLenBefore := len(v.structuredErrors)
+		errLenBefore := len(v.pendingErrors)
 		savedValid := v.valid
 		if ret := v.validateContentPat(child, elem, attrs, attrUsed, state); ret != 0 {
 			// Check if an element was consumed (sequence advanced)
@@ -706,13 +711,13 @@ func (v *validator) validateGroupContent(pat *pattern, elem *helium.Element,
 				// Element consumed but content failed — continue to collect
 				// errors from remaining group children (like libxml2 does)
 				groupFailed = true
-				bounds = append(bounds, saveGroupBound(state, attrUsed, len(v.structuredErrors), v.valid))
+				bounds = append(bounds, saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid))
 				continue
 			}
 
 			// No element consumed — try backtracking.
 			if gi > 0 && v.backtrackGroupFlexible(children, gi, elem, attrs, attrUsed, state, bounds) {
-				bounds = append(bounds, saveGroupBound(state, attrUsed, len(v.structuredErrors), v.valid))
+				bounds = append(bounds, saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid))
 				continue
 			}
 
@@ -722,21 +727,21 @@ func (v *validator) validateGroupContent(pat *pattern, elem *helium.Element,
 				if e, ok := remaining[0].(*helium.Element); ok {
 					expectedName := v.patternElementName(child)
 					if expectedName != "" && expectedName != e.LocalName() && child.kind == patternChoice {
-						v.structuredErrors = v.structuredErrors[:errLenBefore]
+						v.pendingErrors = v.pendingErrors[:errLenBefore]
 						v.valid = savedValid
 						v.addErrorOnNode(e, fmt.Sprintf("Expecting element %s, got %s", expectedName, e.LocalName()))
 						v.addErrorOnNode(e, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
-					} else if len(v.structuredErrors) == errLenBefore {
+					} else if len(v.pendingErrors) == errLenBefore {
 						v.addErrorOnNode(e, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
 					}
 				}
-			} else if len(v.structuredErrors) == errLenBefore && v.patternElementName(child) != "" {
+			} else if len(v.pendingErrors) == errLenBefore && v.patternElementName(child) != "" {
 				v.addError(elem, "Expecting an element , got nothing")
 			}
 			return -1
 		}
 
-		bounds = append(bounds, saveGroupBound(state, attrUsed, len(v.structuredErrors), v.valid))
+		bounds = append(bounds, saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid))
 	}
 	if groupFailed {
 		return -1
@@ -812,7 +817,7 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 
 			// Try remaining children [j+1..failIdx].
 			// Save error state so failed retries don't leave stale errors.
-			retryLen := len(v.structuredErrors)
+			retryLen := len(v.pendingErrors)
 			retryValid := v.valid
 			allOK := true
 			for k := j + 1; k <= failIdx; k++ {
@@ -825,19 +830,19 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 				best = &btSuccess{
 					state:    state.clone(),
 					attrUsed: append([]bool(nil), attrUsed...),
-					errLen:   len(v.structuredErrors),
+					errLen:   len(v.pendingErrors),
 					valid:    v.valid,
 				}
 			}
 			// Restore errors from before retry so failed attempts don't leak errors.
-			v.structuredErrors = v.structuredErrors[:retryLen]
+			v.pendingErrors = v.pendingErrors[:retryLen]
 			v.valid = retryValid
 		}
 
 		if best != nil {
 			*state = *best.state
 			copy(attrUsed, best.attrUsed)
-			v.structuredErrors = v.structuredErrors[:best.errLen]
+			v.pendingErrors = v.pendingErrors[:best.errLen]
 			v.valid = best.valid
 			return true
 		}
@@ -1236,7 +1241,7 @@ func (v *validator) validateGroup(pat *pattern, state *validState) int {
 
 func (v *validator) validateChoice(pat *pattern, state *validState) int {
 	// Save error state so failed branches don't pollute the output.
-	savedLen := len(v.structuredErrors)
+	savedLen := len(v.pendingErrors)
 	savedValid := v.valid
 
 	v.suppressDepth++
@@ -1245,7 +1250,7 @@ func (v *validator) validateChoice(pat *pattern, state *validState) int {
 		if ret := v.validatePattern(child, saved); ret == 0 {
 			v.suppressDepth--
 			// Restore error state (successful branch discards errors from prior branches)
-			v.structuredErrors = v.structuredErrors[:savedLen]
+			v.pendingErrors = v.pendingErrors[:savedLen]
 			v.valid = savedValid
 			*state = *saved
 			return 0
@@ -1254,7 +1259,7 @@ func (v *validator) validateChoice(pat *pattern, state *validState) int {
 	v.suppressDepth--
 
 	// All branches failed — restore error state (no branch errors emitted)
-	v.structuredErrors = v.structuredErrors[:savedLen]
+	v.pendingErrors = v.pendingErrors[:savedLen]
 	v.valid = savedValid
 	return -1
 }
@@ -1809,15 +1814,7 @@ func (v *validator) addError(elem *helium.Element, msg string) {
 	}
 	line := elem.Line()
 	errStr := validityError(v.filename, line, elem.LocalName(), msg)
-	v.structuredErrors = append(v.structuredErrors, ValidationError{
-		Filename: v.filename,
-		Line:     line,
-		Element:  elem.LocalName(),
-		Message:  msg,
-	})
-	if v.errorHandler != nil {
-		v.errorHandler.Handle(v.ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
-	}
+	v.pendingErrors = append(v.pendingErrors, helium.NewLeveledError(errStr, helium.ErrorLevelError))
 	v.valid = false
 }
 
@@ -1828,15 +1825,7 @@ func (v *validator) addErrorOnNode(elem *helium.Element, msg string) {
 	}
 	line := elem.Line()
 	errStr := validityError(v.filename, line, elem.LocalName(), msg)
-	v.structuredErrors = append(v.structuredErrors, ValidationError{
-		Filename: v.filename,
-		Line:     line,
-		Element:  elem.LocalName(),
-		Message:  msg,
-	})
-	if v.errorHandler != nil {
-		v.errorHandler.Handle(v.ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
-	}
+	v.pendingErrors = append(v.pendingErrors, helium.NewLeveledError(errStr, helium.ErrorLevelError))
 	v.valid = false
 }
 
@@ -1846,12 +1835,7 @@ func (v *validator) addBareError(msg string) {
 		return
 	}
 	errStr := bareValidityError(msg)
-	v.structuredErrors = append(v.structuredErrors, ValidationError{
-		Message: msg,
-	})
-	if v.errorHandler != nil {
-		v.errorHandler.Handle(v.ctx, helium.NewLeveledError(errStr, helium.ErrorLevelError))
-	}
+	v.pendingErrors = append(v.pendingErrors, helium.NewLeveledError(errStr, helium.ErrorLevelError))
 	v.valid = false
 }
 

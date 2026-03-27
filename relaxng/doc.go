@@ -16,13 +16,12 @@
 //	    Filename("input.xml").
 //	    Validate(ctx, doc)
 //
-// On failure, the returned error is a [*ValidateError] containing both a
-// libxml2-compatible output string and a structured [ValidationError] slice
-// for programmatic access to individual errors.
+// On failure, the returned error is [ErrValidationFailed]. Individual
+// validation errors are delivered to the configured [helium.ErrorHandler].
 //
 // # Error Handling
 //
 // Both [Compiler] and [Validator] accept an [helium.ErrorHandler] via the
-// ErrorHandler builder method. When set, individual errors are delivered to
-// the handler as they occur.
+// ErrorHandler builder method. Individual errors are delivered to the handler
+// as they occur.
 package relaxng

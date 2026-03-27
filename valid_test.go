@@ -3,11 +3,21 @@ package helium_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
+
+func containsError(errs []error, substr string) bool {
+	for _, e := range errs {
+		if strings.Contains(e.Error(), substr) {
+			return true
+		}
+	}
+	return false
+}
 
 func TestExtSubsetLookup_ElementInExtSubset(t *testing.T) {
 	t.Parallel()
@@ -61,10 +71,12 @@ func TestExtSubsetLookup_AttributeInExtSubset(t *testing.T) {
 <!DOCTYPE root SYSTEM "` + dtdPath + `">
 <root><child/></root>`
 
-	p := helium.NewParser().LoadExternalDTD(true).ValidateDTD(true)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	p := helium.NewParser().LoadExternalDTD(true).ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(xml))
-	require.Error(t, err, "missing REQUIRED attribute from extSubset should fail")
-	require.Contains(t, err.Error(), "attribute role is required")
+
+	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	require.True(t, containsError(collector.Errors(), "attribute role is required"))
 }
 
 func TestExtSubsetLookup_StandaloneYesPreventsExtSubset(t *testing.T) {
@@ -114,10 +126,12 @@ func TestEnumerationAttributeValidation(t *testing.T) {
   <!ATTLIST root color (red|green|blue) #REQUIRED>
 ]>
 <root color="yellow"/>`
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
 		_, err := p.Parse(t.Context(), []byte(xml))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "not among the enumerated set")
+	
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(collector.Errors(), "not among the enumerated set"))
 	})
 
 	t.Run("default value used when absent", func(t *testing.T) {
@@ -163,10 +177,12 @@ func TestEntityAttributeValidation(t *testing.T) {
   <!ATTLIST root img ENTITY #REQUIRED>
 ]>
 <root img="noSuchEntity"/>`
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
 		_, err := p.Parse(t.Context(), []byte(xml))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "undeclared entity")
+	
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(collector.Errors(), "undeclared entity"))
 	})
 
 	t.Run("wrong entity type (internal)", func(t *testing.T) {
@@ -179,10 +195,12 @@ func TestEntityAttributeValidation(t *testing.T) {
   <!ATTLIST root img ENTITY #REQUIRED>
 ]>
 <root img="internalEnt"/>`
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
 		_, err := p.Parse(t.Context(), []byte(xml))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "not unparsed")
+	
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(collector.Errors(), "not unparsed"))
 	})
 }
 
@@ -217,10 +235,12 @@ func TestEntitiesAttributeValidation(t *testing.T) {
   <!ATTLIST root imgs ENTITIES #REQUIRED>
 ]>
 <root imgs="logo1 noSuchEntity"/>`
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
 		_, err := p.Parse(t.Context(), []byte(xml))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "undeclared entity")
+	
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(collector.Errors(), "undeclared entity"))
 	})
 }
 
@@ -253,9 +273,11 @@ func TestNotationAttributeValidation(t *testing.T) {
   <!ATTLIST root fmt NOTATION (gif|png) #REQUIRED>
 ]>
 <root fmt="png"/>`
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
 		_, err := p.Parse(t.Context(), []byte(xml))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "undeclared notation")
+	
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(collector.Errors(), "undeclared notation"))
 	})
 }

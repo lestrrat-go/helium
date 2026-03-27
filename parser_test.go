@@ -3,7 +3,6 @@ package helium_test
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -359,16 +358,14 @@ func TestValidateDTDRequiredAttribute(t *testing.T) {
 ]>
 <doc/>`
 
-	p := helium.NewParser().ValidateDTD(true)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	doc, err := p.Parse(t.Context(), []byte(input))
+
 	require.Error(t, err, "missing #REQUIRED attribute should fail validation")
 	require.NotNil(t, doc, "document should still be returned with validation error")
-
-	ve, ok := errors.AsType[*helium.DTDValidateError](err)
-	require.True(t, ok, "error should be *ValidationError")
-	unwrapped := ve.Unwrap()
-	require.True(t, len(unwrapped) > 0)
-	require.Contains(t, unwrapped[0].Error(), "required")
+	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	require.True(t, containsError(collector.Errors(), "required"))
 }
 
 func TestValidateDTDRequiredPresent(t *testing.T) {
@@ -394,13 +391,12 @@ func TestValidateDTDFixedMismatch(t *testing.T) {
 ]>
 <doc version="2.0"/>`
 
-	p := helium.NewParser().ValidateDTD(true)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(input))
-	require.Error(t, err, "#FIXED attribute value mismatch should fail")
 
-	ve, ok := errors.AsType[*helium.DTDValidateError](err)
-	require.True(t, ok)
-	require.Contains(t, ve.Error(), "must be")
+	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	require.True(t, containsError(collector.Errors(), "must be"))
 }
 
 func TestValidateDTDFixedCorrect(t *testing.T) {
@@ -426,13 +422,12 @@ func TestValidateDTDEmptyElement(t *testing.T) {
 ]>
 <doc><child>text</child></doc>`
 
-	p := helium.NewParser().ValidateDTD(true)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(input))
-	require.Error(t, err, "EMPTY element with content should fail")
 
-	ve, ok := errors.AsType[*helium.DTDValidateError](err)
-	require.True(t, ok)
-	require.Contains(t, ve.Error(), "EMPTY")
+	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	require.True(t, containsError(collector.Errors(), "EMPTY"))
 }
 
 func TestValidateDTDElementContent(t *testing.T) {
@@ -656,10 +651,12 @@ func TestValidateDTDIDDuplicate(t *testing.T) {
 ]>
 <doc><item id="a"/><item id="a"/></doc>`
 
-	p := helium.NewParser().ValidateDTD(true)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(input))
-	require.Error(t, err, "duplicate ID should fail")
-	require.Contains(t, err.Error(), "duplicate ID")
+
+	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	require.True(t, containsError(collector.Errors(), "duplicate ID"))
 }
 
 func TestValidateDTDIDRefValid(t *testing.T) {
@@ -689,10 +686,12 @@ func TestValidateDTDIDRefMissing(t *testing.T) {
 ]>
 <doc><item id="x"/><ref target="y"/></doc>`
 
-	p := helium.NewParser().ValidateDTD(true)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(input))
-	require.Error(t, err, "IDREF to missing ID should fail")
-	require.Contains(t, err.Error(), "unknown ID")
+
+	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	require.True(t, containsError(collector.Errors(), "unknown ID"))
 }
 
 func TestValidateDTDIDRefsValid(t *testing.T) {
@@ -722,10 +721,12 @@ func TestValidateDTDIDRefsMissing(t *testing.T) {
 ]>
 <doc><item id="a"/><refs targets="a z"/></doc>`
 
-	p := helium.NewParser().ValidateDTD(true)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(input))
-	require.Error(t, err, "IDREFS with missing ref should fail")
-	require.Contains(t, err.Error(), "unknown ID")
+
+	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	require.True(t, containsError(collector.Errors(), "unknown ID"))
 }
 
 func TestParseInNodeContext(t *testing.T) {
