@@ -7,8 +7,9 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/internal/xpathstream"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // pattern is a compiled XSLT match pattern.
@@ -349,7 +350,7 @@ func isPatternFunctionArg(expr xpath3.Expr) bool {
 func (c *compiler) validatePatternFunctions(p *pattern, source string) error {
 	for _, alt := range p.Alternatives {
 		var walkErr error
-		xpath3.WalkExpr(alt.expr, func(e xpath3.Expr) bool {
+		xpathstream.WalkExpr(alt.expr, func(e xpath3.Expr) bool {
 			if walkErr != nil {
 				return false
 			}
@@ -404,7 +405,7 @@ func validatePredicateExpr(_ xpath3.Expr) error {
 // XTSE1060: current-group()/current-grouping-key() must not be used within a pattern.
 func checkPatternForbiddenFunctions(ast xpath3.Expr) error {
 	var walkErr error
-	xpath3.WalkExpr(ast, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(ast, func(e xpath3.Expr) bool {
 		if walkErr != nil {
 			return false
 		}
@@ -854,7 +855,7 @@ func matchPathStepPattern(ctx *execContext, e xpath3.PathStepExpr, node helium.N
 // way up the tree.
 func rightPartUsesDescendantAxis(expr xpath3.Expr) bool {
 	found := false
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}

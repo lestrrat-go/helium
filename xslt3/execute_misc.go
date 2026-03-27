@@ -5,8 +5,9 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/internal/xpathstream"
+	"github.com/lestrrat-go/helium/xpath3"
 )
 
 func (ec *execContext) execAnalyzeString(ctx context.Context, inst *analyzeStringInst) error {
@@ -772,11 +773,11 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 	}
 
 	// 5a. XTDE3160: certain XSLT functions are not allowed in xsl:evaluate
-	if xpath3.ExprUsesFunction(dynExpr, "current") {
+	if xpathstream.ExprUsesFunction(dynExpr, "current") {
 		return dynamicError(errCodeXTDE3160, "xsl:evaluate: current() is not allowed in dynamically evaluated expressions")
 	}
 	for _, blocked := range []string{"system-property", "current-output-uri", "available-system-properties", "document"} {
-		if xpath3.ExprUsesFunction(dynExpr, blocked) {
+		if xpathstream.ExprUsesFunction(dynExpr, blocked) {
 			return dynamicError(errCodeXTDE3160, "xsl:evaluate: %s() is not allowed in dynamically evaluated expressions", blocked)
 		}
 	}

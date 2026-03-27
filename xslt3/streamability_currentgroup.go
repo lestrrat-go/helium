@@ -1,6 +1,9 @@
 package xslt3
 
-import "github.com/lestrrat-go/helium/xpath3"
+import (
+	"github.com/lestrrat-go/helium/internal/xpathstream"
+	"github.com/lestrrat-go/helium/xpath3"
+)
 
 func countDownwardInInstructions(ss *Stylesheet, instructions []instruction) int {
 	total := 0
@@ -333,7 +336,7 @@ func countDownwardSelectionsInPathRHS(expr xpath3.Expr) int {
 // where the return clause requires buffering the bound node.
 func returnNavigatesFromVars(expr xpath3.Expr, vars map[string]struct{}) bool {
 	found := false
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -424,7 +427,7 @@ func exprHasContextOnlyDownward(expr xpath3.Expr) bool {
 			return
 		}
 		// For other node types, walk children normally.
-		xpath3.WalkExpr(e, func(child xpath3.Expr) bool {
+		xpathstream.WalkExpr(e, func(child xpath3.Expr) bool {
 			if found {
 				return false
 			}

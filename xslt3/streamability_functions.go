@@ -3,6 +3,7 @@ package xslt3
 import (
 	"strings"
 
+	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -30,7 +31,7 @@ func checkAbsorbingFunction(fn *xslFunction) error {
 	// path() is not streamable even in absorbing functions
 	for _, inst := range fn.Body {
 		for _, expr := range getInstructionExprs(inst) {
-			if xpath3.ExprUsesFunction(expr, "path") {
+			if xpathstream.ExprUsesFunction(expr, "path") {
 				return staticError(errCodeXTSE3430,
 					"absorbing function %q uses path(), which is not streamable", fn.Name.Name)
 			}
@@ -135,7 +136,7 @@ func checkShallowDescentFunction(fn *xslFunction) error {
 	// Check if descendant/descendant-or-self axes are used.
 	for _, inst := range fn.Body {
 		for _, expr := range getInstructionExprs(inst) {
-			if xpath3.ExprUsesDescendantOrSelf(expr) {
+			if xpathstream.ExprUsesDescendantOrSelf(expr) {
 				return staticError(errCodeXTSE3430,
 					"shallow-descent function %q uses descendant axis, violating its declared streamability", fn.Name.Name)
 			}
@@ -437,7 +438,7 @@ func isContextItemArg(expr xpath3.Expr) bool {
 func countCrawlingSelectionsInner(ss *Stylesheet, expr xpath3.Expr, _ bool) int {
 	expr = derefXPathExpr(expr)
 	count := 0
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		e = derefXPathExpr(e)
 		if fc, ok := e.(xpath3.FunctionCall); ok && isGroundingExprSS(ss, fc) {
 			return false // grounding function — result is grounded
@@ -469,7 +470,7 @@ func countCrawlingSelectionsInner(ss *Stylesheet, expr xpath3.Expr, _ bool) int 
 func countDeepCrawlingSelections(expr xpath3.Expr) int {
 	expr = derefXPathExpr(expr)
 	count := 0
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		e = derefXPathExpr(e)
 		if lp, ok := e.(xpath3.LocationPath); ok {
 			for _, step := range lp.Steps {
@@ -511,7 +512,7 @@ func exprHasConsumingTreatAsInPath(expr *xpath3.Expression) bool {
 		return false
 	}
 	found := false
-	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -713,7 +714,7 @@ func functionUsesUpwardFromParam(fn *xslFunction) bool {
 				continue
 			}
 			found := false
-			xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+			xpathstream.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
 				if found {
 					return false
 				}
@@ -760,7 +761,7 @@ func functionUsesUpwardFromParam(fn *xslFunction) bool {
 // exprHasUpwardAxis returns true if the expression contains any upward axis step.
 func exprHasUpwardAxis(expr xpath3.Expr) bool {
 	found := false
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}

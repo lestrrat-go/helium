@@ -1,6 +1,9 @@
 package xslt3
 
-import "github.com/lestrrat-go/helium/xpath3"
+import (
+	"github.com/lestrrat-go/helium/internal/xpathstream"
+	"github.com/lestrrat-go/helium/xpath3"
+)
 
 // collectAllInstructionExprs recursively walks an instruction tree and calls
 // fn for every XPath expression found, including expressions in nested bodies.
@@ -183,7 +186,7 @@ func exprHasParamInLoop(expr xpath3.Expr, paramNames map[string]bool) bool {
 		}
 		if hasForClause {
 			found := false
-			xpath3.WalkExpr(flwor.Return, func(e xpath3.Expr) bool {
+			xpathstream.WalkExpr(flwor.Return, func(e xpath3.Expr) bool {
 				if found {
 					return false
 				}
@@ -220,13 +223,13 @@ func functionHasParamInSimpleMap(fn *xslFunction) bool {
 				continue
 			}
 			found := false
-			xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+			xpathstream.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
 				if found {
 					return false
 				}
 				if sme, ok := e.(xpath3.SimpleMapExpr); ok {
 					// Check if the RHS references the streaming parameter
-					xpath3.WalkExpr(sme.Right, func(inner xpath3.Expr) bool {
+					xpathstream.WalkExpr(sme.Right, func(inner xpath3.Expr) bool {
 						if found {
 							return false
 						}
@@ -253,7 +256,7 @@ func functionHasParamInSimpleMap(fn *xslFunction) bool {
 // in a consuming way (downward navigation, function arguments, etc.).
 func countParamDownwardRefs(expr *xpath3.Expression, paramName string) int {
 	count := 0
-	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
 		// $param/child or $param/* (PathStepExpr)
 		if ps, ok := e.(xpath3.PathStepExpr); ok {
 			if ve, ok := ps.Left.(xpath3.VariableExpr); ok {
@@ -324,7 +327,7 @@ func exprConsumesParam(expr *xpath3.Expression, params []*param) bool {
 	}
 
 	found := false
-	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -371,7 +374,7 @@ func exprConsumesParam(expr *xpath3.Expression, params []*param) bool {
 // (navigated into, passed to consuming function, etc.).
 func exprUsesVarConsumingly(expr *xpath3.Expression, varName string) bool {
 	found := false
-	xpath3.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr.AST(), func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -622,7 +625,7 @@ func getChildInstructions(inst instruction) [][]instruction {
 // For text nodes, current() is motionless since the value is immediate.
 func patternHasCurrentOnElementStep(expr xpath3.Expr) bool {
 	found := false
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
@@ -660,7 +663,7 @@ func stepMatchesElements(step xpath3.Step) bool {
 // exprUsesCurrent returns true if the expression contains a call to current().
 func exprUsesCurrent(expr xpath3.Expr) bool {
 	found := false
-	xpath3.WalkExpr(expr, func(e xpath3.Expr) bool {
+	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}

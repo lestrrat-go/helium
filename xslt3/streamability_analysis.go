@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -52,7 +53,7 @@ func analyzeStreamability(ss *Stylesheet) error {
 		// are not allowed (XTSE3430).
 		if tmpl.Match != nil {
 			for _, alt := range tmpl.Match.Alternatives {
-				if xpath3.ExprTreeHasNonMotionlessPredicate(alt.expr) {
+				if xpathstream.ExprTreeHasNonMotionlessPredicate(alt.expr) {
 					md.Streamable = false
 					break
 				}
@@ -87,7 +88,7 @@ func analyzeStreamability(ss *Stylesheet) error {
 				continue
 			}
 			// A motionless expression must not navigate the document at all.
-			if xpath3.ExprHasDownwardStep(acc.Initial) {
+			if xpathstream.ExprHasDownwardStep(acc.Initial) {
 				acc.Streamable = false
 				continue
 			}
@@ -99,7 +100,7 @@ func analyzeStreamability(ss *Stylesheet) error {
 				continue
 			}
 			for _, alt := range rule.Match.Alternatives {
-				if xpath3.ExprTreeHasNonMotionlessPredicate(alt.expr) {
+				if xpathstream.ExprTreeHasNonMotionlessPredicate(alt.expr) {
 					acc.Streamable = false
 					demoted = true
 					break
@@ -119,12 +120,12 @@ func analyzeStreamability(ss *Stylesheet) error {
 			// consuming because the element may have unprocessed children.
 			// For text/attribute matches, "." is fine (the value is atomic).
 			if rule.Select != nil {
-				if xpath3.ExprHasDownwardStep(rule.Select) {
+				if xpathstream.ExprHasDownwardStep(rule.Select) {
 					acc.Streamable = false
 					demoted = true
 					break
 				}
-				if xpath3.ExprUsesContextItem(rule.Select) && accRuleMatchesElement(rule) {
+				if xpathstream.ExprUsesContextItem(rule.Select) && accRuleMatchesElement(rule) {
 					acc.Streamable = false
 					demoted = true
 					break
@@ -212,7 +213,7 @@ func checkAccAfterPreDescentInner(body []instruction) (bool, error) {
 		// accumulator-after is not available). xsl:attribute select
 		// is NOT checked here because attributes can be delayed.
 		if vo, ok := inst.(*valueOfInst); ok {
-			if vo.Select != nil && xpath3.ExprUsesFunction(vo.Select, "accumulator-after") {
+			if vo.Select != nil && xpathstream.ExprUsesFunction(vo.Select, "accumulator-after") {
 				return false, staticError(errCodeXTSE3430,
 					"accumulator-after() used in pre-descent position is not streamable")
 			}
@@ -241,17 +242,17 @@ func instrIsConsuming(inst instruction) bool {
 		if v.Select == nil {
 			return true
 		}
-		return xpath3.ExprHasDownwardStep(v.Select) || xpath3.ExprUsesContextItem(v.Select)
+		return xpathstream.ExprHasDownwardStep(v.Select) || xpathstream.ExprUsesContextItem(v.Select)
 	case *forEachInst:
-		return v.Select != nil && xpath3.ExprHasDownwardStep(v.Select)
+		return v.Select != nil && xpathstream.ExprHasDownwardStep(v.Select)
 	case *iterateInst:
-		return v.Select != nil && xpath3.ExprHasDownwardStep(v.Select)
+		return v.Select != nil && xpathstream.ExprHasDownwardStep(v.Select)
 	case *valueOfInst:
-		return v.Select != nil && xpath3.ExprHasDownwardStep(v.Select)
+		return v.Select != nil && xpathstream.ExprHasDownwardStep(v.Select)
 	case *xslSequenceInst:
-		return v.Select != nil && xpath3.ExprHasDownwardStep(v.Select)
+		return v.Select != nil && xpathstream.ExprHasDownwardStep(v.Select)
 	case *copyOfInst:
-		return v.Select != nil && (xpath3.ExprHasDownwardStep(v.Select) || xpath3.ExprUsesContextItem(v.Select))
+		return v.Select != nil && (xpathstream.ExprHasDownwardStep(v.Select) || xpathstream.ExprUsesContextItem(v.Select))
 	}
 	return false
 }
@@ -361,7 +362,7 @@ func checkStreamableInstruction(ss *Stylesheet, inst instruction) error {
 func checkStreamableInstructionCtx(ss *Stylesheet, inst instruction, inResultDoc bool) error {
 	switch v := inst.(type) {
 	case *applyTemplatesInst:
-		if v.Select != nil && xpath3.ExprUsesDescendantOrSelf(v.Select) &&
+		if v.Select != nil && xpathstream.ExprUsesDescendantOrSelf(v.Select) &&
 			!exprEndsWithGrounding(v.Select.AST()) {
 			return staticError(errCodeXTSE3430,
 				"xsl:apply-templates with crawling select expression %q is not streamable", v.Select.String())
@@ -432,9 +433,9 @@ func checkStreamableInstructionCtx(ss *Stylesheet, inst instruction, inResultDoc
 	// upward (parent/ancestor), check for downward navigation in the body only
 	// (up-then-down is not streamable).
 	if fe, ok := inst.(*forEachInst); ok {
-		if fe.Select != nil && !xpath3.ExprHasDownwardStep(fe.Select) && !xpath3.ExprUsesDescendantOrSelf(fe.Select) {
+		if fe.Select != nil && !xpathstream.ExprHasDownwardStep(fe.Select) && !xpathstream.ExprUsesDescendantOrSelf(fe.Select) {
 			// Check up-then-down: for-each navigates upward and body goes down.
-			if xpath3.ExprUsesUpwardAxis(fe.Select) && bodyHasDownwardNavigation(fe.Body) {
+			if xpathstream.ExprUsesUpwardAxis(fe.Select) && bodyHasDownwardNavigation(fe.Body) {
 				return staticError(errCodeXTSE3430,
 					"xsl:for-each select %q navigates upward and body navigates downward, which is not streamable (up-then-down)",
 					fe.Select.String())
@@ -533,7 +534,7 @@ func bodyHasDownwardNavigation(body []instruction) bool {
 			if expr == nil {
 				continue
 			}
-			if xpath3.ExprHasDownwardStep(expr) {
+			if xpathstream.ExprHasDownwardStep(expr) {
 				return true
 			}
 		}
