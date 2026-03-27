@@ -358,12 +358,14 @@ func TestValidateDTDRequiredAttribute(t *testing.T) {
 ]>
 <doc/>`
 
-	p := helium.NewParser().ValidateDTD(true)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	doc, err := p.Parse(t.Context(), []byte(input))
+	_ = collector.Close()
 	require.Error(t, err, "missing #REQUIRED attribute should fail validation")
 	require.NotNil(t, doc, "document should still be returned with validation error")
-
 	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	require.True(t, containsError(collector.Errors(), "required"))
 }
 
 func TestValidateDTDRequiredPresent(t *testing.T) {
@@ -389,11 +391,12 @@ func TestValidateDTDFixedMismatch(t *testing.T) {
 ]>
 <doc version="2.0"/>`
 
-	p := helium.NewParser().ValidateDTD(true)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(input))
-	require.Error(t, err, "#FIXED attribute value mismatch should fail")
-
+	_ = collector.Close()
 	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	require.True(t, containsError(collector.Errors(), "must be"))
 }
 
 func TestValidateDTDFixedCorrect(t *testing.T) {
@@ -419,11 +422,12 @@ func TestValidateDTDEmptyElement(t *testing.T) {
 ]>
 <doc><child>text</child></doc>`
 
-	p := helium.NewParser().ValidateDTD(true)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
 	_, err := p.Parse(t.Context(), []byte(input))
-	require.Error(t, err, "EMPTY element with content should fail")
-
+	_ = collector.Close()
 	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+	require.True(t, containsError(collector.Errors(), "EMPTY"))
 }
 
 func TestValidateDTDElementContent(t *testing.T) {
