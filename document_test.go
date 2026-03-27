@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,7 +68,7 @@ func TestGetElementByID(t *testing.T) {
 		require.NoError(t, doc.AddChild(root))
 
 		child := doc.CreateElement("child")
-		ns := helium.NewNamespace("xml", helium.XMLNamespace)
+		ns := helium.NewNamespace("xml", lexicon.NamespaceXML)
 		_, err := child.SetAttributeNS("id", "myid", ns)
 		require.NoError(t, err)
 		require.NoError(t, root.AddChild(child))

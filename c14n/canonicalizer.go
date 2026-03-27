@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 type canonicalizer struct {
@@ -329,7 +330,7 @@ func (c *canonicalizer) renderNamespacesNodeSet(e *helium.Element) error {
 	hasDefaultNS := false
 	for _, nsn := range nsNodes {
 		// Skip the xml namespace — it's never explicitly declared in C14N
-		if nsn.prefix == helium.XMLPrefix {
+		if nsn.prefix == lexicon.PrefixXML {
 			continue
 		}
 		if nsn.prefix == "" {
@@ -372,7 +373,7 @@ func (c *canonicalizer) renderNSNodesAsText(e *helium.Element) error {
 
 	var toOutput []nsSortEntry
 	for _, nsn := range nsNodes {
-		if nsn.prefix == helium.XMLPrefix {
+		if nsn.prefix == lexicon.PrefixXML {
 			continue
 		}
 		toOutput = append(toOutput, nsn)
@@ -401,7 +402,7 @@ func (c *canonicalizer) renderNSNodesAsTextExclusive(e *helium.Element) error {
 
 	var toOutput []nsSortEntry
 	for _, nsn := range nsNodes {
-		if nsn.prefix == helium.XMLPrefix {
+		if nsn.prefix == lexicon.PrefixXML {
 			continue
 		}
 		if _, ok := c.inclusivePrefixes[nsn.prefix]; !ok {
@@ -571,7 +572,7 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 	var toOutput []nsSortEntry
 
 	for prefix := range candidates {
-		if prefix == helium.XMLPrefix {
+		if prefix == lexicon.PrefixXML {
 			continue
 		}
 
@@ -637,7 +638,7 @@ func (c *canonicalizer) collectInScopeNamespaces(e *helium.Element) map[string]s
 	// Remove xml namespace (never explicitly output per C14N spec,
 	// unless it's inherited via xml:* attributes in node-set mode)
 	if c.nodeSet == nil {
-		delete(nsMap, helium.XMLPrefix)
+		delete(nsMap, lexicon.PrefixXML)
 	}
 
 	return nsMap
@@ -726,7 +727,7 @@ func (c *canonicalizer) inheritXMLAttrs(e *helium.Element, entries *[]attrSortEn
 	// Walk ALL ancestors to find xml:* attrs. Take the nearest value for each.
 	present := make(map[string]bool)
 	for _, entry := range *entries {
-		if entry.nsURI == helium.XMLNamespace {
+		if entry.nsURI == lexicon.NamespaceXML {
 			present[entry.localName] = true
 		}
 	}
@@ -737,7 +738,7 @@ func (c *canonicalizer) inheritXMLAttrs(e *helium.Element, entries *[]attrSortEn
 		}
 		anc := n.(*helium.Element)
 		for _, attr := range anc.Attributes() {
-			if attr.URI() != helium.XMLNamespace {
+			if attr.URI() != lexicon.NamespaceXML {
 				continue
 			}
 			ln := attr.LocalName()
@@ -746,7 +747,7 @@ func (c *canonicalizer) inheritXMLAttrs(e *helium.Element, entries *[]attrSortEn
 			}
 			*entries = append(*entries, attrSortEntry{
 				attr:      attr,
-				nsURI:     helium.XMLNamespace,
+				nsURI:     lexicon.NamespaceXML,
 				localName: ln,
 			})
 			present[ln] = true
@@ -766,7 +767,7 @@ func (c *canonicalizer) inheritXMLAttrsC14N11(e *helium.Element, entries *[]attr
 
 	present := make(map[string]bool)
 	for _, entry := range *entries {
-		if entry.nsURI == helium.XMLNamespace {
+		if entry.nsURI == lexicon.NamespaceXML {
 			present[entry.localName] = true
 		}
 	}
@@ -777,7 +778,7 @@ func (c *canonicalizer) inheritXMLAttrsC14N11(e *helium.Element, entries *[]attr
 		}
 		anc := n.(*helium.Element)
 		for _, attr := range anc.Attributes() {
-			if attr.URI() != helium.XMLNamespace {
+			if attr.URI() != lexicon.NamespaceXML {
 				continue
 			}
 			ln := attr.LocalName()
@@ -790,7 +791,7 @@ func (c *canonicalizer) inheritXMLAttrsC14N11(e *helium.Element, entries *[]attr
 			}
 			*entries = append(*entries, attrSortEntry{
 				attr:      attr,
-				nsURI:     helium.XMLNamespace,
+				nsURI:     lexicon.NamespaceXML,
 				localName: ln,
 			})
 			present[ln] = true
@@ -896,7 +897,7 @@ const xmlBaseLocalName = "base"
 // getXMLBaseAttr returns the xml:base attribute value of an element, or "".
 func getXMLBaseAttr(e *helium.Element) string {
 	for _, attr := range e.Attributes() {
-		if attr.LocalName() == xmlBaseLocalName && attr.URI() == helium.XMLNamespace {
+		if attr.LocalName() == xmlBaseLocalName && attr.URI() == lexicon.NamespaceXML {
 			return string(attr.Value())
 		}
 	}
@@ -961,7 +962,7 @@ func relativizeURI(base, target string) string {
 func (c *canonicalizer) removeXMLBaseEntry(entries *[]attrSortEntry) {
 	result := (*entries)[:0]
 	for _, entry := range *entries {
-		if entry.nsURI == helium.XMLNamespace && entry.localName == xmlBaseLocalName {
+		if entry.nsURI == lexicon.NamespaceXML && entry.localName == xmlBaseLocalName {
 			continue
 		}
 		result = append(result, entry)
@@ -973,14 +974,14 @@ func (c *canonicalizer) removeXMLBaseEntry(entries *[]attrSortEntry) {
 func (c *canonicalizer) setXMLBaseEntry(entries *[]attrSortEntry, value string) {
 	// Replace existing xml:base or add new
 	for i, e := range *entries {
-		if e.nsURI == helium.XMLNamespace && e.localName == xmlBaseLocalName {
+		if e.nsURI == lexicon.NamespaceXML && e.localName == xmlBaseLocalName {
 			(*entries)[i].fixupValue = value
 			return
 		}
 	}
 	// Add new entry with fixupValue (attr is nil for synthetic entries)
 	*entries = append(*entries, attrSortEntry{
-		nsURI:      helium.XMLNamespace,
+		nsURI:      lexicon.NamespaceXML,
 		localName:  xmlBaseLocalName,
 		fixupValue: value,
 	})

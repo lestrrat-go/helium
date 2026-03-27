@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
-
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,7 +20,7 @@ func TestCreateAttributeRejectsColon(t *testing.T) {
 	require.Error(t, err)
 
 	// Passing a proper local name should succeed.
-	ns := helium.NewNamespace("xml", helium.XMLNamespace)
+	ns := helium.NewNamespace("xml", lexicon.NamespaceXML)
 	attr, err := doc.CreateAttribute("base", "http://example.com", ns)
 	require.NoError(t, err)
 	require.Equal(t, "base", attr.LocalName())

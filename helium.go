@@ -1,13 +1,6 @@
 package helium
 
-import "github.com/lestrrat-go/helium/internal/lexicon"
-
-const (
-	XMLNamespace = lexicon.NamespaceXML
-	XMLNsPrefix  = lexicon.PrefixXMLNS
-	XMLPrefix    = lexicon.PrefixXML
-	xmlTextNoEnc = "textnoenc"
-)
+const xmlTextNoEnc = "textnoenc"
 
 // ClarkName returns the Clark notation "{uri}local" for a namespace URI and
 // local name pair.

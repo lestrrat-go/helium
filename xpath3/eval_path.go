@@ -699,7 +699,7 @@ func matchPrefix(prefix string, n helium.Node, ec *evalContext) bool {
 	}
 	// The xml prefix is always bound per the XML Namespaces spec.
 	if prefix == "xml" {
-		return ixpath.NodeNamespaceURI(n) == helium.XMLNamespace
+		return ixpath.NodeNamespaceURI(n) == lexicon.NamespaceXML
 	}
 	// Check built-in XPath prefixes (fn, xs, math, map, array, err).
 	if uri, ok := defaultPrefixNS[prefix]; ok {

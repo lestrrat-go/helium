@@ -46,7 +46,7 @@ func (c *compiler) compileTemplate(elem *helium.Element) error {
 	// Only check the template element itself (not ancestors), since c.baseURI
 	// already accounts for xml:base on the stylesheet root and includes.
 	templateBaseURI := c.baseURI
-	if xmlBase, ok := elem.GetAttributeNS("base", helium.XMLNamespace); ok && xmlBase != "" {
+	if xmlBase, ok := elem.GetAttributeNS("base", lexicon.NamespaceXML); ok && xmlBase != "" {
 		templateBaseURI = helium.BuildURI(xmlBase, c.baseURI)
 	}
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // sentinel errors for XPath built-in function argument validation.
@@ -535,7 +536,7 @@ func fnLang(ctx *evalContext, args []*Result) (*Result, error) {
 			continue
 		}
 		for _, attr := range elem.Attributes() {
-			if attr.LocalName() == "lang" && attr.URI() == helium.XMLNamespace {
+			if attr.LocalName() == "lang" && attr.URI() == lexicon.NamespaceXML {
 				val := strings.ToLower(attr.Value())
 				if val == langArg || strings.HasPrefix(val, langArg+"-") {
 					return &Result{Type: BooleanResult, Bool: true}, nil

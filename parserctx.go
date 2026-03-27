@@ -259,8 +259,8 @@ func (ctx *parserCtx) popNode() (elem *nodeEntry) {
 }
 
 func (ctx *parserCtx) lookupNamespace(prefix string) string {
-	if prefix == XMLPrefix {
-		return XMLNamespace
+	if prefix == lexicon.PrefixXML {
+		return lexicon.NamespaceXML
 	}
 	return ctx.nsTab.Lookup(prefix)
 }
@@ -1364,7 +1364,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			return pctx.error(ctx, err)
 		}
 
-		if attname == XMLNsPrefix && aprefix == "" {
+		if attname == lexicon.PrefixXMLNS && aprefix == "" {
 			// <elem xmlns="...">
 			// Namespace URI entity/character references are expanded inline
 			// during attribute value parsing (replaceEntities forced true in
@@ -1386,7 +1386,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			}
 			pctx.skipBlanks(ctx)
 			continue
-		} else if aprefix == XMLNsPrefix {
+		} else if aprefix == lexicon.PrefixXMLNS {
 			var u *url.URL         // predeclare, so we can use goto SkipNS
 			var existingURI string // predeclare, so we can use goto SkipNS
 
@@ -1394,14 +1394,14 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			// Namespace URI entity/character references are expanded inline
 			// during attribute value parsing (replaceEntities forced true in
 			// parseAttribute for namespace attrs), so no post-processing needed.
-			if attname == XMLPrefix { // xmlns:xml
-				if attvalue != XMLNamespace {
+			if attname == lexicon.PrefixXML { // xmlns:xml
+				if attvalue != lexicon.NamespaceXML {
 					return pctx.namespaceError(ctx, errors.New("xml namespace prefix mapped to wrong URI"))
 				}
 				// skip storing namespace definition
 				goto SkipNS
 			}
-			if attname == XMLNsPrefix { // xmlns:xmlns="..."
+			if attname == lexicon.PrefixXMLNS { // xmlns:xmlns="..."
 				return pctx.namespaceError(ctx, errors.New("redefinition of the xmlns prefix forbidden"))
 			}
 
@@ -1482,7 +1482,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		if ok {
 			// First pass: apply default xmlns="..." (must come before prefixed)
 			for _, attr := range defaults {
-				if attr.LocalName() == XMLNsPrefix && attr.Prefix() == "" {
+				if attr.LocalName() == lexicon.PrefixXMLNS && attr.Prefix() == "" {
 					pctx.pushNS("", attr.Value())
 					nbNs++
 				}
@@ -1491,9 +1491,9 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			for _, attr := range defaults {
 				attname := attr.LocalName()
 				aprefix := attr.Prefix()
-				if attname == XMLNsPrefix && aprefix == "" {
+				if attname == lexicon.PrefixXMLNS && aprefix == "" {
 					continue // already handled
-				} else if aprefix == XMLNsPrefix {
+				} else if aprefix == lexicon.PrefixXMLNS {
 					pctx.pushNS(attname, attr.Value())
 					nbNs++
 				} else {
@@ -1520,7 +1520,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 
 	// Scan attributes for xml:space to update the space stack
 	for _, a := range attrs {
-		if a.prefix == XMLPrefix && a.localname == "space" {
+		if a.prefix == lexicon.PrefixXML && a.localname == "space" {
 			switch a.value {
 			case "preserve":
 				pctx.spaceTab[len(pctx.spaceTab)-1] = 1
@@ -1878,7 +1878,7 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 	// parsing, matching libxml2's isNamespace flag in xmlParseAttValueInternal.
 	// This avoids a second decodeEntities pass that would trigger extra
 	// SAX getEntity callbacks.
-	isNamespace := (l == XMLNsPrefix && p == "") || p == XMLNsPrefix
+	isNamespace := (l == lexicon.PrefixXMLNS && p == "") || p == lexicon.PrefixXMLNS
 	savedReplaceEntities := pctx.replaceEntities
 	if isNamespace {
 		pctx.replaceEntities = true
@@ -5736,8 +5736,8 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, exte
 					e.baseDocNode().entityBaseURI = uri
 					if !pctx.options.IsSet(parseNoBaseFix) {
 						if elem, ok := e.(*Element); ok {
-							if _, exists := elem.GetAttributeNS("base", XMLNamespace); !exists {
-								_, _ = elem.SetAttributeNS("base", uri, newNamespace("xml", XMLNamespace))
+							if _, exists := elem.GetAttributeNS("base", lexicon.NamespaceXML); !exists {
+								_, _ = elem.SetAttributeNS("base", uri, newNamespace("xml", lexicon.NamespaceXML))
 							}
 						}
 					}

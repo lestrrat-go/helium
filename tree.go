@@ -192,7 +192,7 @@ func LookupNSByPrefix(e *Element, prefix string) *Namespace {
 		node = node.Parent()
 	}
 	if prefix == "xml" {
-		return NewNamespace("xml", XMLNamespace)
+		return NewNamespace("xml", lexicon.NamespaceXML)
 	}
 	return nil
 }
@@ -205,8 +205,8 @@ func lookupNSByPrefix(e *Element, prefix string) *Namespace {
 // LookupNSByHref walks the element and its ancestors to find a namespace
 // declaration matching the given URI.
 func LookupNSByHref(e *Element, href string) *Namespace {
-	if href == XMLNamespace {
-		return NewNamespace("xml", XMLNamespace)
+	if href == lexicon.NamespaceXML {
+		return NewNamespace("xml", lexicon.NamespaceXML)
 	}
 	var node Node = e
 	for node != nil {

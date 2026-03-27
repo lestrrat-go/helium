@@ -5,6 +5,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/stretchr/testify/require"
 )
 
@@ -133,7 +134,7 @@ func TestLookupNSByHref(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		e := doc.CreateElement("root")
 
-		ns := helium.LookupNSByHref(e, helium.XMLNamespace)
+		ns := helium.LookupNSByHref(e, lexicon.NamespaceXML)
 		require.NotNil(t, ns)
 		require.Equal(t, "xml", ns.Prefix())
 	})
@@ -158,7 +159,7 @@ func TestLookupNSByPrefix(t *testing.T) {
 
 	ns = helium.LookupNSByPrefix(e, "xml")
 	require.NotNil(t, ns)
-	require.Equal(t, helium.XMLNamespace, ns.URI())
+	require.Equal(t, lexicon.NamespaceXML, ns.URI())
 
 	ns = helium.LookupNSByPrefix(e, "missing")
 	require.Nil(t, ns)
@@ -179,7 +180,7 @@ func TestNodeGetBase(t *testing.T) {
 		e := doc.CreateElement("root")
 		require.NoError(t, doc.AddChild(e))
 
-		xmlNS := helium.NewNamespace("xml", helium.XMLNamespace)
+		xmlNS := helium.NewNamespace("xml", lexicon.NamespaceXML)
 		_, err := e.SetAttributeNS("base", "http://example.com/", xmlNS)
 		require.NoError(t, err)
 
@@ -192,7 +193,7 @@ func TestNodeGetBase(t *testing.T) {
 		parent := doc.CreateElement("parent")
 		require.NoError(t, doc.AddChild(parent))
 
-		xmlNS := helium.NewNamespace("xml", helium.XMLNamespace)
+		xmlNS := helium.NewNamespace("xml", lexicon.NamespaceXML)
 		_, err := parent.SetAttributeNS("base", "http://example.com/dir/", xmlNS)
 		require.NoError(t, err)
 
@@ -208,7 +209,7 @@ func TestNodeGetBase(t *testing.T) {
 		parent := doc.CreateElement("parent")
 		require.NoError(t, doc.AddChild(parent))
 
-		xmlNS := helium.NewNamespace("xml", helium.XMLNamespace)
+		xmlNS := helium.NewNamespace("xml", lexicon.NamespaceXML)
 		_, err := parent.SetAttributeNS("base", "http://example.com/a/b/", xmlNS)
 		require.NoError(t, err)
 
@@ -249,7 +250,7 @@ func TestDocumentURL(t *testing.T) {
 		root := doc.CreateElement("root")
 		require.NoError(t, doc.AddChild(root))
 
-		xmlNS := helium.NewNamespace("xml", helium.XMLNamespace)
+		xmlNS := helium.NewNamespace("xml", lexicon.NamespaceXML)
 		_, err := root.SetAttributeNS("base", "sub/", xmlNS)
 		require.NoError(t, err)
 

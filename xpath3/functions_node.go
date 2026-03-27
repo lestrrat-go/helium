@@ -9,6 +9,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/unparsedtext"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
@@ -400,7 +401,7 @@ func fnLang(ctx context.Context, args []Sequence) (Sequence, error) {
 			continue
 		}
 		for _, attr := range elem.Attributes() {
-			if attr.LocalName() == "lang" && attr.URI() == helium.XMLNamespace {
+			if attr.LocalName() == "lang" && attr.URI() == lexicon.NamespaceXML {
 				val := strings.ToLower(attr.Value())
 				if val == langArg || strings.HasPrefix(val, langArg+"-") {
 					return SingleBoolean(true), nil
