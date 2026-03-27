@@ -265,6 +265,9 @@ func (ctx *parserCtx) attrNormalizeSpace(s string) (value string) {
 		out = append(out, 0x20)
 	}
 
+	if len(out) == 0 {
+		return ""
+	}
 	if out[len(out)-1] == 0x20 {
 		out = out[:len(out)-1]
 	}

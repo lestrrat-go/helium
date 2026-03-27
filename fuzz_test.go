@@ -81,6 +81,42 @@ func TestFuzzRepros(t *testing.T) {
 		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
 		require.Error(t, err)
 	})
+
+	t.Run("invalid qname local in attr", func(t *testing.T) {
+		t.Parallel()
+		p := helium.NewParser()
+
+		for _, data := range [][]byte{
+			[]byte(`<root a:0="x"/>`),
+			[]byte(`<root a:-="x"/>`),
+			[]byte(`<root a:.="x"/>`),
+		} {
+			_, err := p.Parse(t.Context(), data)
+			require.Error(t, err, "input %q should be rejected", data)
+		}
+	})
+
+	t.Run("invalid qname local in element", func(t *testing.T) {
+		t.Parallel()
+
+		for _, input := range []string{
+			`<root xmlns:a="u"><a:0/></root>`,
+			`<root xmlns:a="u"><a:-/></root>`,
+			`<root xmlns:a="u"><a:./></root>`,
+		} {
+			_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+			require.Error(t, err, "input %q should be rejected", input)
+		}
+	})
+
+	t.Run("whitespace-only attribute default", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<!DOCTYPEA[<!ATTLIST A A (0) " "`
+
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.Error(t, err)
+	})
 }
 
 func FuzzParse(f *testing.F) {

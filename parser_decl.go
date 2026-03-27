@@ -522,21 +522,8 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix str
 	prefix = v
 
 	v, err = pctx.parseNCName(ctx)
-	if err == nil {
-		local = v
-		return
-	}
-
-	v, err = pctx.parseNmtoken()
-	if err == nil {
-		local = v
-		return
-	}
-
-	v, err = pctx.parseName(ctx)
 	if err != nil {
-		err = pctx.error(ctx, err)
-		return
+		return "", "", pctx.error(ctx, err)
 	}
 	local = v
 	return
