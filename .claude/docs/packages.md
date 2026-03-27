@@ -372,6 +372,16 @@ XML 1.0 NCName character classification. Single source of truth for NCNameStartC
 - Files: `xmlchar.go`
 - Imports: none
 
+## internal/xsd/value/
+
+XSD builtin value validation and comparison, extracted from `xsd/`.
+
+- **ValidateBuiltin(value, builtinLocal string) error** — validate value against XSD builtin type lexical space
+- **Compare(a, b, builtinLocal string) (int, bool)** — type-aware comparison (-1/0/+1, ok)
+- **CompareDecimal(a, b string) int** — decimal comparison via math/big.Rat (-2 on error)
+- Files: `validate.go`, `compare.go`
+- Imports: (none — leaf package)
+
 ## internal/stack/
 
 Generic stack with capacity shrinking.
