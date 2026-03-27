@@ -1,100 +1,49 @@
 package xpath1
 
-import "fmt"
+import "github.com/lestrrat-go/helium/internal/xpath1/lexer"
 
 // TokenType identifies the kind of lexical token.
-type TokenType int
+type TokenType = lexer.TokenType
+
+// Token is a single lexical token from an XPath expression.
+type Token = lexer.Token
 
 // TokenEOF marks the end of input. TokenNumber, TokenString, TokenName,
 // TokenStar, and TokenVariableRef represent literals and names.
 // TokenSlash through TokenDiv represent operators.
 // TokenLParen through TokenColon represent punctuation symbols.
 const (
-	TokenEOF        TokenType = iota // end of input
-	TokenNumber                      // 42, 3.14
-	TokenString                      // "hello", 'hello'
-	TokenName                        // NCName (foo, bar)
-	TokenStar                        // * (wildcard name test or multiply)
-	TokenVariableRef                 // $name
+	TokenEOF         = lexer.TokenEOF
+	TokenNumber      = lexer.TokenNumber
+	TokenString      = lexer.TokenString
+	TokenName        = lexer.TokenName
+	TokenStar        = lexer.TokenStar
+	TokenVariableRef = lexer.TokenVariableRef
 
-	TokenSlash       // /
-	TokenSlashSlash  // //
-	TokenPipe        // |
-	TokenPlus        // +
-	TokenMinus       // -
-	TokenEquals      // =
-	TokenNotEquals   // !=
-	TokenLess        // <
-	TokenLessEq      // <=
-	TokenGreater     // >
-	TokenGreaterEq   // >=
-	TokenAnd         // and
-	TokenOr          // or
-	TokenMod         // mod
-	TokenDiv         // div
+	TokenSlash      = lexer.TokenSlash
+	TokenSlashSlash = lexer.TokenSlashSlash
+	TokenPipe       = lexer.TokenPipe
+	TokenPlus       = lexer.TokenPlus
+	TokenMinus      = lexer.TokenMinus
+	TokenEquals     = lexer.TokenEquals
+	TokenNotEquals  = lexer.TokenNotEquals
+	TokenLess       = lexer.TokenLess
+	TokenLessEq     = lexer.TokenLessEq
+	TokenGreater    = lexer.TokenGreater
+	TokenGreaterEq  = lexer.TokenGreaterEq
+	TokenAnd        = lexer.TokenAnd
+	TokenOr         = lexer.TokenOr
+	TokenMod        = lexer.TokenMod
+	TokenDiv        = lexer.TokenDiv
 
-	TokenLParen     // (
-	TokenRParen     // )
-	TokenLBracket   // [
-	TokenRBracket   // ]
-	TokenAt         // @
-	TokenColonColon // ::
-	TokenComma      // ,
-	TokenDot        // .
-	TokenDotDot     // ..
-	TokenColon      // : (in QName prefix:local)
+	TokenLParen     = lexer.TokenLParen
+	TokenRParen     = lexer.TokenRParen
+	TokenLBracket   = lexer.TokenLBracket
+	TokenRBracket   = lexer.TokenRBracket
+	TokenAt         = lexer.TokenAt
+	TokenColonColon = lexer.TokenColonColon
+	TokenComma      = lexer.TokenComma
+	TokenDot        = lexer.TokenDot
+	TokenDotDot     = lexer.TokenDotDot
+	TokenColon      = lexer.TokenColon
 )
-
-var tokenNames = map[TokenType]string{
-	TokenEOF:        "EOF",
-	TokenNumber:     "Number",
-	TokenString:     "String",
-	TokenName:       "Name",
-	TokenStar:       "*",
-	TokenVariableRef: "VariableRef",
-	TokenSlash:      "/",
-	TokenSlashSlash: "//",
-	TokenPipe:       "|",
-	TokenPlus:       "+",
-	TokenMinus:      "-",
-	TokenEquals:     "=",
-	TokenNotEquals:  "!=",
-	TokenLess:       "<",
-	TokenLessEq:     "<=",
-	TokenGreater:    ">",
-	TokenGreaterEq:  ">=",
-	TokenAnd:        "and",
-	TokenOr:         "or",
-	TokenMod:        "mod",
-	TokenDiv:        "div",
-	TokenLParen:     "(",
-	TokenRParen:     ")",
-	TokenLBracket:   "[",
-	TokenRBracket:   "]",
-	TokenAt:         "@",
-	TokenColonColon: "::",
-	TokenComma:      ",",
-	TokenDot:        ".",
-	TokenDotDot:     "..",
-	TokenColon:      ":",
-}
-
-func (t TokenType) String() string {
-	if s, ok := tokenNames[t]; ok {
-		return s
-	}
-	return fmt.Sprintf("TokenType(%d)", int(t))
-}
-
-// Token is a single lexical token from an XPath expression.
-type Token struct {
-	Type  TokenType
-	Value string
-}
-
-func (t Token) String() string {
-	if t.Value != "" {
-		return fmt.Sprintf("%s(%q)", t.Type, t.Value)
-	}
-	return t.Type.String()
-}

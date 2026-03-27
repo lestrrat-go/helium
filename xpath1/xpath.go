@@ -7,6 +7,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
+	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
 )
 
 // ErrNotNodeSet is returned when an expression result is not a node-set.
@@ -62,13 +63,13 @@ var ErrInvalidFunctionContext = errors.New("xpath: invalid function context type
 var ErrExprTooDeep = errors.New("xpath: expression nesting too deep")
 
 // ErrUnexpectedToken is returned when the parser encounters an unexpected token.
-var ErrUnexpectedToken = errors.New("xpath: unexpected token")
+var ErrUnexpectedToken = lexer.ErrUnexpectedToken
 
 // ErrUnexpectedChar is returned when the lexer encounters an unexpected character.
-var ErrUnexpectedChar = errors.New("xpath: unexpected character")
+var ErrUnexpectedChar = lexer.ErrUnexpectedChar
 
 // ErrUnterminatedString is returned when a string literal is not closed.
-var ErrUnterminatedString = errors.New("xpath: unterminated string")
+var ErrUnterminatedString = lexer.ErrUnterminatedString
 
 // ErrUnknownAxis is returned when an axis name is unrecognized.
 var ErrUnknownAxis = errors.New("xpath: unknown axis")

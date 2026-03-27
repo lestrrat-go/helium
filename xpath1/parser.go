@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
+	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
 )
 
 const maxParseDepth = 5000
@@ -19,7 +20,7 @@ var (
 
 // parser builds an AST from a token stream.
 type parser struct {
-	lexer *lexer
+	lexer *lexer.Lexer
 	depth int
 }
 
