@@ -348,3 +348,398 @@ func (c validationErrorCollector) Handle(_ context.Context, err error) {
 		*c.errors = append(*c.errors, ve)
 	}
 }
+
+// compileTestSchema compiles a schema and returns the compiled schema and
+// any compile error strings concatenated.
+func compileTestSchema(t *testing.T, xml string) (*schematron.Schema, string) {
+	t.Helper()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	schema, err := schematron.NewCompiler().ErrorHandler(collector).Compile(t.Context(), doc)
+	require.NoError(t, err)
+	_ = collector.Close()
+	var b strings.Builder
+	for _, e := range collector.Errors() {
+		b.WriteString(e.Error())
+	}
+	return schema, b.String()
+}
+
+// validateAndCollect validates a document and collects *ValidationError values.
+func validateAndCollect(t *testing.T, schema *schematron.Schema, doc *helium.Document) ([]*schematron.ValidationError, error) {
+	t.Helper()
+	var collected []*schematron.ValidationError
+	handler := validationErrorCollector{errors: &collected}
+	err := schematron.NewValidator(schema).ErrorHandler(handler).Validate(t.Context(), doc)
+	return collected, err
+}
+
+func collectedString(collected []*schematron.ValidationError) string {
+	var sb strings.Builder
+	for _, ve := range collected {
+		sb.WriteString(ve.Error())
+	}
+	return sb.String()
+}
+
+func TestCompileEmptyContext(t *testing.T) {
+	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern><rule context=""><assert test="true()">ok</assert></rule></pattern>
+	</schema>`)
+	require.Contains(t, errs, "rule has an empty context attribute")
+}
+
+func TestCompileRuleNoAssert(t *testing.T) {
+	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern><rule context="*"></rule></pattern>
+	</schema>`)
+	require.Contains(t, errs, "rule has no assert nor report element")
+}
+
+func TestCompilePatternNoRules(t *testing.T) {
+	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern></pattern>
+	</schema>`)
+	require.Contains(t, errs, "Pattern has no rule element")
+}
+
+func TestCompileSchemaNoPatterns(t *testing.T) {
+	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+	</schema>`)
+	require.Contains(t, errs, "schema has no pattern element")
+}
+
+func TestCompileNonRuleInPattern(t *testing.T) {
+	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<bogus/>
+			<rule context="*"><assert test="true()">ok</assert></rule>
+		</pattern>
+	</schema>`)
+	require.Contains(t, errs, "Expecting a rule element instead of bogus")
+}
+
+func TestCompileValidSchema(t *testing.T) {
+	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="*"><assert test="true()">ok</assert></rule>
+		</pattern>
+	</schema>`)
+	require.Equal(t, "", errs)
+}
+
+func TestCompileRuleWithLetOnly(t *testing.T) {
+	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="*">
+				<let name="x" value="1"/>
+			</rule>
+		</pattern>
+	</schema>`)
+	require.Contains(t, errs, "rule has no assert nor report element")
+}
+
+func TestCompileMultipleErrors(t *testing.T) {
+	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="">
+			</rule>
+		</pattern>
+	</schema>`)
+	require.Contains(t, errs, "rule has an empty context attribute")
+	require.Contains(t, errs, "Pattern has no rule element")
+}
+
+func TestCompileValueOfNoSelect(t *testing.T) {
+	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="*"><assert test="true()">val: <value-of/></assert></rule>
+		</pattern>
+	</schema>`)
+	require.Contains(t, errs, "value-of has no select attribute")
+}
+
+func TestCompileTitleAfterPattern(t *testing.T) {
+	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern><rule context="*"><assert test="true()">ok</assert></rule></pattern>
+		<title>late title</title>
+	</schema>`)
+	require.Contains(t, errs, "Expecting a pattern element instead of title")
+}
+
+func TestCompileNsAfterPattern(t *testing.T) {
+	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern><rule context="*"><assert test="true()">ok</assert></rule></pattern>
+		<ns prefix="p" uri="urn:test"/>
+	</schema>`)
+	require.Contains(t, errs, "Expecting a pattern element instead of ns")
+}
+
+func TestCompileTitleBeforeNsBeforePattern(t *testing.T) {
+	_, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<title>my schema</title>
+		<ns prefix="p" uri="urn:test"/>
+		<pattern><rule context="*"><assert test="true()">ok</assert></rule></pattern>
+	</schema>`)
+	require.Equal(t, "", errs)
+}
+
+func TestNameInterpolation(t *testing.T) {
+	t.Run("non-namespaced element", func(t *testing.T) {
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern><rule context="item">
+				<assert test="false()"><name/> is invalid</assert>
+			</rule></pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.Contains(t, collected[0].Message, "item is invalid")
+	})
+
+	t.Run("namespaced element", func(t *testing.T) {
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<ns prefix="ex" uri="http://example.com"/>
+			<pattern><rule context="ex:item">
+				<assert test="false()"><name/> is invalid</assert>
+			</rule></pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns:ex="http://example.com"><ex:item/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.Contains(t, collected[0].Message, "ex:item is invalid")
+	})
+}
+
+func TestValueOfInterpolation(t *testing.T) {
+	t.Run("boolean true", func(t *testing.T) {
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern><rule context="item">
+				<assert test="false()">result is <value-of select="true()"/></assert>
+			</rule></pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.Contains(t, collected[0].Message, "result is True")
+	})
+
+	t.Run("boolean false", func(t *testing.T) {
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern><rule context="item">
+				<assert test="false()">result is <value-of select="false()"/></assert>
+			</rule></pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.Contains(t, collected[0].Message, "result is False")
+	})
+
+	t.Run("nodeset names", func(t *testing.T) {
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern><rule context="root">
+				<assert test="false()">children: <value-of select="*"/></assert>
+			</rule></pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/><b/><c/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.Contains(t, collected[0].Message, "children: a b c")
+	})
+
+	t.Run("empty nodeset", func(t *testing.T) {
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern><rule context="root">
+				<assert test="false()">children: [<value-of select="nonexistent"/>]</assert>
+			</rule></pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.Contains(t, collected[0].Message, "children: []")
+	})
+}
+
+func TestContextPatterns(t *testing.T) {
+	t.Run("simple element", func(t *testing.T) {
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern><rule context="a">
+				<assert test="false()">found a</assert>
+			</rule></pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/><b/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.Len(t, collected, 1)
+		require.Equal(t, "a", collected[0].Element)
+	})
+
+	t.Run("union context", func(t *testing.T) {
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern><rule context="a | b">
+				<assert test="false()">found</assert>
+			</rule></pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/><b/><c/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.Len(t, collected, 2)
+		elements := []string{collected[0].Element, collected[1].Element}
+		sort.Strings(elements)
+		require.Equal(t, []string{"a", "b"}, elements)
+	})
+
+	t.Run("absolute path", func(t *testing.T) {
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern><rule context="/root/a">
+				<assert test="false()">found</assert>
+			</rule></pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/><sub><a/></sub></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		// Only the direct child /root/a should match, not /root/sub/a
+		require.Len(t, collected, 1)
+	})
+
+	t.Run("predicate", func(t *testing.T) {
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern><rule context="a[@x]">
+				<assert test="false()">found</assert>
+			</rule></pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a x="1"/><a/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		// Only <a x="1"> should match
+		require.Len(t, collected, 1)
+	})
+
+	t.Run("wildcard", func(t *testing.T) {
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern><rule context="*">
+				<assert test="false()">found <name/></assert>
+			</rule></pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/><b/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		// root, a, b — all elements should match
+		require.Len(t, collected, 3)
+	})
+}
+
+func TestLetVariableChainedDependency(t *testing.T) {
+	t.Run("independent lets", func(t *testing.T) {
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern>
+				<rule context="item">
+					<let name="x" value="string(@val)"/>
+					<let name="y" value="'hello'"/>
+					<assert test="$x = 'ok'">x is <value-of select="$x"/>, y is <value-of select="$y"/></assert>
+				</rule>
+			</pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item val="bad"/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		got := collectedString(collected)
+		require.Contains(t, got, "x is bad")
+		require.Contains(t, got, "y is hello")
+	})
+
+	t.Run("LIFO evaluation order", func(t *testing.T) {
+		// libxml2 stores lets in LIFO order. When a is defined first and b
+		// second, the list is [b, a]. b is evaluated first (before a is
+		// registered), so $a in b's expression is NaN. We verify the
+		// observable effect: a=1 is reported correctly.
+		schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+			<pattern>
+				<rule context="item">
+					<let name="a" value="1"/>
+					<let name="b" value="$a + 1"/>
+					<report test="$a = 1">a=<value-of select="$a"/></report>
+				</rule>
+			</pattern>
+		</schema>`)
+		require.Equal(t, "", errs)
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item/></root>`))
+		require.NoError(t, err)
+
+		collected, err := validateAndCollect(t, schema, doc)
+		require.ErrorIs(t, err, schematron.ErrValidationFailed)
+		require.Contains(t, collectedString(collected), "a=1")
+	})
+}
+
+func TestUnionContextIntegration(t *testing.T) {
+	schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron">
+		<pattern>
+			<rule context="invoice | credit-note">
+				<assert test="@id">Missing id attribute</assert>
+			</rule>
+		</pattern>
+	</schema>`)
+	require.Equal(t, "", errs)
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><invoice/><credit-note/><other/></root>`))
+	require.NoError(t, err)
+
+	collected, err := validateAndCollect(t, schema, doc)
+	require.ErrorIs(t, err, schematron.ErrValidationFailed)
+	got := collectedString(collected)
+	require.Contains(t, got, "invoice")
+	require.Contains(t, got, "credit-note")
+	require.NotContains(t, got, "other")
+}
