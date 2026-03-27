@@ -1,89 +1,160 @@
-package xpath1
+package xpath1_test
 
 import (
 	"context"
 	"testing"
 
-	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/stretchr/testify/require"
 )
 
-func parseDoc(t *testing.T, s string) *helium.Document {
-	t.Helper()
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(s))
-	require.NoError(t, err)
-	return doc
-}
-
-func docRoot(t *testing.T, doc *helium.Document) helium.Node {
-	t.Helper()
-	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
-		if n.Type() == helium.ElementNode {
-			return n
-		}
-	}
-	t.Fatal("document has no root element")
-	return nil
-}
-
 func TestFunctionFuncImplementsFunction(t *testing.T) {
 	var called bool
-	f := FunctionFunc(func(_ context.Context, _ []*Result) (*Result, error) {
+	f := xpath1.FunctionFunc(func(_ context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
 		called = true
-		return &Result{Type: StringResult, String: "ok"}, nil
+		return &xpath1.Result{Type: xpath1.StringResult, String: "ok"}, nil
 	})
 
-	var fn Function = f
-	r, err := fn.Eval(context.Background(), nil)
+	var fn xpath1.Function = f
+	r, err := fn.Eval(t.Context(), nil)
 	require.NoError(t, err)
 	require.True(t, called)
-	require.Equal(t, StringResult, r.Type)
+	require.Equal(t, xpath1.StringResult, r.Type)
 	require.Equal(t, "ok", r.String)
 }
 
-func TestFunctionContextAccessors(t *testing.T) {
-	doc := parseDoc(t, `<root><item/></root>`)
-	root := docRoot(t, doc)
-	ctx := newEvalContextWithConfig(t.Context(), root, nil)
-	ctx.position = 2
-	ctx.size = 3
-	ctx.namespaces = map[string]string{"ext": "urn:test"}
-	ctx.variables = map[string]interface{}{"v": "hello"}
+func TestFunctionPosition(t *testing.T) {
+	doc := parseXML(t, `<root><a/><a/><a/></root>`)
+	root := docElement(doc)
 
-	var fctx FunctionContext = ctx
-	require.Equal(t, root, fctx.Node())
-	require.Equal(t, 2, fctx.Position())
-	require.Equal(t, 3, fctx.Size())
-
-	uri, ok := fctx.Namespace("ext")
-	require.True(t, ok)
-	require.Equal(t, "urn:test", uri)
-
-	v, ok := fctx.Variable("v")
-	require.True(t, ok)
-	require.Equal(t, "hello", v)
-}
-
-func TestFunctionContextZeroValue(t *testing.T) {
-	var fctx *evalContext
-
-	require.Nil(t, fctx.Node())
-	require.Equal(t, 0, fctx.Position())
-	require.Equal(t, 0, fctx.Size())
-
-	_, ok := fctx.Namespace("ext")
-	require.False(t, ok)
-	_, ok = fctx.Variable("v")
-	require.False(t, ok)
-}
-
-func TestFunctionReceivesPreEvaluatedArgs(t *testing.T) {
-	doc := parseDoc(t, `<root>hello</root>`)
-	root := docRoot(t, doc)
-
-	// Evaluate string(.) which should pre-evaluate the context node to "hello"
-	// and pass it through concat which receives []*Result
-	result, err := Evaluate(context.Background(), root, `concat(string(.), " world")`)
+	result, err := xpath1.Evaluate(t.Context(), root, "count(a[position()=2])")
 	require.NoError(t, err)
+	require.Equal(t, xpath1.NumberResult, result.Type)
+	require.Equal(t, 1.0, result.Number)
+}
+
+func TestFunctionLast(t *testing.T) {
+	doc := parseXML(t, `<root><a>1</a><a>2</a><a>3</a></root>`)
+	root := docElement(doc)
+
+	result, err := xpath1.Evaluate(t.Context(), root, "a[last()]")
+	require.NoError(t, err)
+	require.Equal(t, xpath1.NodeSetResult, result.Type)
+	require.Len(t, result.NodeSet, 1)
+	require.Equal(t, "3", string(result.NodeSet[0].Content()))
+}
+
+func TestFunctionNameContext(t *testing.T) {
+	doc := parseXML(t, `<root><child/></root>`)
+	root := docElement(doc)
+
+	result, err := xpath1.Evaluate(t.Context(), root, "name()")
+	require.NoError(t, err)
+	require.Equal(t, xpath1.StringResult, result.Type)
+	require.Equal(t, "root", result.String)
+}
+
+func TestFunctionStringConversion(t *testing.T) {
+	doc := parseXML(t, `<root>hello world</root>`)
+	root := docElement(doc)
+
+	result, err := xpath1.Evaluate(t.Context(), root, "string(.)")
+	require.NoError(t, err)
+	require.Equal(t, xpath1.StringResult, result.Type)
 	require.Equal(t, "hello world", result.String)
+}
+
+func TestFunctionNumberConversion(t *testing.T) {
+	doc := parseXML(t, `<root>42</root>`)
+	root := docElement(doc)
+
+	result, err := xpath1.Evaluate(t.Context(), root, "number(.)")
+	require.NoError(t, err)
+	require.Equal(t, xpath1.NumberResult, result.Type)
+	require.Equal(t, 42.0, result.Number)
+}
+
+func TestFunctionBooleanConversion(t *testing.T) {
+	doc := parseXML(t, `<root><a/></root>`)
+	root := docElement(doc)
+
+	result, err := xpath1.Evaluate(t.Context(), root, "boolean(a)")
+	require.NoError(t, err)
+	require.Equal(t, xpath1.BooleanResult, result.Type)
+	require.True(t, result.Bool)
+
+	result, err = xpath1.Evaluate(t.Context(), root, "boolean(nonexistent)")
+	require.NoError(t, err)
+	require.Equal(t, xpath1.BooleanResult, result.Type)
+	require.False(t, result.Bool)
+}
+
+func TestFunctionConcatWithContext(t *testing.T) {
+	doc := parseXML(t, `<root>hello</root>`)
+	root := docElement(doc)
+
+	result, err := xpath1.Evaluate(t.Context(), root, `concat(string(.), " world")`)
+	require.NoError(t, err)
+	require.Equal(t, xpath1.StringResult, result.Type)
+	require.Equal(t, "hello world", result.String)
+}
+
+func TestFunctionSumNodeSet(t *testing.T) {
+	doc := parseXML(t, `<root><v>10</v><v>20</v><v>30</v></root>`)
+	root := docElement(doc)
+
+	result, err := xpath1.Evaluate(t.Context(), root, "sum(v)")
+	require.NoError(t, err)
+	require.Equal(t, xpath1.NumberResult, result.Type)
+	require.Equal(t, 60.0, result.Number)
+}
+
+func TestFunctionTrueAndFalse(t *testing.T) {
+	doc := parseXML(t, `<root/>`)
+	root := docElement(doc)
+
+	result, err := xpath1.Evaluate(t.Context(), root, "true() and false()")
+	require.NoError(t, err)
+	require.Equal(t, xpath1.BooleanResult, result.Type)
+	require.False(t, result.Bool)
+}
+
+func TestFunctionNormalizeSpaceCall(t *testing.T) {
+	doc := parseXML(t, `<root/>`)
+	root := docElement(doc)
+
+	result, err := xpath1.Evaluate(t.Context(), root, `normalize-space("  hello   world  ")`)
+	require.NoError(t, err)
+	require.Equal(t, xpath1.StringResult, result.Type)
+	require.Equal(t, "hello world", result.String)
+}
+
+func TestFunctionTranslateCall(t *testing.T) {
+	doc := parseXML(t, `<root/>`)
+	root := docElement(doc)
+
+	result, err := xpath1.Evaluate(t.Context(), root, `translate("abc", "abc", "ABC")`)
+	require.NoError(t, err)
+	require.Equal(t, xpath1.StringResult, result.Type)
+	require.Equal(t, "ABC", result.String)
+}
+
+func TestGetFunctionContext(t *testing.T) {
+	doc := parseXML(t, `<root><a/><a/><a/></root>`)
+	root := docElement(doc)
+
+	var captured xpath1.FunctionContext
+	capture := xpath1.FunctionFunc(func(ctx context.Context, _ []*xpath1.Result) (*xpath1.Result, error) {
+		captured = xpath1.GetFunctionContext(ctx)
+		return &xpath1.Result{Type: xpath1.BooleanResult, Bool: true}, nil
+	})
+
+	ev := xpath1.NewEvaluator().Function("capture", capture)
+	expr, err := xpath1.Compile("capture()")
+	require.NoError(t, err)
+
+	_, err = ev.Evaluate(t.Context(), expr, root)
+	require.NoError(t, err)
+	require.NotNil(t, captured)
+	require.Equal(t, "root", captured.Node().Name())
 }
