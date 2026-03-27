@@ -1,31 +1,36 @@
-package xpath3
+package xpath3_test
 
 import (
 	"testing"
 
+	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
 
 func TestVariableScopeLookupPrefersNearestBinding(t *testing.T) {
-	root := scopeWithBindings(nil, map[string]Sequence{
-		"x": SingleInteger(1),
-	})
-	child := scopeWithBindings(root, map[string]Sequence{
-		"y": SingleInteger(2),
-	})
-	shadow := scopeWithBindings(child, map[string]Sequence{
-		"x": SingleInteger(3),
-	})
+	// let $x := 1 return (let $x := 2 return $x)  → 2  (inner shadows outer)
+	compiled, err := xpath3.NewCompiler().Compile(`let $x := 1 return let $x := 2 return $x`)
+	require.NoError(t, err)
 
-	seq, ok := shadow.Lookup("x")
-	require.True(t, ok)
-	require.Equal(t, int64(3), seq.Get(0).(AtomicValue).IntegerVal())
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Evaluate(t.Context(), compiled, nil)
+	require.NoError(t, err)
 
-	seq, ok = shadow.Lookup("y")
+	n, ok := result.IsNumber()
 	require.True(t, ok)
-	require.Equal(t, int64(2), seq.Get(0).(AtomicValue).IntegerVal())
+	require.Equal(t, 2.0, n)
+}
 
-	seq, ok = root.Lookup("x")
+func TestVariableScopeLookupReachesOuter(t *testing.T) {
+	// let $x := 10 return let $y := 20 return $x  → 10  (outer visible)
+	compiled, err := xpath3.NewCompiler().Compile(`let $x := 10 return let $y := 20 return $x`)
+	require.NoError(t, err)
+
+	result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		Evaluate(t.Context(), compiled, nil)
+	require.NoError(t, err)
+
+	n, ok := result.IsNumber()
 	require.True(t, ok)
-	require.Equal(t, int64(1), seq.Get(0).(AtomicValue).IntegerVal())
+	require.Equal(t, 10.0, n)
 }

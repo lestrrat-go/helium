@@ -1,9 +1,10 @@
-package xsd
+package value_test
 
 import (
 	"fmt"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/xsd/value"
 	"github.com/stretchr/testify/require"
 )
 
@@ -189,11 +190,11 @@ func TestBuiltinTypeValidation(t *testing.T) {
 		t.Run(tt.typeName, func(t *testing.T) {
 			t.Parallel()
 			for _, v := range tt.valid {
-				err := validateBuiltinValue(v, tt.typeName)
+				err := value.ValidateBuiltin(v, tt.typeName)
 				require.NoError(t, err, "type %s should accept %q", tt.typeName, v)
 			}
 			for _, v := range tt.invalid {
-				err := validateBuiltinValue(v, tt.typeName)
+				err := value.ValidateBuiltin(v, tt.typeName)
 				require.Error(t, err, "type %s should reject %q", tt.typeName, v)
 			}
 		})
@@ -294,7 +295,7 @@ func TestCompareValues(t *testing.T) {
 		name := fmt.Sprintf("%s/%s_vs_%s", tt.typ, tt.a, tt.b)
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, ok := compareValues(tt.a, tt.b, tt.typ)
+			got, ok := value.Compare(tt.a, tt.b, tt.typ)
 			require.Equal(t, tt.ok, ok, "ok mismatch")
 			if ok {
 				require.Equal(t, tt.want, got, "cmp mismatch")

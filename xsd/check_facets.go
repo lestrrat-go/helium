@@ -2,23 +2,11 @@ package xsd
 
 import (
 	"fmt"
-	"math/big"
 	"sort"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
-
-// compareDecimal compares two decimal string values using math/big.Rat.
-// Returns -1 if a < b, 0 if a == b, 1 if a > b, or -2 on parse error.
-func compareDecimal(a, b string) int {
-	ra, ok1 := new(big.Rat).SetString(a)
-	rb, ok2 := new(big.Rat).SetString(b)
-	if !ok1 || !ok2 {
-		return -2
-	}
-	return ra.Cmp(rb)
-}
 
 // baseFacets returns the FacetSet from the nearest base type in the chain.
 func baseFacets(td *TypeDef) *FacetSet {

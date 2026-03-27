@@ -1,13 +1,14 @@
-package xpath1
+package number_test
 
 import (
 	"math"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/xpath1/number"
 	"github.com/stretchr/testify/require"
 )
 
-func TestNumberToString(t *testing.T) {
+func TestToString(t *testing.T) {
 	tests := []struct {
 		name string
 		in   float64
@@ -67,7 +68,7 @@ func TestNumberToString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := numberToString(tt.in)
+			got := number.ToString(tt.in)
 			require.Equal(t, tt.want, got)
 		})
 	}

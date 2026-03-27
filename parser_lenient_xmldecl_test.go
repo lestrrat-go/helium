@@ -1,8 +1,9 @@
-package helium
+package helium_test
 
 import (
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,62 +15,62 @@ func TestParseLenientXMLDecl(t *testing.T) {
 		input      string
 		version    string
 		encoding   string
-		standalone DocumentStandaloneType
+		standalone helium.DocumentStandaloneType
 	}{
 		{
 			name:       "standard order: version encoding standalone",
 			input:      `<?xml version="1.0" encoding="utf-8" standalone="yes"?>` + content,
 			version:    "1.0",
 			encoding:   "utf-8",
-			standalone: StandaloneExplicitYes,
+			standalone: helium.StandaloneExplicitYes,
 		},
 		{
 			name:       "encoding before version",
 			input:      `<?xml encoding="utf-8" version="1.0"?>` + content,
 			version:    "1.0",
 			encoding:   "utf-8",
-			standalone: StandaloneImplicitNo,
+			standalone: helium.StandaloneImplicitNo,
 		},
 		{
 			name:       "standalone before version",
 			input:      `<?xml standalone="no" version="1.0"?>` + content,
 			version:    "1.0",
 			encoding:   "",
-			standalone: StandaloneExplicitNo,
+			standalone: helium.StandaloneExplicitNo,
 		},
 		{
 			name:       "encoding standalone version",
 			input:      `<?xml encoding="euc-jp" standalone="yes" version="1.0"?>` + content,
 			version:    "1.0",
 			encoding:   "euc-jp",
-			standalone: StandaloneExplicitYes,
+			standalone: helium.StandaloneExplicitYes,
 		},
 		{
 			name:       "standalone version encoding",
 			input:      `<?xml standalone="no" version="1.1" encoding="cp932"?>` + content,
 			version:    "1.1",
 			encoding:   "cp932",
-			standalone: StandaloneExplicitNo,
+			standalone: helium.StandaloneExplicitNo,
 		},
 		{
 			name:       "version only",
 			input:      `<?xml version="1.0"?>` + content,
 			version:    "1.0",
 			encoding:   "",
-			standalone: StandaloneImplicitNo,
+			standalone: helium.StandaloneImplicitNo,
 		},
 		{
 			name:       "encoding only (no version)",
 			input:      `<?xml encoding="utf-8"?>` + content,
 			version:    "",
 			encoding:   "utf-8",
-			standalone: StandaloneImplicitNo,
+			standalone: helium.StandaloneImplicitNo,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := NewParser().LenientXMLDecl(true)
+			p := helium.NewParser().LenientXMLDecl(true)
 
 			doc, err := p.Parse(t.Context(), []byte(tt.input))
 			require.NoError(t, err, "Parse should succeed")
@@ -86,7 +87,7 @@ func TestParseLenientXMLDecl(t *testing.T) {
 func TestParseLenientXMLDeclRejectsWithoutFlag(t *testing.T) {
 	// Without the lenient flag, non-standard order should fail.
 	input := `<?xml encoding="utf-8" version="1.0"?><root />`
-	p := NewParser()
+	p := helium.NewParser()
 	_, err := p.Parse(t.Context(), []byte(input))
 	require.Error(t, err, "strict parser should reject encoding before version")
 }

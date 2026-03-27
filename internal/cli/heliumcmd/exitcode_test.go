@@ -1,52 +1,48 @@
-package heliumcmd
+package heliumcmd_test
 
 import (
-	"context"
+	"bytes"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/cli/heliumcmd"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMergeExitCode(t *testing.T) {
-	require.Equal(t, ExitOK, mergeExitCode(ExitOK, ExitOK))
-	require.Equal(t, ExitValidation, mergeExitCode(ExitOK, ExitValidation))
-	require.Equal(t, ExitReadFile, mergeExitCode(ExitReadFile, ExitValidation))
-}
-
-func TestXPathMultipleFilesUsesHighestExitCode(t *testing.T) {
+	// mergeExitCode takes the highest exit code.
+	// Test indirectly via Execute with multiple files where one is missing and one is bad XML.
+	// missing file → ExitReadFile(4), bad XML → ExitErr(1).
+	// The highest (ExitReadFile=4) should win.
 	dir := t.TempDir()
-	badXML := writeFile(t, dir, "bad.xml", `<root>`)
+	badXML := filepath.Join(dir, "bad.xml")
+	require.NoError(t, os.WriteFile(badXML, []byte(`<root>`), 0o600))
 
-	cmd := &xpathCommand{
-		prog:     "helium xpath",
-		stdin:    strings.NewReader(""),
-		stdout:   io.Discard,
-		stderr:   io.Discard,
-		stdinTTY: true,
-	}
+	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
+	ctx = heliumcmd.WithStdinTTY(ctx, true)
 
-	code := cmd.runContext(context.Background(), []string{"//book", filepath.Join(dir, "missing.xml"), badXML})
-	require.Equal(t, ExitReadFile, code)
+	code := heliumcmd.Execute(ctx, []string{"xpath", "//book", filepath.Join(dir, "missing.xml"), badXML})
+	require.Equal(t, heliumcmd.ExitReadFile, code)
 }
 
 func TestXSDValidateMultipleFilesUsesHighestExitCode(t *testing.T) {
 	dir := t.TempDir()
-	schemaFile := writeFile(t, dir, "schema.xsd", `<?xml version="1.0"?>
+	schemaFile := filepath.Join(dir, "schema.xsd")
+	require.NoError(t, os.WriteFile(schemaFile, []byte(`<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root" type="xs:string"/>
-</xs:schema>`)
-	invalidXML := writeFile(t, dir, "invalid.xml", `<?xml version="1.0"?><root><child/></root>`)
+</xs:schema>`), 0o600))
 
-	cmd := &xsdValidateCommand{
-		prog:     "helium xsd validate",
-		stdin:    strings.NewReader(""),
-		stderr:   io.Discard,
-		stdinTTY: true,
-	}
+	invalidXML := filepath.Join(dir, "invalid.xml")
+	require.NoError(t, os.WriteFile(invalidXML, []byte(`<?xml version="1.0"?><root><child/></root>`), 0o600))
 
-	code := cmd.runContext(context.Background(), []string{schemaFile, filepath.Join(dir, "missing.xml"), invalidXML})
-	require.Equal(t, ExitReadFile, code)
+	var stderr bytes.Buffer
+	ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
+	ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+	code := heliumcmd.Execute(ctx, []string{"xsd", "validate", schemaFile, filepath.Join(dir, "missing.xml"), invalidXML})
+	require.Equal(t, heliumcmd.ExitReadFile, code)
 }

@@ -1,192 +1,134 @@
-package xslt3
+package xslt3_test
 
 import (
-	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/xpath3"
-	"github.com/lestrrat-go/helium/internal/sequence"
+	"github.com/lestrrat-go/helium/xslt3"
+	"github.com/stretchr/testify/require"
 )
 
-// benchSortEnv holds pre-built test data for sort benchmarks.
-type benchSortEnv struct {
-	ctx     context.Context
-	ec      *execContext
-	nodes   []helium.Node
-	items   xpath3.Sequence
-	sortKey []*sortKey
-}
-
-func newBenchSortEnv(b *testing.B, n int, sortKeys []*sortKey) *benchSortEnv {
+func buildSortSource(b *testing.B, n int) *helium.Document {
 	b.Helper()
 
-	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
-	if err := doc.AddChild(root); err != nil {
-		b.Fatal(err)
-	}
-
-	nodes := make([]helium.Node, n)
+	var sb strings.Builder
+	sb.WriteString("<root>")
 	for i := range n {
-		elem := doc.CreateElement("item")
-		text := doc.CreateText([]byte(strconv.Itoa(n - i)))
-		if err := elem.AddChild(text); err != nil {
-			b.Fatal(err)
-		}
-		if err := root.AddChild(elem); err != nil {
-			b.Fatal(err)
-		}
-		nodes[i] = elem
+		sb.WriteString("<item>")
+		sb.WriteString(strconv.Itoa(n - i))
+		sb.WriteString("</item>")
 	}
+	sb.WriteString("</root>")
 
-	ss := &Stylesheet{
-		namespaces: map[string]string{},
-	}
-
-	ec := &execContext{
-		stylesheet:  ss,
-		sourceDoc:   doc,
-		resultDoc:   doc,
-		contextNode: root,
-		currentNode: root,
-		globalVars:  map[string]xpath3.Sequence{},
-	}
-
-	items := make(xpath3.ItemSlice, len(nodes))
-	for i, node := range nodes {
-		items[i] = xpath3.NodeItem{Node: node}
-	}
-
-	return &benchSortEnv{
-		ctx:     context.Background(),
-		ec:      ec,
-		nodes:   nodes,
-		items:   items,
-		sortKey: sortKeys,
-	}
-}
-
-func mustCompileSortXPath(b *testing.B, expr string) *xpath3.Expression {
-	b.Helper()
-	e, err := xpath3.NewCompiler().Compile(expr)
-	if err != nil {
-		b.Fatalf("compiling %q: %v", expr, err)
-	}
-	return e
-}
-
-func mustCompileSortAVT(b *testing.B, s string) *avt {
-	b.Helper()
-	avt, err := compileAVT(s, nil)
-	if err != nil {
-		b.Fatalf("compiling AVT %q: %v", s, err)
-	}
-	return avt
+	doc, err := helium.NewParser().Parse(b.Context(), []byte(sb.String()))
+	require.NoError(b, err)
+	return doc
 }
 
 func BenchmarkSortNodes(b *testing.B) {
-	textKey := []*sortKey{{
-		Select: mustCompileSortXPath(b, "."),
-	}}
-	numericKey := []*sortKey{{
-		Select:   mustCompileSortXPath(b, "."),
-		DataType: mustCompileSortAVT(b, "number"),
-	}}
-	autoNumericKey := []*sortKey{{
-		Select: mustCompileSortXPath(b, "number(.)"),
-	}}
+	textAscSS := compileStylesheetBench(b, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="root">
+    <sorted>
+      <xsl:for-each select="item">
+        <xsl:sort select="."/>
+        <xsl:copy-of select="."/>
+      </xsl:for-each>
+    </sorted>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	numericAscSS := compileStylesheetBench(b, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="root">
+    <sorted>
+      <xsl:for-each select="item">
+        <xsl:sort select="." data-type="number"/>
+        <xsl:copy-of select="."/>
+      </xsl:for-each>
+    </sorted>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	autoNumericSS := compileStylesheetBench(b, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="root">
+    <sorted>
+      <xsl:for-each select="item">
+        <xsl:sort select="number(.)"/>
+        <xsl:copy-of select="."/>
+      </xsl:for-each>
+    </sorted>
+  </xsl:template>
+</xsl:stylesheet>`)
 
 	for _, size := range []int{100, 1000, 10000} {
+		source := buildSortSource(b, size)
+
 		b.Run(fmt.Sprintf("TextAsc/%d", size), func(b *testing.B) {
-			env := newBenchSortEnv(b, size, textKey)
-			b.ResetTimer()
 			b.ReportAllocs()
 			for range b.N {
-				work := make([]helium.Node, len(env.nodes))
-				copy(work, env.nodes)
-				if _, err := sortNodes(env.ctx, env.ec, work, env.sortKey); err != nil {
-					b.Fatal(err)
-				}
+				_, err := xslt3.Transform(b.Context(), source, textAscSS)
+				require.NoError(b, err)
 			}
 		})
 
 		b.Run(fmt.Sprintf("NumericAsc/%d", size), func(b *testing.B) {
-			env := newBenchSortEnv(b, size, numericKey)
-			b.ResetTimer()
 			b.ReportAllocs()
 			for range b.N {
-				work := make([]helium.Node, len(env.nodes))
-				copy(work, env.nodes)
-				if _, err := sortNodes(env.ctx, env.ec, work, env.sortKey); err != nil {
-					b.Fatal(err)
-				}
+				_, err := xslt3.Transform(b.Context(), source, numericAscSS)
+				require.NoError(b, err)
 			}
 		})
 
 		b.Run(fmt.Sprintf("AutoNumericAsc/%d", size), func(b *testing.B) {
-			env := newBenchSortEnv(b, size, autoNumericKey)
-			b.ResetTimer()
 			b.ReportAllocs()
 			for range b.N {
-				work := make([]helium.Node, len(env.nodes))
-				copy(work, env.nodes)
-				if _, err := sortNodes(env.ctx, env.ec, work, env.sortKey); err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
-	}
-}
-
-func BenchmarkSortItems(b *testing.B) {
-	textKey := []*sortKey{{
-		Select: mustCompileSortXPath(b, "."),
-	}}
-
-	for _, size := range []int{100, 1000} {
-		b.Run(fmt.Sprintf("AtomicText/%d", size), func(b *testing.B) {
-			env := newBenchSortEnv(b, size, textKey)
-			b.ResetTimer()
-			b.ReportAllocs()
-			for range b.N {
-				work := make(xpath3.ItemSlice, sequence.Len(env.items))
-				copy(work, sequence.Materialize(env.items))
-				if _, err := sortItems(env.ctx, env.ec, work, env.sortKey); err != nil {
-					b.Fatal(err)
-				}
+				_, err := xslt3.Transform(b.Context(), source, autoNumericSS)
+				require.NoError(b, err)
 			}
 		})
 	}
 }
 
 func BenchmarkSortNodesMultiKey(b *testing.B) {
-	threeKeys := []*sortKey{
-		{Select: mustCompileSortXPath(b, ".")},
-		{
-			Select:   mustCompileSortXPath(b, "."),
-			DataType: mustCompileSortAVT(b, "number"),
-		},
-		{
-			Select: mustCompileSortXPath(b, "."),
-			Order:  mustCompileSortAVT(b, "descending"),
-		},
-	}
+	threeKeySS := compileStylesheetBench(b, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="root">
+    <sorted>
+      <xsl:for-each select="item">
+        <xsl:sort select="."/>
+        <xsl:sort select="." data-type="number"/>
+        <xsl:sort select="." order="descending"/>
+        <xsl:copy-of select="."/>
+      </xsl:for-each>
+    </sorted>
+  </xsl:template>
+</xsl:stylesheet>`)
 
 	for _, size := range []int{100, 1000} {
+		source := buildSortSource(b, size)
+
 		b.Run(fmt.Sprintf("ThreeKey/%d", size), func(b *testing.B) {
-			env := newBenchSortEnv(b, size, threeKeys)
-			b.ResetTimer()
 			b.ReportAllocs()
 			for range b.N {
-				work := make([]helium.Node, len(env.nodes))
-				copy(work, env.nodes)
-				if _, err := sortNodes(env.ctx, env.ec, work, env.sortKey); err != nil {
-					b.Fatal(err)
-				}
+				_, err := xslt3.Transform(b.Context(), source, threeKeySS)
+				require.NoError(b, err)
 			}
 		})
 	}
+}
+
+func compileStylesheetBench(b *testing.B, src string) *xslt3.Stylesheet {
+	b.Helper()
+
+	doc, err := helium.NewParser().Parse(b.Context(), []byte(src))
+	require.NoError(b, err)
+
+	ss, err := xslt3.CompileStylesheet(b.Context(), doc)
+	require.NoError(b, err)
+	return ss
 }
