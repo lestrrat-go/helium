@@ -512,6 +512,30 @@ func (d *Document) allocTextContent(size int) []byte {
 	return buf
 }
 
+func (d *Document) growOwnedTextContent(cur []byte, extra int) []byte {
+	if extra <= 0 {
+		return cur
+	}
+
+	need := len(cur) + extra
+	if cap(cur) >= need {
+		return cur
+	}
+
+	newCap := cap(cur) * 2
+	if newCap < need {
+		newCap = need
+	}
+	if newCap < 64 {
+		newCap = 64
+	}
+
+	next := d.allocTextContent(newCap)
+	next = next[:len(cur)]
+	copy(next, cur)
+	return next
+}
+
 func (d *Document) allocText() *Text {
 	if len(d.textSlab) == 0 {
 		chunk := textChunkPool.Get()
