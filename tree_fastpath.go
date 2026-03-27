@@ -4,8 +4,62 @@ import (
 	"errors"
 
 	"github.com/lestrrat-go/helium/enum"
-	"github.com/lestrrat-go/helium/internal/lexicon"
 )
+
+type attrNamespaceCacheEntry struct {
+	prefix string
+	ns     *Namespace
+}
+
+func appendFastChild(parent MutableNode, child Node) error {
+	pdn := parent.baseDocNode()
+	cdn := child.baseDocNode()
+
+	last := pdn.lastChild
+	if last == nil {
+		pdn.firstChild = child
+		pdn.lastChild = child
+		cdn.parent = parent
+		return nil
+	}
+
+	ldn := last.baseDocNode()
+	if ldn.next == nil {
+		ldn.next = child
+		cdn.prev = last
+		cdn.parent = parent
+		pdn.lastChild = child
+		return nil
+	}
+
+	return last.(MutableNode).AddSibling(child)
+}
+
+func (pctx *parserCtx) fastLookupAttributeNamespace(doc *Document, prefix string, cache []attrNamespaceCacheEntry) (*Namespace, []attrNamespaceCacheEntry, error) {
+	for i := range cache {
+		if cache[i].prefix == prefix {
+			return cache[i].ns, cache, nil
+		}
+	}
+
+	uri := pctx.nsTab.Lookup(prefix)
+	if uri == "" {
+		if prefix != XMLPrefix {
+			return nil, cache, nil
+		}
+		uri = XMLNamespace
+	}
+
+	ns, err := doc.CreateNamespace(prefix, uri)
+	if err != nil {
+		return nil, cache, err
+	}
+	cache = append(cache, attrNamespaceCacheEntry{
+		prefix: prefix,
+		ns:     ns,
+	})
+	return ns, cache, nil
+}
 
 func (pctx *parserCtx) fastStartDocument() {
 	pctx.doc = NewDocument(pctx.version, pctx.encoding, pctx.standalone)
@@ -43,10 +97,10 @@ func (pctx *parserCtx) fastProcessingInstruction(target, data string) error {
 
 	parent := pctx.elem
 	if parent == nil {
-		return doc.AddChild(pi)
+		return appendFastChild(doc, pi)
 	}
 	if parent.Type() == ElementNode {
-		return parent.AddChild(pi)
+		return appendFastChild(parent, pi)
 	}
 	return parent.AddSibling(pi)
 }
@@ -77,61 +131,77 @@ func (pctx *parserCtx) fastStartElement(localname, prefix, uri string, attrs []a
 		}
 	}
 
+	registerIDs := !pctx.loadsubset.IsSet(SkipIDs)
+	needsAttrDeclLookup := doc.IntSubset() != nil || doc.ExtSubset() != nil
+	elemName := localname
+	if needsAttrDeclLookup && prefix != "" {
+		elemName = prefix + ":" + localname
+	}
+
+	var nsCacheBuf [4]attrNamespaceCacheEntry
+	nsCache := nsCacheBuf[:0]
+	var lastAttr *Attribute
 	for i := range attrs {
 		attr := attrs[i]
 		if attr.isDefault && !pctx.loadsubset.IsSet(CompleteAttrs) {
 			continue
 		}
 
+		var ns *Namespace
 		if attr.prefix != "" {
-			ns := lookupNSByPrefix(e, attr.prefix)
-			if ns == nil && pctx.elem != nil {
-				ns = lookupNSByPrefix(pctx.elem, attr.prefix)
-			}
-			if pctx.replaceEntities {
-				_ = e.SetLiteralAttributeNS(attr.localname, attr.value, ns)
-				continue
-			}
-			if _, err := e.SetAttributeNS(attr.localname, attr.value, ns); err != nil {
+			var err error
+			ns, nsCache, err = pctx.fastLookupAttributeNamespace(doc, attr.prefix, nsCache)
+			if err != nil {
 				return err
 			}
-			continue
 		}
 
+		var created *Attribute
 		if pctx.replaceEntities {
-			_ = e.SetLiteralAttribute(attr.localname, attr.value)
-			continue
+			created = doc.createLiteralAttribute(attr.localname, attr.value, ns)
+		} else {
+			var err error
+			created, err = doc.CreateAttribute(attr.localname, attr.value, ns)
+			if err != nil {
+				return err
+			}
 		}
-		if _, err := e.SetAttribute(attr.localname, attr.value); err != nil {
-			return err
+		if attr.isDefault {
+			created.SetDefault(true)
 		}
-	}
+		if lastAttr == nil {
+			e.properties = created
+		} else {
+			lastAttr.next = created
+			created.prev = lastAttr
+		}
+		created.parent = e
+		lastAttr = created
 
-	elemName := localname
-	if prefix != "" {
-		elemName = prefix + ":" + localname
+		if needsAttrDeclLookup {
+			if decl := lookupAttributeDecl(doc, attr.localname, attr.prefix, elemName); decl != nil {
+				created.SetAType(decl.AType())
+				if registerIDs && decl.AType() == enum.AttrID {
+					doc.RegisterID(attr.value, e)
+					continue
+				}
+			}
+		}
+		if registerIDs && attr.prefix == XMLPrefix && attr.localname == "id" {
+			doc.RegisterID(attr.value, e)
+		}
 	}
-	registerIDs := !pctx.loadsubset.IsSet(SkipIDs)
-	e.ForEachAttribute(func(a *Attribute) bool {
-		if decl := lookupAttributeDecl(doc, a.LocalName(), a.Prefix(), elemName); decl != nil {
-			a.SetAType(decl.AType())
-		}
-		if registerIDs && (a.Name() == lexicon.QNameXMLID || a.AType() == enum.AttrID) {
-			doc.RegisterID(a.Value(), e)
-		}
-		return true
-	})
 
 	var parent MutableNode
 	if pctx.elem != nil {
 		parent = pctx.elem
 	}
 	if parent == nil {
-		if err := doc.AddChild(e); err != nil {
+		if err := appendFastChild(doc, e); err != nil {
 			return err
 		}
 	} else if parent.Type() == ElementNode {
-		if err := parent.AddChild(e); err != nil {
+		if err := appendFastChild(parent, e); err != nil {
 			return err
 		}
 	} else {
@@ -160,11 +230,18 @@ func (pctx *parserCtx) fastEndElement() error {
 }
 
 func (pctx *parserCtx) fastCharacters(data []byte) error {
-	n := pctx.elem
-	if n == nil {
+	parent := pctx.elem
+	if parent == nil {
 		return errors.New("text content placed in wrong location")
 	}
-	return n.AppendText(data)
+
+	pdn := parent.baseDocNode()
+	if last := pdn.lastChild; last != nil && last.Type() == TextNode {
+		return last.(*Text).AppendText(data)
+	}
+
+	text := pctx.doc.CreateText(data)
+	return appendFastChild(parent, text)
 }
 
 func (pctx *parserCtx) fastIgnorableWhitespace(data []byte) error {
@@ -181,7 +258,7 @@ func (pctx *parserCtx) fastCDataBlock(data []byte) error {
 	}
 
 	cdata := pctx.doc.CreateCDATASection(data)
-	return parent.AddChild(cdata)
+	return appendFastChild(parent, cdata)
 }
 
 func (pctx *parserCtx) fastComment(data []byte) error {
@@ -199,10 +276,10 @@ func (pctx *parserCtx) fastComment(data []byte) error {
 	}
 
 	if pctx.elem == nil {
-		return doc.AddChild(comment)
+		return appendFastChild(doc, comment)
 	}
 	if pctx.elem.Type() == ElementNode {
-		return pctx.elem.AddChild(comment)
+		return appendFastChild(pctx.elem, comment)
 	}
 	return pctx.elem.AddSibling(comment)
 }

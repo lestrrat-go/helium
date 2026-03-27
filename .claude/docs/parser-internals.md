@@ -144,6 +144,15 @@ Expands `&#NNN;`, `&#xHHH;`, `&name;`, `%name;` based on substitution type. Recu
 2. No current element → add to document
 3. Current is Element → add as child
 
+### DOM Fast Path
+
+When the default parser is building a DOM with the internal fast path enabled:
+- start-tag handling appends parser-created attributes directly in parse order instead of routing through the generic duplicate-checking setters
+- common-case ID/type propagation happens inline during start-tag processing
+- character data and fresh child nodes are linked directly into the current parent when parser invariants already guarantee the normal `xmlAddChild` preconditions
+
+These shortcuts preserve the public DOM shape; they only avoid generic API work that the parser has already proven unnecessary.
+
 ## Push Parser
 
 `PushParser` uses background goroutine + `pushStream` (thread-safe concurrent buffer):
@@ -166,6 +175,8 @@ Parser runs in background goroutine, reading from pushStream via `ParseReader`. 
 - Deliver chunks via SAX Characters callback
 
 Controlled by `Parser.SetCharBufferSize(size)`.
+
+For the UTF-8 cursor fast path, character-data scanners now continue across reader chunk boundaries before classifying the text run. This preserves CRLF normalization and prevents whitespace-only content from being split into mixed `Characters` / `IgnorableWhitespace` events at buffer edges.
 
 ## Attribute Default Application
 

@@ -318,12 +318,38 @@ func (c *UTF8Cursor) HasPrefixString(s string) bool {
 			return false
 		}
 	}
-	for i := 0; i < n; i++ {
-		if c.buf[c.bufpos+i] != s[i] {
-			return false
+	data := c.buf[c.bufpos:]
+	switch n {
+	case 0:
+		return true
+	case 1:
+		return data[0] == s[0]
+	case 2:
+		return data[0] == s[0] && data[1] == s[1]
+	case 3:
+		return data[0] == s[0] && data[1] == s[1] && data[2] == s[2]
+	case 4:
+		return data[0] == s[0] && data[1] == s[1] && data[2] == s[2] && data[3] == s[3]
+	case 5:
+		return data[0] == s[0] && data[1] == s[1] && data[2] == s[2] && data[3] == s[3] && data[4] == s[4]
+	case 9:
+		return data[0] == s[0] &&
+			data[1] == s[1] &&
+			data[2] == s[2] &&
+			data[3] == s[3] &&
+			data[4] == s[4] &&
+			data[5] == s[5] &&
+			data[6] == s[6] &&
+			data[7] == s[7] &&
+			data[8] == s[8]
+	default:
+		for i := 0; i < n; i++ {
+			if data[i] != s[i] {
+				return false
+			}
 		}
+		return true
 	}
-	return true
 }
 
 func (c *UTF8Cursor) Consume(b []byte) bool {
@@ -344,9 +370,46 @@ func (c *UTF8Cursor) ConsumeString(s string) bool {
 			return false
 		}
 	}
-	for i := 0; i < n; i++ {
-		if c.buf[c.bufpos+i] != s[i] {
+	data := c.buf[c.bufpos:]
+	switch n {
+	case 0:
+	case 1:
+		if data[0] != s[0] {
 			return false
+		}
+	case 2:
+		if data[0] != s[0] || data[1] != s[1] {
+			return false
+		}
+	case 3:
+		if data[0] != s[0] || data[1] != s[1] || data[2] != s[2] {
+			return false
+		}
+	case 4:
+		if data[0] != s[0] || data[1] != s[1] || data[2] != s[2] || data[3] != s[3] {
+			return false
+		}
+	case 5:
+		if data[0] != s[0] || data[1] != s[1] || data[2] != s[2] || data[3] != s[3] || data[4] != s[4] {
+			return false
+		}
+	case 9:
+		if data[0] != s[0] ||
+			data[1] != s[1] ||
+			data[2] != s[2] ||
+			data[3] != s[3] ||
+			data[4] != s[4] ||
+			data[5] != s[5] ||
+			data[6] != s[6] ||
+			data[7] != s[7] ||
+			data[8] != s[8] {
+			return false
+		}
+	default:
+		for i := 0; i < n; i++ {
+			if data[i] != s[i] {
+				return false
+			}
 		}
 	}
 	if err := c.Advance(n); err != nil {
@@ -537,7 +600,15 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 			off += runLen
 		}
 		if off >= dlen {
-			break
+			if c.fillBuffer(off + 1) != nil {
+				break
+			}
+			data = c.buf[c.bufpos:c.buflen]
+			dlen = len(data)
+			if off >= dlen {
+				break
+			}
+			continue
 		}
 
 		b := data[off]
@@ -546,6 +617,11 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 				break
 			}
 			if b == ']' {
+				if off+2 >= dlen {
+					_ = c.fillBuffer(off + 3)
+					data = c.buf[c.bufpos:c.buflen]
+					dlen = len(data)
+				}
 				if off+2 < dlen && data[off+1] == ']' && data[off+2] == '>' {
 					break
 				}
@@ -554,6 +630,11 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte) ([]byte, int) {
 				continue
 			}
 			if b == '\r' {
+				if off+1 >= dlen {
+					_ = c.fillBuffer(off + 2)
+					data = c.buf[c.bufpos:c.buflen]
+					dlen = len(data)
+				}
 				dst = append(dst, '\n')
 				off++
 				if off < dlen && data[off] == '\n' {
@@ -593,7 +674,15 @@ func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer) int {
 	off := 0
 	dst.Grow(c.buflen - c.bufpos)
 
-	for c.bufpos+off < c.buflen {
+	for {
+		if c.bufpos+off >= c.buflen {
+			if c.fillBuffer(off + 1) != nil {
+				break
+			}
+			if c.bufpos+off >= c.buflen {
+				break
+			}
+		}
 		b := c.buf[c.bufpos+off]
 		if b < 0x80 {
 			if b == '<' || b == '&' {
@@ -602,10 +691,18 @@ func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer) int {
 			if b < 0x20 && b != 0x9 && b != 0xa && b != 0xd {
 				break
 			}
-			if b == ']' && c.bufpos+off+2 < c.buflen && c.buf[c.bufpos+off+1] == ']' && c.buf[c.bufpos+off+2] == '>' {
-				break
+			if b == ']' {
+				if c.bufpos+off+2 >= c.buflen {
+					_ = c.fillBuffer(off + 3)
+				}
+				if c.bufpos+off+2 < c.buflen && c.buf[c.bufpos+off+1] == ']' && c.buf[c.bufpos+off+2] == '>' {
+					break
+				}
 			}
 			if b == '\r' {
+				if c.bufpos+off+1 >= c.buflen {
+					_ = c.fillBuffer(off + 2)
+				}
 				dst.WriteByte('\n')
 				off++
 				if c.bufpos+off < c.buflen && c.buf[c.bufpos+off] == '\n' {

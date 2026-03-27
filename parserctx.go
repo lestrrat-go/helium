@@ -1008,22 +1008,37 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 	recover := pctx.options.IsSet(parseRecover)
 
 	for !cur.Done() && !pctx.stopped {
-		if cur.HasPrefixString("</") {
+		if cur.Peek() == '<' && cur.PeekAt(1) == '/' {
 			break
 		}
 
 		var err error
-		if cur.HasPrefixString("<?") {
-			err = pctx.parsePI(ctx)
-		} else if cur.HasPrefixString("<![CDATA[") {
-			err = pctx.parseCDSect(ctx)
-		} else if cur.HasPrefixString("<!--") {
-			err = pctx.parseComment(ctx)
-		} else if cur.HasPrefixString("<") {
-			err = pctx.parseElement(ctx)
-		} else if cur.HasPrefixString("&") {
+		switch cur.Peek() {
+		case '<':
+			switch cur.PeekAt(1) {
+			case '?':
+				err = pctx.parsePI(ctx)
+			case '!':
+				switch {
+				case cur.PeekAt(2) == '[' &&
+					cur.PeekAt(3) == 'C' &&
+					cur.PeekAt(4) == 'D' &&
+					cur.PeekAt(5) == 'A' &&
+					cur.PeekAt(6) == 'T' &&
+					cur.PeekAt(7) == 'A' &&
+					cur.PeekAt(8) == '[':
+					err = pctx.parseCDSect(ctx)
+				case cur.PeekAt(2) == '-' && cur.PeekAt(3) == '-':
+					err = pctx.parseComment(ctx)
+				default:
+					err = pctx.parseElement(ctx)
+				}
+			default:
+				err = pctx.parseElement(ctx)
+			}
+		case '&':
 			err = pctx.parseReference(ctx)
-		} else {
+		default:
 			if err := pctx.parseCharData(ctx, false); err != nil {
 				if !recover || errors.Is(err, errParserStopped) {
 					return err
@@ -1282,7 +1297,7 @@ func (pctx *parserCtx) parseElement(ctx context.Context) error {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.HasPrefixString("/>") {
+	if cur.Peek() != '/' || cur.PeekAt(1) != '>' {
 		if err := pctx.parseContent(ctx); err != nil {
 			return pctx.error(ctx, err)
 		}
@@ -1358,7 +1373,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			pctx.pushNS("", attvalue)
 			nbNs++
 		SkipDefaultNS:
-			if cur.Peek() == '>' || cur.HasPrefixString("/>") {
+			if cur.Peek() == '>' || (cur.Peek() == '/' && cur.PeekAt(1) == '>') {
 				continue
 			}
 
@@ -1421,7 +1436,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			nbNs++
 
 		SkipNS:
-			if cur.Peek() == '>' || cur.HasPrefixString("/>") {
+			if cur.Peek() == '>' || (cur.Peek() == '/' && cur.PeekAt(1) == '>') {
 				continue
 			}
 
@@ -1577,7 +1592,11 @@ func (pctx *parserCtx) parseEndTag(ctx context.Context) error {
 	if cur == nil {
 		panic("did not get rune cursor")
 	}
-	if !cur.ConsumeString("/>") {
+	if cur.Peek() == '/' && cur.PeekAt(1) == '>' {
+		if err := cur.Advance(2); err != nil {
+			return err
+		}
+	} else {
 		if !cur.ConsumeString("</") {
 			return pctx.error(ctx, ErrLtSlashRequired)
 		}
