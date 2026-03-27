@@ -79,6 +79,7 @@ type parserCtx struct {
 	// remain            int
 	replaceEntities   bool
 	sax               sax.SAX2Handler
+	treeBuilder       *TreeBuilder
 	spaceTab          []int // xml:space stack: -1=inherit, 0=default, 1=preserve
 	standalone        DocumentStandaloneType
 	hasExternalSubset bool
@@ -97,9 +98,9 @@ type parserCtx struct {
 	depth             int
 	loadsubset        LoadSubsetOption
 	charBufferSize    int
-	baseURI           string            // document base URI for resolving external references
+	baseURI           string          // document base URI for resolving external references
 	catalog           CatalogResolver // XML catalog for entity resolution
-	elem              *Element          // current context element
+	elem              *Element        // current context element
 
 	nsTab       nsStack
 	nsNrTab     []int // number of ns bindings pushed per element (parallel to nodeTab)
@@ -120,6 +121,7 @@ type parserCtx struct {
 	currentEntityURI string            // URI of the external entity currently being replayed (for base-uri tracking)
 	nameCache        map[string]string // per-parse string interning for element/attribute names
 	charBuf          []byte            // reusable buffer for parseCharDataContent
+	attrBuf          []attrData        // reusable attribute scratch buffer for start-tag parsing
 }
 
 type parserCtxKey struct{}
@@ -389,6 +391,9 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.maxAmpl = entityMaxAmplDefault
 	if p != nil {
 		ctx.sax = p.sax
+		if tb, ok := p.sax.(*TreeBuilder); ok {
+			ctx.treeBuilder = tb
+		}
 		ctx.charBufferSize = p.charBufferSize
 		ctx.options = p.options
 		ctx.catalog = p.catalog
@@ -699,8 +704,6 @@ func decodeRuneAt(cur strcursor.Cursor, offset int) (rune, int, bool) {
 	return r, w, true
 }
 
-
-
 func (ctx *parserCtx) switchEncoding() error {
 	if pdebug.Enabled {
 		g := pdebug.IPrintf("START switchEncoding()")
@@ -869,7 +872,9 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 		}
 	}
 
-	if s := pctx.sax; s != nil {
+	if pctx.treeBuilder != nil {
+		pctx.fastStartDocument()
+	} else if s := pctx.sax; s != nil {
 		switch err := s.StartDocument(ctx); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
@@ -974,7 +979,9 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	*/
 
 	// All done
-	if s := pctx.sax; s != nil {
+	if pctx.treeBuilder != nil {
+		pctx.fastEndDocument()
+	} else if s := pctx.sax; s != nil {
 		switch err := s.EndDocument(ctx); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
@@ -1182,13 +1189,21 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		pctx.charBuf = data
 
 		if pctx.areBlanksBytes(data, false) {
-			if s := pctx.sax; s != nil && !pctx.disableSAX {
+			if pctx.treeBuilder != nil && !pctx.disableSAX {
+				if err := pctx.fastIgnorableWhitespace(data); err != nil {
+					return err
+				}
+			} else if s := pctx.sax; s != nil && !pctx.disableSAX {
 				if err := pctx.deliverCharacters(ctx, s.IgnorableWhitespace, data); err != nil {
 					return err
 				}
 			}
 		} else {
-			if s := pctx.sax; s != nil && !pctx.disableSAX {
+			if pctx.treeBuilder != nil && !pctx.disableSAX {
+				if err := pctx.fastCharacters(data); err != nil {
+					return err
+				}
+			} else if s := pctx.sax; s != nil && !pctx.disableSAX {
 				if err := pctx.deliverCharacters(ctx, s.Characters, data); err != nil {
 					return err
 				}
@@ -1216,13 +1231,21 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 
 	data := buf.Bytes()
 	if pctx.areBlanksBytes(data, false) {
-		if s := pctx.sax; s != nil && !pctx.disableSAX {
+		if pctx.treeBuilder != nil && !pctx.disableSAX {
+			if err := pctx.fastIgnorableWhitespace(data); err != nil {
+				return err
+			}
+		} else if s := pctx.sax; s != nil && !pctx.disableSAX {
 			if err := pctx.deliverCharacters(ctx, s.IgnorableWhitespace, data); err != nil {
 				return err
 			}
 		}
 	} else {
-		if s := pctx.sax; s != nil && !pctx.disableSAX {
+		if pctx.treeBuilder != nil && !pctx.disableSAX {
+			if err := pctx.fastCharacters(data); err != nil {
+				return err
+			}
+		} else if s := pctx.sax; s != nil && !pctx.disableSAX {
 			if err := pctx.deliverCharacters(ctx, s.Characters, data); err != nil {
 				return err
 			}
@@ -1301,9 +1324,10 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	pctx.spaceTab = append(pctx.spaceTab, -1)
 
 	nbNs := 0
-	// Use stack-allocated backing array for small attribute counts (common case).
-	var attrsBuf [8]sax.Attribute
-	attrs := attrsBuf[:0]
+	if pctx.attrBuf == nil {
+		pctx.attrBuf = make([]attrData, 0, 8)
+	}
+	attrs := pctx.attrBuf[:0]
 	for pctx.instate != psEOF {
 		pctx.skipBlanks(ctx)
 		if cur.Peek() == '>' {
@@ -1411,7 +1435,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 
 		// Due to various reasons, we cannot create a real Attribute object
 		// here. So we create a simple holder for attribute data
-		attr := &attrData{
+		attr := attrData{
 			localname: attname,
 			prefix:    aprefix,
 			value:     attvalue,
@@ -1457,13 +1481,18 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 					// Skip if an explicit attribute with the same name exists
 					dup := false
 					for _, ea := range attrs {
-						if ea.LocalName() == attname && ea.Prefix() == aprefix {
+						if ea.localname == attname && ea.prefix == aprefix {
 							dup = true
 							break
 						}
 					}
 					if !dup {
-						attrs = append(attrs, attr)
+						attrs = append(attrs, attrData{
+							localname: attname,
+							prefix:    aprefix,
+							value:     attr.Value(),
+							isDefault: attr.IsDefault(),
+						})
 					}
 				}
 			}
@@ -1472,8 +1501,8 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 
 	// Scan attributes for xml:space to update the space stack
 	for _, a := range attrs {
-		if a.Prefix() == XMLPrefix && a.LocalName() == "space" {
-			switch a.Value() {
+		if a.prefix == XMLPrefix && a.localname == "space" {
+			switch a.value {
 			case "preserve":
 				pctx.spaceTab[len(pctx.spaceTab)-1] = 1
 			case "default":
@@ -1491,7 +1520,11 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		return pctx.namespaceError(ctx, errors.New("namespace '"+prefix+"' not found"))
 	}
 
-	if s := pctx.sax; s != nil && !pctx.disableSAX {
+	if pctx.treeBuilder != nil && !pctx.disableSAX {
+		if err := pctx.fastStartElement(local, prefix, nsuri, attrs, nbNs); err != nil {
+			return pctx.error(ctx, err)
+		}
+	} else if s := pctx.sax; s != nil && !pctx.disableSAX {
 		var nslist []sax.Namespace
 		if nbNs > 0 {
 			nslist = make([]sax.Namespace, nbNs)
@@ -1500,7 +1533,14 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 				nslist[i] = ns
 			}
 		}
-		switch err := s.StartElementNS(ctx, local, prefix, nsuri, nslist, attrs); err {
+		var saxAttrs []sax.Attribute
+		if len(attrs) > 0 {
+			saxAttrs = make([]sax.Attribute, len(attrs))
+			for i := range attrs {
+				saxAttrs[i] = &attrs[i]
+			}
+		}
+		switch err := s.StartElementNS(ctx, local, prefix, nsuri, nslist, saxAttrs); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
 		default:
@@ -1513,6 +1553,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	}
 	pctx.pushNodeEntry(nodeEntry{local: local, prefix: prefix, uri: nsuri, qname: qname})
 	pctx.nsNrTab = append(pctx.nsNrTab, nbNs)
+	pctx.attrBuf = attrs[:0]
 
 	return nil
 }
@@ -1558,7 +1599,11 @@ func (pctx *parserCtx) parseEndTag(ctx context.Context) error {
 	}
 
 	e := pctx.peekNode()
-	if s := pctx.sax; s != nil && !pctx.disableSAX {
+	if pctx.treeBuilder != nil && !pctx.disableSAX {
+		if err := pctx.fastEndElement(); err != nil {
+			return pctx.error(ctx, err)
+		}
+	} else if s := pctx.sax; s != nil && !pctx.disableSAX {
 		switch err := s.EndElementNS(ctx, e.LocalName(), e.Prefix(), e.URI()); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
@@ -2604,7 +2649,11 @@ func (pctx *parserCtx) parsePI(ctx context.Context) error {
 	}
 
 	if cur.ConsumeString("?>") {
-		if s := pctx.sax; s != nil && !pctx.disableSAX {
+		if pctx.treeBuilder != nil && !pctx.disableSAX {
+			if err := pctx.fastProcessingInstruction(target, ""); err != nil {
+				return pctx.error(ctx, err)
+			}
+		} else if s := pctx.sax; s != nil && !pctx.disableSAX {
 			switch err := s.ProcessingInstruction(ctx, target, ""); err {
 			case nil, sax.ErrHandlerUnspecified:
 				// no op
@@ -2657,7 +2706,11 @@ func (pctx *parserCtx) parsePI(ctx context.Context) error {
 		return pctx.error(ctx, ErrInvalidProcessingInstruction)
 	}
 
-	if s := pctx.sax; s != nil && !pctx.disableSAX {
+	if pctx.treeBuilder != nil && !pctx.disableSAX {
+		if err := pctx.fastProcessingInstruction(target, data); err != nil {
+			return pctx.error(ctx, err)
+		}
+	} else if s := pctx.sax; s != nil && !pctx.disableSAX {
 		switch err := s.ProcessingInstruction(ctx, target, data); err {
 		case nil, sax.ErrHandlerUnspecified:
 			// no op
@@ -3054,7 +3107,6 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 	return true
 }
 
-
 func isChar(r rune) bool {
 	if r == utf8.RuneError {
 		return false
@@ -3105,7 +3157,17 @@ func (pctx *parserCtx) parseCDSect(ctx context.Context) error {
 		return pctx.error(ctx, ErrCDATANotFinished)
 	}
 
-	if s := pctx.sax; s != nil && !pctx.disableSAX {
+	if pctx.treeBuilder != nil && !pctx.disableSAX {
+		if pctx.options.IsSet(parseNoCDATA) {
+			if err := pctx.fastCharacters([]byte(str)); err != nil {
+				return err
+			}
+		} else {
+			if err := pctx.fastCDataBlock([]byte(str)); err != nil {
+				return pctx.error(ctx, err)
+			}
+		}
+	} else if s := pctx.sax; s != nil && !pctx.disableSAX {
 		if pctx.options.IsSet(parseNoCDATA) {
 			if err := pctx.deliverCharacters(ctx, s.Characters, []byte(str)); err != nil {
 				return err
@@ -3177,7 +3239,13 @@ func (pctx *parserCtx) parseComment(ctx context.Context) error {
 		return err
 	}
 
-	if sh := pctx.sax; sh != nil && !pctx.disableSAX {
+	if pctx.treeBuilder != nil && !pctx.disableSAX {
+		str = bytes.ReplaceAll(str, []byte{'\r', '\n'}, []byte{'\n'})
+		str = bytes.ReplaceAll(str, []byte{'\r'}, []byte{'\n'})
+		if err := pctx.fastComment(str); err != nil {
+			return pctx.error(ctx, err)
+		}
+	} else if sh := pctx.sax; sh != nil && !pctx.disableSAX {
 		// XML §2.11 End-of-Line Handling: normalize \r\n to \n, then lone \r to \n.
 		str = bytes.ReplaceAll(str, []byte{'\r', '\n'}, []byte{'\n'})
 		str = bytes.ReplaceAll(str, []byte{'\r'}, []byte{'\n'})
