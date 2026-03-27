@@ -2,8 +2,6 @@ package helium
 
 import "github.com/lestrrat-go/helium/internal/lexicon"
 
-const Version = `0.0.1`
-
 const (
 	XMLNamespace = lexicon.NamespaceXML
 	XMLNsPrefix  = lexicon.PrefixXMLNS
