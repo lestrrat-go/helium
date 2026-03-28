@@ -29,7 +29,7 @@ type jsonOptions struct {
 
 func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	s, err := coerceArgToString(args[0])
 	if err != nil {
@@ -64,7 +64,7 @@ func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid trailing content: %v", err)}
 	}
 	if item == nil {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 
 	return ItemSlice{item}, nil
@@ -483,7 +483,7 @@ func canonicalInvalidJSONEscape(raw string) string {
 
 func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	uri, err := coerceArgToString(args[0])
 	if err != nil {
@@ -511,7 +511,7 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 func jsonToXDM(v any) (Item, error) {
 	switch val := v.(type) {
 	case nil:
-		return nil, nil //nolint:nilnil // JSON null maps to empty sequence (nil Item, nil error) per XPath spec
+		return nil, nil //nolint:nilnil // JSON null maps to empty sequence per XPath spec
 	case bool:
 		return AtomicValue{TypeName: TypeBoolean, Value: val}, nil
 	case json.Number:

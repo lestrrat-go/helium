@@ -15,7 +15,7 @@ func init() {
 
 func fnParseIETFDate(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	s, err := coerceArgToString(args[0])
 	if err != nil {

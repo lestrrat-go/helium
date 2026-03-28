@@ -41,6 +41,10 @@ var (
 	seqMaterialize = sequence.Materialize[Item]
 )
 
+// validNilSequence is a typed nil Sequence returned when an empty XPath
+// sequence with no error is the intentional result.
+var validNilSequence Sequence
+
 var cloneSequence = sequence.Clone[Item]
 
 // CloneSequence returns a deep copy of the Sequence.

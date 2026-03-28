@@ -97,7 +97,7 @@ func enrichNodeItems(ec *evalContext, seq Sequence) Sequence {
 
 func evalSequenceExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, e SequenceExpr) (Sequence, error) {
 	if len(e.Items) == 0 {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	var result ItemSlice
 	for _, item := range e.Items {

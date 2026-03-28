@@ -42,14 +42,14 @@ func fnExists(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnHead(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	return ItemSlice{args[0].Get(0)}, nil
 }
 
 func fnTail(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) <= 1 {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	return ItemSlice(seqMaterialize(args[0])[1:]), nil
 }
@@ -156,10 +156,10 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 
 	// Handle NaN start or NaN length
 	if math.IsNaN(startF) {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	if hasLength && math.IsNaN(lengthF) {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 
 	// Compute end position: startF + lengthF (only when length is given)
@@ -168,7 +168,7 @@ func fnSubsequence(_ context.Context, args []Sequence) (Sequence, error) {
 		endF = startF + lengthF
 		// -INF + INF = NaN → empty result
 		if math.IsNaN(endF) {
-			return nil, nil //nolint:nilnil
+			return validNilSequence, nil
 		}
 	}
 

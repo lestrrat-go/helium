@@ -39,7 +39,7 @@ func fnStaticBaseURI(ctx context.Context, _ []Sequence) (Sequence, error) {
 			Value:    ec.baseURI,
 		}), nil
 	}
-	return nil, nil //nolint:nilnil
+	return validNilSequence, nil
 }
 
 func fnDefaultCollation(ctx context.Context, _ []Sequence) (Sequence, error) {
@@ -92,7 +92,7 @@ func fnEnvironmentVariable(_ context.Context, args []Sequence) (Sequence, error)
 	}
 	val, ok := os.LookupEnv(name)
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	return SingleString(val), nil
 }

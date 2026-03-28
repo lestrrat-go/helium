@@ -33,7 +33,7 @@ func evalCastExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext, 
 	}
 	if seqLen(seq) == 0 {
 		if e.AllowEmpty {
-			return nil, nil //nolint:nilnil
+			return validNilSequence, nil
 		}
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "cast requires non-empty sequence"}
 	}

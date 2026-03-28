@@ -121,7 +121,7 @@ func evalDynamicFunctionCall(evalFn exprEvaluator, goCtx context.Context, ec *ev
 		}
 		val, ok := v.Get(key)
 		if !ok {
-			return nil, nil //nolint:nilnil
+			return validNilSequence, nil
 		}
 		return val, nil
 	case ArrayItem:

@@ -111,7 +111,7 @@ func extractDuration(seq Sequence, allowedTypes ...string) (Duration, bool, erro
 
 func fnDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 || seqLen(args[1]) == 0 {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	dateA, err := AtomizeItem(args[0].Get(0))
 	if err != nil {
@@ -177,7 +177,7 @@ func fnYearFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	return SingleInteger(int64(t.Year())), nil
 }
@@ -188,7 +188,7 @@ func fnMonthFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	return SingleInteger(int64(t.Month())), nil
 }
@@ -199,7 +199,7 @@ func fnDayFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	return SingleInteger(int64(t.Day())), nil
 }
@@ -210,7 +210,7 @@ func fnHoursFromDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	return SingleInteger(int64(t.Hour())), nil
 }
@@ -221,7 +221,7 @@ func fnMinutesFromDateTime(_ context.Context, args []Sequence) (Sequence, error)
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	return SingleInteger(int64(t.Minute())), nil
 }
@@ -232,7 +232,7 @@ func fnSecondsFromDateTime(_ context.Context, args []Sequence) (Sequence, error)
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	sec := float64(t.Second()) + float64(t.Nanosecond())/1e9
 	return SingleDouble(sec), nil
@@ -244,10 +244,10 @@ func fnTimezoneFromDateTime(_ context.Context, args []Sequence) (Sequence, error
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	if !HasTimezone(t) {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	_, offset := t.Zone()
 	secs := float64(offset)
@@ -267,7 +267,7 @@ func fnYearFromDate(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	return SingleInteger(int64(t.Year())), nil
 }
@@ -278,7 +278,7 @@ func fnMonthFromDate(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	return SingleInteger(int64(t.Month())), nil
 }
@@ -289,7 +289,7 @@ func fnDayFromDate(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	return SingleInteger(int64(t.Day())), nil
 }
@@ -300,10 +300,10 @@ func fnTimezoneFromDate(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	if !HasTimezone(t) {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	_, offset := t.Zone()
 	secs := float64(offset)
@@ -323,7 +323,7 @@ func fnHoursFromTime(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	return SingleInteger(int64(t.Hour())), nil
 }
@@ -334,7 +334,7 @@ func fnMinutesFromTime(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	return SingleInteger(int64(t.Minute())), nil
 }
@@ -345,7 +345,7 @@ func fnSecondsFromTime(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	sec := float64(t.Second()) + float64(t.Nanosecond())/1e9
 	return SingleDouble(sec), nil
@@ -357,10 +357,10 @@ func fnTimezoneFromTime(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	if !HasTimezone(t) {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	_, offset := t.Zone()
 	secs := float64(offset)
@@ -380,7 +380,7 @@ func fnYearsFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	years := d.Months / 12
 	if d.Negative {
@@ -395,7 +395,7 @@ func fnMonthsFromDuration(_ context.Context, args []Sequence) (Sequence, error) 
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	months := d.Months % 12
 	if d.Negative {
@@ -410,7 +410,7 @@ func fnDaysFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	days := int(d.Seconds) / 86400
 	if d.Negative {
@@ -425,7 +425,7 @@ func fnHoursFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	hours := (int(d.Seconds) % 86400) / 3600
 	if d.Negative {
@@ -440,7 +440,7 @@ func fnMinutesFromDuration(_ context.Context, args []Sequence) (Sequence, error)
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	minutes := (int(d.Seconds) % 3600) / 60
 	if d.Negative {
@@ -455,7 +455,7 @@ func fnSecondsFromDuration(_ context.Context, args []Sequence) (Sequence, error)
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	// Use exact arithmetic: integer total seconds mod 60 + exact fractional part
 	intSec := int64(d.Seconds)
@@ -478,7 +478,7 @@ func fnAdjustDateTimeToTimezone(ctx context.Context, args []Sequence) (Sequence,
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	if len(args) > 1 && seqLen(args[1]) == 0 {
 		// Remove timezone: keep local components
@@ -505,7 +505,7 @@ func fnAdjustDateToTimezone(ctx context.Context, args []Sequence) (Sequence, err
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	if len(args) > 1 && seqLen(args[1]) == 0 {
 		// Remove timezone: keep local date
@@ -533,7 +533,7 @@ func fnAdjustTimeToTimezone(ctx context.Context, args []Sequence) (Sequence, err
 		return nil, err
 	}
 	if !ok {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	if len(args) > 1 && seqLen(args[1]) == 0 {
 		// Remove timezone: keep local time components

@@ -27,6 +27,9 @@ type collationImpl struct {
 	key       func(s string) []byte
 }
 
+// validNilCollation is a typed nil returned when "use default collation" is intended.
+var validNilCollation *collationImpl
+
 // codepointCollation is the default XPath collation using byte-level comparison.
 var codepointCollation = &collationImpl{
 	compare: strings.Compare,

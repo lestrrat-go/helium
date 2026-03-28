@@ -66,14 +66,14 @@ func aggregateTypeFamily(typeName string) string {
 // codepoint collation.
 func resolveCollationArg(args []Sequence, idx int) (*collationImpl, error) {
 	if len(args) <= idx || seqLen(args[idx]) == 0 {
-		return nil, nil //nolint:nilnil
+		return validNilCollation, nil
 	}
 	uri, err := coerceArgToString(args[idx])
 	if err != nil {
 		return nil, err
 	}
 	if uri == lexicon.CollationCodepoint {
-		return nil, nil //nolint:nilnil
+		return validNilCollation, nil
 	}
 	return resolveCollation(uri, "")
 }
@@ -118,7 +118,7 @@ func fnAvg(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if len(atoms) == 0 {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	var family string
 	allDecOrInt := true
@@ -301,7 +301,7 @@ func fnMax(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if len(atoms) == 0 {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	coll, err := getCollation(ctx, args, 1)
 	if err != nil {
@@ -319,7 +319,7 @@ func fnMin(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if len(atoms) == 0 {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	coll, err := getCollation(ctx, args, 1)
 	if err != nil {
@@ -545,7 +545,7 @@ func sumDurations(seq Sequence, family string) (Sequence, error) {
 
 func fnDistinctValues(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	if err := validateCollationArg(args, 1); err != nil {
 		return nil, err

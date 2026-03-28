@@ -18,7 +18,7 @@ func evalArithmetic(evalFn exprEvaluator, goCtx context.Context, ec *evalContext
 		return nil, err
 	}
 	if seqLen(left) == 0 || seqLen(right) == 0 {
-		return nil, nil //nolint:nilnil // empty sequence
+		return validNilSequence, nil // empty sequence
 	}
 	if left.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "arithmetic operand must be a single item"}
@@ -334,7 +334,7 @@ func evalUnaryExpr(evalFn exprEvaluator, goCtx context.Context, ec *evalContext,
 		return nil, err
 	}
 	if seqLen(r) == 0 {
-		return nil, nil //nolint:nilnil
+		return validNilSequence, nil
 	}
 	if r.Len() > 1 {
 		return nil, &XPathError{Code: errCodeXPTY0004, Message: "unary minus operand must be a single item"}
