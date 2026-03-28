@@ -65,7 +65,7 @@ func (c *canonicalizer) processDocument() error {
 		case helium.DocumentTypeNode, helium.DTDNode:
 			continue
 		case helium.ElementNode:
-			elem, ok := helium.AsType[*helium.Element](child)
+			elem, ok := helium.AsNode[*helium.Element](child)
 			if !ok {
 				continue
 			}
@@ -77,7 +77,7 @@ func (c *canonicalizer) processDocument() error {
 			if !c.isVisible(child) {
 				continue
 			}
-			pi, ok := helium.AsType[*helium.ProcessingInstruction](child)
+			pi, ok := helium.AsNode[*helium.ProcessingInstruction](child)
 			if !ok {
 				continue
 			}
@@ -88,7 +88,7 @@ func (c *canonicalizer) processDocument() error {
 			if !c.withComments || !c.isVisible(child) {
 				continue
 			}
-			cm, ok := helium.AsType[*helium.Comment](child)
+			cm, ok := helium.AsNode[*helium.Comment](child)
 			if !ok {
 				continue
 			}
@@ -187,7 +187,7 @@ func (c *canonicalizer) processElement(e *helium.Element) error {
 func (c *canonicalizer) processNode(n helium.Node) error {
 	switch n.Type() {
 	case helium.ElementNode:
-		elem, ok := helium.AsType[*helium.Element](n)
+		elem, ok := helium.AsNode[*helium.Element](n)
 		if !ok {
 			return nil
 		}
@@ -201,7 +201,7 @@ func (c *canonicalizer) processNode(n helium.Node) error {
 			return nil
 		}
 		// Inside elements, PIs are inline (no position-dependent newlines)
-		pi, ok := helium.AsType[*helium.ProcessingInstruction](n)
+		pi, ok := helium.AsNode[*helium.ProcessingInstruction](n)
 		if !ok {
 			return nil
 		}
@@ -211,7 +211,7 @@ func (c *canonicalizer) processNode(n helium.Node) error {
 			return nil
 		}
 		// Inside elements, comments are inline (no position-dependent newlines)
-		cm, ok := helium.AsType[*helium.Comment](n)
+		cm, ok := helium.AsNode[*helium.Comment](n)
 		if !ok {
 			return nil
 		}
@@ -456,7 +456,7 @@ func (c *canonicalizer) nsRenderedByAncestor(e *helium.Element, prefix, uri stri
 		if n.Type() != helium.ElementNode {
 			continue
 		}
-		anc, ok := helium.AsType[*helium.Element](n)
+		anc, ok := helium.AsNode[*helium.Element](n)
 		if !ok {
 			continue
 		}
@@ -488,7 +488,7 @@ func (c *canonicalizer) findNearestRenderedDefaultNS(e *helium.Element) string {
 		if n.Type() != helium.ElementNode {
 			continue
 		}
-		anc, ok := helium.AsType[*helium.Element](n)
+		anc, ok := helium.AsNode[*helium.Element](n)
 		if !ok {
 			continue
 		}
@@ -645,7 +645,7 @@ func (c *canonicalizer) collectInScopeNamespaces(e *helium.Element) map[string]s
 	// Later (closer) declarations override earlier ones.
 	var ancestors []*helium.Element
 	for n := helium.Node(e); n != nil; n = n.Parent() {
-		if anc, ok := helium.AsType[*helium.Element](n); ok {
+		if anc, ok := helium.AsNode[*helium.Element](n); ok {
 			ancestors = append(ancestors, anc)
 		}
 	}
@@ -746,7 +746,7 @@ func (c *canonicalizer) renderAttributes(e *helium.Element) error {
 func (c *canonicalizer) inheritXMLAttrs(e *helium.Element, entries *[]attrSortEntry) {
 	// Only inherit if there's a non-visible gap
 	if parentNode := e.Parent(); parentNode != nil {
-		if parentElem, ok := helium.AsType[*helium.Element](parentNode); ok {
+		if parentElem, ok := helium.AsNode[*helium.Element](parentNode); ok {
 			if c.isVisible(parentElem) {
 				// Parent is visible — no gap, xml:* attrs flow through normally
 				return
@@ -764,7 +764,7 @@ func (c *canonicalizer) inheritXMLAttrs(e *helium.Element, entries *[]attrSortEn
 	}
 
 	for n := e.Parent(); n != nil; n = n.Parent() {
-		anc, ok := helium.AsType[*helium.Element](n)
+		anc, ok := helium.AsNode[*helium.Element](n)
 		if !ok {
 			continue
 		}
@@ -790,7 +790,7 @@ func (c *canonicalizer) inheritXMLAttrs(e *helium.Element, entries *[]attrSortEn
 // from non-visible ancestors in C14N 1.1 mode.
 func (c *canonicalizer) inheritXMLAttrsC14N11(e *helium.Element, entries *[]attrSortEntry) {
 	if parentNode := e.Parent(); parentNode != nil {
-		if parentElem, ok := helium.AsType[*helium.Element](parentNode); ok {
+		if parentElem, ok := helium.AsNode[*helium.Element](parentNode); ok {
 			if c.isVisible(parentElem) {
 				return
 			}
@@ -805,7 +805,7 @@ func (c *canonicalizer) inheritXMLAttrsC14N11(e *helium.Element, entries *[]attr
 	}
 
 	for n := e.Parent(); n != nil; n = n.Parent() {
-		anc, ok := helium.AsType[*helium.Element](n)
+		anc, ok := helium.AsNode[*helium.Element](n)
 		if !ok {
 			continue
 		}
@@ -836,7 +836,7 @@ func (c *canonicalizer) inheritXMLAttrsC14N11(e *helium.Element, entries *[]attr
 // to account for non-visible ancestors' xml:base contributions.
 func (c *canonicalizer) fixupXMLBase(e *helium.Element, entries *[]attrSortEntry) {
 	if parentNode := e.Parent(); parentNode != nil {
-		if parentElem, ok := helium.AsType[*helium.Element](parentNode); ok {
+		if parentElem, ok := helium.AsNode[*helium.Element](parentNode); ok {
 			if c.isVisible(parentElem) {
 				return // Parent visible, no fixup needed
 			}
@@ -849,7 +849,7 @@ func (c *canonicalizer) fixupXMLBase(e *helium.Element, entries *[]attrSortEntry
 	// Find nearest visible ancestor's effective base URI
 	vaBase := ""
 	for n := e.Parent(); n != nil; n = n.Parent() {
-		if anc, ok := helium.AsType[*helium.Element](n); ok {
+		if anc, ok := helium.AsNode[*helium.Element](n); ok {
 			if c.isVisible(anc) {
 				vaBase = c.effectiveBaseURI(anc)
 				break
@@ -880,7 +880,7 @@ func (c *canonicalizer) effectiveBaseURI(e *helium.Element) string {
 	// Collect ancestor chain
 	var chain []*helium.Element
 	for n := helium.Node(e); n != nil; n = n.Parent() {
-		if elem, ok := helium.AsType[*helium.Element](n); ok {
+		if elem, ok := helium.AsNode[*helium.Element](n); ok {
 			chain = append(chain, elem)
 		}
 	}

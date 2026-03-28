@@ -214,7 +214,7 @@ func (d *Document) Replace(_ ...Node) error {
 // DocumentElement returns the root element of the document, or nil if none exists.
 func (d *Document) DocumentElement() *Element {
 	for n := d.firstChild; n != nil; n = n.NextSibling() {
-		if elem, ok := AsType[*Element](n); ok {
+		if elem, ok := AsNode[*Element](n); ok {
 			return elem
 		}
 	}
@@ -893,7 +893,7 @@ func (d *Document) GetElementByID(id string) *Element {
 	// Fallback: O(n) tree walk for documents not built via parser.
 	var found *Element
 	_ = Walk(d, NodeWalkerFunc(func(n Node) error {
-		elem, ok := AsType[*Element](n)
+		elem, ok := AsNode[*Element](n)
 		if !ok {
 			return nil
 		}

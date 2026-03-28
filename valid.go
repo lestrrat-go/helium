@@ -250,7 +250,7 @@ func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) 
 
 	// Walk the document tree and validate each element
 	_ = Walk(doc, NodeWalkerFunc(func(n Node) error {
-		if elem, ok := AsType[*Element](n); ok {
+		if elem, ok := AsNode[*Element](n); ok {
 			validateOneElement(ctx, doc, elem, vctx)
 		}
 		return nil
@@ -461,7 +461,7 @@ func validateMixedContent(ctx context.Context, elem *Element, content *ElementCo
 		case TextNode, CDATASectionNode, EntityRefNode, CommentNode, ProcessingInstructionNode:
 			// Always allowed in mixed content
 		case ElementNode:
-			if ce, ok := AsType[*Element](child); ok {
+			if ce, ok := AsNode[*Element](child); ok {
 				cname := ce.LocalName()
 				if _, ok := allowed[cname]; !ok {
 					vctx.addf(ctx, "element %s: child element %s not allowed in mixed content", elem.LocalName(), cname)
@@ -498,7 +498,7 @@ func collectChildElements(elem *Element) []string {
 	for child := range Children(elem) {
 		switch child.Type() {
 		case ElementNode:
-			if ce, ok := AsType[*Element](child); ok {
+			if ce, ok := AsNode[*Element](child); ok {
 				children = append(children, ce.LocalName())
 			}
 		case TextNode:

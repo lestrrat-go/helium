@@ -74,7 +74,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element) (
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -153,7 +153,7 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -180,7 +180,7 @@ func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, t
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -239,7 +239,7 @@ func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td 
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -299,7 +299,7 @@ func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element,
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -331,7 +331,7 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ae, ok := helium.AsType[*helium.Element](child)
+		ae, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -359,7 +359,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -375,7 +375,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 					if gc.Type() != helium.ElementNode {
 						continue
 					}
-					gce, ok := helium.AsType[*helium.Element](gc)
+					gce, ok := helium.AsNode[*helium.Element](gc)
 					if !ok {
 						continue
 					}
@@ -403,7 +403,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 					if gc.Type() != helium.ElementNode {
 						continue
 					}
-					gce, ok := helium.AsType[*helium.Element](gc)
+					gce, ok := helium.AsNode[*helium.Element](gc)
 					if !ok {
 						continue
 					}
@@ -431,7 +431,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element) (*
 				if gc.Type() != helium.ElementNode {
 					continue
 				}
-				gce, ok := helium.AsType[*helium.Element](gc)
+				gce, ok := helium.AsNode[*helium.Element](gc)
 				if !ok {
 					continue
 				}
@@ -457,7 +457,7 @@ func (c *compiler) parseFacets(_ context.Context, restriction *helium.Element) *
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}

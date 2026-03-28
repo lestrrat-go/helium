@@ -238,7 +238,7 @@ func (pctx *parserCtx) fastCharacters(data []byte) error {
 
 	pdn := parent.baseDocNode()
 	if last := pdn.lastChild; last != nil {
-		if t, ok := AsType[*Text](last); ok {
+		if t, ok := AsNode[*Text](last); ok {
 			return t.AppendText(data)
 		}
 	}

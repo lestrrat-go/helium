@@ -256,7 +256,7 @@ func (c *xpathCommand) evalXPath3(ctx context.Context, cfg *xpathConfig, doc *he
 func (c *xpathCommand) printXPathNode(n helium.Node) int {
 	switch n.Type() {
 	case helium.AttributeNode:
-		attr, ok := helium.AsType[*helium.Attribute](n)
+		attr, ok := helium.AsNode[*helium.Attribute](n)
 		if !ok {
 			_, _ = fmt.Fprintf(c.stderr, "%s: unexpected attribute node type %T\n", c.prog, n)
 			return ExitErr

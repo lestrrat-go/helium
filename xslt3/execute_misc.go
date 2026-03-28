@@ -246,7 +246,7 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *wherePopula
 			continue
 		}
 		if child.Type() == helium.DocumentNode {
-			doc, _ := helium.AsType[*helium.Document](child)
+			doc, _ := helium.AsNode[*helium.Document](child)
 			for dc := range helium.Children(doc) {
 				copied, copyErr := helium.CopyNode(dc, ec.resultDoc)
 				if copyErr != nil {

@@ -18,7 +18,7 @@ func (c *compiler) parseNamedGroup(ctx context.Context, elem *helium.Element) er
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -56,7 +56,7 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -81,7 +81,7 @@ func (c *compiler) parseModelGroup(ctx context.Context, elem *helium.Element, co
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}

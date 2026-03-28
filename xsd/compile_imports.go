@@ -16,7 +16,7 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		elem, ok := helium.AsType[*helium.Element](child)
+		elem, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -227,7 +227,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		elem, ok := helium.AsType[*helium.Element](child)
+		elem, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -331,7 +331,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 				if gc.Type() != helium.ElementNode {
 					continue
 				}
-				gce, ok := helium.AsType[*helium.Element](gc)
+				gce, ok := helium.AsNode[*helium.Element](gc)
 				if !ok {
 					continue
 				}

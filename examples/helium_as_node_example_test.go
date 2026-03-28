@@ -7,8 +7,8 @@ import (
 	"github.com/lestrrat-go/helium"
 )
 
-func Example_helium_as_type() {
-	// AsType safely narrows a Node to a concrete type, similar to
+func Example_helium_as_node() {
+	// AsNode safely narrows a Node to a concrete type, similar to
 	// errors.AsType. It returns the typed value and true on success,
 	// or the zero value and false otherwise.
 
@@ -22,12 +22,12 @@ func Example_helium_as_type() {
 	// The document's first child is the root element.
 	node := doc.FirstChild()
 
-	if elem, ok := helium.AsType[*helium.Element](node); ok {
+	if elem, ok := helium.AsNode[*helium.Element](node); ok {
 		fmt.Printf("element: %s\n", elem.LocalName())
 	}
 
 	// A non-matching assertion returns false.
-	if _, ok := helium.AsType[*helium.Text](node); !ok {
+	if _, ok := helium.AsNode[*helium.Text](node); !ok {
 		fmt.Println("not a text node")
 	}
 	// Output:

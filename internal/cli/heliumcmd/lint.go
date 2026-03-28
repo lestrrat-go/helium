@@ -523,7 +523,7 @@ func (c *command) evalXPath(ctx context.Context, cfg *config, doc *helium.Docume
 		for _, n := range res.NodeSet {
 			switch n.Type() {
 			case helium.AttributeNode:
-				attr, ok := helium.AsType[*helium.Attribute](n)
+				attr, ok := helium.AsNode[*helium.Attribute](n)
 				if !ok {
 					_, _ = fmt.Fprintf(c.stderr, "%s: unexpected attribute node type %T\n", c.prog, n)
 					return ExitErr

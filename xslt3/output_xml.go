@@ -258,7 +258,7 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 		}
 		switch child.Type() {
 		case helium.ElementNode:
-			elem, _ := helium.AsType[*helium.Element](child)
+			elem, _ := helium.AsNode[*helium.Element](child)
 			// Write indentation before start tag
 			if err := ictx.writeIndent(sw); err != nil {
 				return err

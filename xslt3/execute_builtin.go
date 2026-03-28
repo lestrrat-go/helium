@@ -45,7 +45,7 @@ func (ec *execContext) applyOnNoMatch(ctx context.Context, node helium.Node, mod
 		if node.Type() == helium.ElementNode {
 			// XSLT 3.0: shallow-skip for elements applies templates to
 			// attributes and children (but does not copy the element).
-			srcElem, _ := helium.AsType[*helium.Element](node)
+			srcElem, _ := helium.AsNode[*helium.Element](node)
 			for _, attr := range srcElem.Attributes() {
 				if err := ec.applyTemplates(ctx, attr, mode, paramValues...); err != nil {
 					return err
@@ -155,7 +155,7 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 		}
 		return nil
 	case helium.ElementNode:
-		srcElem, _ := helium.AsType[*helium.Element](node)
+		srcElem, _ := helium.AsNode[*helium.Element](node)
 		newElem := ec.resultDoc.CreateElement(srcElem.LocalName())
 		for _, ns := range srcElem.Namespaces() {
 			_ = newElem.DeclareNamespace(ns.Prefix(), ns.URI())
@@ -209,9 +209,9 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 		pi := ec.resultDoc.CreatePI(node.Name(), string(node.Content()))
 		return ec.addNode(pi)
 	case helium.AttributeNode:
-		attr, _ := helium.AsType[*helium.Attribute](node)
+		attr, _ := helium.AsNode[*helium.Attribute](node)
 		out := ec.currentOutput()
-		if outElem, ok := helium.AsType[*helium.Element](out.current); ok {
+		if outElem, ok := helium.AsNode[*helium.Element](out.current); ok {
 			copyAttributeToElement(outElem, attr)
 			out.noteOutput()
 		}
@@ -257,7 +257,7 @@ func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
 			return err
 		}
 		if node.Type() == helium.ElementNode && copied.Parent() == nil {
-			srcElem, _ := helium.AsType[*helium.Element](node)
+			srcElem, _ := helium.AsNode[*helium.Element](node)
 			if srcBase := helium.NodeGetBase(srcElem.OwnerDocument(), srcElem); srcBase != "" {
 				helium.SetNodeBaseURI(copied, srcBase)
 			}
@@ -303,7 +303,7 @@ func (ec *execContext) shouldStripWhitespace(node helium.Node) bool {
 	if parent == nil || parent.Type() != helium.ElementNode {
 		return false
 	}
-	elem, _ := helium.AsType[*helium.Element](parent)
+	elem, _ := helium.AsNode[*helium.Element](parent)
 	// xml:space="preserve" on the element or an ancestor overrides strip-space.
 	// Walk up to find the nearest xml:space declaration.
 	if inheritedXMLSpace(elem) == lexicon.SpacePreserve {

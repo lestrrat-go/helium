@@ -176,7 +176,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 		default:
 			continue
 		}
-		childElem, _ := helium.AsType[*helium.Element](child)
+		childElem, _ := helium.AsNode[*helium.Element](child)
 		if childElem.URI() != lexicon.NamespaceXSLT {
 			return nil, staticError(errCodeXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:choose", childElem.Name())
 		}

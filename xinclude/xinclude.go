@@ -170,7 +170,7 @@ func (p *processor) processNode(ctx context.Context, n helium.Node) error {
 		var includes []*helium.Element
 		for c := range helium.Children(n) {
 			if isXInclude(c) {
-				elem, ok := helium.AsType[*helium.Element](c)
+				elem, ok := helium.AsNode[*helium.Element](c)
 				if !ok {
 					continue
 				}
@@ -480,7 +480,7 @@ func (p *processor) mergeEntities(ctx context.Context, src, dst *helium.Document
 	dstInt := dst.IntSubset()
 	if dstInt == nil {
 		for c := range helium.Children(dst) {
-			if elem, ok := helium.AsType[*helium.Element](c); ok {
+			if elem, ok := helium.AsNode[*helium.Element](c); ok {
 				var err error
 				dstInt, err = dst.CreateInternalSubset(elem.LocalName(), "", "")
 				if err != nil {
@@ -997,7 +997,7 @@ func fixupNamespaceDecls(n helium.Node) {
 	if n.Type() != helium.ElementNode {
 		return
 	}
-	elem, ok := helium.AsType[*helium.Element](n)
+	elem, ok := helium.AsNode[*helium.Element](n)
 	if !ok {
 		return
 	}

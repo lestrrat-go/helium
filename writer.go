@@ -207,7 +207,7 @@ func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
 		defer g.IRelease("END Writer.dumpDocContent")
 	}
 
-	doc, ok := AsType[*Document](n)
+	doc, ok := AsNode[*Document](n)
 	if !ok {
 		return nil
 	}
@@ -260,7 +260,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		return nil
 	case ProcessingInstructionNode:
 		// Mirrors xmlsave.c XML_PI_NODE handling.
-		if pi, ok := AsType[*ProcessingInstruction](n); ok {
+		if pi, ok := AsNode[*ProcessingInstruction](n); ok {
 			_, _ = io.WriteString(out, "<?")
 			_, _ = io.WriteString(out, pi.target)
 			if pi.data != "" {
@@ -316,28 +316,28 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		}
 		return nil
 	case ElementDeclNode:
-		if edecl, ok := AsType[*ElementDecl](n); ok {
+		if edecl, ok := AsNode[*ElementDecl](n); ok {
 			if err = d.dumpElementDecl(out, edecl); err != nil {
 				return err
 			}
 		}
 		return nil
 	case AttributeDeclNode:
-		if adecl, ok := AsType[*AttributeDecl](n); ok {
+		if adecl, ok := AsNode[*AttributeDecl](n); ok {
 			if err = d.dumpAttributeDecl(out, adecl); err != nil {
 				return err
 			}
 		}
 		return nil
 	case EntityNode:
-		if ent, ok := AsType[*Entity](n); ok {
+		if ent, ok := AsNode[*Entity](n); ok {
 			if err = d.dumpEntityDecl(out, ent); err != nil {
 				return err
 			}
 		}
 		return nil
 	case NotationNode:
-		if nota, ok := AsType[*Notation](n); ok {
+		if nota, ok := AsNode[*Notation](n); ok {
 			if err = d.dumpNotationDecl(out, nota); err != nil {
 				return err
 			}
@@ -396,7 +396,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			if a == nil {
 				break
 			}
-			if at, ok := AsType[*Attribute](a); ok {
+			if at, ok := AsNode[*Attribute](a); ok {
 				attr = at
 			}
 		}

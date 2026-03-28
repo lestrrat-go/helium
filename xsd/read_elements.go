@@ -131,7 +131,7 @@ func (c *compiler) readElementType(ctx context.Context, elem *helium.Element, de
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -333,7 +333,7 @@ func (c *compiler) parseIDConstraints(ctx context.Context, elem *helium.Element)
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
@@ -374,7 +374,7 @@ func (c *compiler) parseIDConstraint(_ context.Context, elem *helium.Element, ki
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}

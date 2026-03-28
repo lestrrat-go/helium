@@ -188,7 +188,7 @@ func (c *compiler) parseSchemaChildren(ctx context.Context, root *helium.Element
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		elem, ok := helium.AsType[*helium.Element](child)
+		elem, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}

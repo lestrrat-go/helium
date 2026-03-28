@@ -119,7 +119,7 @@ func serializeItemAdaptive(item xpath3.Item, charMap map[rune]string) string {
 		case *helium.Element, *helium.Document:
 			_ = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, v.Node)
 		case *helium.Attribute:
-			attr, _ := helium.AsType[*helium.Attribute](v.Node)
+			attr, _ := helium.AsNode[*helium.Attribute](v.Node)
 			buf.WriteString(attr.Name())
 			buf.WriteString("=\"")
 			buf.Write(attr.Content())

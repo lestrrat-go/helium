@@ -1112,7 +1112,7 @@ func matchSchemaElementTest(_ context.Context, ec *execContext, t xpath3.SchemaE
 	if node.Type() != helium.ElementNode {
 		return false
 	}
-	elem, _ := helium.AsType[*helium.Element](node)
+	elem, _ := helium.AsNode[*helium.Element](node)
 	// Resolve the schema element name.
 	prefix, local := splitQNamePair(t.Name)
 	ns := ""
@@ -1156,7 +1156,7 @@ func matchSchemaAttributeTest(_ context.Context, ec *execContext, t xpath3.Schem
 	if node.Type() != helium.AttributeNode {
 		return false
 	}
-	attr, _ := helium.AsType[*helium.Attribute](node)
+	attr, _ := helium.AsNode[*helium.Attribute](node)
 	prefix, local := splitQNamePair(t.Name)
 	ns := ""
 	if prefix != "" {

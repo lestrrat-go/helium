@@ -8,14 +8,14 @@ import (
 	"github.com/lestrrat-go/pdebug"
 )
 
-// AsType performs a safe type assertion on a [Node], returning the
+// AsNode performs a safe type assertion on a [Node], returning the
 // concrete type T and true if the assertion succeeds, or the zero value
-// of T and false otherwise. It mirrors the signature of [errors.AsType].
+// of T and false otherwise.
 //
-//	if elem, ok := helium.AsType[*helium.Element](node); ok {
+//	if elem, ok := helium.AsNode[*helium.Element](node); ok {
 //	    // use elem
 //	}
-func AsType[T Node](n Node) (T, bool) {
+func AsNode[T Node](n Node) (T, bool) {
 	if n == nil {
 		var zero T
 		return zero, false
@@ -193,7 +193,7 @@ func appendText(n MutableNode, b []byte) error {
 	// Fast path: if last child is already a text node, append directly
 	// without allocating a new Text node.
 	if last := n.LastChild(); last != nil {
-		if t, ok := AsType[*Text](last); ok {
+		if t, ok := AsNode[*Text](last); ok {
 			return t.AppendText(b)
 		}
 	}
@@ -553,7 +553,7 @@ func setTreeDoc(n MutableNode, doc *Document) {
 		return
 	}
 
-	if e, ok := AsType[*Element](n); ok {
+	if e, ok := AsNode[*Element](n); ok {
 		for prop := e.properties; prop != nil; prop = prop.NextAttribute() {
 			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
 			prop.doc = doc

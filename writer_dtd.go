@@ -19,7 +19,7 @@ func dtdQuoteChar(value string) byte {
 }
 
 func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
-	dtd, ok := AsType[*DTD](n)
+	dtd, ok := AsNode[*DTD](n)
 	if !ok {
 		return nil
 	}

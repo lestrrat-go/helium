@@ -620,7 +620,7 @@ func (r *schemaRegistry) ValidateDoc(ctx context.Context, doc *helium.Document) 
 func findDocumentElement(doc *helium.Document) *helium.Element {
 	for child := range helium.Children(doc) {
 		if child.Type() == helium.ElementNode {
-			elem, _ := helium.AsType[*helium.Element](child)
+			elem, _ := helium.AsNode[*helium.Element](child)
 		return elem
 		}
 	}

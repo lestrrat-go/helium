@@ -154,7 +154,7 @@ func (c *compiler) checkGlobalElement(ctx context.Context, elem *helium.Element)
 			if child.Type() != helium.ElementNode {
 				continue
 			}
-			ce, ok := helium.AsType[*helium.Element](child)
+			ce, ok := helium.AsNode[*helium.Element](child)
 			if !ok {
 				continue
 			}
@@ -236,7 +236,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 			if child.Type() != helium.ElementNode {
 				continue
 			}
-			ce, ok := helium.AsType[*helium.Element](child)
+			ce, ok := helium.AsNode[*helium.Element](child)
 			if !ok {
 				continue
 			}
@@ -292,7 +292,7 @@ func (c *compiler) checkLocalElement(ctx context.Context, elem *helium.Element) 
 			if child.Type() != helium.ElementNode {
 				continue
 			}
-			ce, ok := helium.AsType[*helium.Element](child)
+			ce, ok := helium.AsNode[*helium.Element](child)
 			if !ok {
 				continue
 			}
@@ -349,7 +349,7 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 			if child.Type() != helium.ElementNode {
 				continue
 			}
-			ce, ok := helium.AsType[*helium.Element](child)
+			ce, ok := helium.AsNode[*helium.Element](child)
 			if !ok {
 				continue
 			}
@@ -400,7 +400,7 @@ func (c *compiler) checkAttributeUse(ctx context.Context, elem *helium.Element) 
 				if child.Type() != helium.ElementNode {
 					continue
 				}
-				ce, ok := helium.AsType[*helium.Element](child)
+				ce, ok := helium.AsNode[*helium.Element](child)
 				if !ok {
 					continue
 				}
@@ -458,7 +458,7 @@ func (c *compiler) checkAnnotation(ctx context.Context, elem *helium.Element) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
-		ce, ok := helium.AsType[*helium.Element](child)
+		ce, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}

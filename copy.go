@@ -12,12 +12,12 @@ import (
 func CopyNode(src Node, targetDoc *Document) (Node, error) {
 	switch src.Type() {
 	case DocumentNode:
-		if doc, ok := AsType[*Document](src); ok {
+		if doc, ok := AsNode[*Document](src); ok {
 			return CopyDoc(doc)
 		}
 		return nil, fmt.Errorf("helium: unexpected DocumentNode type %T", src)
 	case ElementNode:
-		if elem, ok := AsType[*Element](src); ok {
+		if elem, ok := AsNode[*Element](src); ok {
 			return copyElement(elem, targetDoc)
 		}
 		return nil, fmt.Errorf("helium: unexpected ElementNode type %T", src)
@@ -160,7 +160,7 @@ func copyDTD(src *DTD, dst *Document) error {
 	for c := src.FirstChild(); c != nil; c = c.NextSibling() {
 		switch c.Type() {
 		case EntityNode:
-			if ent, ok := AsType[*Entity](c); ok {
+			if ent, ok := AsNode[*Entity](c); ok {
 				cp := copyEntity(ent, dst)
 				switch ent.entityType {
 				case enum.InternalParameterEntity, enum.ExternalParameterEntity:
@@ -171,19 +171,19 @@ func copyDTD(src *DTD, dst *Document) error {
 				_ = dstDTD.AddChild(cp)
 			}
 		case ElementDeclNode:
-			if edecl, ok := AsType[*ElementDecl](c); ok {
+			if edecl, ok := AsNode[*ElementDecl](c); ok {
 				cp := copyElementDecl(edecl, dst)
 				dstDTD.elements[edecl.name+":"+edecl.prefix] = cp
 				_ = dstDTD.AddChild(cp)
 			}
 		case AttributeDeclNode:
-			if adecl, ok := AsType[*AttributeDecl](c); ok {
+			if adecl, ok := AsNode[*AttributeDecl](c); ok {
 				cp := copyAttributeDecl(adecl, dst)
 				dstDTD.attributes[adecl.name+":"+adecl.prefix+":"+adecl.elem] = cp
 				_ = dstDTD.AddChild(cp)
 			}
 		case NotationNode:
-			if nota, ok := AsType[*Notation](c); ok {
+			if nota, ok := AsNode[*Notation](c); ok {
 				cp := copyNotation(nota, dst)
 				dstDTD.notations[nota.name] = cp
 				_ = dstDTD.AddChild(cp)

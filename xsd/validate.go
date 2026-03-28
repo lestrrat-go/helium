@@ -122,7 +122,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
-		elem, ok := helium.AsType[*helium.Element](n)
+		elem, ok := helium.AsNode[*helium.Element](n)
 		if !ok {
 			return nil
 		}
@@ -137,7 +137,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		if n.Type() != helium.ElementNode {
 			return nil
 		}
-		elem, ok := helium.AsType[*helium.Element](n)
+		elem, ok := helium.AsNode[*helium.Element](n)
 		if !ok {
 			return nil
 		}
@@ -297,7 +297,7 @@ func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *hel
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.ElementNode:
-			ce, ok := helium.AsType[*helium.Element](child)
+			ce, ok := helium.AsNode[*helium.Element](child)
 			if !ok {
 				continue
 			}
@@ -329,7 +329,7 @@ func collectChildElements(elem *helium.Element) []childElem {
 	var children []childElem
 	for child := range helium.Children(elem) {
 		if child.Type() == helium.ElementNode {
-			ce, ok := helium.AsType[*helium.Element](child)
+			ce, ok := helium.AsNode[*helium.Element](child)
 			if !ok {
 				continue
 			}
@@ -609,7 +609,7 @@ func (vc *validationContext) validateNilledElement(ctx context.Context, elem *he
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.ElementNode:
-			ce, ok := helium.AsType[*helium.Element](child)
+			ce, ok := helium.AsNode[*helium.Element](child)
 			if !ok {
 				continue
 			}
