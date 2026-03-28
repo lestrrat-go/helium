@@ -29,10 +29,18 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 		return false
 	}
 
+	label := cfg.label
+	if label == "" {
+		label = doc.URL()
+	}
+	if label == "" {
+		label = "(string)"
+	}
+
 	v := &validator{
 		ctx:          ctx,
 		grammar:      grammar,
-		filename:     cfg.label,
+		filename:     label,
 		errorHandler: handler,
 		valid:        true,
 	}

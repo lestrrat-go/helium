@@ -103,6 +103,12 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.errorHandler = helium.NilErrorHandler{}
 	if cfg != nil {
 		c.filename = cfg.label
+		if c.filename == "" {
+			c.filename = doc.URL()
+		}
+		if c.filename == "" {
+			c.filename = "(string)"
+		}
 		if cfg.errorHandler != nil {
 			c.errorHandler = cfg.errorHandler
 		}
