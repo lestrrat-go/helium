@@ -1017,23 +1017,25 @@ func (c *compiler) compileChildren(ctx context.Context, parent *helium.Element) 
 			// Merge adjacent text/CDATA nodes (skipping comments/PIs) per XSLT §4.2:
 			// comments are removed before whitespace stripping, and adjacent
 			// text nodes must be merged for correct whitespace-only determination.
-			text := string(child.Content())
+			var buf strings.Builder
+			buf.Write(child.Content())
 			for next := child.NextSibling(); next != nil; next = next.NextSibling() {
 				if next.Type() == helium.CommentNode || next.Type() == helium.ProcessingInstructionNode {
 					continue
 				}
 				switch tn := next.(type) {
 				case *helium.Text:
-					text += string(tn.Content())
+					buf.Write(tn.Content())
 					child = next
 					continue
 				case *helium.CDATASection:
-					text += string(tn.Content())
+					buf.Write(tn.Content())
 					child = next
 					continue
 				}
 				break
 			}
+			text := buf.String()
 			if !c.shouldStripText(ctx, text) {
 				if sawTerminator {
 					return nil, staticError(errCodeXTSE3120, "no instruction may follow xsl:break or xsl:next-iteration")
